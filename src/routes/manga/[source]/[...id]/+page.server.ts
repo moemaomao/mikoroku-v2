@@ -21,9 +21,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
 	const sourceId = params.source;
-	// [...id] → array, join jadi path lengkap (misal: comics/kidnapped-dragons-53fc8424)
 	const idParts = Array.isArray(params.id) ? params.id : [params.id];
-	const mangaId = '/' + idParts.join('/');
+	const mangaId = '/' + idParts.filter(Boolean).join('/');
 
 	if (!sourceId || !mangaId || mangaId === '/') {
 		throw error(400, 'Invalid manga path');
@@ -47,10 +46,7 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		};
 	} catch (e: any) {
 		console.error('[Manga Detail] load failed:', e);
-
-		// Kalau sudah error() dari SvelteKit, biarin
 		if (e?.status) throw e;
-
 		throw error(404, 'Manga tidak ditemukan');
 	}
 };
