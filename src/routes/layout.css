@@ -1,0 +1,125 @@
+@import 'tailwindcss';
+
+/* FanaCumik - Minimal Custom Properties */
+:root {
+	--color-primary: #f97316;
+	--color-accent: #db2777;
+}
+
+/* Smooth scrolling */
+html {
+	scroll-behavior: smooth;
+	background-color: #111;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+	width: 6px;
+	background-color: #111;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: #333;
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #555;
+}
+
+.shine-effect {
+	animation: shine 3s linear infinite;
+}
+
+@keyframes shine {
+	0% {
+		transform: translateX(-150%) skewX(-25deg);
+	}
+
+	100% {
+		transform: translateX(500%) skewX(-25deg);
+	}
+}
+
+/* ===== Dark / Light theme ===== */
+html.dark {
+	color-scheme: dark;
+	background-color: #09090b;
+}
+
+html.light {
+	color-scheme: light;
+	background-color: #f4f4f5;
+}
+
+html.light body,
+html.light .theme-root {
+	background-color: #f4f4f5;
+	color: #18181b;
+}
+
+html.light header.theme-header {
+	background: rgba(255, 255, 255, 0.85) !important;
+	border-color: #e4e4e7 !important;
+}
+
+html.light .theme-card {
+	background: #ffffff !important;
+	border-color: #e4e4e7 !important;
+	color: #18181b !important;
+}
+
+html.light .theme-muted {
+	color: #71717a !important;
+}
+
+html.light .theme-input {
+	background: #ffffff !important;
+	border-color: #d4d4d8 !important;
+	color: #18181b !important;
+}
+
+html.light aside.theme-sidebar {
+	background: #ffffff !important;
+	border-color: #e4e4e7 !important;
+}
+
+html.light ::-webkit-scrollbar {
+	background-color: #f4f4f5;
+}
+html.light ::-webkit-scrollbar-thumb {
+	background: #d4d4d8;
+}
+
+/* ===== Dark / Light theme ===== */
+html.dark {
+	color-scheme: dark;
+	background-color: #09090b;
+}
+
+html.light {
+	color-scheme: light;
+	background-color: #f4f4f5;
+}
+
+html.light body,
+html.light .theme-root {
+	background-color: #f4f4f5;
+	color: #18181b;
+}
+
+html.light header.theme-header {
+	background: rgba(255, 255, 255, 0.9) !important;
+	border-color: #e4e4e7 !important;
+}
+
+html.light ::-webkit-scrollbar {
+	background-color: #f4f4f5;
+}
+html.light ::-webkit-scrollbar-thumb {
+	background: #d4d4d8;
+}

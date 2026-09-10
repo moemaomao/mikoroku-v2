@@ -1,0 +1,21 @@
+{
+	"/": [
+		"src/routes/+page.server.ts"
+	],
+	"/api/proxy": [
+		"src/routes/api/proxy/+server.ts"
+	],
+	"/bookmark": [],
+	"/history": [
+		"src/routes/history/+page.server.ts"
+	],
+	"/manga/[source]/[...id]": [
+		"src/routes/manga/[source]/[...id]/+page.server.ts"
+	],
+	"/read/[source]/[...id]": [
+		"src/routes/read/[source]/[...id]/+page.server.ts"
+	],
+	"/sources": [
+		"src/routes/sources/+page.server.ts"
+	]
+}
