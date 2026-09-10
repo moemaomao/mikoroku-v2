@@ -29,8 +29,8 @@
 		removeBookmark,
 		type BookmarkEntry
 	} from '$lib/stores/bookmark.svelte';
+	import { getImpl } from '$lib/stores/impl';
 
-	// ===== Loading Bar Config =====
 	NProgress.configure({
 		showSpinner: false,
 		trickleSpeed: 100,
@@ -61,6 +61,12 @@
 
 	const LOGO =
 		'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s100/MIKOROKU.png';
+
+	function homeHref(extra: Record<string, string> = {}): string {
+		const source = (browser && getImpl()) || 'asura';
+		const params = new URLSearchParams({ source, ...extra });
+		return `/?${params.toString()}`;
+	}
 
 	function loadBookmarks() {
 		bookmarks = getBookmarks();
@@ -109,6 +115,12 @@
 		goto(href);
 	}
 
+	function goHome(e: MouseEvent) {
+		e.preventDefault();
+		closeOverlays();
+		goto(homeHref());
+	}
+
 	function handleRemoveBookmark(mangaId: string) {
 		removeBookmark(mangaId);
 		loadBookmarks();
@@ -116,7 +128,7 @@
 
 	function handleSearchKey(e: KeyboardEvent) {
 		if (e.key === 'Enter' && searchQuery.trim()) {
-			const targetUrl = `/?q=${encodeURIComponent(searchQuery.trim())}`;
+			const targetUrl = homeHref({ q: searchQuery.trim() });
 			closeOverlays();
 			goto(targetUrl);
 		}
@@ -215,7 +227,7 @@
 					? 'border-zinc-800'
 					: 'border-zinc-200'}"
 			>
-				<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex min-w-0 items-center">
+				<a href="/" onclick={goHome} class="flex min-w-0 items-center">
 					<img src={LOGO} alt="Mikoroku" class="h-8 w-auto" />
 				</a>
 				<button
@@ -234,22 +246,46 @@
 					? 'text-zinc-400'
 					: 'text-zinc-600'}"
 			>
-				<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<a
+					href="/"
+					onclick={goHome}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
 					<BookOpen class="h-5 w-5 shrink-0" /> Manga List
 				</a>
-				<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<a
+					href="/"
+					onclick={goHome}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
 					<BookOpen class="h-5 w-5 shrink-0" /> Hentai List
 				</a>
-				<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<a
+					href="/"
+					onclick={goHome}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
 					<Library class="h-5 w-5 shrink-0" /> Genre List
 				</a>
-				<a href="/bookmark" onclick={(e) => handleNavigate(e, '/bookmark')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-                    <Bookmark class="h-5 w-5 shrink-0" /> Bookmark
-                </a>
-				<a href="/history" onclick={(e) => handleNavigate(e, '/history')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<a
+					href="/bookmark"
+					onclick={(e) => handleNavigate(e, '/bookmark')}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
+					<Bookmark class="h-5 w-5 shrink-0" /> Bookmark
+				</a>
+				<a
+					href="/history"
+					onclick={(e) => handleNavigate(e, '/history')}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
 					<History class="h-5 w-5 shrink-0" /> History
 				</a>
-				<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<a
+					href="/"
+					onclick={goHome}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
 					<FileText class="h-5 w-5 shrink-0" /> Commission
 				</a>
 
@@ -271,7 +307,11 @@
 				>
 					<DollarSign class="h-5 w-5 shrink-0" /> Donation
 				</a>
-				<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<a
+					href="/"
+					onclick={goHome}
+					class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+				>
 					<Shield class="h-5 w-5 shrink-0" /> Admin Panel
 				</a>
 			</nav>
@@ -303,7 +343,7 @@
 						{/if}
 
 						{#if !isSidebarOpen || !isDesktop}
-							<a href="/" onclick={(e) => handleNavigate(e, '/')} class="flex items-center">
+							<a href="/" onclick={goHome} class="flex items-center">
 								<img src={LOGO} alt="Mikoroku" class="h-8 w-auto sm:h-9" />
 							</a>
 						{/if}
@@ -402,7 +442,9 @@
 														</div>
 														<div class="min-w-0 flex-1">
 															<p class="line-clamp-2 text-xs font-medium">{bm.mangaTitle}</p>
-															<p class="mt-0.5 text-[10px] text-zinc-500 capitalize">{bm.sourceId}</p>
+															<p class="mt-0.5 text-[10px] text-zinc-500 capitalize">
+																{bm.sourceId}
+															</p>
 														</div>
 													</a>
 													<button
@@ -439,7 +481,9 @@
 										? 'border-zinc-800 bg-zinc-900'
 										: 'border-zinc-200 bg-white'}"
 								>
-									<div class="border-b px-4 py-2 {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
+									<div
+										class="border-b px-4 py-2 {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}"
+									>
 										<p class="text-sm font-semibold">Guest</p>
 										<p class="text-xs text-zinc-500">Silakan login terlebih dahulu</p>
 									</div>
@@ -461,10 +505,10 @@
 		{/if}
 
 		<main class="flex-1">
-	<div class="min-h-full" onclick={closeOverlays} role="presentation">
-		{@render children()}
-	</div>
-       </main>
+			<div class="min-h-full" onclick={closeOverlays} role="presentation">
+				{@render children()}
+			</div>
+		</main>
 
 		{#if !isReaderPage}
 			<footer
