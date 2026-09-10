@@ -1,13 +1,8 @@
-/**
- * Home Page - Server Load
- * Soft-fail + timeout agar Workers free tidak 500/1102 terus
- */
-
-import { getAllSources, getSource } from '$lib/server/sources';
+import { getSource } from '$lib/server/sources';
 import type { PageServerLoad } from './$types';
+import { error } from '@sveltejs/kit';
 
-const LOAD_TIMEOUT_MS = 8000;
-const MAX_MANGAS = 40;
+const LOAD_TIMEOUT_MS = 12000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -24,68 +19,38 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	});
 }
 
-export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
-	const sourceId = url.searchParams.get('source') || 'asura';
-	const pageNum = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
-	const query = (url.searchParams.get('q') || '').trim();
+export const load: PageServerLoad = async ({ params, setHeaders }) => {
+	const sourceId = params.source;
+	// [...id] → array, join jadi path lengkap (misal: comics/kidnapped-dragons-53fc8424)
+	const idParts = Array.isArray(params.id) ? params.id : [params.id];
+	const mangaId = '/' + idParts.join('/');
 
-	const lang = (url.searchParams.get('lang') || 'all').toLowerCase();
-	const type = (url.searchParams.get('type') || 'all').toLowerCase();
-
-	depends(`browse:${sourceId}`);
-
-	const sources = getAllSources().map((s) => ({ id: s.id, name: s.name }));
-	let mangas: any[] = [];
+	if (!sourceId || !mangaId || mangaId === '/') {
+		throw error(400, 'Invalid manga path');
+	}
 
 	try {
 		const adapter = getSource(sourceId);
+		const manga = await withTimeout(adapter.getMangaDetails(mangaId), LOAD_TIMEOUT_MS);
 
-		// Adapter yang support filter (Hitomi, nhentai, dll) sudah filter di sumbernya
-		const fetchPromise = query
-			? adapter.searchManga(query, { page: pageNum, lang, type })
-			: adapter.getLatestManga(pageNum, { lang, type });
-
-		const result = await withTimeout(fetchPromise, LOAD_TIMEOUT_MS);
-		let list = Array.isArray(result) ? result : [];
-
-		// Hanya filter di memori JIKA item punya field lang/language/type
-		// (jangan hapus hasil yang sudah di-filter di adapter)
-		const hasLangField = list.some(
-			(m: any) => m.lang != null || m.language != null
-		);
-		const hasTypeField = list.some((m: any) => m.type != null);
-
-		if (lang !== 'all' && hasLangField) {
-			list = list.filter((m: any) => {
-				const itemLang = (m.lang || m.language || '').toLowerCase();
-				return !itemLang || itemLang === lang;
-			});
+		if (!manga || !manga.title) {
+			throw error(404, 'Manga tidak ditemukan');
 		}
 
-		if (type !== 'all' && hasTypeField) {
-			list = list.filter((m: any) => {
-				const itemType = (m.type || '').toLowerCase();
-				return !itemType || itemType === type;
-			});
-		}
+		setHeaders({
+			'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300'
+		});
 
-		mangas = list.slice(0, MAX_MANGAS);
-	} catch (e) {
-		console.error('[Browse] load failed:', e);
-		mangas = [];
+		return {
+			manga,
+			source: sourceId
+		};
+	} catch (e: any) {
+		console.error('[Manga Detail] load failed:', e);
+
+		// Kalau sudah error() dari SvelteKit, biarin
+		if (e?.status) throw e;
+
+		throw error(404, 'Manga tidak ditemukan');
 	}
-
-	setHeaders({
-		'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
-	});
-
-	return {
-		mangas,
-		sources,
-		currentSource: sourceId,
-		currentPage: pageNum,
-		searchQuery: query,
-		selectedLang: lang,
-		selectedType: type
-	};
 };
