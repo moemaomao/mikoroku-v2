@@ -623,7 +623,7 @@
 						>
 							{#each chapters as chapter}
 								<a
-									href="/read/{source}{chapter.id}?server={activeServer}"
+									href="/reader/{source}{chapter.id}?server={activeServer}"
 									class="detail-chapter-thumb relative aspect-square w-full overflow-hidden rounded-[10px] transition hover:z-[2] hover:scale-105"
 								>
 									{#if chapterCover(chapter)}
@@ -651,7 +651,7 @@
 						<div class="grid grid-cols-3 gap-2.5 pb-8 md:grid-cols-4 lg:grid-cols-6">
 							{#each chapters as chapter}
 								<a
-									href="/read/{source}{chapter.id}?server={activeServer}"
+									href="/reader/{source}{chapter.id}?server={activeServer}"
 									class="detail-chapter-text flex min-h-[60px] flex-col justify-center rounded-[10px] border px-3 py-3 hover:border-blue-500/40"
 								>
 									<p class="detail-title text-[12px] leading-tight font-bold">{chapter.title}</p>
@@ -665,7 +665,7 @@
 						<div class="flex flex-col gap-2.5 pb-8">
 							{#each chapters as chapter}
 								<a
-									href="/read/{source}{chapter.id}?server={activeServer}"
+									href="/reader/{source}{chapter.id}?server={activeServer}"
 									class="detail-chapter-list flex h-20 items-center overflow-hidden rounded-xl border hover:border-green-500/40"
 								>
 									<div class="h-full w-[90px] shrink-0 overflow-hidden bg-zinc-300 dark:bg-zinc-900">

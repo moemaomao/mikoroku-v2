@@ -6,7 +6,7 @@
 import { getAllSources, getSource } from '$lib/server/sources';
 import type { PageServerLoad } from './$types';
 
-const LOAD_TIMEOUT_MS = 8000;
+const LOAD_TIMEOUT_MS = 12000;
 const MAX_MANGAS = 40;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -28,21 +28,18 @@ export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	const sourceId = url.searchParams.get('source') || 'asura';
 	const pageNum = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
 	const query = (url.searchParams.get('q') || '').trim();
-	
-	// Tangkap parameter lang dan type dari URL
-	const lang = url.searchParams.get('lang') || 'all';
-	const type = url.searchParams.get('type') || 'all';
+	const lang = (url.searchParams.get('lang') || 'all').toLowerCase();
+	const type = (url.searchParams.get('type') || 'all').toLowerCase();
 
 	depends(`browse:${sourceId}`);
 
-	// Selalu return shape yang valid (supaya +page.svelte tidak crash)
 	const sources = getAllSources().map((s) => ({ id: s.id, name: s.name }));
 	let mangas: any[] = [];
 
 	try {
 		const adapter = getSource(sourceId);
 
-		// Opsi 1: Jika fungsi di adapter kamu menerima object filter (Rekomendasi)
+		// Filter lang/type sudah ditangani di dalam adapter (Hitomi nozomi, nhentai search tag)
 		const fetchPromise = query
 			? adapter.searchManga(query, { page: pageNum, lang, type })
 			: adapter.getLatestManga(pageNum, { lang, type });
@@ -50,19 +47,23 @@ export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 		const result = await withTimeout(fetchPromise, LOAD_TIMEOUT_MS);
 		let list = Array.isArray(result) ? result : [];
 
-		// Opsi 2 (Fallback): Jika adapter belum mendukung filter internal,
-		// lakukan filter manual di memori berdasarkan tipe/bahasa jika datanya ada
-		if (lang !== 'all') {
-			list = list.filter((m: any) => 
-				m.lang?.toLowerCase() === lang.toLowerCase() || 
-				m.language?.toLowerCase() === lang.toLowerCase()
-			);
+		// Filter di memori HANYA jika item benar-benar punya field tersebut
+		// (jangan kosongkan hasil yang sudah di-filter di adapter)
+		const hasLangField = list.some((m: any) => m.lang != null || m.language != null);
+		const hasTypeField = list.some((m: any) => m.type != null);
+
+		if (lang !== 'all' && hasLangField) {
+			list = list.filter((m: any) => {
+				const itemLang = (m.lang || m.language || '').toLowerCase();
+				return !itemLang || itemLang === lang;
+			});
 		}
 
-		if (type !== 'all') {
-			list = list.filter((m: any) => 
-				m.type?.toLowerCase() === type.toLowerCase()
-			);
+		if (type !== 'all' && hasTypeField) {
+			list = list.filter((m: any) => {
+				const itemType = (m.type || '').toLowerCase();
+				return !itemType || itemType === type;
+			});
 		}
 
 		mangas = list.slice(0, MAX_MANGAS);

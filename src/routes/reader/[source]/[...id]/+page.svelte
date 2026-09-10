@@ -162,7 +162,7 @@
 		if (!rawId) return;
 		const cleanId = String(rawId).replace(/^\/+/, '');
 		currentPageIndex = 0;
-		await goto(`/read/${source}/${cleanId}`);
+		await goto(`/reader/${source}/${cleanId}`);
 		await invalidateAll();
 		window.scrollTo(0, 0);
 	}

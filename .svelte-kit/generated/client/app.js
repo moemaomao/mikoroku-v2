@@ -18,7 +18,7 @@ export const dictionary = {
 		"/bookmark": [3],
 		"/history": [~4],
 		"/manga/[source]/[...id]": [~5],
-		"/read/[source]/[...id]": [~6],
+		"/reader/[source]/[...id]": [~6],
 		"/sources": [~7]
 	};
 

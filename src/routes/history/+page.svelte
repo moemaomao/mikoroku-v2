@@ -76,7 +76,7 @@
 		<div class="space-y-2">
 			{#each history as entry}
 				{@const mangaHref = `/manga/${entry.sourceId}${entry.mangaId}`}
-				{@const readHref = `/read/${entry.sourceId}${entry.chapterId}`}
+				{@const readHref = `/reader/${entry.sourceId}${entry.chapterId}`}
 
 				<div
 					class="flex items-center gap-4 p-3 bg-zinc-900/50 border border-zinc-800/50 rounded-xl group"

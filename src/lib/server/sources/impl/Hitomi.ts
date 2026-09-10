@@ -195,7 +195,6 @@ export class HitomiSource extends BaseSource {
 
 		let typeRaw = '';
 
-		// 1. Coba dari href (paling akurat)
 		const href =
 			$('a.lillie').attr('href') ||
 			$('a[href*=".html"]').first().attr('href') ||
@@ -205,7 +204,6 @@ export class HitomiSource extends BaseSource {
 		);
 		if (hrefMatch) typeRaw = hrefMatch[1];
 
-		// 2. Coba dari class (acg = artistcg, dj = doujinshi)
 		if (!typeRaw) {
 			const root = $.root().children('div').first();
 			const cls = (root.attr('class') || '').toLowerCase();
@@ -215,7 +213,6 @@ export class HitomiSource extends BaseSource {
 			if (clsMatch) typeRaw = clsMatch[1];
 		}
 
-		// 3. Coba dari teks di dalam block
 		if (!typeRaw) {
 			const text = $.root().text().toLowerCase();
 			if (text.includes('artist cg') || text.includes('artistcg')) typeRaw = 'artistcg';
@@ -266,234 +263,226 @@ export class HitomiSource extends BaseSource {
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
-private buildNozomiPath(lang = 'all', type = 'all'): string[] {
-	const l = (lang || 'all').toLowerCase().trim();
-	const t = (type || 'all').toLowerCase().trim();
+	private buildNozomiPath(lang = 'all', type = 'all'): string[] {
+		const l = (lang || 'all').toLowerCase().trim();
+		const t = (type || 'all').toLowerCase().trim();
 
-	const candidates: string[] = [];
+		const candidates: string[] = [];
 
-	// Type + Language
-	if (t !== 'all' && l !== 'all') {
-		candidates.push(`${t}-${l}.nozomi`);
-		candidates.push(`n/${t}-${l}.nozomi`);
-		// tetap coba type saja dulu (lebih reliable)
-		candidates.push(`${t}-all.nozomi`);
-		candidates.push(`n/${t}-all.nozomi`);
-	}
-	// Hanya Type
-	else if (t !== 'all') {
-		candidates.push(`${t}-all.nozomi`);
-		candidates.push(`n/${t}-all.nozomi`);
-	}
-	// Hanya Language
-	else if (l !== 'all') {
-		candidates.push(`index-${l}.nozomi`);
-		candidates.push(`n/index-${l}.nozomi`);
-	}
-
-	// Default hanya kalau benar-benar tidak ada filter
-	if (t === 'all' && l === 'all') {
-		candidates.push('index-all.nozomi');
-		candidates.push('n/index-all.nozomi');
-	}
-
-	return [...new Set(candidates)];
-}
-
-async getLatestManga(page: number, opts?: { lang?: string; type?: string }): Promise<Manga[]> {
-	try {
-		const p = Math.max(1, Number(page) || 1);
-		const per = this.PER_PAGE;
-		const start = (p - 1) * per * 4;
-		const end = start + per * 4 - 1;
-
-		const lang = opts?.lang || 'all';
-		const type = opts?.type || 'all';
-
-		const paths = this.buildNozomiPath(lang, type);
-		let buf: ArrayBuffer | null = null;
-		let usedPath = '';
-
-		for (const path of paths) {
-			try {
-				console.log(`[Hitomi] mencoba: ${path}`);
-				buf = await this.getBuf(`${this.ltn}/${path}`, `bytes=${start}-${end}`);
-				usedPath = path;
-				console.log(`[Hitomi] BERHASIL pakai: ${path}`);
-				break;
-			} catch (e: any) {
-				console.warn(`[Hitomi] gagal ${path}:`, e?.message || e);
-				continue;
-			}
+		if (t !== 'all' && l !== 'all') {
+			candidates.push(`${t}-${l}.nozomi`);
+			candidates.push(`n/${t}-${l}.nozomi`);
+			candidates.push(`${t}-all.nozomi`);
+			candidates.push(`n/${t}-all.nozomi`);
+		} else if (t !== 'all') {
+			candidates.push(`${t}-all.nozomi`);
+			candidates.push(`n/${t}-all.nozomi`);
+		} else if (l !== 'all') {
+			candidates.push(`index-${l}.nozomi`);
+			candidates.push(`n/index-${l}.nozomi`);
 		}
 
-		if (!buf) {
-			// Baru fallback ke index-all kalau semua gagal
-			console.warn('[Hitomi] semua path type/lang gagal, fallback ke index-all');
-			try {
-				buf = await this.getBuf(`${this.ltn}/index-all.nozomi`, `bytes=${start}-${end}`);
-				usedPath = 'index-all.nozomi';
-			} catch {
-				console.error('[Hitomi] index-all juga gagal');
+		if (t === 'all' && l === 'all') {
+			candidates.push('index-all.nozomi');
+			candidates.push('n/index-all.nozomi');
+		}
+
+		return [...new Set(candidates)];
+	}
+
+	async getLatestManga(page: number, opts?: { lang?: string; type?: string }): Promise<Manga[]> {
+		try {
+			const p = Math.max(1, Number(page) || 1);
+			const per = this.PER_PAGE;
+			const start = (p - 1) * per * 4;
+			const end = start + per * 4 - 1;
+
+			const lang = opts?.lang || 'all';
+			const type = opts?.type || 'all';
+
+			const paths = this.buildNozomiPath(lang, type);
+			let buf: ArrayBuffer | null = null;
+			let usedPath = '';
+
+			for (const path of paths) {
+				try {
+					console.log(`[Hitomi] mencoba: ${path}`);
+					buf = await this.getBuf(`${this.ltn}/${path}`, `bytes=${start}-${end}`);
+					usedPath = path;
+					console.log(`[Hitomi] BERHASIL pakai: ${path}`);
+					break;
+				} catch (e: any) {
+					console.warn(`[Hitomi] gagal ${path}:`, e?.message || e);
+					continue;
+				}
+			}
+
+			if (!buf) {
+				console.warn('[Hitomi] semua path type/lang gagal, fallback ke index-all');
+				try {
+					buf = await this.getBuf(`${this.ltn}/index-all.nozomi`, `bytes=${start}-${end}`);
+					usedPath = 'index-all.nozomi';
+				} catch {
+					console.error('[Hitomi] index-all juga gagal');
+					return [];
+				}
+			}
+
+			const ids = this.parseNozomi(buf);
+			if (!ids.length) {
+				console.warn(`[Hitomi] nozomi ${usedPath} kosong`);
 				return [];
 			}
-		}
 
-		const ids = this.parseNozomi(buf);
-		if (!ids.length) {
-			console.warn(`[Hitomi] nozomi ${usedPath} kosong`);
-			return [];
-		}
+			const out: Manga[] = [];
 
-		const out: Manga[] = [];
-
-		for (let i = 0; i < ids.length && out.length < per; i += this.CONCURRENCY) {
-			const chunk = ids.slice(i, i + this.CONCURRENCY);
-			const rows = await Promise.all(chunk.map((id) => this.loadBrief(id)));
-			for (const m of rows) {
-				if (m) out.push(m);
-				if (out.length >= per) break;
-			}
-		}
-
-		return out.slice(0, per);
-	} catch (e) {
-		console.error('[Hitomi] getLatestManga', e);
-		return [];
-	}
-}
-
-	async searchManga(
-	query: string,
-	opts?: { page?: number; lang?: string; type?: string }
-): Promise<Manga[]> {
-	const q = (query || '').trim().toLowerCase().replace(/\s+/g, '_');
-	const page = Math.max(1, opts?.page || 1);
-	const lang = opts?.lang || 'all';
-	const type = opts?.type || 'all';
-
-	// Query kosong → treat sebagai latest + filter
-	if (!q) return this.getLatestManga(page, { lang, type });
-
-	try {
-		let paths: string[] = [];
-
-		if (q.includes(':')) {
-			const [ns, ...rest] = q.split(':');
-			const val = rest.join(':');
-			if (ns === 'language') {
-				paths = [`index-${val}.nozomi`, `n/index-${val}.nozomi`];
-			} else if (ns === 'type') {
-				paths = [`${val}-all.nozomi`, `n/${val}-all.nozomi`];
-			} else {
-				paths = [`tag/${ns}:${val}-all.nozomi`, `n/tag/${ns}:${val}-all.nozomi`];
-			}
-		} else {
-			// Text teks biasa → pakai filter lang/type
-			paths = this.buildNozomiPath(lang, type);
-		}
-
-		// Selalu tambahkan fallback
-		paths.push('index-all.nozomi');
-		paths = [...new Set(paths)];
-
-		const per = this.PER_PAGE;
-		const start = (page - 1) * per * 4;
-		const end = start + per * 4 - 1;
-
-		let buf: ArrayBuffer | null = null;
-		let usedPath = '';
-
-		for (const path of paths) {
-			try {
-				buf = await this.getBuf(`${this.ltn}/${path}`, `bytes=${start}-${end}`);
-				usedPath = path;
-				console.log(`[Hitomi] search using nozomi: ${path}`);
-				break;
-			} catch {
-				continue;
-			}
-		}
-
-		if (!buf) {
-			console.error('[Hitomi] search: semua path nozomi gagal');
-			return [];
-		}
-
-		const ids = this.parseNozomi(buf);
-		const out: Manga[] = [];
-
-		for (let i = 0; i < ids.length && out.length < per; i += this.CONCURRENCY) {
-			const chunk = ids.slice(i, i + this.CONCURRENCY);
-			const rows = await Promise.all(chunk.map((id) => this.loadBrief(id)));
-			for (const m of rows) {
-				if (!m) continue;
-				if (q.includes(':') || m.title.toLowerCase().includes(q.replace(/_/g, ' '))) {
-					out.push(m);
+			for (let i = 0; i < ids.length && out.length < per; i += this.CONCURRENCY) {
+				const chunk = ids.slice(i, i + this.CONCURRENCY);
+				const rows = await Promise.all(chunk.map((id) => this.loadBrief(id)));
+				for (const m of rows) {
+					if (m) out.push(m);
+					if (out.length >= per) break;
 				}
-				if (out.length >= per) break;
 			}
-		}
 
-		return out.slice(0, per);
-	} catch (e) {
-		console.error('[Hitomi] searchManga', e);
-		return [];
+			return out.slice(0, per);
+		} catch (e) {
+			console.error('[Hitomi] getLatestManga', e);
+			return [];
+		}
 	}
-}
+
+	/**
+	 * Search:
+	 * - Namespace (language:xx / type:xx / artist:xx / tag:xx) → nozomi file
+	 * - Teks biasa → ambil index-all + filter judul di memori
+	 */
+	async searchManga(
+		query: string,
+		opts?: { page?: number; lang?: string; type?: string }
+	): Promise<Manga[]> {
+		const raw = (query || '').trim().toLowerCase();
+		const page = Math.max(1, opts?.page || 1);
+		const lang = opts?.lang || 'all';
+		const type = opts?.type || 'all';
+		const per = this.PER_PAGE;
+
+		if (!raw) return this.getLatestManga(page, { lang, type });
+
+		try {
+			let paths: string[] = [];
+			const isNamespace = raw.includes(':');
+
+			if (isNamespace) {
+				const [ns, ...rest] = raw.split(':');
+				const val = rest.join(':').replace(/\s+/g, '_');
+				if (ns === 'language') {
+					paths = [`index-${val}.nozomi`, `n/index-${val}.nozomi`];
+				} else if (ns === 'type') {
+					paths = [`${val}-all.nozomi`, `n/${val}-all.nozomi`];
+				} else {
+					paths = [`tag/${ns}:${val}-all.nozomi`, `n/tag/${ns}:${val}-all.nozomi`];
+				}
+			} else {
+				// Teks biasa: cari di index-all (bukan buildNozomiPath)
+				paths = ['index-all.nozomi', 'n/index-all.nozomi'];
+			}
+
+			const start = (page - 1) * per * 4;
+			const end = start + per * 4 - 1;
+
+			let buf: ArrayBuffer | null = null;
+			for (const path of paths) {
+				try {
+					buf = await this.getBuf(`${this.ltn}/${path}`, `bytes=${start}-${end}`);
+					console.log(`[Hitomi] search using nozomi: ${path}`);
+					break;
+				} catch {
+					continue;
+				}
+			}
+
+			if (!buf) {
+				console.error('[Hitomi] search: semua path nozomi gagal');
+				return [];
+			}
+
+			const ids = this.parseNozomi(buf);
+			const needle = raw.replace(/_/g, ' ');
+			const out: Manga[] = [];
+
+			for (let i = 0; i < ids.length && out.length < per; i += this.CONCURRENCY) {
+				const chunk = ids.slice(i, i + this.CONCURRENCY);
+				const rows = await Promise.all(chunk.map((id) => this.loadBrief(id)));
+				for (const m of rows) {
+					if (!m) continue;
+					// Namespace → terima semua; teks → cocokkan judul
+					if (isNamespace || m.title.toLowerCase().includes(needle)) {
+						out.push(m);
+					}
+					if (out.length >= per) break;
+				}
+			}
+
+			return out.slice(0, per);
+		} catch (e) {
+			console.error('[Hitomi] searchManga', e);
+			return [];
+		}
+	}
 
 	// ── Details ──────────────────────────────────────────────────────────────
-async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-	const gid = this.extractGid(mangaId);
-	if (!gid) throw new Error(`Invalid Hitomi id: ${mangaId}`);
 
-	const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
-	const info = this.parseGalleryInfo(js);
-	await this.ensureGg().catch(() => undefined);
+	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
+		const gid = this.extractGid(mangaId);
+		if (!gid) throw new Error(`Invalid Hitomi id: ${mangaId}`);
 
-	const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
-	const hash = info.files?.[0]?.hash || '';
-	const cover = hash ? this.thumbFromHash(hash) : '';
+		const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
+		const info = this.parseGalleryInfo(js);
+		await this.ensureGg().catch(() => undefined);
 
-	const artists = (info.artists || []).map((a: any) => a.artist).filter(Boolean);
-	const groups = (info.groups || []).map((g: any) => g.group).filter(Boolean);
-	const tags = (info.tags || []).map((t: any) => this.mapTag(t)).filter(Boolean);
+		const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
+		const hash = info.files?.[0]?.hash || '';
+		const cover = hash ? this.thumbFromHash(hash) : '';
 
-	const type = this.normalizeType(String(info.type || '')) || 'manga';
-	const id = this.toId(gid);
-	const pageCount = info.files?.length || 0;
+		const artists = (info.artists || []).map((a: any) => a.artist).filter(Boolean);
+		const groups = (info.groups || []).map((g: any) => g.group).filter(Boolean);
+		const tags = (info.tags || []).map((t: any) => this.mapTag(t)).filter(Boolean);
 
-	return {
-		id,
-		sourceId: this.id,
-		title,
-		cover,
-		type,
-		status: 'Completed',
-		description: [
-			info.japanese_title && `AltTitle: ${info.japanese_title}`,
-			type && `Type: ${type}`,
-			(info.language_localname || info.language) &&
-				`Language: ${info.language_localname || info.language}`,
-			artists.length && `Artists: ${artists.join(', ')}`,
-			groups.length && `Groups: ${groups.join(', ')}`,
-			pageCount && `Pages: ${pageCount}`
-		]
-			.filter(Boolean)
-			.join('\n'),
-		authors: artists.length ? artists : groups,
-		genres: tags,
-		chapters: [
-			{
-				id,
-				title: 'Read',
-				number: 1,
-				date: info.date || '',
-				cover 
-			}
-		]
-	};
-}
+		const type = this.normalizeType(String(info.type || '')) || 'manga';
+		const id = this.toId(gid);
+		const pageCount = info.files?.length || 0;
+
+		return {
+			id,
+			sourceId: this.id,
+			title,
+			cover,
+			type,
+			status: 'Completed',
+			description: [
+				info.japanese_title && `AltTitle: ${info.japanese_title}`,
+				type && `Type: ${type}`,
+				(info.language_localname || info.language) &&
+					`Language: ${info.language_localname || info.language}`,
+				artists.length && `Artists: ${artists.join(', ')}`,
+				groups.length && `Groups: ${groups.join(', ')}`,
+				pageCount && `Pages: ${pageCount}`
+			]
+				.filter(Boolean)
+				.join('\n'),
+			authors: artists.length ? artists : groups,
+			genres: tags,
+			chapters: [
+				{
+					id,
+					title: 'Read',
+					number: 1,
+					date: info.date || ''
+				}
+			]
+		};
+	}
 
 	// ── Pages ────────────────────────────────────────────────────────────────
 

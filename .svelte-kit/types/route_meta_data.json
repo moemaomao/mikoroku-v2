@@ -12,8 +12,8 @@
 	"/manga/[source]/[...id]": [
 		"src/routes/manga/[source]/[...id]/+page.server.ts"
 	],
-	"/read/[source]/[...id]": [
-		"src/routes/read/[source]/[...id]/+page.server.ts"
+	"/reader/[source]/[...id]": [
+		"src/routes/reader/[source]/[...id]/+page.server.ts"
 	],
 	"/sources": [
 		"src/routes/sources/+page.server.ts"

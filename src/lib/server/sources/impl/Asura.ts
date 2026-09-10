@@ -27,7 +27,6 @@ export class AsuraSource extends BaseSource {
 	}
 
 	private cleanId(link: string): string {
-		// Keep path clean, e.g. /comics/the-indomitable-martial-king-53fc8424
 		let id = link.trim();
 		if (id.startsWith('http')) {
 			try {
@@ -38,6 +37,28 @@ export class AsuraSource extends BaseSource {
 		}
 		if (!id.startsWith('/')) id = `/${id}`;
 		return id.replace(/\/+$/, '');
+	}
+
+	/** Ambil value di sebelah label (Status / Type / Rating) */
+	private getLabeledValue($: cheerio.CheerioAPI, label: string): string {
+		let value = '';
+		$('div').each((_, el) => {
+			const $el = $(el);
+			const text = $el.text().replace(/\s+/g, ' ').trim();
+			// Label murni di elemen kecil
+			if (text.toLowerCase() === label.toLowerCase()) {
+				const next = $el.next();
+				if (next.length) {
+					value = next.text().replace(/\s+/g, ' ').trim();
+					return false;
+				}
+				// fallback: parent berisi "Label | value"
+				const parentText = $el.parent().text().replace(/\s+/g, ' ').trim();
+				const m = parentText.match(new RegExp(`${label}\\s+(.+)`, 'i'));
+				if (m) value = m[1].split(/\s{2,}/)[0].trim();
+			}
+		});
+		return value;
 	}
 
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
@@ -54,7 +75,6 @@ export class AsuraSource extends BaseSource {
 			if (seen.has(id)) return;
 			seen.add(id);
 
-			// Title: prefer h3, fallback to link text cleaned of chapter/rating noise
 			let title = $card.find('h3').first().text().trim();
 			if (!title) {
 				title = a
@@ -68,12 +88,19 @@ export class AsuraSource extends BaseSource {
 			let cover = img.attr('src') || img.attr('data-src') || '';
 			cover = this.absUrl(cover);
 
+			// Coba deteksi type dari badge di card (kalau ada)
+			let type = 'manhwa';
+			const cardText = $card.text().toLowerCase();
+			if (cardText.includes('manhua')) type = 'manhua';
+			else if (cardText.includes('manga') && !cardText.includes('manhwa')) type = 'manga';
+
 			if (title && id) {
 				res.push({
 					id,
 					title,
 					cover,
-					sourceId: this.id
+					sourceId: this.id,
+					type
 				});
 			}
 		});
@@ -109,6 +136,7 @@ export class AsuraSource extends BaseSource {
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
+		// Title
 		const title =
 			$('h1').first().text().trim() ||
 			$('title')
@@ -116,13 +144,15 @@ export class AsuraSource extends BaseSource {
 				.replace(/\s*\|?\s*Asura Scans.*$/i, '')
 				.trim();
 
+		// Cover
 		let cover =
 			$('img[src*="asura-images/covers/"]').first().attr('src') ||
 			$('meta[property="og:image"]').attr('content') ||
 			'';
 		cover = this.absUrl(cover);
 
-		const description =
+		// Synopsis
+		let synopsis =
 			$('.summary__content, .summary, .description, .synopsis, .about, .series-description')
 				.first()
 				.text()
@@ -130,20 +160,65 @@ export class AsuraSource extends BaseSource {
 			$('meta[name="description"]').attr('content')?.trim() ||
 			'';
 
-		const status =
-			$('div.flex.gap-3.pt-4 span.capitalize').first().text().trim() || 'Ongoing';
+		// Status
+		let status = this.getLabeledValue($, 'Status') || 'Ongoing';
+		status = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+		if (status.toLowerCase().includes('complet')) status = 'Completed';
+		else if (status.toLowerCase().includes('ongoing') || status.toLowerCase().includes('on-going'))
+			status = 'Ongoing';
 
+		// Type (manhwa / manhua / manga) — penting untuk badge
+		let type = this.getLabeledValue($, 'Type').toLowerCase() || 'manhwa';
+		if (!['manhwa', 'manhua', 'manga'].includes(type)) {
+			type = 'manhwa';
+		}
+
+		// Rating (otomatis dari source, contoh: 8.5)
+		let rating = '0.0';
+		const ratingLabel = this.getLabeledValue($, 'Rating');
+		if (ratingLabel) {
+			const m = ratingLabel.match(/(\d+(?:\.\d+)?)/);
+			if (m) {
+				const val = parseFloat(m[1]);
+				// Asura pakai skala 10
+				if (val >= 0 && val <= 10) rating = val.toFixed(1);
+			}
+		}
+		// Fallback: cari pola "8.5" di dekat kata Rating
+		if (rating === '0.0') {
+			const bodyText = $('body').text();
+			const m = bodyText.match(/Rating\s+(\d+(?:\.\d+)?)/i);
+			if (m) {
+				const val = parseFloat(m[1]);
+				if (val >= 0 && val <= 10) rating = val.toFixed(1);
+			}
+		}
+
+		// Genres
 		const genres: string[] = [];
 		$('a[href*="genres="]').each((_, el) => {
 			const g = $(el).text().trim();
-			if (g) genres.push(g);
+			if (g && !genres.includes(g)) genres.push(g);
 		});
 
+		// Authors
 		const authors: string[] = [];
 		$('a[href*="author="]').each((_, el) => {
 			const a = $(el).text().trim();
-			if (a) authors.push(a);
+			if (a && !authors.includes(a)) authors.push(a);
 		});
+		// Artist kadang terpisah
+		$('a[href*="artist="]').each((_, el) => {
+			const a = $(el).text().trim();
+			if (a && !authors.includes(a)) authors.push(a);
+		});
+
+		// Description + meta (agar UI parseMeta bisa baca Rating)
+		const metaLines: string[] = [];
+		if (rating !== '0.0') metaLines.push(`Rating: ${rating}`);
+		metaLines.push(`Status: ${status}`);
+		metaLines.push(`Type: ${type}`);
+		const description = [...metaLines, synopsis].filter(Boolean).join('\n');
 
 		// Chapters
 		const chapters: Chapter[] = [];
@@ -158,38 +233,64 @@ export class AsuraSource extends BaseSource {
 			if (seen.has(id)) return;
 			seen.add(id);
 
-			let chapterTitle = $a.text().replace(/\s+/g, ' ').trim();
-			// Clean relative time / date suffixes
-			chapterTitle = chapterTitle
-				.replace(/\s+\d+\s+(hour|day|week|month|year)s?\s+ago\s*$/i, '')
-				.replace(/\s+last\s+(week|month|year)\s*$/i, '')
-				.replace(/\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,\s*\d{4}\s*$/i, '')
-				.replace(/\s+(yesterday|today)\s*$/i, '')
+			// Nomor dari URL (paling akurat)
+			const numFromUrl = id.match(/\/chapter\/(\d+(?:\.\d+)?)/i);
+			let number = numFromUrl ? parseFloat(numFromUrl[1]) : NaN;
+
+			let raw = $a.text().replace(/\s+/g, ' ').trim();
+
+			// Skip navigasi
+			const lower = raw.toLowerCase();
+			if (['last chapter', 'next chapter', 'previous chapter'].includes(lower)) return;
+
+			// Date
+			let date = '';
+			const dateMatch = raw.match(
+				/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{4}|\d+\s*(?:hour|day|week|month|year)s?\s*ago|yesterday|today|last\s+(?:week|month|year))\s*$/i
+			);
+			if (dateMatch) {
+				date = dateMatch[1].trim();
+				raw = raw.slice(0, dateMatch.index).trim();
+			}
+
+			// Bersihkan sisa relative time
+			raw = raw
+				.replace(/\s*\d+\s*(hour|day|week|month|year)s?\s*ago\s*$/i, '')
+				.replace(/\s*(yesterday|today)\s*$/i, '')
+				.replace(/\s*last\s+(week|month|year)\s*$/i, '')
 				.trim();
 
-			const lower = chapterTitle.toLowerCase();
-			if (['last chapter', 'next chapter', 'previous chapter'].includes(lower)) return;
-			if (lower === 'first chapter') chapterTitle = 'Chapter 1';
+			// "First Chapter" → chapter 0 atau 1
+			if (lower === 'first chapter' || lower.includes('first chapter')) {
+				if (Number.isNaN(number)) number = 0;
+				raw = number === 0 ? 'Chapter 0' : `Chapter ${number}`;
+			}
 
-			const numMatch = id.match(/\/chapter\/(\d+(?:\.\d+)?)/) || chapterTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i);
-			const number = numMatch ? parseFloat(numMatch[1]) : i + 1;
+			// Fallback nomor dari judul
+			if (Number.isNaN(number)) {
+				const numFromTitle = raw.match(/chapter\s*(\d+(?:\.\d+)?)/i);
+				number = numFromTitle ? parseFloat(numFromTitle[1]) : i + 1;
+			}
+
+			const chTitle = `Chapter ${number}`;
 
 			chapters.push({
 				id,
-				title: chapterTitle || `Chapter ${number}`,
+				title: chTitle,
 				number,
-				date: ''
+				date
 			});
 		});
 
-		// Sort ascending by chapter number (site shows newest first)
-		chapters.sort((a, b) => a.number - b.number);
+		// Sort newest first (biar tidak acak & konsisten dengan UI)
+		chapters.sort((a, b) => b.number - a.number);
 
 		return {
 			id: path,
 			sourceId: this.id,
 			title,
 			cover,
+			type, // ← penting: manhwa / manhua / manga
 			description,
 			authors,
 			status,
@@ -209,11 +310,11 @@ export class AsuraSource extends BaseSource {
 
 		const html = await this.fetchHtml(path);
 
-		// 1) Primary: Astro island props JSON (entity-escaped)
+		// 1) Primary: Astro island props JSON
 		const pagesFromProps = this.parseAstroPages(html);
 		if (pagesFromProps.length > 0) return pagesFromProps;
 
-		// 2) Fallback: img tags in reader
+		// 2) Fallback: img tags
 		const $ = cheerio.load(html);
 		const pages: string[] = [];
 		const seen = new Set<string>();
@@ -240,14 +341,9 @@ export class AsuraSource extends BaseSource {
 		return pages;
 	}
 
-	/**
-	 * Parse Astro island props that contain the pages array.
-	 * Format roughly: props="...&quot;pages&quot;:..."
-	 */
 	private parseAstroPages(html: string): string[] {
 		const pagesKey = html.indexOf('&quot;pages&quot;');
 		if (pagesKey === -1) {
-			// Try non-escaped version just in case
 			const m = html.match(/"pages"\s*:\s*(\[[\s\S]*?\])/);
 			if (m) {
 				try {
@@ -259,7 +355,6 @@ export class AsuraSource extends BaseSource {
 			return [];
 		}
 
-		// Find the nearest props="..." that contains the pages key
 		let propsStart = -1;
 		let pos = 0;
 		while (true) {
@@ -293,7 +388,6 @@ export class AsuraSource extends BaseSource {
 	}
 
 	private extractUrlsFromPagesJson(pagesData: any): string[] {
-		// Astro often wraps as [1, [ [0, {url, width, height}], ... ]]
 		const arr = Array.isArray(pagesData)
 			? pagesData[1] ?? pagesData[0] ?? pagesData
 			: pagesData;

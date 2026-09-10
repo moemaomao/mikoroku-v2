@@ -10,13 +10,21 @@ import { AsuraSource } from './impl/Asura';
 import { WelomaSource } from './impl/weloma';
 import { HitomiSource } from './impl/Hitomi';
 import { NhentaiSource } from './impl/Nhentai';
+import { HentaifoxSource } from './impl/Hentaifox';
+import { PornhwaSource } from './impl/pornhwa';
+import { KingcomixSource } from './impl/Kingkomix';
+import { EhentaiSource } from './impl/Ehentai';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
 	asura: new AsuraSource(),
 	weloma: new WelomaSource(),
 	hitomi: new HitomiSource(),
-	nhentai: new NhentaiSource()
+	nhentai: new NhentaiSource(),
+	hentaifox: new HentaifoxSource(),
+	pornhwa: new PornhwaSource(),
+	kingcomix: new KingcomixSource(),
+	ehentai: new EhentaiSource()
 };
 
 /**

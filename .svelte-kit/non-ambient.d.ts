@@ -27,12 +27,12 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/api" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/read" | "/read/[source]" | "/read/[source]/[...id]" | "/sources";
+		RouteId(): "/" | "/api" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]" | "/sources";
 		RouteParams(): {
 			"/manga/[source]": { source: string };
 			"/manga/[source]/[...id]": { source: string; id: string };
-			"/read/[source]": { source: string };
-			"/read/[source]/[...id]": { source: string; id: string }
+			"/reader/[source]": { source: string };
+			"/reader/[source]/[...id]": { source: string; id: string }
 		};
 		LayoutParams(): {
 			"/": { source?: string; id?: string };
@@ -43,12 +43,12 @@ declare module "$app/types" {
 			"/manga": { source?: string; id?: string };
 			"/manga/[source]": { source: string; id?: string };
 			"/manga/[source]/[...id]": { source: string; id: string };
-			"/read": { source?: string; id?: string };
-			"/read/[source]": { source: string; id?: string };
-			"/read/[source]/[...id]": { source: string; id: string };
+			"/reader": { source?: string; id?: string };
+			"/reader/[source]": { source: string; id?: string };
+			"/reader/[source]/[...id]": { source: string; id: string };
 			"/sources": Record<string, never>
 		};
-		Pathname(): "/" | "/api" | "/api/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/read" | "/read/" | `/read/${string}` & {} | `/read/${string}/` & {} | `/read/${string}/${string}` & {} | `/read/${string}/${string}/` & {} | "/sources" | "/sources/";
+		Pathname(): "/" | "/api" | "/api/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/sources" | "/sources/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/assetsignore.txt" | "/robots.txt" | string & {};
 	}
