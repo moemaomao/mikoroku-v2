@@ -61,6 +61,7 @@
     const SOURCE_META: Record<string, { flag: string; lang: string; isR18: boolean; color: string }> = {
         asura: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
         mangakatana: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+        mangabatscom: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
         mangabats: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
         asurascans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
         weloma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-blue-500' },
