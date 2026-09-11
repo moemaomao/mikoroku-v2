@@ -9,7 +9,7 @@ import * as cheerio from 'cheerio';
  * Search : /?s=QUERY
  * Detail : /baca/series/{slug}/
  * Chapter: /baca/{slug}-chapter-{n}-bahasa-indonesia/
- * Pages  : img di .entry-content (reader.eromanga.cfd)
+ * Pages  : .entry-content img (reader.eromanga.cfd)
  *
  * ID format:
  *   manga   : "/baca/series/{slug}"
@@ -65,7 +65,7 @@ export class CrotpediaSource extends BaseSource {
 		const t = (text || '').toLowerCase();
 		if (/\bmanhwa\b/.test(t)) return 'manhwa';
 		if (/\bmanhua\b/.test(t)) return 'manhua';
-		return 'manga'; // doujinshi → manga
+		return 'manga';
 	}
 
 	// ── List ─────────────────────────────────────────────────────────────────
@@ -74,82 +74,92 @@ export class CrotpediaSource extends BaseSource {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		// HANYA Update Terbaru (.flexbox4-item) — jangan .flexbox-item (populer)
-		$('.flexbox4-item').each((_, el) => {
-			const $el = $(el);
-			const a =
-				$el.find('.title a[href*="/baca/series/"]').first().length
-					? $el.find('.title a[href*="/baca/series/"]').first()
-					: $el.find('a[href*="/baca/series/"]').first();
-			const href = a.attr('href') || '';
+		const push = (
+			href: string,
+			title: string,
+			cover: string,
+			typeText = '',
+			chText = ''
+		) => {
 			const id = this.cleanId(href);
 			if (!/^\/baca\/series\/[^/]+$/.test(id)) return;
 			if (seen.has(id)) return;
 			seen.add(id);
 
-			const title = (
-				a.attr('title') ||
-				a.text() ||
-				$el.find('img').attr('alt') ||
-				''
-			)
-				.replace(/\s+/g, ' ')
-				.trim();
+			title = (title || '').replace(/\s+/g, ' ').trim();
 			if (!title) return;
-
-			const cover =
-				$el.find('img').attr('src') ||
-				$el.find('img').attr('data-src') ||
-				'';
-
-			const typeText = $el.find('.type').text() || '';
-			const chText = $el.find('ul.chapter a').first().text() || '';
 
 			out.push({
 				id,
 				sourceId: this.id,
 				title,
-				cover: this.absUrl(cover.split('?')[0]),
+				cover: this.absUrl((cover || '').split('?')[0]),
 				type: this.detectType(typeText),
 				status: 'Ongoing',
 				latestChapter: this.parseChapterNumber(chText) || undefined
 			});
+		};
+
+		// HANYA Update Terbaru (.flexbox4-item) — jangan .flexbox-item (populer)
+		$('.flexbox4-item').each((_, el) => {
+			const $el = $(el);
+			const a = $el.find('.title a[href*="/baca/series/"]').first().length
+				? $el.find('.title a[href*="/baca/series/"]').first()
+				: $el.find('a[href*="/baca/series/"]').first();
+			const href = a.attr('href') || '';
+			const title =
+				a.attr('title') ||
+				a.text() ||
+				$el.find('img').attr('alt') ||
+				'';
+			const cover =
+				$el.find('img').attr('src') ||
+				$el.find('img').attr('data-src') ||
+				'';
+			const typeText = $el.find('.type').text() || '';
+			const chText = $el.find('ul.chapter a').first().text() || '';
+			push(href, title, cover, typeText, chText);
 		});
 
-		// Fallback search results / generic series links
+		// Fallback (search / layout beda)
 		if (!out.length) {
 			$('a[href*="/baca/series/"]').each((_, el) => {
 				const $a = $(el);
 				const href = $a.attr('href') || '';
-				const id = this.cleanId(href);
-				if (!/^\/baca\/series\/[^/]+$/.test(id)) return;
-				if (seen.has(id)) return;
-				seen.add(id);
-
 				const title = ($a.attr('title') || $a.text() || '')
 					.replace(/\s+/g, ' ')
 					.trim();
 				if (!title || title.length < 2) return;
-
-				const $parent = $a.closest('.flexbox4-item, .flexbox-item, article, li, div');
+				const $parent = $a.closest(
+					'.flexbox4-item, .flexbox-item, article, li, div'
+				);
 				const cover =
 					$parent.find('img').attr('src') ||
 					$parent.find('img').attr('data-src') ||
 					$a.find('img').attr('src') ||
 					'';
-
-				out.push({
-					id,
-					sourceId: this.id,
-					title,
-					cover: this.absUrl((cover || '').split('?')[0]),
-					type: 'manga',
-					status: 'Ongoing'
-				});
+				push(href, title, cover);
 			});
 		}
 
 		return out;
+	}
+
+	private async fetchListPage(path: string): Promise<Manga[]> {
+		try {
+			const html = await this.fetchHtml(path);
+			if (!html || html.length < 500) {
+				console.warn('[crotpedia] empty html', path);
+				return [];
+			}
+			const $ = cheerio.load(html);
+			const list = this.parseCards($);
+			console.log(`[crotpedia] ${path} → ${list.length} items`);
+			return list;
+		} catch (e) {
+			console.warn('[crotpedia] fetchListPage failed', path, e);
+			return [];
+		}
 	}
 
 	async getLatestManga(
@@ -158,11 +168,39 @@ export class CrotpediaSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			const path = p <= 1 ? `/` : `/page/${p}/`;
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			const list = this.parseCards($).slice(0, this.PER_PAGE);
-			console.log(`[crotpedia] latest page=${p} → ${list.length}`);
+			const seen = new Set<string>();
+			const merged: Manga[] = [];
+
+			// Ambil page situs + page berikutnya sampai cukup 24
+			// Situs sering ~20 item/page di Update Terbaru
+			const startSite = p; // app page 1 → site / & /page/2 jika kurang
+			let sitePage = startSite;
+
+			while (merged.length < this.PER_PAGE && sitePage < startSite + 3) {
+				const path = sitePage <= 1 ? `/` : `/page/${sitePage}/`;
+				const batch = await this.fetchListPage(path);
+				if (!batch.length) break;
+
+				for (const m of batch) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					merged.push(m);
+					if (merged.length >= this.PER_PAGE) break;
+				}
+
+				// Untuk app page > 1, cukup 1 page situs dulu;
+				// kalau kurang baru ambil page berikutnya
+				if (batch.length === 0) break;
+				sitePage++;
+			}
+
+			// App page > 1: skip item yang sudah "dimakan" page sebelumnya
+			// Estimasi: tiap page situs ~20, app page butuh 24
+			// Mapping sederhana: offset = (p-1)*PER_PAGE di stream beruntun
+			// Karena kita mulai dari sitePage=p, hasil page 2 situs = konten app-ish page 2
+			const list = merged.slice(0, this.PER_PAGE);
+
+			console.log(`[crotpedia] latest page=${p} → ${list.length} items`);
 			return list;
 		} catch (e) {
 			console.error('[crotpedia] getLatestManga', e);
@@ -183,9 +221,7 @@ export class CrotpediaSource extends BaseSource {
 				page <= 1
 					? `/?s=${encodeURIComponent(q)}`
 					: `/page/${page}/?s=${encodeURIComponent(q)}`;
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			const list = this.parseCards($).slice(0, this.PER_PAGE);
+			const list = (await this.fetchListPage(path)).slice(0, this.PER_PAGE);
 			console.log(`[crotpedia] search "${q}" → ${list.length}`);
 			return list;
 		} catch (e) {
@@ -212,8 +248,9 @@ export class CrotpediaSource extends BaseSource {
 		const html = await this.fetchHtml(path + '/');
 		const $ = cheerio.load(html);
 
+		// Title
 		let title =
-			$('h1').first().text().trim() ||
+			$('.series-title, .entry-title, h1.title, h1').first().text().trim() ||
 			$('meta[property="og:title"]').attr('content') ||
 			path;
 		title = title
@@ -221,53 +258,95 @@ export class CrotpediaSource extends BaseSource {
 			.replace(/\s+/g, ' ')
 			.trim();
 
+		// Cover
 		let cover =
+			$('.series-thumb img, .flexbox4-thumb img, .thumb img').first().attr('src') ||
 			$('meta[property="og:image"]').attr('content') ||
-			$('.flexbox-thumb img, .series-thumb img, img').first().attr('src') ||
 			'';
-		// Skip site logo / default
 		if (/crotpedia-project|logo/i.test(cover)) {
 			cover =
-				$('.flexbox4-thumb img, .series-thumb img').first().attr('src') || cover;
+				$('.series-thumb img, .thumb img').first().attr('src') || cover;
 		}
 		cover = this.absUrl((cover || '').split('?')[0]);
 
-		// Meta text blocks
-		const bodyText = $('body').text().replace(/\s+/g, ' ');
-		let alt = '';
-		const altM = bodyText.match(/Alternative\s+(.+?)\s+Published/i);
-		if (altM) alt = altM[1].trim();
+		// Meta: <li><b>Label</b><span>Value</span></li>
+		const meta: Record<string, string> = {};
+		$('li').each((_, el) => {
+			const $el = $(el);
+			const label = $el
+				.find('b')
+				.first()
+				.text()
+				.replace(/\s+/g, ' ')
+				.trim()
+				.toLowerCase();
+			const value = $el
+				.find('span')
+				.first()
+				.text()
+				.replace(/\s+/g, ' ')
+				.trim();
+			if (label && value) meta[label] = value;
+		});
 
-		let status = 'Ongoing';
-		if (/Completed/i.test(bodyText.slice(0, 2000))) status = 'Completed';
-		else if (/Ongoing/i.test(bodyText.slice(0, 2000))) status = 'Ongoing';
+		const alt = meta['alternative'] || meta['alternatives'] || '';
 
 		const authors: string[] = [];
-		const authM = bodyText.match(/Author\s+([^\n]+?)\s+Total Chapter/i);
-		if (authM) {
-			authM[1]
-				.split(/,|\//)
-				.map((s) => s.trim())
-				.filter(Boolean)
-				.forEach((n) => {
-					if (!authors.includes(n)) authors.push(n);
-				});
+		const authorRaw = meta['author'] || meta['authors'] || meta['artist'] || '';
+		authorRaw
+			.split(/,|\//)
+			.map((s) => s.trim())
+			.filter(Boolean)
+			.forEach((n) => {
+				if (!authors.includes(n)) authors.push(n);
+			});
+
+		// Status
+		let status = 'Ongoing';
+		const statusHint =
+			$('.series-infoz, .status, .type').text() +
+			' ' +
+			$('body').text().slice(0, 1500);
+		if (/complete|finished|end/i.test(statusHint)) status = 'Completed';
+		else if (/ongoing/i.test(statusHint)) status = 'Ongoing';
+
+		// Rating: <div class="series-infoz score"><span>10</span></div>
+		let rating = $('.series-infoz.score span')
+			.first()
+			.text()
+			.replace(/\s+/g, ' ')
+			.trim();
+		if (!rating || !/\d/.test(rating)) {
+			rating = $('.series-infoz.score')
+				.first()
+				.text()
+				.replace(/[^\d.]/g, '')
+				.trim();
 		}
 
 		// Genres — hanya /baca/genre/
 		const genres: string[] = [];
 		$('a[href*="/baca/genre/"]').each((_, a) => {
 			const g = $(a).text().replace(/\s+/g, ' ').trim();
-			if (g && g.length < 40 && !genres.includes(g) && !/^genre list$/i.test(g)) {
+			if (
+				g &&
+				g.length < 40 &&
+				!genres.includes(g) &&
+				!/^genre list$/i.test(g)
+			) {
 				genres.push(g);
 			}
 		});
 
-		// Synopsis — paragraf setelah genres / sebelum Chapter List
+		// Synopsis
 		let synopsis = '';
 		$('p').each((_, el) => {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
-			if (t.length > 40 && !synopsis && !/chapter list|comment|subscribe/i.test(t)) {
+			if (
+				t.length > 40 &&
+				!synopsis &&
+				!/chapter list|comment|subscribe/i.test(t)
+			) {
 				synopsis = t;
 			}
 		});
@@ -286,16 +365,20 @@ export class CrotpediaSource extends BaseSource {
 			seen.add(id);
 
 			const text = $a.text().replace(/\s+/g, ' ').trim();
-			const number = this.parseChapterNumber(href) || this.parseChapterNumber(text);
+			const number =
+				this.parseChapterNumber(href) || this.parseChapterNumber(text);
 			if (!number && !/chapter/i.test(text)) return;
 
-			// tanggal sering di sibling / parent text
 			let date = '';
-			const parentText = $a.parent().text().replace(/\s+/g, ' ').trim();
-			const dm = parentText.match(
-				/(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}/i
-			);
-			if (dm) date = dm[0];
+			const dateEl = $a.find('.date').text().trim();
+			if (dateEl) date = dateEl;
+			else {
+				const parentText = $a.parent().text().replace(/\s+/g, ' ').trim();
+				const dm = parentText.match(
+					/(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}/i
+				);
+				if (dm) date = dm[0];
+			}
 
 			chapters.push({
 				id,
@@ -313,6 +396,7 @@ export class CrotpediaSource extends BaseSource {
 		const description = [
 			alt && `Alternative: ${alt}`,
 			authors.length && `Author(s): ${authors.join(', ')}`,
+			rating && `Rating: ${rating}`,
 			latestChapter != null && `Latest chapter: ${latestChapter}`,
 			synopsis
 		]
@@ -320,7 +404,7 @@ export class CrotpediaSource extends BaseSource {
 			.join('\n\n');
 
 		console.log(
-			`[crotpedia] details ${path} → ch=${chapters.length}, genres=${genres.join(',')}`
+			`[crotpedia] details ${path} → authors=${authors.join(',')}, rating=${rating}, ch=${chapters.length}, genres=${genres.join(',')}`
 		);
 
 		return {
@@ -357,15 +441,19 @@ export class CrotpediaSource extends BaseSource {
 				if (!src || src.startsWith('data:')) return;
 				src = this.absUrl(src.split('?')[0]);
 				if (!/^https?:\/\//i.test(src)) return;
-				if (/logo|icon|avatar|donasi|gravatar|banner|wp-content\/uploads\/2021/i.test(src))
+				if (
+					/logo|icon|avatar|donasi|gravatar|banner|wp-content\/uploads\/2021/i.test(
+						src
+					)
+				)
 					return;
-				if (/cover\.eromanga|resize=\d+/i.test(src) && !/reader\./i.test(src)) return;
+				if (/cover\.eromanga|resize=\d+/i.test(src) && !/reader\./i.test(src))
+					return;
 				if (seen.has(src)) return;
 				seen.add(src);
 				urls.push(src);
 			};
 
-			// Primary: entry content reader images
 			$('.entry-content img, #readerarea img, .reader-area img, article img').each(
 				(_, img) => {
 					const $img = $(img);
@@ -373,7 +461,6 @@ export class CrotpediaSource extends BaseSource {
 				}
 			);
 
-			// Prefer reader.eromanga.cfd if mixed
 			const readerOnly = urls.filter((u) => /reader\.eromanga\.cfd/i.test(u));
 			const finalUrls = readerOnly.length ? readerOnly : urls;
 
