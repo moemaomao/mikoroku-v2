@@ -20,7 +20,7 @@ import { ImhentaiSource } from './impl/imhentai';
 import { Hentai2readSource } from './impl/hentai2read';
 import { HentaieraSource } from './impl/Hentaiera';
 import { HentaireadSource } from './impl/Hentairead';
-import { SimplyHentaiSource } from './impl/SImplyhentai';
+import { SimplyHentaiSource } from './impl/Simplyhentai';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
