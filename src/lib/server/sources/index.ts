@@ -24,6 +24,9 @@ import { SimplyHentaiSource } from './impl/Simplyhentai';
 import { Klz9Source } from './impl/Klz9';
 import { Love4uSource } from './impl/Love4u';
 import { RawkumaSource } from './impl/Rawkuma';
+import { MangaKatanaSource } from './impl/Mangakatana';
+import { MangaBatsSource } from './impl/MangaBats';
+import { MangaBatsComSource } from './impl/MangaBatscom';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -44,7 +47,10 @@ const sources: Record<string, IMangaSource> = {
     simplyhentai: new SimplyHentaiSource(),
 	klz9: new Klz9Source(),
 	love4u: new Love4uSource(),
-	rawkuma: new RawkumaSource()
+	rawkuma: new RawkumaSource(),
+	mangakatana: new MangaKatanaSource(),
+	mangabats: new MangaBatsSource(),
+	mangabatscom: new MangaBatsComSource()
 };
 
 /**
