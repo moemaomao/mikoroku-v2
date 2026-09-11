@@ -13,26 +13,31 @@ async function resolveMangaId(
 	chapterId: string,
 	adapter: ReturnType<typeof getSource>
 ): Promise<string> {
+	// ── MangaKatana: /manga/slug.id/c123 ────────────────────────────────
+	const mk = chapterId.match(/^(\/manga\/[^/]+)\/c[\d.]+\/?$/i);
+	if (mk?.[1]) return mk[1];
+
 	// ── Komiku special case ──────────────────────────────────────────────
 	// Chapter format: /slug-name-chapter-28
 	// Manga format  : /manga/slug-name
-if (source === 'komiku') {
-	// Support chapter biasa & desimal (5.5, 12.1, dll)
-	const m = chapterId.match(/^\/(.+)-chapter-(\d+(?:\.\d+)?)\/?$/i);
-	if (m?.[1]) {
-		return `/manga/${m[1]}`;
+	if (source === 'komiku') {
+		const m = chapterId.match(/^\/(.+)-chapter-(\d+(?:\.\d+)?)\/?$/i);
+		if (m?.[1]) {
+			return `/manga/${m[1]}`;
+		}
+
+		const fallback = chapterId.replace(/-chapter-\d+(?:\.\d+)?\/?$/i, '');
+		if (fallback !== chapterId && fallback.length > 1) {
+			const slug = fallback.replace(/^\//, '');
+			return `/manga/${slug}`;
+		}
 	}
 
-	// fallback
-	const fallback = chapterId.replace(/-chapter-\d+(?:\.\d+)?\/?$/i, '');
-	if (fallback !== chapterId && fallback.length > 1) {
-		const slug = fallback.replace(/^\//, '');
-		return `/manga/${slug}`;
-	}
-}
-
-	// ── Standard hierarchical paths: /manga-slug/chapter-1 ───────────────
-	const hierarchical = chapterId.replace(/\/(chapter|ch|episode|ep)[-/_]?.+$/i, '');
+	// ── Standard hierarchical: /manga-slug/chapter-1 atau /ch-1 ─────────
+	const hierarchical = chapterId.replace(
+		/\/(chapter|ch|episode|ep|c)[-/_]?[\d.]+\/?$/i,
+		''
+	);
 	if (hierarchical !== chapterId && hierarchical.length > 1) {
 		return hierarchical;
 	}
@@ -100,10 +105,12 @@ if (currentChapterIndex === -1 && chapters.length > 0) {
 	);
 }
 
-// Still not found: match by number (support desimal)
+
 if (currentChapterIndex === -1 && chapters.length > 0) {
-	const numMatch = chapterId.match(/chapter-(\d+(?:\.\d+)?)\/?$/i) 
-		|| chapterId.match(/(\d+(?:\.\d+)?)\/?$/);
+	const numMatch =
+		chapterId.match(/\/c(\d+(?:\.\d+)?)\/?$/i) ||
+		chapterId.match(/chapter[-_/]?(\d+(?:\.\d+)?)\/?$/i) || 
+		chapterId.match(/(\d+(?:\.\d+)?)\/?$/);                
 	if (numMatch) {
 		const n = parseFloat(numMatch[1]);
 		currentChapterIndex = chapters.findIndex(
