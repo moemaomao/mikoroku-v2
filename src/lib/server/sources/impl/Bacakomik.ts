@@ -292,83 +292,119 @@ export class BacaKomikSource extends BaseSource {
 	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-		let path = this.cleanId(mangaId);
+	let path = this.cleanId(mangaId);
 
-		if (/^\/chapter\//i.test(path)) {
-			const series = this.seriesIdFromChapter(path);
-			if (series) path = series;
+	if (/^\/chapter\//i.test(path)) {
+		const series = this.seriesIdFromChapter(path);
+		if (series) path = series;
+	}
+
+	if (!/^\/series\/[^/]+$/i.test(path)) {
+		throw new Error(`Invalid bacakomik id: ${mangaId}`);
+	}
+
+	const html = await this.fetchHtml(path + '/');
+	const $ = cheerio.load(html);
+
+	// ── Title ──────────────────────────────────────────────────────────────
+	let title =
+		$('h1').first().text().trim() ||
+		$('meta[property="og:title"]').attr('content') ||
+		path;
+	title = title
+		.replace(/\s*[-–|].*BacaKomik.*$/i, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	// ── Cover (fix) ──────────────────────────────────────────────────────
+	// Prioritas: img.thumb / .series-thumb img
+	let cover =
+		$('img.thumb').attr('src') ||
+		$('.series-thumb img').attr('src') ||
+		$('meta[property="og:image"]').attr('content') ||
+		$('.thumbnail-wrapper img, .thumb img, article img').first().attr('src') ||
+		'';
+	cover = this.absUrl((cover || '').split('?')[0]);
+
+	const bodyText = $('body').text().replace(/\s+/g, ' ');
+
+	// ── Alt / Author / Status (tetap pakai regex body) ─────────────────────
+	let alt = '';
+	const altM = bodyText.match(/Alternatif\s*:\s*(.+?)(?:Author|Status|Sinopsis|$)/i);
+	if (altM) alt = altM[1].replace(/\s+/g, ' ').trim().replace(/,$/, '');
+
+	const authors: string[] = [];
+	const authM = bodyText.match(/Author\s*:\s*(.+?)(?:Status|Sinopsis|Genre|$)/i);
+	if (authM) {
+		authM[1]
+			.split(/,|\//)
+			.map((s) => s.trim())
+			.filter((n) => n && n.length < 60)
+			.forEach((n) => {
+				if (!authors.includes(n)) authors.push(n);
+			});
+	}
+
+	let status = 'Ongoing';
+	const stM = bodyText.match(/Status\s*:\s*(Ongoing|Completed|Hiatus)/i);
+	if (stM) {
+		status = /complete/i.test(stM[1]) ? 'Completed' : stM[1];
+	}
+
+	// ── Genres ─────────────────────────────────────────────────────────────
+	const genres: string[] = [];
+	$('a.genre-link, a[href*="/genre/"]').each((_, a) => {
+		const g = $(a).text().replace(/\s+/g, ' ').trim();
+		if (g && g.length < 40 && !/^genre$/i.test(g) && !genres.includes(g)) {
+			genres.push(g);
 		}
+	});
 
-		if (!/^\/series\/[^/]+$/i.test(path)) {
-			throw new Error(`Invalid bacakomik id: ${mangaId}`);
+	// ── Synopsis ───────────────────────────────────────────────────────────
+	let synopsis = '';
+	const sinM = bodyText.match(/Sinopsis\s*:\s*(.+?)(?:Dae Ho|Chapter|Favorit|$)/i);
+	$('p').each((_, el) => {
+		const t = $(el).text().replace(/\s+/g, ' ').trim();
+		if (t.length > 80 && !synopsis && !/genre|author|status|alternatif/i.test(t)) {
+			synopsis = t;
 		}
+	});
+	if (!synopsis && sinM) synopsis = sinM[1].trim();
 
-		const html = await this.fetchHtml(path + '/');
-		const $ = cheerio.load(html);
+	const typeHint = $('.cpt-label, .card').first().text() || genres.join(' ');
 
-		let title =
-			$('h1').first().text().trim() ||
-			$('meta[property="og:title"]').attr('content') ||
-			path;
-		title = title
-			.replace(/\s*[-–|].*BacaKomik.*$/i, '')
-			.replace(/\s+/g, ' ')
-			.trim();
+	// ── Chapters (FIX utama) ───────────────────────────────────────────────
+	// Situs sekarang inject chapter lewat: const chapterData = [...]
+	const chapters: Chapter[] = [];
+	const seen = new Set<string>();
 
-		let cover =
-			$('meta[property="og:image"]').attr('content') ||
-			$('.thumbnail-wrapper img, .thumb img, article img').first().attr('src') ||
-			'';
-		cover = this.absUrl((cover || '').split('?')[0]);
+	const chapterDataMatch = html.match(/const\s+chapterData\s*=\s*(\[[\s\S]*?\]);/);
+	if (chapterDataMatch) {
+		try {
+			const data = JSON.parse(chapterDataMatch[1]) as Array<{ title?: string; url?: string }>;
+			for (const item of data) {
+				if (!item?.url) continue;
+				const id = this.cleanId(item.url);
+				if (!/^\/chapter\//i.test(id) || seen.has(id)) continue;
+				seen.add(id);
 
-		const bodyText = $('body').text().replace(/\s+/g, ' ');
+				const text = (item.title || '').replace(/\s+/g, ' ').trim();
+				const number =
+					this.parseChapterNumber(id) || this.parseChapterNumber(text) || 0;
 
-		let alt = '';
-		const altM = bodyText.match(/Alternatif\s*:\s*(.+?)(?:Author|Status|Sinopsis|$)/i);
-		if (altM) alt = altM[1].replace(/\s+/g, ' ').trim().replace(/,$/, '');
-
-		const authors: string[] = [];
-		const authM = bodyText.match(/Author\s*:\s*(.+?)(?:Status|Sinopsis|Genre|$)/i);
-		if (authM) {
-			authM[1]
-				.split(/,|\//)
-				.map((s) => s.trim())
-				.filter((n) => n && n.length < 60)
-				.forEach((n) => {
-					if (!authors.includes(n)) authors.push(n);
+				chapters.push({
+					id,
+					title: text || `Chapter ${number}`,
+					number
 				});
-		}
-
-		let status = 'Ongoing';
-		const stM = bodyText.match(/Status\s*:\s*(Ongoing|Completed|Hiatus)/i);
-		if (stM) {
-			status = /complete/i.test(stM[1]) ? 'Completed' : stM[1];
-		}
-
-		const genres: string[] = [];
-		$('a.genre-link, a[href*="/genre/"]').each((_, a) => {
-			const g = $(a).text().replace(/\s+/g, ' ').trim();
-			if (g && g.length < 40 && !/^genre$/i.test(g) && !genres.includes(g)) {
-				genres.push(g);
 			}
-		});
+		} catch (e) {
+			console.warn('[bacakomik] failed to parse chapterData', e);
+		}
+	}
 
-		let synopsis = '';
-		const sinM = bodyText.match(/Sinopsis\s*:\s*(.+?)(?:Dae Ho|Chapter|Favorit|$)/i);
-		// Ambil paragraf panjang
-		$('p').each((_, el) => {
-			const t = $(el).text().replace(/\s+/g, ' ').trim();
-			if (t.length > 80 && !synopsis && !/genre|author|status|alternatif/i.test(t)) {
-				synopsis = t;
-			}
-		});
-		if (!synopsis && sinM) synopsis = sinM[1].trim();
-
-		const typeHint = $('.cpt-label, .card').first().text() || genres.join(' ');
-
-		// Chapters
-		const chapters: Chapter[] = [];
-		const seen = new Set<string>();
+	// Fallback lama (kalau suatu saat mereka SSR lagi)
+	if (!chapters.length) {
 		$('a[href*="/chapter/"]').each((_, a) => {
 			const href = $(a).attr('href') || '';
 			const id = this.cleanId(href);
@@ -385,37 +421,39 @@ export class BacaKomikSource extends BaseSource {
 				number
 			});
 		});
-		chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
-
-		const latestChapter = chapters[chapters.length - 1]?.number;
-
-		const description = [
-			alt && `Alternative: ${alt}`,
-			authors.length && `Author(s): ${authors.join(', ')}`,
-			latestChapter != null && `Latest chapter: ${latestChapter}`,
-			synopsis
-		]
-			.filter(Boolean)
-			.join('\n\n');
-
-		console.log(
-			`[bacakomik] details ${path} → ch=${chapters.length}, genres=${genres.length}`
-		);
-
-		return {
-			id: path,
-			sourceId: this.id,
-			title,
-			cover,
-			type: this.detectType(typeHint),
-			status,
-			description,
-			authors,
-			genres,
-			chapters,
-			latestChapter
-		};
 	}
+
+	chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
+
+	const latestChapter = chapters[chapters.length - 1]?.number;
+
+	const description = [
+		alt && `Alternative: ${alt}`,
+		authors.length && `Author(s): ${authors.join(', ')}`,
+		latestChapter != null && `Latest chapter: ${latestChapter}`,
+		synopsis
+	]
+		.filter(Boolean)
+		.join('\n\n');
+
+	console.log(
+		`[bacakomik] details ${path} → ch=${chapters.length}, genres=${genres.length}, cover=${!!cover}`
+	);
+
+	return {
+		id: path,
+		sourceId: this.id,
+		title,
+		cover,
+		type: this.detectType(typeHint),
+		status,
+		description,
+		authors,
+		genres,
+		chapters,
+		latestChapter
+	};
+}
 
 	// ── Pages ────────────────────────────────────────────────────────────────
 
