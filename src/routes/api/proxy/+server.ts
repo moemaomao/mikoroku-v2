@@ -1,7 +1,7 @@
 /**
  * Image Proxy
- * - Non-Hitomi + non-ihlv1 + non-nhentai + w → redirect weserv (0 CPU Worker)
- * - Hitomi / ihlv1 / nhentai → fetch langsung (butuh referer yang benar)
+ * - Non-Hitomi + non-ihlv1 + non-nhentai + non-hentairead + w → redirect weserv (0 CPU Worker)
+ * - Hitomi / ihlv1 / nhentai / hentairead → fetch langsung (butuh referer yang benar)
  */
 
 import type { RequestHandler } from './$types';
@@ -28,14 +28,17 @@ export const GET: RequestHandler = async ({ url }) => {
 		const isHitomi = /hitomi\.la|gold-usergeneratedcontent\.net/i.test(decodedUrl);
 		const isBlockedWeserv = /ihlv1\.xyz/i.test(decodedUrl);
 		const isNhentai = /nhentai\.net/i.test(decodedUrl);
+		const isHentairead =
+			sourceId === 'hentairead' ||
+			/hentairead\.com|hencover|henread/i.test(decodedUrl);
 
 		// ===== Hemat CPU: redirect ke weserv =====
-		// Skip weserv untuk source yang sering di-block / butuh referer khusus
 		if (
 			w &&
 			!isHitomi &&
 			!isBlockedWeserv &&
 			!isNhentai &&
+			!isHentairead &&
 			/^https?:\/\//i.test(decodedUrl)
 		) {
 			const weserv =
@@ -64,6 +67,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://weloma.net/';
 		} else if (sourceId === 'nhentai' || isNhentai) {
 			referer = 'https://nhentai.net/';
+		} else if (isHentairead) {
+			referer = 'https://hentairead.com/';
 		}
 
 		const controller = new AbortController();
