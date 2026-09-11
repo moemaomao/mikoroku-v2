@@ -4,6 +4,7 @@
     import { onMount } from 'svelte';
     import { Search, Loader2, ChevronDown, Check } from 'lucide-svelte';
     import { getImpl, setImpl } from '$lib/stores/impl';
+    import type { MangaKatanaSource } from '$lib/server/sources/impl/Mangakatana';
 
     type SourceItem = { id: string; name: string };
 
@@ -60,6 +61,8 @@
 
     const SOURCE_META: Record<string, { flag: string; lang: string; isR18: boolean; color: string }> = {
         asura: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+        mangakatana: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+        mangabats: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
         asurascans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
         weloma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-blue-500' },
         hitomi: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
