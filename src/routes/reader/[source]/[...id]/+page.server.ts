@@ -7,22 +7,39 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import debug from '$lib/utils/debug';
 
-/** Resolve manga id from chapter id (Weloma uses /c/xxx independent of /m/xxx) */
+/** Resolve manga id from chapter id */
 async function resolveMangaId(
 	source: string,
 	chapterId: string,
 	adapter: ReturnType<typeof getSource>
 ): Promise<string> {
-	// Standard hierarchical paths: /manga-slug/chapter-1
+	// ── Komiku special case ──────────────────────────────────────────────
+	// Chapter format: /slug-name-chapter-28
+	// Manga format  : /manga/slug-name
+if (source === 'komiku') {
+	// Support chapter biasa & desimal (5.5, 12.1, dll)
+	const m = chapterId.match(/^\/(.+)-chapter-(\d+(?:\.\d+)?)\/?$/i);
+	if (m?.[1]) {
+		return `/manga/${m[1]}`;
+	}
+
+	// fallback
+	const fallback = chapterId.replace(/-chapter-\d+(?:\.\d+)?\/?$/i, '');
+	if (fallback !== chapterId && fallback.length > 1) {
+		const slug = fallback.replace(/^\//, '');
+		return `/manga/${slug}`;
+	}
+}
+
+	// ── Standard hierarchical paths: /manga-slug/chapter-1 ───────────────
 	const hierarchical = chapterId.replace(/\/(chapter|ch|episode|ep)[-/_]?.+$/i, '');
 	if (hierarchical !== chapterId && hierarchical.length > 1) {
 		return hierarchical;
 	}
 
-	// Weloma / Hitomi-style: independent chapter ids
+	// ── Weloma / Hitomi-style ────────────────────────────────────────────
 	if (source === 'weloma' || chapterId.startsWith('/c/')) {
 		try {
-			// fetch chapter HTML via getChapterPages path logic — use public fetch of parent link
 			const base = (adapter as any).baseUrl || 'https://weloma.net';
 			const path = chapterId.startsWith('http') ? chapterId : `${base}${chapterId}`;
 			const res = await fetch(path, {
@@ -75,22 +92,25 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 		);
 
 		// Match current chapter
-		let currentChapterIndex = chapters.findIndex((ch) => ch.id === chapterId);
+let currentChapterIndex = chapters.findIndex((ch) => ch.id === chapterId);
 
-		if (currentChapterIndex === -1 && chapters.length > 0) {
-			currentChapterIndex = chapters.findIndex(
-				(ch) => ch.id.endsWith(chapterId) || chapterId.endsWith(ch.id)
-			);
-		}
+if (currentChapterIndex === -1 && chapters.length > 0) {
+	currentChapterIndex = chapters.findIndex(
+		(ch) => ch.id.endsWith(chapterId) || chapterId.endsWith(ch.id)
+	);
+}
 
-		// Still not found: match by number in path / title
-		if (currentChapterIndex === -1 && chapters.length > 0) {
-			const numMatch = chapterId.match(/(\d+(?:\.\d+)?)\s*$/);
-			if (numMatch) {
-				const n = parseFloat(numMatch[1]);
-				currentChapterIndex = chapters.findIndex((ch) => ch.number === n);
-			}
-		}
+// Still not found: match by number (support desimal)
+if (currentChapterIndex === -1 && chapters.length > 0) {
+	const numMatch = chapterId.match(/chapter-(\d+(?:\.\d+)?)\/?$/i) 
+		|| chapterId.match(/(\d+(?:\.\d+)?)\/?$/);
+	if (numMatch) {
+		const n = parseFloat(numMatch[1]);
+		currentChapterIndex = chapters.findIndex(
+			(ch) => Math.abs((ch.number ?? 0) - n) < 0.001
+		);
+	}
+}
 
 		const currentChapter = chapters[currentChapterIndex] ?? null;
 

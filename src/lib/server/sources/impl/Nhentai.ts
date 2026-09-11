@@ -213,9 +213,10 @@ export class NhentaiSource extends BaseSource {
 			}
 
 			const list = data?.result || data?.galleries || [];
-			return list
-				.map((g: any) => this.toMangaFromList(g))
-				.filter(Boolean) as Manga[];
+return list
+    .map((g: any) => this.toMangaFromList(g))
+    .filter(Boolean)
+    .slice(0, 24) as Manga[];
 		} catch (e) {
 			console.error('[nhentai] getLatestManga', e);
 			return [];
@@ -245,9 +246,10 @@ export class NhentaiSource extends BaseSource {
 				`${this.api}/search?query=${searchQ}&page=${page}`
 			);
 			const list = data?.result || data?.galleries || [];
-			return list
-				.map((g: any) => this.toMangaFromList(g))
-				.filter(Boolean) as Manga[];
+return list
+    .map((g: any) => this.toMangaFromList(g))
+    .filter(Boolean)
+    .slice(0, 24) as Manga[];
 		} catch (e) {
 			console.error('[nhentai] searchManga', e);
 			return [];

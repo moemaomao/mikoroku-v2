@@ -1,21 +1,32 @@
 {
 	"/": [
-		"src/routes/+page.server.ts"
+		"src/routes/+page.server.ts",
+		"src/routes/+layout.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/api/pages": [
+		"src/routes/api/pages/+server.ts"
 	],
 	"/api/proxy": [
 		"src/routes/api/proxy/+server.ts"
 	],
-	"/bookmark": [],
+	"/bookmark": [
+		"src/routes/+layout.server.ts"
+	],
 	"/history": [
-		"src/routes/history/+page.server.ts"
+		"src/routes/history/+page.server.ts",
+		"src/routes/+layout.server.ts"
 	],
 	"/manga/[source]/[...id]": [
-		"src/routes/manga/[source]/[...id]/+page.server.ts"
+		"src/routes/manga/[source]/[...id]/+page.server.ts",
+		"src/routes/+layout.server.ts"
 	],
 	"/reader/[source]/[...id]": [
-		"src/routes/reader/[source]/[...id]/+page.server.ts"
+		"src/routes/reader/[source]/[...id]/+page.server.ts",
+		"src/routes/+layout.server.ts"
 	],
 	"/sources": [
-		"src/routes/sources/+page.server.ts"
+		"src/routes/sources/+page.server.ts",
+		"src/routes/+layout.server.ts"
 	]
 }

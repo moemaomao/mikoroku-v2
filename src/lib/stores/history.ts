@@ -18,7 +18,7 @@ export interface ReadingEntry {
 	timestamp: number;
 }
 
-const STORAGE_KEY = 'fana-cumik_history';
+const STORAGE_KEY = 'mikoroku_history';
 const MAX_HISTORY = 50;
 
 /**
@@ -59,6 +59,7 @@ export function saveReading(entry: Omit<ReadingEntry, 'timestamp'>): void {
 		const trimmed = filtered.slice(0, MAX_HISTORY);
 
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+		window.dispatchEvent(new CustomEvent('history-changed'));
 	} catch {
 		// Silent fail
 	}
@@ -78,6 +79,7 @@ export function getLastRead(mangaId: string): ReadingEntry | null {
 export function clearHistory(): void {
 	if (!browser) return;
 	localStorage.removeItem(STORAGE_KEY);
+	window.dispatchEvent(new CustomEvent('history-changed'));
 }
 
 /**
@@ -89,4 +91,5 @@ export function removeFromHistory(mangaId: string): void {
 	const history = getHistory();
 	const filtered = history.filter((h) => h.mangaId !== mangaId);
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+	window.dispatchEvent(new CustomEvent('history-changed'));
 }

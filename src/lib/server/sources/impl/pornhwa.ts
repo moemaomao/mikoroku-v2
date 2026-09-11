@@ -95,20 +95,21 @@ export class PornhwaSource extends BaseSource {
 	}
 
 	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
-		try {
-			const p = Math.max(1, Number(page) || 1);
-			const path = p <= 1 ? '/latest-update/' : `/latest-update/${p}/`;
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			return this.parseList($);
-		} catch (e) {
-			console.error('[pornhwa] getLatestManga', e);
-			return [];
-		}
-	}
+        page: number,
+        _opts?: { lang?: string; type?: string }
+    ): Promise<Manga[]> {
+        try {
+            const p = Math.max(1, Number(page) || 1);
+            const path = p <= 1 ? '/latest-update/' : `/latest-update/${p}/`;
+            const html = await this.fetchHtml(path);
+            const $ = cheerio.load(html);
+         
+            return this.parseList($).slice(0, 24);
+        } catch (e) {
+            console.error('[pornhwa] getLatestManga', e);
+            return [];
+        }
+    }
 
 	async searchManga(
 		query: string,

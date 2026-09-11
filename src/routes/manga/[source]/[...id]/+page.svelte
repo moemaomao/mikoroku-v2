@@ -33,8 +33,7 @@
 		return out;
 	}
 
-	const META_KEYS =
-		/^\s*(alttitle|alt title|alternative(?: title)?|type|language|artists?|groups?|pages|author|publication|published|serialization|demographic|latest(?: update)?|rating|volume|vol)\s*:/i;
+	const META_KEYS = /^\s*(alttitle|alt title|alternative(?: title)?|type|language|artists?|groups?|pages|author|publication|published|serialization|demographic|latest(?: update)?|updated|rating|volume|vol)\s*:/i;
 
 	let meta = $derived(parseMeta(manga?.description));
 	let altTitle = $derived(

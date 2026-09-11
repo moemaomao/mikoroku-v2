@@ -27,7 +27,7 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/api" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]" | "/sources";
+		RouteId(): "/" | "/api" | "/api/pages" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]" | "/sources";
 		RouteParams(): {
 			"/manga/[source]": { source: string };
 			"/manga/[source]/[...id]": { source: string; id: string };
@@ -37,6 +37,7 @@ declare module "$app/types" {
 		LayoutParams(): {
 			"/": { source?: string; id?: string };
 			"/api": Record<string, never>;
+			"/api/pages": Record<string, never>;
 			"/api/proxy": Record<string, never>;
 			"/bookmark": Record<string, never>;
 			"/history": Record<string, never>;
@@ -48,7 +49,7 @@ declare module "$app/types" {
 			"/reader/[source]/[...id]": { source: string; id: string };
 			"/sources": Record<string, never>
 		};
-		Pathname(): "/" | "/api" | "/api/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/sources" | "/sources/";
+		Pathname(): "/" | "/api" | "/api/" | "/api/pages" | "/api/pages/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/sources" | "/sources/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/assetsignore.txt" | "/robots.txt" | string & {};
 	}

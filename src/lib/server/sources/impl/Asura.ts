@@ -111,18 +111,54 @@ export class AsuraSource extends BaseSource {
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
 	async getLatestManga(page: number): Promise<Manga[]> {
-		const path = page <= 1 ? '/browse' : `/browse?page=${page}`;
-		const html = await this.fetchHtml(path);
-		const $ = cheerio.load(html);
-		return this.parseCards($);
-	}
 
-	async searchManga(query: string): Promise<Manga[]> {
-		const encoded = encodeURIComponent(query);
-		const html = await this.fetchHtml(`/browse?search=${encoded}`);
-		const $ = cheerio.load(html);
-		return this.parseCards($);
-	}
+    const path = page <= 1 ? '/browse' : `/browse?page=${page}`;
+    const html = await this.fetchHtml(path);
+    const $ = cheerio.load(html);
+    let list = this.parseCards($);
+
+    if (list.length < 24) {
+        try {
+            const nextPage = page + 1;
+            const nextHtml = await this.fetchHtml(`/browse?page=${nextPage}`);
+            const $next = cheerio.load(nextHtml);
+            const nextList = this.parseCards($next);
+            
+            list = [...list, ...nextList];
+        } catch (e) {
+            console.error('[Asura] failed to fetch extra page for 24 items', e);
+        }
+    }
+
+    return list.slice(0, 24);
+}
+
+	async searchManga(query: string, opts?: { page?: number }): Promise<Manga[]> {
+    const q = (query || '').trim();
+    const page = Math.max(1, opts?.page || 1);
+    
+    if (!q) return this.getLatestManga(page);
+
+    const encoded = encodeURIComponent(q);
+    const html = await this.fetchHtml(`/browse?search=${encoded}&page=${page}`);
+    const $ = cheerio.load(html);
+    let list = this.parseCards($);
+
+    if (list.length < 24 && list.length > 0) {
+        try {
+            const nextPage = page + 1;
+            const nextHtml = await this.fetchHtml(`/browse?search=${encoded}&page=${nextPage}`);
+            const $next = cheerio.load(nextHtml);
+            const nextList = this.parseCards($next);
+            
+            list = [...list, ...nextList];
+        } catch (e) {
+            console.error('[Asura] failed to fetch extra search pages', e);
+        }
+    }
+
+    return list.slice(0, 24);
+}
 
 	// ── Manga Details ────────────────────────────────────────────────────────
 
