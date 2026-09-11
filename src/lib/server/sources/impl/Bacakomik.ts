@@ -458,51 +458,68 @@ export class BacaKomikSource extends BaseSource {
 	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
-		const path = this.cleanId(chapterId);
-		if (!/^\/chapter\//i.test(path)) {
-			console.error('[bacakomik] not a chapter path:', chapterId);
-			return [];
-		}
-
-		try {
-			const html = await this.fetchHtml(path + '/');
-			const $ = cheerio.load(html);
-			const urls: string[] = [];
-			const seen = new Set<string>();
-
-			const pick = (src: string) => {
-				if (!src || src.startsWith('data:')) return;
-				src = this.absUrl(src.split('?')[0]);
-				if (!/^https?:\/\//i.test(src)) return;
-				if (
-					/logo|icon|avatar|emoji|banner|\.gif$|ads|wp-content\/uploads\/2025\/10\/bacakomik/i.test(
-						src
-					)
-				)
-					return;
-				// prioritaskan CDN baca, skip ads r2
-				if (/r2\.dev\//i.test(src) && !/warungkomik/i.test(src)) return;
-				if (seen.has(src)) return;
-				seen.add(src);
-				urls.push(src);
-			};
-
-			$('.entry-content img, #readerarea img, .reader-area img, article img').each(
-				(_, img) => {
-					const $img = $(img);
-					pick($img.attr('src') || $img.attr('data-src') || '');
-				}
-			);
-
-			// Prefer warungkomikcdn
-			const cdn = urls.filter((u) => /warungkomikcdn/i.test(u));
-			const finalUrls = cdn.length ? cdn : urls;
-
-			console.log(`[bacakomik] ${finalUrls.length} pages → ${path}`);
-			return finalUrls;
-		} catch (e) {
-			console.error('[bacakomik] getChapterPages', path, e);
-			return [];
-		}
+	const path = this.cleanId(chapterId);
+	if (!/^\/chapter\//i.test(path)) {
+		console.error('[bacakomik] not a chapter path:', chapterId);
+		return [];
 	}
+
+	try {
+		const html = await this.fetchHtml(path + '/');
+		const $ = cheerio.load(html);
+		const urls: string[] = [];
+		const seen = new Set<string>();
+
+		const pick = (src: string) => {
+			if (!src || src.startsWith('data:')) return;
+			src = this.absUrl(src.split('?')[0]);
+			if (!/^https?:\/\//i.test(src)) return;
+
+			// skip ads / logo / gif
+			if (
+				/logo|icon|avatar|emoji|banner|\.gif$|ads|wp-content\/uploads\/2025\/10\/bacakomik|histats|yandex/i.test(
+					src
+				)
+			)
+				return;
+
+			// skip pure ad CDN (r2 ads), tapi izinkan gudangkomik / warungkomik
+			if (
+				/r2\.dev\//i.test(src) &&
+				!/warungkomik|gudangkomik/i.test(src)
+			)
+				return;
+
+			if (seen.has(src)) return;
+			seen.add(src);
+			urls.push(src);
+		};
+
+		// Selector baru (utama) + fallback lama
+		$(
+			'.viewer-komik img, .img-wrapper img, .entry-content img, #readerarea img, .reader-area img, article img'
+		).each((_, img) => {
+			const $img = $(img);
+			pick(
+				$img.attr('src') ||
+					$img.attr('data-src') ||
+					$img.attr('data-lazy-src') ||
+					$img.attr('data-original') ||
+					''
+			);
+		});
+
+		// Prefer CDN komik yang valid
+		const preferred = urls.filter((u) =>
+			/gudangkomik|warungkomikcdn|warungkomik/i.test(u)
+		);
+		const finalUrls = preferred.length ? preferred : urls;
+
+		console.log(`[bacakomik] ${finalUrls.length} pages → ${path}`);
+		return finalUrls;
+	} catch (e) {
+		console.error('[bacakomik] getChapterPages', path, e);
+		return [];
+	}
+  }
 }
