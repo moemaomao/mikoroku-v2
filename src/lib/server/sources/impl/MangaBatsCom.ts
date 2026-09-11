@@ -19,6 +19,8 @@ export class MangaBatsComSource extends BaseSource {
 
 	private readonly PER_PAGE = 24;
 
+	// ── Helpers ──────────────────────────────────────────────────────────────
+
 	private absUrl(url: string): string {
 		if (!url) return '';
 		if (url.startsWith('http')) return url;
@@ -52,7 +54,6 @@ export class MangaBatsComSource extends BaseSource {
 		return n ? parseFloat(n[1]) : 0;
 	}
 
-	/** Decode HTML entities sederhana */
 	private decodeHtml(s: string): string {
 		return s
 			.replace(/&#039;/g, "'")
@@ -91,7 +92,7 @@ export class MangaBatsComSource extends BaseSource {
 			});
 		};
 
-		// Primary: wrapper di list/search
+		// Primary: list / search cards
 		$('.list-comic-item-wrap').each((_, el) => {
 			const $el = $(el);
 			const a = $el.find('a.list-story-item, a.cover, a[href*="/manga/"]').first();
@@ -114,7 +115,7 @@ export class MangaBatsComSource extends BaseSource {
 			push(href, title, cover, chText);
 		});
 
-		// Homepage daily: .itemupdate
+		// Homepage daily
 		if (!out.length) {
 			$('.itemupdate').each((_, el) => {
 				const $el = $(el);
@@ -134,7 +135,7 @@ export class MangaBatsComSource extends BaseSource {
 			});
 		}
 
-		// Fallback: cover anchors
+		// Fallback anchors
 		if (!out.length) {
 			$('a.list-story-item[href*="/manga/"], a.cover[href*="/manga/"]').each((_, el) => {
 				const $a = $(el);
@@ -180,8 +181,7 @@ export class MangaBatsComSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			// site: /search/story/{query}
-			const slug = encodeURIComponent(q).replace(/%20/g, '%20');
+			const slug = encodeURIComponent(q);
 			const path =
 				page <= 1
 					? `/search/story/${slug}`
@@ -210,6 +210,7 @@ export class MangaBatsComSource extends BaseSource {
 			}
 		});
 		if (!res.ok) throw new Error(`chapters API ${res.status}`);
+
 		const json = (await res.json()) as {
 			data?: {
 				chapters?: Array<{
@@ -220,6 +221,7 @@ export class MangaBatsComSource extends BaseSource {
 				}>;
 			};
 		};
+
 		const rows = json?.data?.chapters || [];
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
@@ -231,9 +233,9 @@ export class MangaBatsComSource extends BaseSource {
 			seen.add(id);
 
 			const number =
-	typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
-		? row.chapter_num
-		: this.parseChapterNumber(row.chapter_name || chSlug) || 0;
+				typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
+					? row.chapter_num
+					: this.parseChapterNumber(row.chapter_name || chSlug) || 0;
 
 			let date = '';
 			if (row.updated_at) {
@@ -247,10 +249,11 @@ export class MangaBatsComSource extends BaseSource {
 			chapters.push({
 				id,
 				title: row.chapter_name || `Chapter ${number}`,
-				number: number || chapters.length + 1,
+				number,
 				date
 			});
 		}
+
 		return chapters;
 	}
 
@@ -263,6 +266,7 @@ export class MangaBatsComSource extends BaseSource {
 		const html = await this.fetchHtml(`/manga/${slug}`);
 		const $ = cheerio.load(html);
 
+		// Title
 		let title =
 			$('h1').first().text().trim() ||
 			$('meta[property="og:title"]').attr('content') ||
@@ -273,6 +277,7 @@ export class MangaBatsComSource extends BaseSource {
 			.replace(/\s*[-|].*Mangabat.*$/i, '')
 			.trim();
 
+		// Cover
 		let cover =
 			$('meta[property="og:image"]').attr('content') ||
 			$('.story-info-left img, .info-image img').attr('src') ||
@@ -280,6 +285,7 @@ export class MangaBatsComSource extends BaseSource {
 			'';
 		cover = this.absUrl((cover || '').split('?')[0]);
 
+		// Alternative names
 		let alt = '';
 		$('h2').each((_, el) => {
 			const t = $(el).text().trim();
@@ -294,67 +300,103 @@ export class MangaBatsComSource extends BaseSource {
 			}
 		});
 
+		// Status + last update
 		let status = 'Ongoing';
 		let lastUpdate = '';
-		$('p').each((_, el) => {
-			const t = $(el).text().trim();
-			const next = $(el).next('p').text().trim();
-			if (/^Status:?$/i.test(t) && next) {
-				const v = next.toLowerCase();
-				if (/complete|finished|end/.test(v)) status = 'Completed';
-				else status = 'Ongoing';
+		$('li').each((_, el) => {
+			const t = $(el).text().replace(/\s+/g, ' ').trim();
+			if (/^status\s*:/i.test(t)) {
+				const v = t.replace(/^status\s*:\s*/i, '').toLowerCase();
+				status = /complete|finished|end/.test(v) ? 'Completed' : 'Ongoing';
 			}
-			if (/^Last updated:?$/i.test(t) && next) lastUpdate = next;
+			if (/^last updated\s*:/i.test(t)) {
+				lastUpdate = t.replace(/^last updated\s*:\s*/i, '').trim();
+			}
 		});
 
+		// Authors / Artist — dari teks <li>, bukan hanya link
 		const authors: string[] = [];
-		$('a[href*="/author/"]').each((_, a) => {
-			const n = $(a).text().trim();
-			if (n && n.toLowerCase() !== 'unknown' && !authors.includes(n)) {
-				authors.push(n);
-			}
+		$('li').each((_, el) => {
+			const t = $(el).text().replace(/\s+/g, ' ').trim();
+			const m = t.match(/^(?:author\(s\)|authors?|artist\(s\)|artists?)\s*:\s*(.+)$/i);
+			if (!m) return;
+			m[1]
+				.split(/,|\/|;/)
+				.map((s) => s.trim())
+				.filter((n) => n && !/^unknown$/i.test(n))
+				.forEach((n) => {
+					if (!authors.includes(n)) authors.push(n);
+				});
+		});
+		if (!authors.length) {
+			$('a[href*="/author/"]').each((_, a) => {
+				const n = $(a).text().trim();
+				if (n && !/^unknown$/i.test(n) && !authors.includes(n)) authors.push(n);
+			});
+		}
+
+		// Rating
+		let rating = '';
+		const dataRate = $('.rating.star-rating').first().attr('data-default');
+		if (dataRate && /\d/.test(dataRate)) rating = dataRate.trim();
+		if (!rating) {
+			const rateText = $('#rate_row_cmd').first().text().replace(/\s+/g, ' ').trim();
+			const rm = rateText.match(/(\d+(?:\.\d+)?)\s*\/\s*5/);
+			if (rm) rating = rm[1];
+		}
+		if (!rating) {
+			$('li').each((_, el) => {
+				const t = $(el).text().replace(/\s+/g, ' ').trim();
+				if (!/^rating/i.test(t)) return;
+				const rm = t.match(/(\d+(?:\.\d+)?)/);
+				if (rm && !rating) rating = rm[1];
+			});
+		}
+
+		// Genres — HANYA dari blok info manga (bukan navbar)
+		const genres: string[] = [];
+		const skipGenre = /^(all|completed|ongoing)$/i;
+		$('li.genres a, .genre-list a').each((_, a) => {
+			const g = $(a).text().replace(/\s+/g, ' ').trim();
+			if (!g || skipGenre.test(g) || g.length >= 40) return;
+			if (!genres.includes(g)) genres.push(g);
 		});
 
-		// Genres — HANYA dari blok info manga, bukan navbar/filter
-const genres: string[] = [];
-const skipGenre = /^(all|completed|ongoing)$/i;
-$('li.genres a, .genre-list a').each((_, a) => {
-	const g = $(a).text().replace(/\s+/g, ' ').trim();
-	if (!g || skipGenre.test(g) || g.length >= 40) return;
-	if (!genres.includes(g)) genres.push(g);
-});
+		// Synopsis
+		const synopsis =
+			$('#panel-story-info-description, .panel-story-info-description')
+				.text()
+				.replace(/\s+/g, ' ')
+				.replace(/^Description\s*:?\s*/i, '')
+				.trim() || '';
 
-// Synopsis ...
-const synopsis =
-	$('#panel-story-info-description, .panel-story-info-description')
-		.text()
-		.replace(/\s+/g, ' ')
-		.replace(/^Description\s*:?\s*/i, '')
-		.trim() || '';
+		// Chapters API + sort ascending (next/prev)
+		let chapters: Chapter[] = [];
+		try {
+			chapters = await this.fetchChaptersApi(slug);
+		} catch (e) {
+			console.warn('[mangabatscom] chapters API failed', e);
+		}
+		chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
 
-// Chapters dari API
-let chapters: Chapter[] = [];
-try {
-	chapters = await this.fetchChaptersApi(slug);
-} catch (e) {
-	console.warn('[mangabatscom] chapters API failed', e);
-}
-
-// Urutkan ascending (penting next/prev + latest)
-chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
-
-const latestChapter = chapters[chapters.length - 1]?.number;
-const latestUpdate =
-	lastUpdate || chapters[chapters.length - 1]?.date || '';
+		const latestChapter = chapters[chapters.length - 1]?.number;
+		const latestUpdate =
+			lastUpdate || chapters[chapters.length - 1]?.date || '';
 
 		const description = [
 			alt && `Alternative: ${alt}`,
+			authors.length && `Author(s): ${authors.join(', ')}`,
+			rating && `Rating: ${rating}/5`,
 			latestUpdate && `Latest update: ${latestUpdate}`,
 			latestChapter != null && `Latest chapter: ${latestChapter}`,
 			synopsis
 		]
 			.filter(Boolean)
 			.join('\n\n');
+
+		console.log(
+			`[mangabatscom] details ${slug} → authors=${authors.join(',')}, rating=${rating}, chapters=${chapters.length}, genres=${genres.join(',')}`
+		);
 
 		return {
 			id: `/manga/${slug}`,
@@ -386,9 +428,6 @@ const latestUpdate =
 			const urls: string[] = [];
 			const seen = new Set<string>();
 
-			const $imgs = $(
-				'#container-chapter-reader img, .container-chapter-reader img'
-			);
 			const pick = ($img: cheerio.Cheerio<any>) => {
 				let src =
 					$img.attr('src') ||
@@ -404,6 +443,9 @@ const latestUpdate =
 				urls.push(src);
 			};
 
+			const $imgs = $(
+				'#container-chapter-reader img, .container-chapter-reader img'
+			);
 			if ($imgs.length) {
 				$imgs.each((_, img) => pick($(img)));
 			} else {
