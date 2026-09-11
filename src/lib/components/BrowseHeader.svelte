@@ -4,6 +4,7 @@
     import { onMount } from 'svelte';
     import { Search, Loader2, ChevronDown, Check } from 'lucide-svelte';
     import { getImpl, setImpl } from '$lib/stores/impl';
+    import type { Love4uSource } from '$lib/server/sources/impl/Love4u';
 
     type SourceItem = { id: string; name: string };
 
@@ -71,6 +72,9 @@
         kingcomix: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         ehentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-purple-600' },
         klmanga: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+        klz9: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+        love4u: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+        rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         imhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
         hentai2read: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
