@@ -57,6 +57,16 @@ export class MangaKatanaSource extends BaseSource {
 		return n ? parseFloat(n[1]) : 0;
 	}
 
+	/** Deteksi type dari genre (Manhwa/Manhua/Webtoon di-tag sebagai genre) */
+	private detectType(genres: string[] | string): 'manga' | 'manhwa' | 'manhua' {
+		const g = (Array.isArray(genres) ? genres.join(' ') : String(genres || '')).toLowerCase();
+		if (/\bmanhwa\b/.test(g)) return 'manhwa';
+		if (/\bmanhua\b/.test(g)) return 'manhua';
+		// Webtoon biasanya manhwa (Korea)
+		if (/\bwebtoon\b/.test(g)) return 'manhwa';
+		return 'manga';
+	}
+
 	// ── List parser ──────────────────────────────────────────────────────────
 
 	private parseCards($: cheerio.CheerioAPI, rawHtml?: string): Manga[] {
@@ -68,7 +78,8 @@ export class MangaKatanaSource extends BaseSource {
 			title: string,
 			cover: string,
 			statusText = '',
-			chText = ''
+			chText = '',
+			genreText = ''
 		) => {
 			if (!href || !/\/manga\//i.test(href)) return;
 			const id = this.cleanId(href);
@@ -90,7 +101,7 @@ export class MangaKatanaSource extends BaseSource {
 				sourceId: this.id,
 				title,
 				cover: this.absUrl((cover || '').split('?')[0]),
-				type: 'manga',
+				type: this.detectType(genreText),
 				status,
 				latestChapter: this.parseChapterNumber(chText) || undefined
 			});
@@ -112,7 +123,8 @@ export class MangaKatanaSource extends BaseSource {
 			const chText =
 				$el.find('.last_chap a, .chapters a, .chapter a, h3.title span').text() ||
 				'';
-			push(href, title, cover, statusText, chText);
+			const genreText = $el.find('.genres').text() || '';
+			push(href, title, cover, statusText, chText, genreText);
 		});
 
 		// Regex fallback
@@ -314,6 +326,8 @@ export class MangaKatanaSource extends BaseSource {
 			});
 		}
 
+		const type = this.detectType(genres);
+
 		// Synopsis
 		const synopsis =
 			$('.summary p, .summary, #summary, .desc')
@@ -381,7 +395,7 @@ export class MangaKatanaSource extends BaseSource {
 			.join('\n\n');
 
 		console.log(
-			`[mangakatana] details ${path} → chapters=${chapters.length}, genres=${genres.join(',')}`
+			`[mangakatana] details ${path} → type=${type}, chapters=${chapters.length}, genres=${genres.join(',')}`
 		);
 
 		return {
@@ -389,7 +403,7 @@ export class MangaKatanaSource extends BaseSource {
 			sourceId: this.id,
 			title,
 			cover,
-			type: 'manga',
+			type,
 			status,
 			description,
 			authors,
