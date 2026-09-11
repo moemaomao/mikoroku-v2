@@ -21,6 +21,9 @@ import { Hentai2readSource } from './impl/hentai2read';
 import { HentaieraSource } from './impl/Hentaiera';
 import { HentaireadSource } from './impl/Hentairead';
 import { SimplyHentaiSource } from './impl/Simplyhentai';
+import { Klz9Source } from './impl/Klz9';
+import { Love4uSource } from './impl/Love4u';
+import { RawkumaSource } from './impl/Rawkuma';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -38,7 +41,10 @@ const sources: Record<string, IMangaSource> = {
     hentai2read: new Hentai2readSource(),
     hentaiera: new HentaieraSource(),
     hentairead: new HentaireadSource(),
-    simplyhentai: new SimplyHentaiSource()
+    simplyhentai: new SimplyHentaiSource(),
+	klz9: new Klz9Source(),
+	love4u: new Love4uSource(),
+	rawkuma: new RawkumaSource()
 };
 
 /**
