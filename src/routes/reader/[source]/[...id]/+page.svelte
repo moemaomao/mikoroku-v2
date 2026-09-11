@@ -1,11 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { goto, invalidateAll } from '$app/navigation';
 	import {
-		ArrowLeft,
-		ChevronLeft,
-		ChevronRight,
 		ChevronsUp,
 		Download,
 		Flag,
@@ -26,6 +24,7 @@
 		nextChapter
 	} = $derived(data);
 
+	// ── Reader state ─────────────────────────────────────────────────────────
 	let currentPageIndex = $state(0);
 	let currentMode = $state<'webtoon' | 'page'>('webtoon');
 	let showControls = $state(true);
@@ -38,12 +37,27 @@
 	let imageQuality = $state(600);
 	let imgEpoch = $state(0);
 
+	// ── Theme (ikut layout) ──────────────────────────────────────────────────
+	let isDarkMode = $state(true);
+
+	function syncTheme() {
+		if (!browser) return;
+		const saved = localStorage.getItem('darkMode');
+		if (saved !== null) {
+			isDarkMode = saved === 'true';
+		} else {
+			isDarkMode = !document.documentElement.classList.contains('light');
+		}
+	}
+
+	// ── Download ─────────────────────────────────────────────────────────────
 	let isDownloading = $state(false);
 	let downloadBannerActive = $state(false);
 	let downloadText = $state('Menyiapkan unduhan...');
 	let downloadCount = $state('0/0');
 	let downloadPercent = $state(0);
 
+	// ── Report ───────────────────────────────────────────────────────────────
 	let selectedReportType = $state('');
 	let reportReason = $state('');
 	const reportTags = [
@@ -58,6 +72,7 @@
 		'Lainnya'
 	];
 
+	// ── Helpers ──────────────────────────────────────────────────────────────
 	function proxyImage(url: string, forDownload = false): string {
 		if (!url) return '';
 		let u = url.trim();
@@ -92,6 +107,7 @@
 	function prevPage() {
 		if (currentPageIndex > 0) currentPageIndex--;
 	}
+
 	function nextPage() {
 		if (currentPageIndex < pages.length - 1) currentPageIndex++;
 	}
@@ -150,6 +166,7 @@
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
+	/** Navigasi chapter — replaceState agar Back browser langsung ke detail */
 	async function goToChapter(target: unknown) {
 		showChapterList = false;
 		isMenuOpen = false;
@@ -162,19 +179,9 @@
 		if (!rawId) return;
 		const cleanId = String(rawId).replace(/^\/+/, '');
 		currentPageIndex = 0;
-		await goto(`/reader/${source}/${cleanId}`);
+		await goto(`/reader/${source}/${cleanId}`, { replaceState: true });
 		await invalidateAll();
 		window.scrollTo(0, 0);
-	}
-
-	function goBack() {
-		if (mangaInfo?.id) {
-			goto(`/manga/${source}/${String(mangaInfo.id).replace(/^\/+/, '')}`);
-		} else if (mangaInfo?.slug) {
-			goto(`/manga/${source}/${mangaInfo.slug}`);
-		} else {
-			goto('/');
-		}
 	}
 
 	function submitReport() {
@@ -188,7 +195,9 @@
 		reportReason = '';
 	}
 
+	// ── Download ZIP ─────────────────────────────────────────────────────────
 	let jszipReady: Promise<any> | null = null;
+
 	function loadJSZip(): Promise<any> {
 		if ((window as any).JSZip) return Promise.resolve((window as any).JSZip);
 		if (jszipReady) return jszipReady;
@@ -257,7 +266,15 @@
 		}, 1500);
 	}
 
+	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
+		syncTheme();
+		const obs = new MutationObserver(syncTheme);
+		obs.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['class']
+		});
+
 		const savedMode = localStorage.getItem('readerMode');
 		if (savedMode === 'page' || savedMode === 'webtoon') currentMode = savedMode;
 		dataSaver = localStorage.getItem('dataSaver') === 'true';
@@ -275,6 +292,8 @@
 				sourceId: source
 			});
 		}
+
+		return () => obs.disconnect();
 	});
 </script>
 
@@ -288,12 +307,16 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="relative flex min-h-screen flex-col bg-black font-['Kodchasan',sans-serif] text-zinc-100"
+	class="relative flex min-h-screen flex-col font-['Kodchasan',sans-serif]
+		{isDarkMode ? 'bg-black text-zinc-100' : 'bg-zinc-100 text-zinc-900'}"
 	onmousemove={handleMouseMove}
 >
-	<!-- Title bar (reader.html style) -->
+	<!-- Title bar -->
 	<div class="relative z-10 px-4 py-3 text-center">
-		<p class="m-0 text-[1.02em] font-medium text-zinc-200 opacity-85">
+		<p
+			class="m-0 text-[1.02em] font-medium opacity-85
+				{isDarkMode ? 'text-zinc-200' : 'text-zinc-700'}"
+		>
 			{#if mangaInfo?.title}{mangaInfo.title}{/if}
 			{#if currentChapter?.title}
 				{' '}{currentChapter.title}
@@ -307,23 +330,37 @@
 	{#if downloadBannerActive}
 		<div class="sticky top-0 z-[90] mx-auto mb-1.5 w-full max-w-[900px] px-3">
 			<div
-				class="flex items-center gap-2.5 rounded-xl border border-emerald-500/25 bg-black/50 px-3 py-2 backdrop-blur-md"
+				class="flex items-center gap-2.5 rounded-xl border px-3 py-2 backdrop-blur-md
+					{isDarkMode
+					? 'border-emerald-500/25 bg-black/50'
+					: 'border-emerald-500/40 bg-white/80'}"
 			>
-				<div class="text-emerald-400 {isDownloading ? 'animate-spin' : ''}">
+				<div class="text-emerald-500 {isDownloading ? 'animate-spin' : ''}">
 					<CloudDownload class="h-4 w-4" />
 				</div>
 				<div class="min-w-0 flex-1">
-					<p class="mb-1 truncate text-[0.76rem] font-medium text-zinc-200">{downloadText}</p>
-					<div class="h-1 w-full overflow-hidden rounded-full bg-white/10">
+					<p
+						class="mb-1 truncate text-[0.76rem] font-medium
+							{isDarkMode ? 'text-zinc-200' : 'text-zinc-800'}"
+					>
+						{downloadText}
+					</p>
+					<div
+						class="h-1 w-full overflow-hidden rounded-full
+							{isDarkMode ? 'bg-white/10' : 'bg-zinc-200'}"
+					>
 						<div
 							class="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all"
 							style="width: {downloadPercent}%"
 						></div>
 					</div>
 				</div>
-				<span class="min-w-[40px] text-right text-[0.72rem] font-semibold text-zinc-400"
-					>{downloadCount}</span
+				<span
+					class="min-w-[40px] text-right text-[0.72rem] font-semibold
+						{isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
 				>
+					{downloadCount}
+				</span>
 			</div>
 		</div>
 	{/if}
@@ -331,7 +368,12 @@
 	<!-- Reader -->
 	<main id="reader" class="mx-auto w-full max-w-[900px] flex-1 pb-20">
 		{#if !pages?.length}
-			<div class="py-16 text-center text-zinc-500">Gambar tidak tersedia</div>
+			<div
+				class="py-16 text-center
+					{isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}"
+			>
+				Gambar tidak tersedia
+			</div>
 		{:else if currentMode === 'webtoon'}
 			{#each pages as pageUrl, i (imgEpoch + '-' + i)}
 				<div class="w-full leading-none">
@@ -356,64 +398,82 @@
 					/>
 				{/key}
 			</div>
-			<!-- Page arrows (page mode) -->
 			<button
 				onclick={prevPage}
 				disabled={currentPageIndex === 0}
-				class="fixed top-1/2 left-2 z-[200] -translate-y-1/2 border-0 bg-transparent text-[34px] text-white/80 disabled:opacity-20"
-				style="display: {currentMode === 'page' ? 'block' : 'none'}"
+				class="fixed top-1/2 left-2 z-[200] -translate-y-1/2 border-0 bg-transparent text-[34px] disabled:opacity-20
+					{isDarkMode ? 'text-white/80' : 'text-zinc-800/80'}"
 			>
 				‹
 			</button>
 			<button
 				onclick={nextPage}
 				disabled={currentPageIndex >= pages.length - 1}
-				class="fixed top-1/2 right-2 z-[200] -translate-y-1/2 border-0 bg-transparent text-[34px] text-white/80 disabled:opacity-20"
-				style="display: {currentMode === 'page' ? 'block' : 'none'}"
+				class="fixed top-1/2 right-2 z-[200] -translate-y-1/2 border-0 bg-transparent text-[34px] disabled:opacity-20
+					{isDarkMode ? 'text-white/80' : 'text-zinc-800/80'}"
 			>
 				›
 			</button>
 		{/if}
 	</main>
 
-	<!-- Bottom nav: << >>  (reader.html style) -->
+	<!-- Bottom nav: prev / next chapter -->
 	<div
-		class="fixed right-0 bottom-0 left-0 z-[100] flex justify-center gap-[18px] border-t border-white/5 px-5 py-3 transition-opacity duration-300 {showControls
-			? 'opacity-100'
-			: 'pointer-events-none opacity-0'}"
+		class="fixed right-0 bottom-0 left-0 z-[100] flex justify-center gap-[18px] border-t px-5 py-3 transition-opacity duration-300
+			{isDarkMode ? 'border-white/5' : 'border-zinc-300/60 bg-white/70 backdrop-blur-md'}
+			{showControls ? 'opacity-100' : 'pointer-events-none opacity-0'}"
 	>
 		<button
-	onclick={() => prevChapter && goToChapter(prevChapter)}
-	disabled={!prevChapter}
-	aria-label="Chapter sebelumnya"
-	title="Chapter sebelumnya"
-	class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border border-white/15 bg-red-600/50 px-[15px] py-[5px] text-[0.92em] text-white/85 backdrop-blur-md transition hover:bg-red-600/70 disabled:cursor-not-allowed disabled:opacity-30"
->
-	<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-		<path d="M13 5l-7 7 7 7" />
-		<path d="M19 5l-7 7 7 7" opacity="0.6" />
-	</svg>
-</button>
+			onclick={() => prevChapter && goToChapter(prevChapter)}
+			disabled={!prevChapter}
+			aria-label="Chapter sebelumnya"
+			title="Chapter sebelumnya"
+			class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border px-[15px] py-[5px] text-[0.92em] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-30
+				{isDarkMode
+					? 'border-white/15 bg-red-600/50 text-white/85 hover:bg-red-600/70'
+					: 'border-zinc-300 bg-red-600/85 text-white hover:bg-red-600'}"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				width="20"
+				height="20"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				aria-hidden="true"
+			>
+				<path d="M13 5l-7 7 7 7" />
+				<path d="M19 5l-7 7 7 7" opacity="0.6" />
+			</svg>
+		</button>
 
-<button
-	onclick={() => nextChapter && goToChapter(nextChapter)}
-	disabled={!nextChapter}
-	aria-label="Chapter selanjutnya"
-	title="Chapter selanjutnya"
-	class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border border-white/15 bg-red-600/50 px-[15px] py-[5px] text-[0.92em] text-white/85 backdrop-blur-md transition hover:bg-red-600/70 disabled:cursor-not-allowed disabled:opacity-30"
->
-	<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-		<path d="M11 5l7 7-7 7" />
-		<path d="M5 5l7 7-7 7" opacity="0.6" />
-	</svg>
-</button>
+		<button
+			onclick={() => nextChapter && goToChapter(nextChapter)}
+			disabled={!nextChapter}
+			aria-label="Chapter selanjutnya"
+			title="Chapter selanjutnya"
+			class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border px-[15px] py-[5px] text-[0.92em] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-30
+				{isDarkMode
+					? 'border-white/15 bg-red-600/50 text-white/85 hover:bg-red-600/70'
+					: 'border-zinc-300 bg-red-600/85 text-white hover:bg-red-600'}"
+		>
+			<svg
+				viewBox="0 0 24 24"
+				width="20"
+				height="20"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				aria-hidden="true"
+			>
+				<path d="M11 5l7 7-7 7" />
+				<path d="M5 5l7 7-7 7" opacity="0.6" />
+			</svg>
+		</button>
 	</div>
 
-	<!-- ========== Settings overlay (kanan bawah) — urutan sama SS ========== -->
-	<div
-		class="fixed right-[15px] bottom-[78px] z-[300] flex flex-col items-center gap-2.5"
-	>
-		<!-- Scroll top -->
+	<!-- Settings overlay (kanan bawah) -->
+	<div class="fixed right-[15px] bottom-[78px] z-[300] flex flex-col items-center gap-2.5">
 		<button
 			onclick={scrollToTop}
 			class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(0,150,255,0.15)] text-[18px] text-[#4da6ff] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(0,150,255,0.25)]"
@@ -422,7 +482,6 @@
 			<ChevronsUp class="h-5 w-5" />
 		</button>
 
-		<!-- Download -->
 		<button
 			onclick={handleDownload}
 			disabled={isDownloading || !pages?.length}
@@ -432,7 +491,6 @@
 			<Download class="h-5 w-5" />
 		</button>
 
-		<!-- Report -->
 		<button
 			onclick={() => (isReportOpen = true)}
 			class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(255,0,0,0.15)] text-[18px] text-[#ff4444] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(255,0,0,0.25)]"
@@ -441,7 +499,6 @@
 			<Flag class="h-5 w-5" />
 		</button>
 
-		<!-- Gear + dropdown -->
 		<div class="relative">
 			<button
 				onclick={() => {
@@ -455,11 +512,10 @@
 			</button>
 
 			{#if isMenuOpen}
-				<!-- Menu: urutan persis reader.html / SS -->
 				<div
-					class="absolute right-0 bottom-[52px] z-[310] flex max-h-[65vh] w-[210px] flex-col gap-2 overflow-y-auto rounded-xl bg-black/80 px-3.5 py-3 shadow-[0_6px_25px_rgba(0,0,0,0.75)]"
+					class="absolute right-0 bottom-[52px] z-[310] flex max-h-[65vh] w-[210px] flex-col gap-2 overflow-y-auto rounded-xl px-3.5 py-3 shadow-[0_6px_25px_rgba(0,0,0,0.35)]
+						{isDarkMode ? 'bg-black/85' : 'border border-zinc-200 bg-white/95'}"
 				>
-					<!-- 1. Mode -->
 					<button
 						onclick={toggleMode}
 						class="w-full rounded-lg border-0 bg-red-800 px-3 py-2.5 text-left text-[0.87em] font-medium text-white transition hover:bg-red-700"
@@ -467,7 +523,6 @@
 						Mode: {currentMode === 'webtoon' ? 'Webtoon' : 'Page'}
 					</button>
 
-					<!-- 2. Page select -->
 					<select
 						class="w-full cursor-pointer rounded-lg border-0 bg-red-800 px-3 py-2.5 text-[0.87em] text-white outline-none"
 						value={currentPageIndex}
@@ -480,7 +535,6 @@
 						{/each}
 					</select>
 
-					<!-- 3. Chapter List toggle -->
 					<button
 						onclick={() => (showChapterList = !showChapterList)}
 						class="w-full rounded-lg border-0 bg-red-800 px-3 py-2.5 text-left text-[0.87em] font-medium text-white transition hover:bg-red-700"
@@ -488,30 +542,40 @@
 						Chapter List
 					</button>
 
-					<!-- 4. Chapter list (expand) -->
 					{#if showChapterList}
 						<div
-							class="max-h-[280px] overflow-y-auto rounded-lg bg-[rgba(25,25,25,0.8)] py-1"
+							class="max-h-[280px] overflow-y-auto rounded-lg py-1
+								{isDarkMode ? 'bg-[rgba(25,25,25,0.8)]' : 'bg-zinc-100'}"
 						>
 							{#each chapters as chapter}
 								<button
 									onclick={() => goToChapter(chapter)}
-									class="w-full border-b border-zinc-600/80 px-3 py-2 text-left text-[0.84em] text-white transition last:border-b-0 hover:bg-white/10 {chapter.id ===
-										chapterId || chapter.id === currentChapter?.id
-										? 'bg-red-500/25 font-medium'
-										: ''}"
+									class="w-full border-b px-3 py-2 text-left text-[0.84em] transition last:border-b-0
+										{isDarkMode
+											? 'border-zinc-600/80 text-white hover:bg-white/10'
+											: 'border-zinc-200 text-zinc-800 hover:bg-zinc-200/80'}
+										{chapter.id === chapterId || chapter.id === currentChapter?.id
+											? 'bg-red-500/25 font-medium'
+											: ''}"
 								>
 									{chapter.title}
 								</button>
 							{/each}
 							{#if !chapters?.length}
-								<p class="px-3 py-2 text-center text-[0.84em] text-zinc-500">Kosong</p>
+								<p
+									class="px-3 py-2 text-center text-[0.84em]
+										{isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}"
+								>
+									Kosong
+								</p>
 							{/if}
 						</div>
 					{/if}
 
-					<!-- 5. Data Saver -->
-					<div class="flex items-center justify-between px-0.5 py-1 text-[0.87em] text-white">
+					<div
+						class="flex items-center justify-between px-0.5 py-1 text-[0.87em]
+							{isDarkMode ? 'text-white' : 'text-zinc-800'}"
+					>
 						<span>Data Saver</span>
 						<input
 							type="checkbox"
@@ -521,58 +585,66 @@
 						/>
 					</div>
 
-					<!-- 6. Quality (saat data saver on) -->
 					{#if dataSaver}
-	<div class="flex flex-col gap-1.5 text-white">
-		<label for="image-quality" class="text-[0.8em]">
-			Quality: <span class="font-semibold text-emerald-400">{imageQuality}</span>px
-		</label>
-		<input
-			id="image-quality"
-			type="range"
-			min="600"
-			max="1200"
-			step="100"
-			value={imageQuality}
-			oninput={updateQuality}
-			class="w-full cursor-pointer accent-red-600"
-		/>
-	                 </div>
-                   {/if}
+						<div
+							class="flex flex-col gap-1.5
+								{isDarkMode ? 'text-white' : 'text-zinc-800'}"
+						>
+							<label for="image-quality" class="text-[0.8em]">
+								Quality:
+								<span class="font-semibold text-emerald-500">{imageQuality}</span>px
+							</label>
+							<input
+								id="image-quality"
+								type="range"
+								min="600"
+								max="1200"
+								step="100"
+								value={imageQuality}
+								oninput={updateQuality}
+								class="w-full cursor-pointer accent-red-600"
+							/>
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</div>
 	</div>
 
-	<!-- Back (pojok kiri atas, minimal) -->
-	<button
-		onclick={goBack}
-		class="fixed top-3 left-3 z-[200] flex items-center gap-1 rounded-full border border-white/10 bg-black/50 px-2.5 py-1.5 text-xs text-zinc-300 backdrop-blur-md transition hover:bg-black/70"
-	>
-		<ArrowLeft class="h-3.5 w-3.5" />
-		<span class="hidden sm:inline">Back</span>
-	</button>
-
 	<!-- Report modal -->
 	{#if isReportOpen}
 		<div
-			class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-5 backdrop-blur-md"
+			class="fixed inset-0 z-[9999] flex items-center justify-center p-5 backdrop-blur-md
+				{isDarkMode ? 'bg-black/75' : 'bg-zinc-900/40'}"
 		>
 			<div
-				class="w-full max-w-[450px] rounded-3xl border border-white/10 bg-[rgba(20,20,20,0.95)] p-[22px] shadow-2xl"
+				class="w-full max-w-[450px] rounded-3xl border p-[22px] shadow-2xl
+					{isDarkMode
+						? 'border-white/10 bg-[rgba(20,20,20,0.95)]'
+						: 'border-zinc-200 bg-white'}"
 			>
-				<h3 class="m-0 text-[1.15rem] text-white">Laporkan Chapter</h3>
-				<p class="mt-1.5 mb-4 text-[0.9rem] text-zinc-400">
+				<h3
+					class="m-0 text-[1.15rem]
+						{isDarkMode ? 'text-white' : 'text-zinc-900'}"
+				>
+					Laporkan Chapter
+				</h3>
+				<p
+					class="mt-1.5 mb-4 text-[0.9rem]
+						{isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
+				>
 					Bantu kami memperbaiki masalah chapter ini.
 				</p>
 				<div class="mb-4 flex flex-wrap gap-2">
 					{#each reportTags as tag}
 						<button
 							onclick={() => (selectedReportType = tag)}
-							class="cursor-pointer rounded-full border-0 px-3.5 py-2 text-[0.82rem] transition {selectedReportType ===
-							tag
-								? 'bg-red-600 text-white'
-								: 'bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							class="cursor-pointer rounded-full border-0 px-3.5 py-2 text-[0.82rem] transition
+								{selectedReportType === tag
+									? 'bg-red-600 text-white'
+									: isDarkMode
+										? 'bg-white/5 text-zinc-300 hover:bg-white/10'
+										: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}"
 						>
 							{tag}
 						</button>
@@ -581,12 +653,18 @@
 				<textarea
 					bind:value={reportReason}
 					placeholder="Detail (opsional)..."
-					class="box-border h-[110px] w-full resize-none rounded-2xl border-0 bg-white/5 p-3.5 font-inherit text-white outline-none placeholder:text-zinc-500"
+					class="box-border h-[110px] w-full resize-none rounded-2xl border-0 p-3.5 font-inherit outline-none
+						{isDarkMode
+							? 'bg-white/5 text-white placeholder:text-zinc-500'
+							: 'bg-zinc-100 text-zinc-900 placeholder:text-zinc-400'}"
 				></textarea>
 				<div class="mt-4 flex gap-2.5">
 					<button
 						onclick={() => (isReportOpen = false)}
-						class="h-[46px] flex-1 cursor-pointer rounded-[14px] border-0 bg-white/5 font-semibold text-zinc-300"
+						class="h-[46px] flex-1 cursor-pointer rounded-[14px] border-0 font-semibold
+							{isDarkMode
+								? 'bg-white/5 text-zinc-300'
+								: 'bg-zinc-100 text-zinc-600'}"
 					>
 						Batal
 					</button>
