@@ -3,24 +3,20 @@ import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
 /**
- * mangakatana.com adapter (HTML scrape)
+ * mangakatana.com adapter
  *
- * List   : /  |  /page/{n}   (~20/page)
+ * Latest : /latest | /latest/page/{n}
  * Search : /?search=QUERY&search_by=m_name
  * Detail : /manga/{slug}.{id}
  * Chapter: /manga/{slug}.{id}/c{num}
- * Pages  : var thzq=['url1','url2',...] di HTML chapter
- *
- * ID format:
- *   manga   : "/manga/{slug}.{id}"
- *   chapter : "/manga/{slug}.{id}/c{num}"
+ * Pages  : var thzq=[...]
  */
 export class MangaKatanaSource extends BaseSource {
 	id = 'mangakatana';
 	name = 'MangaKatana';
 	baseUrl = 'https://mangakatana.com';
 
-	private readonly PER_PAGE = 24;
+	private readonly PER_PAGE = 20;
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -46,123 +42,124 @@ export class MangaKatanaSource extends BaseSource {
 
 	private parseChapterNumber(text: string): number {
 		const s = String(text || '');
-		// Prioritas: /c123 atau /c12.5 di path
 		const fromPath = s.match(/\/c(\d+(?:\.\d+)?)(?:\/|$)/i);
 		if (fromPath) return parseFloat(fromPath[1]);
-
 		const m = s.match(/(?:chapter|chap|ch\.?)\s*(\d+(?:\.\d+)?)/i);
 		if (m) return parseFloat(m[1]);
-
 		const n = s.match(/(\d+(?:\.\d+)?)/);
 		return n ? parseFloat(n[1]) : 0;
 	}
 
-	/** Deteksi type dari genre (Manhwa/Manhua/Webtoon di-tag sebagai genre) */
 	private detectType(genres: string[] | string): 'manga' | 'manhwa' | 'manhua' {
 		const g = (Array.isArray(genres) ? genres.join(' ') : String(genres || '')).toLowerCase();
 		if (/\bmanhwa\b/.test(g)) return 'manhwa';
 		if (/\bmanhua\b/.test(g)) return 'manhua';
-		// Webtoon biasanya manhwa (Korea)
 		if (/\bwebtoon\b/.test(g)) return 'manhwa';
 		return 'manga';
 	}
 
-	// ── List parser ──────────────────────────────────────────────────────────
+	// ── List ─────────────────────────────────────────────────────────────────
 
+	/** Hanya parse #book_list (Latest). Tidak menyentuh Hot. */
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
-	const out: Manga[] = [];
-	const seen = new Set<string>();
+		const out: Manga[] = [];
+		const seen = new Set<string>();
 
-	// STRICT: hanya Latest di #book_list
-	$('#book_list .item[data-id]').each((_, el) => {
-		const $el = $(el);
-		const a = $el.find('h3.title a, .wrap_img a').first();
-		const href = a.attr('href') || '';
-		if (!href || !/\/manga\//i.test(href)) return;
+		$('#book_list .item[data-id]').each((_, el) => {
+			const $el = $(el);
+			const a = $el.find('h3.title a, .wrap_img a').first();
+			const href = a.attr('href') || '';
+			if (!href || !/\/manga\//i.test(href)) return;
 
-		const id = this.cleanId(href);
-		if (!/^\/manga\/[^/]+$/.test(id)) return;
-		if (seen.has(id)) return;
-		seen.add(id);
+			const id = this.cleanId(href);
+			if (!/^\/manga\/[^/]+$/.test(id) || seen.has(id)) return;
+			seen.add(id);
 
-		let title = (a.text() || a.attr('title') || '').replace(/\s+/g, ' ').trim();
-		title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
-		if (!title) return;
+			let title = (a.text() || a.attr('title') || '').replace(/\s+/g, ' ').trim();
+			title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
+			if (!title) return;
 
-		const cover =
-			$el.find('picture source[type="image/webp"]').attr('srcset') ||
-			$el.find('picture source').attr('srcset') ||
-			$el.find('img').attr('src') ||
-			$el.find('img').attr('data-src') ||
-			'';
+			const cover =
+				$el.find('picture source[type="image/webp"]').attr('srcset') ||
+				$el.find('picture source').attr('srcset') ||
+				$el.find('img').attr('src') ||
+				$el.find('img').attr('data-src') ||
+				'';
 
-		const statusText = $el.find('.status').text();
-		const status = /complete|finished|end/i.test(statusText) ? 'Completed' : 'Ongoing';
-		const chText = $el.find('.last_chap a, h3.title span').text() || '';
-		const genreText = $el.find('.genres').text() || '';
+			const statusText = $el.find('.status').text();
+			const status = /complete|finished|end/i.test(statusText) ? 'Completed' : 'Ongoing';
+			const chText = $el.find('.last_chap a, h3.title span').text() || '';
+			const genreText = $el.find('.genres').text() || '';
 
-		out.push({
-			id,
-			sourceId: this.id,
-			title,
-			cover: this.absUrl((cover || '').split('?')[0]),
-			type: this.detectType(genreText),
-			status,
-			latestChapter: this.parseChapterNumber(chText) || undefined
+			out.push({
+				id,
+				sourceId: this.id,
+				title,
+				cover: this.absUrl(cover.split('?')[0]),
+				type: this.detectType(genreText),
+				status,
+				latestChapter: this.parseChapterNumber(chText) || undefined
+			});
 		});
-	});
 
-	return out;
-}
+		return out;
+	}
 
-private async fetchListPage(path: string): Promise<Manga[]> {
-	try {
-		const html = await this.fetchHtml(path);
-		if (!html || html.length < 500) {
-			console.warn('[mangakatana] empty html', path);
+	private async fetchListPage(path: string): Promise<Manga[]> {
+		try {
+			const html = await this.fetchHtml(path);
+			console.log(`[mangakatana] GET ${path} → html=${html?.length ?? 0}`);
+
+			if (!html || html.length < 500) return [];
+			if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
+				console.error('[mangakatana] Cloudflare', path);
+				return [];
+			}
+
+			const $ = cheerio.load(html);
+			const hasList = $('#book_list').length > 0;
+			const rawItems = $('#book_list .item[data-id]').length;
+			const list = this.parseCards($);
+
+			console.log(
+				`[mangakatana] ${path} book_list=${hasList} rawItems=${rawItems} parsed=${list.length}`,
+				list.slice(0, 3).map((m) => m.title)
+			);
+			return list;
+		} catch (e) {
+			console.warn('[mangakatana] fetch error', path, e);
 			return [];
 		}
-		if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
-			console.error('[mangakatana] Cloudflare challenge', path);
+	}
+
+	async getLatestManga(
+		page: number,
+		_opts?: { lang?: string; type?: string }
+	): Promise<Manga[]> {
+		try {
+			const p = Math.max(1, Number(page) || 1);
+
+			// Urutan fallback — JANGAN pakai homepage "/" (ada Hot carousel)
+			const candidates =
+				p <= 1
+					? ['/latest', '/page/1']
+					: [`/latest/page/${p}`, `/page/${p}`];
+
+			for (const path of candidates) {
+				const list = await this.fetchListPage(path);
+				if (list.length) {
+					console.log(`[mangakatana] latest page=${p} ok via ${path} → ${list.length}`);
+					return list.slice(0, this.PER_PAGE);
+				}
+			}
+
+			console.warn(`[mangakatana] latest page=${p} → EMPTY (all paths failed)`);
+			return [];
+		} catch (e) {
+			console.error('[mangakatana] getLatestManga', e);
 			return [];
 		}
-		const $ = cheerio.load(html);
-		const list = this.parseCards($);
-		console.log(`[mangakatana] ${path} → ${list.length} items`, list.slice(0, 3).map((m) => m.title));
-		return list;
-	} catch (e) {
-		console.warn('[mangakatana] fetch failed', path, e);
-		return [];
 	}
-}
-
-async getLatestManga(
-	page: number,
-	_opts?: { lang?: string; type?: string }
-): Promise<Manga[]> {
-	try {
-		const p = Math.max(1, Number(page) || 1);
-
-		// SATU url per page — jangan merge homepage (ada Hot di atas)
-		const path = p <= 1 ? '/latest' : `/latest/page/${p}`;
-		let list = await this.fetchListPage(path);
-
-		// Fallback pagination saja (bukan homepage /)
-		if (!list.length && p > 1) {
-			list = await this.fetchListPage(`/page/${p}`);
-		}
-		// Page 1 fallback terakhir: /page/1 (bukan /)
-		if (!list.length && p <= 1) {
-			list = await this.fetchListPage('/page/1');
-		}
-
-		console.log(`[mangakatana] latest page=${p} → ${list.length} items`);
-		return list.slice(0, this.PER_PAGE);
-	} catch (e) {
-		console.error('[mangakatana] getLatestManga', e);
-		return [];
-	}
-}
 
 	async searchManga(
 		query: string,
@@ -176,15 +173,8 @@ async getLatestManga(
 			const path =
 				`/?search=${encodeURIComponent(q)}&search_by=m_name` +
 				(page > 1 ? `&page=${page}` : '');
-			const html = await this.fetchHtml(path);
-			if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
-				console.error('[mangakatana] Cloudflare challenge (search)');
-				return [];
-			}
-			const $ = cheerio.load(html);
-			const list = this.parseCards($, html).slice(0, this.PER_PAGE);
-			console.log(`[mangakatana] search "${q}" page=${page} → ${list.length} items`);
-			return list;
+			const list = await this.fetchListPage(path);
+			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[mangakatana] searchManga', e);
 			return [];
