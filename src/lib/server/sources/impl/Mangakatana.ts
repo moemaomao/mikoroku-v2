@@ -16,7 +16,8 @@ export class MangaKatanaSource extends BaseSource {
 	name = 'MangaKatana';
 	baseUrl = 'https://mangakatana.com';
 
-	private readonly PER_PAGE = 20;
+	private readonly PER_PAGE = 24;
+    private readonly SITE_PER_PAGE = 20;
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -60,51 +61,70 @@ export class MangaKatanaSource extends BaseSource {
 
 	// ── List ─────────────────────────────────────────────────────────────────
 
-	/** Hanya parse #book_list (Latest). Tidak menyentuh Hot. */
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
-		const out: Manga[] = [];
-		const seen = new Set<string>();
+	const out: Manga[] = [];
+	const seen = new Set<string>();
 
-		$('#book_list .item[data-id]').each((_, el) => {
-			const $el = $(el);
-			const a = $el.find('h3.title a, .wrap_img a').first();
-			const href = a.attr('href') || '';
-			if (!href || !/\/manga\//i.test(href)) return;
+	$('#book_list .item[data-id]').each((i, el) => {
+		const $el = $(el);
 
-			const id = this.cleanId(href);
-			if (!/^\/manga\/[^/]+$/.test(id) || seen.has(id)) return;
-			seen.add(id);
-
-			let title = (a.text() || a.attr('title') || '').replace(/\s+/g, ' ').trim();
-			title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
-			if (!title) return;
-
-			const cover =
-				$el.find('picture source[type="image/webp"]').attr('srcset') ||
-				$el.find('picture source').attr('srcset') ||
-				$el.find('img').attr('src') ||
-				$el.find('img').attr('data-src') ||
-				'';
-
-			const statusText = $el.find('.status').text();
-			const status = /complete|finished|end/i.test(statusText) ? 'Completed' : 'Ongoing';
-			const chText = $el.find('.last_chap a, h3.title span').text() || '';
-			const genreText = $el.find('.genres').text() || '';
-
-			out.push({
-				id,
-				sourceId: this.id,
-				title,
-				cover: this.absUrl(cover.split('?')[0]),
-				type: this.detectType(genreText),
-				status,
-				latestChapter: this.parseChapterNumber(chText) || undefined
-			});
+		let href = '';
+		$el.find('a[href*="/manga/"]').each((_, link) => {
+			const h = $(link).attr('href') || '';
+			if (!h) return;
+			if (/\/c[\d.]+/i.test(h) || /\/fc/i.test(h)) return;
+			if (!href) href = h;
 		});
 
-		return out;
-	}
+		if (!href) {
+			if (i === 0) console.warn('[mangakatana] item0 no href', $el.html()?.slice(0, 200));
+			return;
+		}
 
+		const id = this.cleanId(href);
+	
+		if (!id.startsWith('/manga/')) return;
+		if (id.split('/').length !== 3) return;
+		if (seen.has(id)) return;
+		seen.add(id);
+
+		let title =
+			$el.find('h3.title a').first().text() ||
+			$el.find('h3.title').first().text() ||
+			$el.find('.title a').first().text() ||
+			'';
+		title = title.replace(/\s+/g, ' ').trim();
+		title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
+		if (!title) {
+			if (i === 0) console.warn('[mangakatana] item0 no title', { href, id });
+			return;
+		}
+
+		const cover =
+			$el.find('picture source[type="image/webp"]').attr('srcset') ||
+			$el.find('picture source').attr('srcset') ||
+			$el.find('img').attr('src') ||
+			$el.find('img').attr('data-src') ||
+			'';
+
+		const statusText = $el.find('.status').text();
+		const status = /complete|finished|end/i.test(statusText) ? 'Completed' : 'Ongoing';
+		const chText = $el.find('.last_chap a, h3.title span').text() || '';
+		const genreText = $el.find('.genres').text() || '';
+
+		out.push({
+			id,
+			sourceId: this.id,
+			title,
+			cover: this.absUrl((cover || '').split('?')[0]),
+			type: this.detectType(genreText),
+			status,
+			latestChapter: this.parseChapterNumber(chText) || undefined
+		});
+	});
+
+	return out;
+}
 	private async fetchListPage(path: string): Promise<Manga[]> {
 		try {
 			const html = await this.fetchHtml(path);
@@ -132,34 +152,51 @@ export class MangaKatanaSource extends BaseSource {
 		}
 	}
 
-	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
-		try {
-			const p = Math.max(1, Number(page) || 1);
+	
 
-			// Urutan fallback — JANGAN pakai homepage "/" (ada Hot carousel)
-			const candidates =
-				p <= 1
-					? ['/latest', '/page/1']
-					: [`/latest/page/${p}`, `/page/${p}`];
+async getLatestManga(
+	page: number,
+	_opts?: { lang?: string; type?: string }
+): Promise<Manga[]> {
+	try {
+		const p = Math.max(1, Number(page) || 1);
+		const start = (p - 1) * this.PER_PAGE; // 0, 24, 48, ...
+		const startSite = Math.floor(start / this.SITE_PER_PAGE) + 1;
+		const endSite = Math.floor((start + this.PER_PAGE - 1) / this.SITE_PER_PAGE) + 1;
 
-			for (const path of candidates) {
-				const list = await this.fetchListPage(path);
-				if (list.length) {
-					console.log(`[mangakatana] latest page=${p} ok via ${path} → ${list.length}`);
-					return list.slice(0, this.PER_PAGE);
-				}
+		const seen = new Set<string>();
+		const merged: Manga[] = [];
+
+		for (let sp = startSite; sp <= endSite; sp++) {
+			const path = sp <= 1 ? '/latest' : `/latest/page/${sp}`;
+			let batch = await this.fetchListPage(path);
+
+			if (!batch.length && sp > 1) {
+				batch = await this.fetchListPage(`/page/${sp}`);
+			}
+			if (!batch.length && sp <= 1) {
+				batch = await this.fetchListPage('/page/1');
 			}
 
-			console.warn(`[mangakatana] latest page=${p} → EMPTY (all paths failed)`);
-			return [];
-		} catch (e) {
-			console.error('[mangakatana] getLatestManga', e);
-			return [];
+			for (const m of batch) {
+				if (seen.has(m.id)) continue;
+				seen.add(m.id);
+				merged.push(m);
+			}
 		}
+
+		const offset = start % this.SITE_PER_PAGE;
+		const list = merged.slice(offset, offset + this.PER_PAGE);
+
+		console.log(
+			`[mangakatana] latest page=${p} sites=${startSite}-${endSite} → ${list.length} items`
+		);
+		return list;
+	} catch (e) {
+		console.error('[mangakatana] getLatestManga', e);
+		return [];
 	}
+}
 
 	async searchManga(
 		query: string,
@@ -278,7 +315,6 @@ export class MangaKatanaSource extends BaseSource {
 				});
 		}
 
-		// Genres — HANYA dari meta manga (jangan ambil navbar)
 		const genres: string[] = [];
 		$('li.d-row-small .genres a, .d-row-small .value .genres a').each((_, a) => {
 			const g = $(a).text().trim();
@@ -302,7 +338,6 @@ export class MangaKatanaSource extends BaseSource {
 			$('meta[name="description"]').attr('content') ||
 			'';
 
-		// Chapters — selector ketat + sort ascending (penting untuk next/prev)
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
@@ -340,7 +375,7 @@ export class MangaKatanaSource extends BaseSource {
 			});
 		});
 
-		// Ascending: chapter 1 → latest (app: next = idx+1, prev = idx-1)
+
 		chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
 
 		const latestChapter =
@@ -390,7 +425,6 @@ export class MangaKatanaSource extends BaseSource {
 			const urls: string[] = [];
 			const seen = new Set<string>();
 
-			// Primary: var thzq=['url',...]
 			const thzqMatch = html.match(/var\s+thzq\s*=\s*\[([\s\S]*?)\];/);
 			if (thzqMatch) {
 				const re = /['"](https?:\/\/[^'"]+)['"]/g;
@@ -403,7 +437,6 @@ export class MangaKatanaSource extends BaseSource {
 				}
 			}
 
-			// Fallback: ytaw
 			if (!urls.length) {
 				const ytaw = html.match(/var\s+ytaw\s*=\s*\[([\s\S]*?)\];/);
 				if (ytaw) {
@@ -418,7 +451,6 @@ export class MangaKatanaSource extends BaseSource {
 				}
 			}
 
-			// Fallback: img tags
 			if (!urls.length) {
 				const $ = cheerio.load(html);
 				$('img[data-src], img[src]').each((_, img) => {
