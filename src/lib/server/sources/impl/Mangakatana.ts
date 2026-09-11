@@ -172,22 +172,26 @@ export class MangaKatanaSource extends BaseSource {
 	// ── Public API ───────────────────────────────────────────────────────────
 
 	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
-		try {
-			const p = Math.max(1, Number(page) || 1);
-			const paths =
-				p === 1 ? [`/`, `/latest`] : [`/page/${p}`, `/latest/page/${p}`];
+	page: number,
+	_opts?: { lang?: string; type?: string }
+): Promise<Manga[]> {
+	try {
+		const p = Math.max(1, Number(page) || 1);
 
-			const list = await this.fetchListPages(paths);
-			console.log(`[mangakatana] latest page=${p} → ${list.length} items`);
-			return list;
-		} catch (e) {
-			console.error('[mangakatana] getLatestManga', e);
-			return [];
-		}
+		// Selalu Latest Update, BUKAN Hot Update (homepage punya #hot_book)
+		const paths =
+			p === 1
+				? [`/latest`]
+				: [`/latest/page/${p}`, `/page/${p}`];
+
+		const list = await this.fetchListPages(paths);
+		console.log(`[mangakatana] latest page=${p} → ${list.length} items`);
+		return list;
+	} catch (e) {
+		console.error('[mangakatana] getLatestManga', e);
+		return [];
 	}
+}
 
 	async searchManga(
 		query: string,
