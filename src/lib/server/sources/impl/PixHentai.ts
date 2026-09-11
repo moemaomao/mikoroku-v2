@@ -204,20 +204,39 @@ export class PixHentaiSource extends BaseSource {
 		cover = this.absUrl((cover || '').split('?')[0]);
 
 		// Genres / categories
-		const genres: string[] = [];
-		$(
-			'a[rel="category tag"], .cat-links a, a[href*="/genre/"], a[href*="/category/"]'
-		).each((_, a) => {
-			const g = $(a).text().replace(/\s+/g, ' ').trim();
-			if (
-				g &&
-				g.length < 40 &&
-				!genres.includes(g) &&
-				!/^(uncategorized|genre)$/i.test(g)
-			) {
-				genres.push(g);
-			}
-		});
+		// Genres / categories — HANYA dari meta post, jangan ambil menu nav
+const genres: string[] = [];
+$('li.meta-cat a[rel="category tag"], .meta-cat a[rel="category tag"]').each(
+	(_, a) => {
+		const g = $(a).text().replace(/\s+/g, ' ').trim();
+		if (
+			g &&
+			g.length < 40 &&
+			!genres.includes(g) &&
+			!/^(uncategorized|genre|post category)$/i.test(g)
+		) {
+			genres.push(g);
+		}
+	}
+);
+
+if (!genres.length) {
+	$('a[rel="category tag"]').each((_, a) => {
+		
+		const $a = $(a);
+		if ($a.closest('nav, .menu, .navbar, #menu, .main-menu, .sidebar-menu').length)
+			return;
+		const g = $a.text().replace(/\s+/g, ' ').trim();
+		if (
+			g &&
+			g.length < 40 &&
+			!genres.includes(g) &&
+			!/^(uncategorized|genre)$/i.test(g)
+		) {
+			genres.push(g);
+		}
+	});
+}
 
 		// Synopsis — paragraf pertama yang cukup panjang
 		let synopsis = '';
