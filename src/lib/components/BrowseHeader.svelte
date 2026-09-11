@@ -4,7 +4,6 @@
     import { onMount } from 'svelte';
     import { Search, Loader2, ChevronDown, Check } from 'lucide-svelte';
     import { getImpl, setImpl } from '$lib/stores/impl';
-    import type { MangaKatanaSource } from '$lib/server/sources/impl/Mangakatana';
 
     type SourceItem = { id: string; name: string };
 
