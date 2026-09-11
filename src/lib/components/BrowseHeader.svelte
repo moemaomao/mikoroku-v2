@@ -78,6 +78,7 @@
         love4u: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+        doujindesu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
         imhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
         hentai2read: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         hentairead: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
@@ -111,6 +112,7 @@
         return groups;
     });
 
+    // Derived Helper
     let currentSourceName = $derived(sources.find((s) => s.id === currentSource)?.name || currentSource);
     let currentLangObj = $derived(LANGUAGES.find((l) => l.id === selectedLang) || LANGUAGES[0]);
     let currentTypeObj = $derived(TYPES.find((t) => t.id === selectedType) || TYPES[0]);
