@@ -121,7 +121,6 @@ export class HentaireadSource extends BaseSource {
 	 *   .manga-grid > item
 	 *     a[href*="/hentai/"]  → slug + title
 	 *     .manga-item__img img[srcset|data-src|src] → cover
-	 *     .manga-item__tags span → tags (opsional)
 	 */
 	private parseList(html: string): Manga[] {
 		const out: Manga[] = [];
@@ -139,16 +138,27 @@ export class HentaireadSource extends BaseSource {
 			if (!slug || seen.has(slug)) continue;
 			seen.add(slug);
 
-			// Cover: prioritaskan srcset → data-srcset → data-src → src
+			// Cover: prioritaskan srcset → data-srcset → data-src → data-original → src
 			let cover = '';
-			const srcsetM = block.match(/(?:srcset|data-srcset)="([^"]+)"/i);
+			const srcsetM = block.match(/(?:srcset|data-srcset)=["']([^"']+)["']/i);
 			if (srcsetM) {
 				cover = this.pickSrcset(srcsetM[1]);
 			}
 			if (!cover) {
-				const dataSrcM = block.match(/data-src="([^"]+)"/i);
-				const srcM = block.match(/<img[^>]+src="([^"]+)"/i);
-				cover = dataSrcM?.[1] || srcM?.[1] || '';
+				const lazyM = block.match(
+					/(?:data-src|data-original|data-lazy-src)=["']([^"']+)["']/i
+				);
+				const srcM = block.match(/<img[^>]+src=["']([^"']+)["']/i);
+				cover = lazyM?.[1] || srcM?.[1] || '';
+			}
+
+			// Buang placeholder / data-uri
+			if (
+				!cover ||
+				cover.startsWith('data:') ||
+				/placeholder|blank|spinner|loading/i.test(cover)
+			) {
+				cover = '';
 			}
 			cover = this.normalizeCover(cover);
 
@@ -257,17 +267,17 @@ export class HentaireadSource extends BaseSource {
 		// Cover dari srcset / data-src / src
 		let cover = '';
 		const srcsetM = html.match(
-			/manga-item__img[\s\S]{0,400}?(?:srcset|data-srcset)="([^"]+)"/i
+			/manga-item__img[\s\S]{0,500}?(?:srcset|data-srcset)=["']([^"']+)["']/i
 		);
 		if (srcsetM) {
 			cover = this.pickSrcset(srcsetM[1]);
 		}
 		if (!cover) {
 			const dataSrcM = html.match(
-				/manga-item__img[\s\S]{0,400}?data-src="([^"]+)"/i
+				/manga-item__img[\s\S]{0,500}?(?:data-src|data-original)=["']([^"']+)["']/i
 			);
 			const imgM = html.match(
-				/manga-item__img[\s\S]{0,400}?src="([^"]+)"/i
+				/manga-item__img[\s\S]{0,500}?src=["']([^"']+)["']/i
 			);
 			cover = dataSrcM?.[1] || imgM?.[1] || '';
 		}
@@ -358,23 +368,32 @@ export class HentaireadSource extends BaseSource {
 		try {
 			const html = await this.getHtml(`${this.baseUrl}/hentai/${slug}/`);
 
-			// ul.lazy-listing__list img
 			const urls: string[] = [];
 			const seen = new Set<string>();
 
+			// Ambil isi list lazy-loading
 			const imgRe =
 				/<ul[^>]*class="[^"]*lazy-listing__list[^"]*"[^>]*>([\s\S]*?)<\/ul>/i;
 			const listHtml = html.match(imgRe)?.[1] || html;
 
-			const srcRe = /<img[^>]+(?:data-src|src)="([^"]+)"/gi;
+			// data-src lebih sering dipakai (lazy), baru src
+			const srcRe = /<img[^>]+(?:data-src|src)=["']([^"']+)["']/gi;
 			let m: RegExpExecArray | null;
+
 			while ((m = srcRe.exec(listHtml)) !== null) {
-				let src = m[1];
-				if (!src || src.startsWith('data:')) continue;
+				let src = (m[1] || '').trim();
+				if (!src || src.startsWith('data:') || /placeholder|blank|spinner/i.test(src)) {
+					continue;
+				}
+
+				// hencover → henread, buang /preview
 				src = this.toFullImage(src);
+
+				// absolutkan
 				if (src.startsWith('//')) src = `https:${src}`;
 				else if (src.startsWith('/')) src = `${this.baseUrl}${src}`;
-				if (seen.has(src)) continue;
+
+				if (!src.startsWith('http') || seen.has(src)) continue;
 				seen.add(src);
 				urls.push(src);
 			}
