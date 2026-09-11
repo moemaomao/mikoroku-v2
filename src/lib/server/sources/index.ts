@@ -50,7 +50,7 @@ const sources: Record<string, IMangaSource> = {
 	rawkuma: new RawkumaSource(),
 	mangakatana: new MangaKatanaSource(),
 	mangabats: new MangaBatsSource(),
-	Mangabatscom: new MangaBatsComSource()
+	mangabatscom: new MangaBatsComSource()
 };
 
 /**
