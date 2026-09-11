@@ -40,6 +40,15 @@ export const GET: RequestHandler = async ({ url }) => {
 		const isRawkuma =
 			sourceId === 'rawkuma' ||
 			/rawkuma\.(net|com)|kuma\.kyut\.dev/i.test(decodedUrl);
+	    const isMangaKatana =
+	       sourceId === 'mangakatana' ||
+	        /mangakatana\.com/i.test(decodedUrl);
+	    const isMangaBats =
+	       sourceId === 'mangabats' ||
+	       /mangabats\.xyz|amzim\.beer|uploads\.mangadex\.org/i.test(decodedUrl);
+	    const isMangaBatsCom =
+	       sourceId === 'mangabatscom' ||
+	       /mangabats\.com|2xstorage\.com/i.test(decodedUrl);
 
 		// Domain yang sering block weserv / butuh referer khusus → jangan redirect
 		const skipWeserv =
@@ -89,7 +98,13 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://rawkuma.net/';
 		} else if (sourceId === 'komiku') {
 			referer = 'https://komiku.id/';
-		}
+		}  else if (isMangaKatana) {
+	        referer = 'https://mangakatana.com/';
+        } else if (isMangaBats) {
+	       referer = 'https://mangabats.xyz/';
+        } else if (isMangaBatsCom) {
+	       referer = 'https://www.mangabats.com/';
+        }
 
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
