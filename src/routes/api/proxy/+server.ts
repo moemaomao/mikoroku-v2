@@ -1,7 +1,8 @@
 /**
  * Image Proxy
  * - Hemat CPU: redirect ke weserv jika ada `w` dan domain tidak butuh referer khusus
- * - Hitomi / ihlv1 / nhentai / hentairead / klz9 / love4u / rawkuma → fetch langsung + Referer benar
+ * - Hitomi / ihlv1 / nhentai / hentairead / klz9 / love4u / rawkuma /
+ *   mangakatana / mangabats / mangabatscom / doujindesu → fetch langsung + Referer benar
  */
 
 import type { RequestHandler } from './$types';
@@ -25,32 +26,36 @@ export const GET: RequestHandler = async ({ url }) => {
 		let decodedUrl = decodeURIComponent(targetUrl);
 		if (decodedUrl.startsWith('//')) decodedUrl = 'https:' + decodedUrl;
 
-		const isHitomi = /hitomi\.la|gold-usergeneratedcontent\.net/i.test(decodedUrl);
+		const isHitomi =
+			/hitomi\.la|gold-usergeneratedcontent\.net/i.test(decodedUrl);
 		const isBlockedWeserv = /ihlv1\.xyz|jfimv2\.xyz/i.test(decodedUrl);
 		const isNhentai = /nhentai\.net/i.test(decodedUrl);
 		const isHentairead =
 			sourceId === 'hentairead' ||
 			/hentairead\.com|hencover|henread/i.test(decodedUrl);
 		const isKlz9 =
-			sourceId === 'klz9' ||
-			/klz9\.com|jfimv2\.xyz/i.test(decodedUrl);
+			sourceId === 'klz9' || /klz9\.com|jfimv2\.xyz/i.test(decodedUrl);
 		const isLove4u =
-			sourceId === 'love4u' ||
-			/love4u\.net/i.test(decodedUrl);
+			sourceId === 'love4u' || /love4u\.net/i.test(decodedUrl);
 		const isRawkuma =
 			sourceId === 'rawkuma' ||
 			/rawkuma\.(net|com)|kuma\.kyut\.dev/i.test(decodedUrl);
-	    const isMangaKatana =
-	       sourceId === 'mangakatana' ||
-	        /mangakatana\.com/i.test(decodedUrl);
-	    const isMangaBats =
-	       sourceId === 'mangabats' ||
-	       /mangabats\.xyz|amzim\.beer|uploads\.mangadex\.org/i.test(decodedUrl);
-	    const isMangaBatsCom =
-	       sourceId === 'mangabatscom' ||
-	       /mangabats\.com|2xstorage\.com/i.test(decodedUrl);
+		const isMangaKatana =
+			sourceId === 'mangakatana' ||
+			/mangakatana\.com|i\d*\.mangakatana\.com/i.test(decodedUrl);
+		const isMangaBats =
+			sourceId === 'mangabats' ||
+			/mangabats\.xyz|amzim\.beer|uploads\.mangadex\.org/i.test(decodedUrl);
+		const isMangaBatsCom =
+			sourceId === 'mangabatscom' ||
+			/mangabats\.com|2xstorage\.com/i.test(decodedUrl);
+		const isDoujinDesu =
+			sourceId === 'doujindesu' ||
+			/desu\.xxx|desu\.pics|amz-ch\.desu\.pics|pic\.desu\.xxx|cdn-static\.desu\.xxx/i.test(
+				decodedUrl
+			);
 
-		// Domain yang sering block weserv / butuh referer khusus → jangan redirect
+		// Domain yang butuh referer khusus → jangan redirect weserv
 		const skipWeserv =
 			isHitomi ||
 			isBlockedWeserv ||
@@ -58,7 +63,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			isHentairead ||
 			isKlz9 ||
 			isLove4u ||
-			isRawkuma;
+			isRawkuma ||
+			isMangaKatana ||
+			isMangaBats ||
+			isMangaBatsCom ||
+			isDoujinDesu;
 
 		// ===== Hemat CPU: redirect ke weserv =====
 		if (w && !skipWeserv && /^https?:\/\//i.test(decodedUrl)) {
@@ -98,13 +107,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://rawkuma.net/';
 		} else if (sourceId === 'komiku') {
 			referer = 'https://komiku.id/';
-		}  else if (isMangaKatana) {
-	        referer = 'https://mangakatana.com/';
-        } else if (isMangaBats) {
-	       referer = 'https://mangabats.xyz/';
-        } else if (isMangaBatsCom) {
-	       referer = 'https://www.mangabats.com/';
-        }
+		} else if (isMangaKatana) {
+			referer = 'https://mangakatana.com/';
+		} else if (isMangaBatsCom) {
+			referer = 'https://www.mangabats.com/';
+		} else if (isMangaBats) {
+			referer = 'https://mangabats.xyz/';
+		} else if (isDoujinDesu) {
+			referer = 'https://doujin.desu.xxx/';
+		}
 
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -121,9 +132,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			});
 
 			if (!imageResponse.ok) {
-				return new Response(`Failed to fetch image: ${imageResponse.status}`, {
-					status: imageResponse.status
-				});
+				return new Response(
+					`Failed to fetch image: ${imageResponse.status}`,
+					{ status: imageResponse.status }
+				);
 			}
 
 			const contentType =
