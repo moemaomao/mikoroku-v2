@@ -80,6 +80,8 @@
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         doujindesu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
         crotpedia: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+        bacakomik: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+        pixhentai: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
         imhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
         hentai2read: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         hentairead: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
