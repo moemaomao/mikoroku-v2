@@ -520,26 +520,26 @@
 			</main>
 
 			<!-- History Widget Mobile -->
-			{#if !isReaderPage}
-				<div class="border-t xl:hidden {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
-					{#if isHistoryOpen}
-						<div class="max-h-[420px] overflow-hidden">
-							<HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
-						</div>
-					{:else}
-						<button
-							onclick={toggleHistory}
-							class="flex w-full items-center justify-center gap-2 py-3.5 text-sm font-medium transition
-								{isDarkMode
-								? 'bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800'
-								: 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}"
-						>
-							<History class="h-4 w-4" />
-							Show My History
-						</button>
-					{/if}
-				</div>
-			{/if}
+{#if !isReaderPage}
+	<div class="border-t xl:hidden {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
+		{#if isHistoryOpen}
+			<div class="flex h-[min(420px,55vh)] max-h-[420px] flex-col overflow-hidden">
+				<HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
+			</div>
+		{:else}
+			<button
+				onclick={toggleHistory}
+				class="flex w-full items-center justify-center gap-2 py-3.5 text-sm font-medium transition
+					{isDarkMode
+					? 'bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800'
+					: 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}"
+			>
+				<History class="h-4 w-4" />
+				Show My History
+			</button>
+		{/if}
+	</div>
+{/if}
 
 			{#if !isReaderPage}
 				<footer
