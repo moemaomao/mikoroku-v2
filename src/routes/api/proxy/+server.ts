@@ -1,7 +1,7 @@
 /**
  * Image Proxy
- * - Non-Hitomi + non-ihlv1 + non-nhentai + non-hentairead + w → redirect weserv (0 CPU Worker)
- * - Hitomi / ihlv1 / nhentai / hentairead → fetch langsung (butuh referer yang benar)
+ * - Hemat CPU: redirect ke weserv jika ada `w` dan domain tidak butuh referer khusus
+ * - Hitomi / ihlv1 / nhentai / hentairead / klz9 / love4u / rawkuma → fetch langsung + Referer benar
  */
 
 import type { RequestHandler } from './$types';
@@ -26,21 +26,33 @@ export const GET: RequestHandler = async ({ url }) => {
 		if (decodedUrl.startsWith('//')) decodedUrl = 'https:' + decodedUrl;
 
 		const isHitomi = /hitomi\.la|gold-usergeneratedcontent\.net/i.test(decodedUrl);
-		const isBlockedWeserv = /ihlv1\.xyz/i.test(decodedUrl);
+		const isBlockedWeserv = /ihlv1\.xyz|jfimv2\.xyz/i.test(decodedUrl);
 		const isNhentai = /nhentai\.net/i.test(decodedUrl);
 		const isHentairead =
 			sourceId === 'hentairead' ||
 			/hentairead\.com|hencover|henread/i.test(decodedUrl);
+		const isKlz9 =
+			sourceId === 'klz9' ||
+			/klz9\.com|jfimv2\.xyz/i.test(decodedUrl);
+		const isLove4u =
+			sourceId === 'love4u' ||
+			/love4u\.net/i.test(decodedUrl);
+		const isRawkuma =
+			sourceId === 'rawkuma' ||
+			/rawkuma\.(net|com)|kuma\.kyut\.dev/i.test(decodedUrl);
+
+		// Domain yang sering block weserv / butuh referer khusus → jangan redirect
+		const skipWeserv =
+			isHitomi ||
+			isBlockedWeserv ||
+			isNhentai ||
+			isHentairead ||
+			isKlz9 ||
+			isLove4u ||
+			isRawkuma;
 
 		// ===== Hemat CPU: redirect ke weserv =====
-		if (
-			w &&
-			!isHitomi &&
-			!isBlockedWeserv &&
-			!isNhentai &&
-			!isHentairead &&
-			/^https?:\/\//i.test(decodedUrl)
-		) {
+		if (w && !skipWeserv && /^https?:\/\//i.test(decodedUrl)) {
 			const weserv =
 				'https://images.weserv.nl/?url=' +
 				encodeURIComponent(decodedUrl) +
@@ -69,6 +81,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://nhentai.net/';
 		} else if (isHentairead) {
 			referer = 'https://hentairead.com/';
+		} else if (isKlz9) {
+			referer = 'https://klz9.com/';
+		} else if (isLove4u) {
+			referer = 'https://love4u.net/';
+		} else if (isRawkuma) {
+			referer = 'https://rawkuma.net/';
+		} else if (sourceId === 'komiku') {
+			referer = 'https://komiku.id/';
 		}
 
 		const controller = new AbortController();
