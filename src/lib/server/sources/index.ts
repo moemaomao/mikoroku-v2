@@ -27,6 +27,7 @@ import { RawkumaSource } from './impl/Rawkuma';
 import { MangaKatanaSource } from './impl/Mangakatana';
 import { MangaBatsSource } from './impl/MangaBats';
 import { MangaBatsComSource } from './impl/MangaBatsCom';
+import { DoujinDesuSource } from './impl/DoujinDesu';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -50,7 +51,8 @@ const sources: Record<string, IMangaSource> = {
 	rawkuma: new RawkumaSource(),
 	mangakatana: new MangaKatanaSource(),
 	mangabats: new MangaBatsSource(),
-	mangabatscom: new MangaBatsComSource()
+	mangabatscom: new MangaBatsComSource(),
+    doujindesu: new DoujinDesuSource()
 };
 
 /**
