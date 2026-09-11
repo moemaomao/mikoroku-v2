@@ -54,6 +54,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			/desu\.xxx|desu\.pics|amz-ch\.desu\.pics|pic\.desu\.xxx|cdn-static\.desu\.xxx/i.test(
 				decodedUrl
 			);
+		const isCrotpedia =
+	        sourceId === 'crotpedia' ||
+	        /crotpedia\.net|eromanga\.cfd|reader\.eromanga\.cfd|cover\.eromanga\.cfd/i.test(
+		       decodedUrl
+	        );
 
 		// Domain yang butuh referer khusus → jangan redirect weserv
 		const skipWeserv =
@@ -115,7 +120,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://mangabats.xyz/';
 		} else if (isDoujinDesu) {
 			referer = 'https://doujin.desu.xxx/';
-		}
+		} else if (isCrotpedia) {
+	       referer = 'https://crotpedia.net/';
+        }
 
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
