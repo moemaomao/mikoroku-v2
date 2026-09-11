@@ -59,6 +59,12 @@ export const GET: RequestHandler = async ({ url }) => {
 	        /crotpedia\.net|eromanga\.cfd|reader\.eromanga\.cfd|cover\.eromanga\.cfd/i.test(
 		       decodedUrl
 	        );
+		const isBacaKomik =
+	        sourceId === 'bacakomik' ||
+	        /bacakomik\.pics|warungkomikcdn\.icu/i.test(decodedUrl);
+		const isPixHentai =
+	        sourceId === 'pixhentai' ||
+	        /pixhentai\.com|openhentai\.net/i.test(decodedUrl);
 
 		// Domain yang butuh referer khusus → jangan redirect weserv
 		const skipWeserv =
@@ -122,6 +128,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://doujin.desu.xxx/';
 		} else if (isCrotpedia) {
 	       referer = 'https://crotpedia.net/';
+        } else if (isBacaKomik) {
+	       referer = 'https://bacakomik.pics/';
+        } else if (isPixHentai) {
+	       referer = 'https://pixhentai.com/';
         }
 
 		const controller = new AbortController();
