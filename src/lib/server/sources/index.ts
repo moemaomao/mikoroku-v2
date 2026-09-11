@@ -28,6 +28,7 @@ import { MangaKatanaSource } from './impl/Mangakatana';
 import { MangaBatsSource } from './impl/MangaBats';
 import { MangaBatsComSource } from './impl/MangaBatsCom';
 import { DoujinDesuSource } from './impl/DoujinDesu';
+import { CrotpediaSource } from './impl/Crotpedia';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -52,7 +53,8 @@ const sources: Record<string, IMangaSource> = {
 	mangakatana: new MangaKatanaSource(),
 	mangabats: new MangaBatsSource(),
 	mangabatscom: new MangaBatsComSource(),
-    doujindesu: new DoujinDesuSource()
+    doujindesu: new DoujinDesuSource(),
+    crotpedia: new CrotpediaSource()
 };
 
 /**
