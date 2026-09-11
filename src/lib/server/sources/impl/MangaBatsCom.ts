@@ -231,9 +231,9 @@ export class MangaBatsComSource extends BaseSource {
 			seen.add(id);
 
 			const number =
-				typeof row.chapter_num === 'number'
-					? row.chapter_num
-					: this.parseChapterNumber(row.chapter_name || chSlug);
+	typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
+		? row.chapter_num
+		: this.parseChapterNumber(row.chapter_name || chSlug) || 0;
 
 			let date = '';
 			if (row.updated_at) {
@@ -315,28 +315,37 @@ export class MangaBatsComSource extends BaseSource {
 			}
 		});
 
-		const genres: string[] = [];
-		$('a[href*="/genre/"], .genre-list a').each((_, a) => {
-			const g = $(a).text().trim();
-			if (g && !genres.includes(g) && g.length < 40) genres.push(g);
-		});
+		// Genres — HANYA dari blok info manga, bukan navbar/filter
+const genres: string[] = [];
+const skipGenre = /^(all|completed|ongoing)$/i;
+$('li.genres a, .genre-list a').each((_, a) => {
+	const g = $(a).text().replace(/\s+/g, ' ').trim();
+	if (!g || skipGenre.test(g) || g.length >= 40) return;
+	if (!genres.includes(g)) genres.push(g);
+});
 
-		const synopsis =
-			$('#panel-story-info-description, .panel-story-info-description')
-				.text()
-				.replace(/\s+/g, ' ')
-				.replace(/^Description\s*:?\s*/i, '')
-				.trim() || '';
+// Synopsis ...
+const synopsis =
+	$('#panel-story-info-description, .panel-story-info-description')
+		.text()
+		.replace(/\s+/g, ' ')
+		.replace(/^Description\s*:?\s*/i, '')
+		.trim() || '';
 
-		let chapters: Chapter[] = [];
-		try {
-			chapters = await this.fetchChaptersApi(slug);
-		} catch (e) {
-			console.warn('[mangabatscom] chapters API failed', e);
-		}
+// Chapters dari API
+let chapters: Chapter[] = [];
+try {
+	chapters = await this.fetchChaptersApi(slug);
+} catch (e) {
+	console.warn('[mangabatscom] chapters API failed', e);
+}
 
-		const latestChapter = chapters[0]?.number;
-		const latestUpdate = lastUpdate || chapters[0]?.date || '';
+// Urutkan ascending (penting next/prev + latest)
+chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
+
+const latestChapter = chapters[chapters.length - 1]?.number;
+const latestUpdate =
+	lastUpdate || chapters[chapters.length - 1]?.date || '';
 
 		const description = [
 			alt && `Alternative: ${alt}`,
