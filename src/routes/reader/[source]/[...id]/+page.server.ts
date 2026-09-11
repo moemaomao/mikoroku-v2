@@ -1,478 +1,163 @@
-import { BaseSource } from '../BaseSource';
-import type { Chapter, Manga, MangaDetails } from '../types';
-import * as cheerio from 'cheerio';
-
 /**
- * mangakatana.com adapter (HTML scrape)
- *
- * List   : /  |  /page/{n}   (~20/page)
- * Search : /?search=QUERY&search_by=m_name
- * Detail : /manga/{slug}.{id}
- * Chapter: /manga/{slug}.{id}/c{num}
- * Pages  : var thzq=['url1','url2',...] di HTML chapter
- *
- * ID format:
- *   manga   : "/manga/{slug}.{id}"
- *   chapter : "/manga/{slug}.{id}/c{num}"
+ * Chapter Reader Page - Server Load Function
  */
-export class MangaKatanaSource extends BaseSource {
-	id = 'mangakatana';
-	name = 'MangaKatana';
-	baseUrl = 'https://mangakatana.com';
 
-	private readonly PER_PAGE = 24;
+import { getSource } from '$lib/server/sources';
+import { error } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
+import debug from '$lib/utils/debug';
 
-	// ── Helpers ──────────────────────────────────────────────────────────────
+/** Resolve manga id from chapter id */
+async function resolveMangaId(
+	source: string,
+	chapterId: string,
+	adapter: ReturnType<typeof getSource>
+): Promise<string> {
+	// ── MangaKatana: /manga/slug.id/c123 ────────────────────────────────
+	const mk = chapterId.match(/^(\/manga\/[^/]+)\/c[\d.]+\/?$/i);
+	if (mk?.[1]) return mk[1];
 
-	private absUrl(url: string): string {
-		if (!url) return '';
-		if (url.startsWith('http')) return url;
-		if (url.startsWith('//')) return `https:${url}`;
-		return `${this.baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
-	}
-
-	private cleanId(link: string): string {
-		let id = (link || '').trim();
-		if (id.startsWith('http')) {
-			try {
-				id = new URL(id).pathname;
-			} catch {
-				/* ignore */
-			}
-		}
-		if (!id.startsWith('/')) id = `/${id}`;
-		return id.replace(/\/+$/, '') || '/';
-	}
-
-	private parseChapterNumber(text: string): number {
-		const s = String(text || '');
-		// Prioritas: /c123 atau /c12.5 di path
-		const fromPath = s.match(/\/c(\d+(?:\.\d+)?)(?:\/|$)/i);
-		if (fromPath) return parseFloat(fromPath[1]);
-
-		const m = s.match(/(?:chapter|chap|ch\.?)\s*(\d+(?:\.\d+)?)/i);
-		if (m) return parseFloat(m[1]);
-
-		const n = s.match(/(\d+(?:\.\d+)?)/);
-		return n ? parseFloat(n[1]) : 0;
-	}
-
-	/** Deteksi type dari genre (Manhwa/Manhua/Webtoon di-tag sebagai genre) */
-	private detectType(genres: string[] | string): 'manga' | 'manhwa' | 'manhua' {
-		const g = (Array.isArray(genres) ? genres.join(' ') : String(genres || '')).toLowerCase();
-		if (/\bmanhwa\b/.test(g)) return 'manhwa';
-		if (/\bmanhua\b/.test(g)) return 'manhua';
-		// Webtoon biasanya manhwa (Korea)
-		if (/\bwebtoon\b/.test(g)) return 'manhwa';
-		return 'manga';
-	}
-
-	// ── List parser ──────────────────────────────────────────────────────────
-
-	private parseCards($: cheerio.CheerioAPI, rawHtml?: string): Manga[] {
-		const out: Manga[] = [];
-		const seen = new Set<string>();
-
-		const push = (
-			href: string,
-			title: string,
-			cover: string,
-			statusText = '',
-			chText = '',
-			genreText = ''
-		) => {
-			if (!href || !/\/manga\//i.test(href)) return;
-			const id = this.cleanId(href);
-			// Hanya path manga murni: /manga/slug.id
-			if (!/^\/manga\/[^/]+$/.test(id)) return;
-			if (seen.has(id)) return;
-			seen.add(id);
-
-			title = (title || '').replace(/\s+/g, ' ').trim();
-			title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
-			if (!title) return;
-
-			const status = /complete|finished|end/i.test(statusText)
-				? 'Completed'
-				: 'Ongoing';
-
-			out.push({
-				id,
-				sourceId: this.id,
-				title,
-				cover: this.absUrl((cover || '').split('?')[0]),
-				type: this.detectType(genreText),
-				status,
-				latestChapter: this.parseChapterNumber(chText) || undefined
-			});
-		};
-
-		// Selector utama
-		$('#book_list .item[data-id]').each((_, el) => {
-			const $el = $(el);
-			const a = $el.find('h3.title a, .title a, .wrap_img a').first();
-			const href = a.attr('href') || '';
-			const title = a.text() || a.attr('title') || '';
-			const cover =
-				$el.find('picture source[type="image/webp"]').attr('srcset') ||
-				$el.find('picture source').attr('srcset') ||
-				$el.find('img').attr('src') ||
-				$el.find('img').attr('data-src') ||
-				'';
-			const statusText = $el.find('.status').text();
-			const chText =
-				$el.find('.last_chap a, .chapters a, .chapter a, h3.title span').text() ||
-				'';
-			const genreText = $el.find('.genres').text() || '';
-			push(href, title, cover, statusText, chText, genreText);
-		});
-
-		// Regex fallback
-		if (!out.length && rawHtml) {
-			const re =
-				/<div class="item"[^>]*data-id="\d+"[^>]*>[\s\S]*?href="(https?:\/\/mangakatana\.com\/manga\/[^"]+)"[\s\S]*?(?:srcset|src)="(https?:\/\/mangakatana\.com\/imgs\/[^"]+)"[\s\S]*?<h3 class="title">\s*<a[^>]*>([^<]+)/gi;
-			let m: RegExpExecArray | null;
-			while ((m = re.exec(rawHtml)) !== null) {
-				push(m[1], m[3], m[2]);
-			}
+	// ── Komiku special case ──────────────────────────────────────────────
+	// Chapter format: /slug-name-chapter-28
+	// Manga format  : /manga/slug-name
+	if (source === 'komiku') {
+		const m = chapterId.match(/^\/(.+)-chapter-(\d+(?:\.\d+)?)\/?$/i);
+		if (m?.[1]) {
+			return `/manga/${m[1]}`;
 		}
 
-		return out;
-	}
-
-	private async fetchListPages(paths: string[]): Promise<Manga[]> {
-		const seen = new Set<string>();
-		const merged: Manga[] = [];
-
-		for (const path of paths) {
-			try {
-				const html = await this.fetchHtml(path);
-				if (!html || html.length < 500) {
-					console.warn('[mangakatana] empty html', path);
-					continue;
-				}
-				if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
-					console.error('[mangakatana] Cloudflare challenge', path);
-					continue;
-				}
-				const $ = cheerio.load(html);
-				for (const m of this.parseCards($, html)) {
-					if (seen.has(m.id)) continue;
-					seen.add(m.id);
-					merged.push(m);
-				}
-			} catch (e) {
-				console.warn('[mangakatana] fetch page failed', path, e);
-			}
+		const fallback = chapterId.replace(/-chapter-\d+(?:\.\d+)?\/?$/i, '');
+		if (fallback !== chapterId && fallback.length > 1) {
+			const slug = fallback.replace(/^\//, '');
+			return `/manga/${slug}`;
 		}
-
-		return merged.slice(0, this.PER_PAGE);
 	}
 
-	// ── Public API ───────────────────────────────────────────────────────────
+	// ── Standard hierarchical: /manga-slug/chapter-1 atau /ch-1 ─────────
+	const hierarchical = chapterId.replace(
+		/\/(chapter|ch|episode|ep|c)[-/_]?[\d.]+\/?$/i,
+		''
+	);
+	if (hierarchical !== chapterId && hierarchical.length > 1) {
+		return hierarchical;
+	}
 
-	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
+	// ── Weloma / Hitomi-style ────────────────────────────────────────────
+	if (source === 'weloma' || chapterId.startsWith('/c/')) {
 		try {
-			const p = Math.max(1, Number(page) || 1);
-			const paths =
-				p === 1 ? [`/`, `/latest`] : [`/page/${p}`, `/latest/page/${p}`];
-
-			const list = await this.fetchListPages(paths);
-			console.log(`[mangakatana] latest page=${p} → ${list.length} items`);
-			return list;
-		} catch (e) {
-			console.error('[mangakatana] getLatestManga', e);
-			return [];
-		}
-	}
-
-	async searchManga(
-		query: string,
-		opts?: { page?: number; lang?: string; type?: string }
-	): Promise<Manga[]> {
-		const q = (query || '').trim();
-		const page = Math.max(1, opts?.page || 1);
-		if (!q) return this.getLatestManga(page, opts);
-
-		try {
-			const path =
-				`/?search=${encodeURIComponent(q)}&search_by=m_name` +
-				(page > 1 ? `&page=${page}` : '');
-			const html = await this.fetchHtml(path);
-			if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
-				console.error('[mangakatana] Cloudflare challenge (search)');
-				return [];
+			const base = (adapter as any).baseUrl || 'https://weloma.net';
+			const path = chapterId.startsWith('http') ? chapterId : `${base}${chapterId}`;
+			const res = await fetch(path, {
+				headers: {
+					'User-Agent':
+						'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+					Referer: base
+				}
+			});
+			if (res.ok) {
+				const html = await res.text();
+				const m = html.match(/href="(\/m\/[A-Za-z0-9]+)"/i);
+				if (m?.[1]) return m[1];
 			}
-			const $ = cheerio.load(html);
-			const list = this.parseCards($, html).slice(0, this.PER_PAGE);
-			console.log(`[mangakatana] search "${q}" page=${page} → ${list.length} items`);
-			return list;
 		} catch (e) {
-			console.error('[mangakatana] searchManga', e);
-			return [];
+			debug.error('[Reader] Failed to resolve Weloma mangaId from chapter:', e);
 		}
 	}
 
-	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-		const path = this.cleanId(mangaId);
-		if (!/\/manga\//i.test(path)) {
-			throw new Error(`Invalid mangakatana id: ${mangaId}`);
+	return hierarchical;
+}
+
+export const load: PageServerLoad = async ({ params, setHeaders }) => {
+	const { source, id } = params;
+
+	// [...id] catch-all → full path with leading slash
+	const chapterId = `/${id}`;
+
+	try {
+		const adapter = getSource(source);
+
+		const mangaId = await resolveMangaId(source, chapterId, adapter);
+		const mangaSlug = mangaId.startsWith('/') ? mangaId.slice(1) : mangaId;
+
+		const [pages, mangaDetails] = await Promise.all([
+			adapter.getChapterPages(chapterId),
+			adapter.getMangaDetails(mangaId).catch((e) => {
+				debug.error(`[Reader] Failed to fetch manga details for ${mangaId}:`, e);
+				return null;
+			})
+		]);
+
+		if (!pages || pages.length === 0) {
+			throw error(404, { message: 'Chapter not found or has no pages' });
 		}
 
-		const html = await this.fetchHtml(path);
-		const $ = cheerio.load(html);
-
-		// Title
-		let title =
-			$('h1.heading, h1').first().text().trim() ||
-			$('meta[property="og:title"]').attr('content') ||
-			$('title').text().split('|')[0] ||
-			path;
-		title = title.replace(/\s*[-|].*MangaKatana.*$/i, '').trim();
-
-		// Cover
-		let cover =
-			$('meta[property="og:image"]').attr('content') ||
-			$('.cover img, .media img, picture source').attr('srcset') ||
-			$('.cover img, .media img').attr('src') ||
-			'';
-		cover = this.absUrl((cover || '').split('?')[0]);
-
-		// Meta table
-		const meta: Record<string, string> = {};
-		$('li.d-row-small, .d-row-small').each((_, el) => {
-			const $el = $(el);
-			const label = $el
-				.find('.d-cell-small.label, .label')
-				.first()
-				.text()
-				.replace(/:\s*$/, '')
-				.trim()
-				.toLowerCase();
-			const value = $el
-				.find('.d-cell-small.value, .value')
-				.first()
-				.text()
-				.replace(/\s+/g, ' ')
-				.trim();
-			if (label) meta[label] = value;
-		});
-
-		const alt =
-			meta['alt name(s)'] ||
-			meta['alt name'] ||
-			$('.alt_name').text().replace(/\s+/g, ' ').trim() ||
-			'';
-
-		// Status
-		let status = 'Ongoing';
-		const statusRaw = (meta['status'] || $('.value.status').text() || '').toLowerCase();
-		if (/complete|finished|end/.test(statusRaw)) status = 'Completed';
-		else if (/ongoing|publishing/.test(statusRaw)) status = 'Ongoing';
-
-		const latestChapterLabel =
-			meta['latest chapter(s)'] || meta['latest chapter'] || '';
-		const updateAt =
-			meta['update at'] || meta['updated'] || meta['last update'] || '';
-
-		// Rating
-		let rating = '';
-		const ratingKeys = Object.keys(meta).filter((k) => /rating|score|rate/.test(k));
-		if (ratingKeys.length) rating = meta[ratingKeys[0]];
-		if (!rating) {
-			const starText =
-				$('.uk-rating, .rating, [class*="star"], [data-score]')
-					.first()
-					.attr('data-score') ||
-				$('.uk-rating, .rating, [class*="score"]').first().text().trim();
-			if (starText && /\d/.test(starText)) rating = starText.replace(/\s+/g, ' ');
-		}
-		if (!rating) {
-			const ld = html.match(
-				/"aggregateRating"\s*:\s*\{[^}]*"ratingValue"\s*:\s*"?([\d.]+)"?/i
-			);
-			if (ld) rating = ld[1];
-		}
-
-		// Authors
-		const authors: string[] = [];
-		$('a.author, a[href*="/author/"]').each((_, a) => {
-			const n = $(a).text().trim();
-			if (n && !authors.includes(n)) authors.push(n);
-		});
-		if (!authors.length && meta['author(s) / artist(s)']) {
-			meta['author(s) / artist(s)']
-				.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean)
-				.forEach((n) => {
-					if (!authors.includes(n)) authors.push(n);
-				});
-		}
-
-		// Genres — HANYA dari meta manga (jangan ambil navbar)
-		const genres: string[] = [];
-		$('li.d-row-small .genres a, .d-row-small .value .genres a').each((_, a) => {
-			const g = $(a).text().trim();
-			if (g && !genres.includes(g) && g.length < 40) genres.push(g);
-		});
-		if (!genres.length) {
-			$('.d-cell-small.value a[href*="/genre/"]').each((_, a) => {
-				const g = $(a).text().trim();
-				if (g && !genres.includes(g) && g.length < 40) genres.push(g);
-			});
-		}
-
-		const type = this.detectType(genres);
-
-		// Synopsis
-		const synopsis =
-			$('.summary p, .summary, #summary, .desc')
-				.text()
-				.replace(/\s+/g, ' ')
-				.trim() ||
-			$('meta[name="description"]').attr('content') ||
-			'';
-
-		// Chapters — selector ketat + sort ascending (penting untuk next/prev)
-		const chapters: Chapter[] = [];
-		const seen = new Set<string>();
-
-		$('.chapters a[href*="/manga/"][href*="/c"]').each((_, a) => {
-			const $a = $(a);
-			const href = $a.attr('href') || '';
-			if (!href) return;
-			if (!/\/c[\d.]+/i.test(href)) return;
-			if (/\/fc$/i.test(href)) return;
-
-			const id = this.cleanId(href);
-			if (seen.has(id)) return;
-			seen.add(id);
-
-			const chTitle =
-				$a.text().replace(/\s+/g, ' ').trim() ||
-				`Chapter ${this.parseChapterNumber(id)}`;
-
-			const numberFromId = this.parseChapterNumber(id);
-			const numberFromTitle = this.parseChapterNumber(chTitle);
-			const number = numberFromId || numberFromTitle || 0;
-
-			const date =
-				$a
-					.closest('tr, li, div')
-					.find('.update_time, .date, time')
-					.text()
-					.trim() || '';
-
-			chapters.push({
-				id,
-				title: chTitle,
-				number,
-				date
-			});
-		});
-
-		// Ascending: chapter 1 → latest (app: next = idx+1, prev = idx-1)
-		chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
-
-		const latestChapter =
-			this.parseChapterNumber(latestChapterLabel) ||
-			chapters[chapters.length - 1]?.number;
-		const latestUpdate =
-			updateAt || chapters[chapters.length - 1]?.date || '';
-
-		const description = [
-			alt && `Alternative: ${alt}`,
-			latestUpdate && `Latest update: ${latestUpdate}`,
-			latestChapter != null && `Latest chapter: ${latestChapter}`,
-			rating && `Rating: ${rating}`,
-			synopsis
-		]
-			.filter(Boolean)
-			.join('\n\n');
-
-		console.log(
-			`[mangakatana] details ${path} → type=${type}, chapters=${chapters.length}, genres=${genres.join(',')}`
+		// Sort by number ascending (oldest → newest) for consistent prev/next
+		const chapters = [...(mangaDetails?.chapters || [])].sort(
+			(a, b) => (a.number ?? 0) - (b.number ?? 0)
 		);
 
-		return {
-			id: path,
-			sourceId: this.id,
-			title,
-			cover,
-			type,
-			status,
-			description,
-			authors,
-			genres,
-			chapters,
-			latestChapter
-		};
-	}
+		// Match current chapter
+let currentChapterIndex = chapters.findIndex((ch) => ch.id === chapterId);
 
-	async getChapterPages(chapterId: string): Promise<string[]> {
-		const path = this.cleanId(chapterId);
-		if (!/\/c[\d.]+/i.test(path)) {
-			console.error('[mangakatana] getChapterPages → not a chapter path:', chapterId);
-			return [];
-		}
+if (currentChapterIndex === -1 && chapters.length > 0) {
+	currentChapterIndex = chapters.findIndex(
+		(ch) => ch.id.endsWith(chapterId) || chapterId.endsWith(ch.id)
+	);
+}
 
-		try {
-			const html = await this.fetchHtml(path);
-			const urls: string[] = [];
-			const seen = new Set<string>();
 
-			// Primary: var thzq=['url',...]
-			const thzqMatch = html.match(/var\s+thzq\s*=\s*\[([\s\S]*?)\];/);
-			if (thzqMatch) {
-				const re = /['"](https?:\/\/[^'"]+)['"]/g;
-				let m: RegExpExecArray | null;
-				while ((m = re.exec(thzqMatch[1])) !== null) {
-					const u = m[1].replace(/\\u0026/g, '&');
-					if (seen.has(u)) continue;
-					seen.add(u);
-					urls.push(u);
-				}
-			}
-
-			// Fallback: ytaw
-			if (!urls.length) {
-				const ytaw = html.match(/var\s+ytaw\s*=\s*\[([\s\S]*?)\];/);
-				if (ytaw) {
-					const re = /['"](https?:\/\/[^'"]+)['"]/g;
-					let m: RegExpExecArray | null;
-					while ((m = re.exec(ytaw[1])) !== null) {
-						const u = m[1];
-						if (seen.has(u)) continue;
-						seen.add(u);
-						urls.push(u);
-					}
-				}
-			}
-
-			// Fallback: img tags
-			if (!urls.length) {
-				const $ = cheerio.load(html);
-				$('img[data-src], img[src]').each((_, img) => {
-					let src = $(img).attr('data-src') || $(img).attr('src') || '';
-					if (!src || src === '#' || src.startsWith('data:')) return;
-					src = this.absUrl(src);
-					if (!/^https?:\/\//i.test(src)) return;
-					if (/logo|icon|avatar|static\/img/i.test(src)) return;
-					if (seen.has(src)) return;
-					seen.add(src);
-					urls.push(src);
-				});
-			}
-
-			console.log(`[mangakatana] ${urls.length} pages → ${path}`);
-			return urls;
-		} catch (e) {
-			console.error('[mangakatana] getChapterPages failed', path, e);
-			return [];
-		}
+if (currentChapterIndex === -1 && chapters.length > 0) {
+	const numMatch =
+		chapterId.match(/\/c(\d+(?:\.\d+)?)\/?$/i) ||
+		chapterId.match(/chapter[-_/]?(\d+(?:\.\d+)?)\/?$/i) || 
+		chapterId.match(/(\d+(?:\.\d+)?)\/?$/);                
+	if (numMatch) {
+		const n = parseFloat(numMatch[1]);
+		currentChapterIndex = chapters.findIndex(
+			(ch) => Math.abs((ch.number ?? 0) - n) < 0.001
+		);
 	}
 }
+
+		const currentChapter = chapters[currentChapterIndex] ?? null;
+
+		// Sorted ascending: prev = lower index, next = higher index
+		const prevChapter =
+			currentChapterIndex > 0 ? chapters[currentChapterIndex - 1] : null;
+		const nextChapter =
+			currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1
+				? chapters[currentChapterIndex + 1]
+				: null;
+
+		setHeaders({
+			'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=300'
+		});
+
+		return {
+			pages,
+			source,
+			chapterId,
+			mangaInfo: mangaDetails
+				? {
+						id: mangaDetails.id,
+						title: mangaDetails.title,
+						cover: mangaDetails.cover,
+						slug: mangaSlug
+					}
+				: {
+						id: mangaId,
+						title: mangaSlug.replace(/-/g, ' '),
+						cover: '',
+						slug: mangaSlug
+					},
+			chapters,
+			currentChapter,
+			prevChapter,
+			nextChapter
+		};
+	} catch (e) {
+		if (e && typeof e === 'object' && 'status' in e) throw e;
+		debug.error(`Failed to fetch chapter ${chapterId} from ${source}:`, e);
+		throw error(404, { message: 'Chapter not found' });
+	}
+};
