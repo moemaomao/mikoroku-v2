@@ -111,7 +111,6 @@
         return groups;
     });
 
-    // Derived Helper
     let currentSourceName = $derived(sources.find((s) => s.id === currentSource)?.name || currentSource);
     let currentLangObj = $derived(LANGUAGES.find((l) => l.id === selectedLang) || LANGUAGES[0]);
     let currentTypeObj = $derived(TYPES.find((t) => t.id === selectedType) || TYPES[0]);
