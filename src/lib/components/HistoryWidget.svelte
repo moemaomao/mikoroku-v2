@@ -82,12 +82,12 @@
 </script>
 
 <aside
-	class="history-widget flex h-full w-full flex-col border-l transition-transform duration-300 ease-in-out
+	class="history-widget flex h-full min-h-0 w-full flex-col border-l transition-transform duration-300 ease-in-out
 		xl:w-[280px]
 		{open ? 'translate-x-0' : 'translate-x-full'}
 		{isDarkMode ? 'border-zinc-800/80 bg-zinc-950/95' : 'border-zinc-200 bg-white/95'}"
 >
-	<!-- Header: X di kiri | Title di tengah | See all di kanan -->
+	<!-- Header -->
 	<div
 		class="relative flex shrink-0 items-center justify-between gap-2 border-b px-3 py-3.5
 			{isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"
@@ -128,8 +128,11 @@
 		</div>
 	</div>
 
-	<!-- List -->
-	<div class="flex-1 overflow-y-auto overscroll-contain p-2">
+	<!-- List: min-h-0 + touch-pan-y = kunci scroll mobile -->
+	<div
+		class="history-list min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+		style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"
+	>
 		{#if history.length === 0}
 			<div class="flex flex-col items-center justify-center px-4 py-12 text-center">
 				<div
@@ -192,7 +195,8 @@
 						<button
 							onclick={(e) => handleRemove(entry.mangaId, e)}
 							class="absolute right-1.5 top-1.5 rounded-md p-1 text-zinc-500 opacity-0 transition
-								group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400"
+								group-hover:opacity-100 hover:bg-red-500/15 hover:text-red-400
+								max-xl:opacity-100"
 							aria-label="Remove from history"
 						>
 							<Trash2 class="h-3.5 w-3.5" />
@@ -225,10 +229,10 @@
 		scrollbar-width: thin;
 		scrollbar-color: rgb(63 63 70) transparent;
 	}
-	.history-widget::-webkit-scrollbar {
+	.history-list::-webkit-scrollbar {
 		width: 4px;
 	}
-	.history-widget::-webkit-scrollbar-thumb {
+	.history-list::-webkit-scrollbar-thumb {
 		background: rgb(63 63 70);
 		border-radius: 4px;
 	}
