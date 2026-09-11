@@ -29,7 +29,7 @@ import { MangaBatsSource } from './impl/MangaBats';
 import { MangaBatsComSource } from './impl/MangaBatsCom';
 import { DoujinDesuSource } from './impl/DoujinDesu';
 import { CrotpediaSource } from './impl/Crotpedia';
-import { BacaKomikSource } from './impl/BacaKomik';
+import { BacaKomikSource } from './impl/Bacakomik';
 import { PixHentaiSource } from './impl/PixHentai';
 import type { IMangaSource } from './types';
 
