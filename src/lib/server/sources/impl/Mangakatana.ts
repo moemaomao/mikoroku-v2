@@ -69,124 +69,95 @@ export class MangaKatanaSource extends BaseSource {
 
 	// ── List parser ──────────────────────────────────────────────────────────
 
-	private parseCards($: cheerio.CheerioAPI, rawHtml?: string): Manga[] {
-		const out: Manga[] = [];
-		const seen = new Set<string>();
+	private parseCards($: cheerio.CheerioAPI): Manga[] {
+	const out: Manga[] = [];
+	const seen = new Set<string>();
 
-		const push = (
-			href: string,
-			title: string,
-			cover: string,
-			statusText = '',
-			chText = '',
-			genreText = ''
-		) => {
-			if (!href || !/\/manga\//i.test(href)) return;
-			const id = this.cleanId(href);
-			// Hanya path manga murni: /manga/slug.id
-			if (!/^\/manga\/[^/]+$/.test(id)) return;
-			if (seen.has(id)) return;
-			seen.add(id);
+	// STRICT: hanya Latest di #book_list
+	$('#book_list .item[data-id]').each((_, el) => {
+		const $el = $(el);
+		const a = $el.find('h3.title a, .wrap_img a').first();
+		const href = a.attr('href') || '';
+		if (!href || !/\/manga\//i.test(href)) return;
 
-			title = (title || '').replace(/\s+/g, ' ').trim();
-			title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
-			if (!title) return;
+		const id = this.cleanId(href);
+		if (!/^\/manga\/[^/]+$/.test(id)) return;
+		if (seen.has(id)) return;
+		seen.add(id);
 
-			const status = /complete|finished|end/i.test(statusText)
-				? 'Completed'
-				: 'Ongoing';
+		let title = (a.text() || a.attr('title') || '').replace(/\s+/g, ' ').trim();
+		title = title.replace(/\s*-\s*Update chapter\s+\d+(?:\.\d+)?\s*$/i, '').trim();
+		if (!title) return;
 
-			out.push({
-				id,
-				sourceId: this.id,
-				title,
-				cover: this.absUrl((cover || '').split('?')[0]),
-				type: this.detectType(genreText),
-				status,
-				latestChapter: this.parseChapterNumber(chText) || undefined
-			});
-		};
+		const cover =
+			$el.find('picture source[type="image/webp"]').attr('srcset') ||
+			$el.find('picture source').attr('srcset') ||
+			$el.find('img').attr('src') ||
+			$el.find('img').attr('data-src') ||
+			'';
 
-		// Selector utama
-		$('#book_list .item[data-id]').each((_, el) => {
-			const $el = $(el);
-			const a = $el.find('h3.title a, .title a, .wrap_img a').first();
-			const href = a.attr('href') || '';
-			const title = a.text() || a.attr('title') || '';
-			const cover =
-				$el.find('picture source[type="image/webp"]').attr('srcset') ||
-				$el.find('picture source').attr('srcset') ||
-				$el.find('img').attr('src') ||
-				$el.find('img').attr('data-src') ||
-				'';
-			const statusText = $el.find('.status').text();
-			const chText =
-				$el.find('.last_chap a, .chapters a, .chapter a, h3.title span').text() ||
-				'';
-			const genreText = $el.find('.genres').text() || '';
-			push(href, title, cover, statusText, chText, genreText);
+		const statusText = $el.find('.status').text();
+		const status = /complete|finished|end/i.test(statusText) ? 'Completed' : 'Ongoing';
+		const chText = $el.find('.last_chap a, h3.title span').text() || '';
+		const genreText = $el.find('.genres').text() || '';
+
+		out.push({
+			id,
+			sourceId: this.id,
+			title,
+			cover: this.absUrl((cover || '').split('?')[0]),
+			type: this.detectType(genreText),
+			status,
+			latestChapter: this.parseChapterNumber(chText) || undefined
 		});
+	});
 
-		// Regex fallback
-		if (!out.length && rawHtml) {
-			const re =
-				/<div class="item"[^>]*data-id="\d+"[^>]*>[\s\S]*?href="(https?:\/\/mangakatana\.com\/manga\/[^"]+)"[\s\S]*?(?:srcset|src)="(https?:\/\/mangakatana\.com\/imgs\/[^"]+)"[\s\S]*?<h3 class="title">\s*<a[^>]*>([^<]+)/gi;
-			let m: RegExpExecArray | null;
-			while ((m = re.exec(rawHtml)) !== null) {
-				push(m[1], m[3], m[2]);
-			}
+	return out;
+}
+
+private async fetchListPage(path: string): Promise<Manga[]> {
+	try {
+		const html = await this.fetchHtml(path);
+		if (!html || html.length < 500) {
+			console.warn('[mangakatana] empty html', path);
+			return [];
 		}
-
-		return out;
-	}
-
-	private async fetchListPages(paths: string[]): Promise<Manga[]> {
-		const seen = new Set<string>();
-		const merged: Manga[] = [];
-
-		for (const path of paths) {
-			try {
-				const html = await this.fetchHtml(path);
-				if (!html || html.length < 500) {
-					console.warn('[mangakatana] empty html', path);
-					continue;
-				}
-				if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
-					console.error('[mangakatana] Cloudflare challenge', path);
-					continue;
-				}
-				const $ = cheerio.load(html);
-				for (const m of this.parseCards($, html)) {
-					if (seen.has(m.id)) continue;
-					seen.add(m.id);
-					merged.push(m);
-				}
-			} catch (e) {
-				console.warn('[mangakatana] fetch page failed', path, e);
-			}
+		if (/just a moment|cf-browser-verification|challenge-platform/i.test(html)) {
+			console.error('[mangakatana] Cloudflare challenge', path);
+			return [];
 		}
-
-		return merged.slice(0, this.PER_PAGE);
+		const $ = cheerio.load(html);
+		const list = this.parseCards($);
+		console.log(`[mangakatana] ${path} → ${list.length} items`, list.slice(0, 3).map((m) => m.title));
+		return list;
+	} catch (e) {
+		console.warn('[mangakatana] fetch failed', path, e);
+		return [];
 	}
+}
 
-	// ── Public API ───────────────────────────────────────────────────────────
-
-	async getLatestManga(
+async getLatestManga(
 	page: number,
 	_opts?: { lang?: string; type?: string }
 ): Promise<Manga[]> {
 	try {
 		const p = Math.max(1, Number(page) || 1);
 
-		// Selalu Latest Update, BUKAN Hot Update (homepage punya #hot_book)
-		const paths =
-			p === 1
-				? [`/latest`]
-				: [`/latest/page/${p}`, `/page/${p}`];
+		// SATU url per page — jangan merge homepage (ada Hot di atas)
+		const path = p <= 1 ? '/latest' : `/latest/page/${p}`;
+		let list = await this.fetchListPage(path);
 
-		const list = await this.fetchListPages(paths);
+		// Fallback pagination saja (bukan homepage /)
+		if (!list.length && p > 1) {
+			list = await this.fetchListPage(`/page/${p}`);
+		}
+		// Page 1 fallback terakhir: /page/1 (bukan /)
+		if (!list.length && p <= 1) {
+			list = await this.fetchListPage('/page/1');
+		}
+
 		console.log(`[mangakatana] latest page=${p} → ${list.length} items`);
-		return list;
+		return list.slice(0, this.PER_PAGE);
 	} catch (e) {
 		console.error('[mangakatana] getLatestManga', e);
 		return [];
