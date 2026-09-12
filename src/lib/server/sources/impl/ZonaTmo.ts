@@ -53,98 +53,98 @@ export class ZonaTmoSource extends BaseSource {
 	// ── Últimas subidas (satu-satunya list yang di-support) ──────────────────
 
 	async getLatestManga(page: number): Promise<Manga[]> {
-		const path = page <= 1 ? '/ultimas-subidas' : `/ultimas-subidas?page=${page}`;
-		const html = await this.fetchHtml(path);
-		const $ = cheerio.load(html);
+	// Últimas subidas
+	const path =
+		page <= 1
+			? '/ultimas-subidas'
+			: `/ultimas-subidas?page=${page}`;
 
-		const mangas: Manga[] = [];
-		const seen = new Set<string>();
+	const html = await this.fetchHtml(path);
+	const $ = cheerio.load(html);
 
-		// Struktur kartu di Últimas subidas biasanya berisi link ke manga + chapter terbaru
-		// Selector disesuaikan dengan pola umum TMO / ZonaTMO
-		$('a[href*="/library/manga/"]').each((_, el) => {
-			const $a = $(el);
-			const href = $a.attr('href') || '';
-			if (!href || !href.includes('/library/manga/')) return;
+	const mangas: Manga[] = [];
+	const seen = new Set<string>();
 
-			const id = this.cleanId(href);
-			if (seen.has(id)) return;
-			seen.add(id);
+	// Selector utama (pola TMO / ZonaTMO)
+	const cards = $(
+		'div.element, div.book-item, .element-bg, .upload-item, a[href*="/library/manga/"]'
+	);
 
-			// Cari parent card untuk ambil metadata
-			const $card = $a.closest('div, article, li, .card, .item, .upload-item').length
-				? $a.closest('div, article, li, .card, .item, .upload-item')
-				: $a.parent();
+	cards.each((_, el) => {
+		const $el = $(el);
 
-			let title =
-				$card.find('h3, h4, h2, .title, .name').first().text().trim() ||
-				$a.text().replace(/\s+/g, ' ').trim() ||
-				$a.attr('title') ||
-				'';
-
-			// Bersihkan sisa "Capítulo X" dari judul
-			title = title
-				.replace(/\s*Capítulo\s*\d+(?:\.\d+)?.*$/i, '')
-				.replace(/\s*Chapter\s*\d+(?:\.\d+)?.*$/i, '')
-				.replace(/\s+/g, ' ')
-				.trim();
-
-			if (!title || title.length < 2) return;
-
-			const img = $card.find('img').first();
-			let cover = img.attr('src') || img.attr('data-src') || img.attr('data-original') || '';
-			cover = this.absUrl(cover);
-
-			const cardText = $card.text().toLowerCase();
-			const type = this.detectType(cardText);
-
-			mangas.push({
-				id,
-				title,
-				cover,
-				sourceId: this.id,
-				type
-			});
-		});
-
-		// Fallback: parse dari struktur heading + type yang sering muncul di text dump
-		if (mangas.length === 0) {
-			$('h3, h4, .title').each((_, el) => {
-				const $el = $(el);
-				const $a = $el.find('a[href*="/library/manga/"]').first().length
+		// Link manga
+		const $a =
+			$el.is('a[href*="/library/"]')
+				? $el
+				: $el.find('a[href*="/library/manga/"]').first().length
 					? $el.find('a[href*="/library/manga/"]').first()
-					: $el.closest('a[href*="/library/manga/"]').length
-						? $el.closest('a[href*="/library/manga/"]')
-						: null;
+					: $el.find('a[href*="/library/"]').first();
 
-				if (!$a || !$a.length) return;
+		const href = $a.attr('href') || '';
+		if (!href || !href.includes('/library/')) return;
 
-				const href = $a.attr('href') || '';
-				const id = this.cleanId(href);
-				if (seen.has(id)) return;
-				seen.add(id);
+		const id = this.cleanId(href);
+		if (seen.has(id)) return;
+		seen.add(id);
 
-				const title = $el.text().replace(/\s+/g, ' ').trim();
-				if (!title) return;
+		// Title
+		let title =
+			$a.find('h4, h3, .title').first().text().trim() ||
+			$el.find('h4, h3, .title').first().text().trim() ||
+			$a.attr('title')?.trim() ||
+			$a.text().replace(/\s+/g, ' ').trim();
 
-				const $parent = $el.parent();
-				const img = $parent.find('img').first();
-				const cover = this.absUrl(img.attr('src') || img.attr('data-src') || '');
+		// Bersihkan sisa "Capítulo X"
+		title = title
+			.replace(/\s*Cap[ií]tulo\s*\d+(?:\.\d+)?.*$/i, '')
+			.replace(/\s*Chapter\s*\d+(?:\.\d+)?.*$/i, '')
+			.replace(/\s+/g, ' ')
+			.trim();
 
-				const type = this.detectType($parent.text());
+		if (!title || title.length < 2) return;
 
-				mangas.push({
-					id,
-					title,
-					cover,
-					sourceId: this.id,
-					type
-				});
-			});
+		// Cover: img dulu, fallback background-image / data-bg
+		let cover = '';
+		const $img = $el.find('img').first();
+		if ($img.length) {
+			cover =
+				$img.attr('src') ||
+				$img.attr('data-src') ||
+				$img.attr('data-original') ||
+				'';
 		}
 
-		return mangas.slice(0, this.PER_PAGE);
-	}
+		if (!cover) {
+			const style =
+				$el.find('.thumbnail, .thumb, .book-thumbnail').attr('style') ||
+				$el.attr('style') ||
+				'';
+			const bgMatch = style.match(
+				/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/i
+			);
+			if (bgMatch) cover = bgMatch[1];
+		}
+
+		if (!cover) {
+			cover = $el.attr('data-bg') || $el.find('[data-bg]').attr('data-bg') || '';
+		}
+
+		cover = this.absUrl(cover);
+
+		const type = this.detectType($el.text());
+
+		mangas.push({
+			id,
+			title,
+			cover,
+			sourceId: this.id,
+			type
+		});
+	});
+
+	return mangas.slice(0, this.PER_PAGE);
+}
 
 	async searchManga(query: string, opts?: { page?: number }): Promise<Manga[]> {
 		// Karena request hanya fokus ke Últimas subidas, search dikembalikan kosong
