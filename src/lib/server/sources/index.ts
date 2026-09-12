@@ -32,6 +32,7 @@ import { CrotpediaSource } from './impl/Crotpedia';
 import { BacaKomikSource } from './impl/Bacakomik';
 import { PixHentaiSource } from './impl/PixHentai';
 import { MgkomikSource } from './impl/Mgkomik';
+import { KomikindoSource } from './impl/Komikindo';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -60,7 +61,8 @@ const sources: Record<string, IMangaSource> = {
     crotpedia: new CrotpediaSource(),
     bacakomik: new BacaKomikSource(),
     pixhentai: new PixHentaiSource(),
-    mgkomik: new MgkomikSource()
+    mgkomik: new MgkomikSource(),
+    komikindo: new KomikindoSource()
 };
 
 /**
