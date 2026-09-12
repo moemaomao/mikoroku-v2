@@ -49,7 +49,7 @@ export class KomikindoSource extends BaseSource {
 		);
 		if (m) return parseFloat(m[1]);
 		const n = String(text).match(/(\d+(?:\.\d+)?)/);
-		return n ? parseFloat(n[1]) : 0;
+		return n ? parseFloat(n[1]) : NaN;
 	}
 
 	private imgSrc($el: cheerio.Cheerio<any>): string {
@@ -78,7 +78,7 @@ export class KomikindoSource extends BaseSource {
 
 	// ── List parser ──────────────────────────────────────────────────────────
 
-		private parseCards($: cheerio.CheerioAPI): Manga[] {
+	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
@@ -108,18 +108,17 @@ export class KomikindoSource extends BaseSource {
 			let cover = this.imgSrc($el.find('img').first());
 			cover = this.absUrl((cover || '').split('?')[0]);
 
-			// Chapter badge: .lsch a / Ch. 69
 			const chText =
 				$el.find('.lsch a, .lchapter, .epxs, a[href*="-chapter-"]').first().text() ||
 				'';
-			const latestChapter = this.parseChapterNumber(chText) || undefined;
+			const chNum = this.parseChapterNumber(chText);
+			const latestChapter = Number.isFinite(chNum) && chNum >= 0 ? chNum : undefined;
 
-			// Status: Ongoing default (list jarang tampilkan status selesai)
 			let status = 'Ongoing';
 			const statusTxt = $el.find('.status, .manga-status, .stts').text().toLowerCase();
 			if (/complete|selesai|tamat|end/.test(statusTxt)) status = 'Completed';
 
-			// Type dari <span class="typeflag Manhwa"> (class, bukan text!)
+			// Type dari <span class="typeflag Manhwa"></span> (class, bukan text)
 			let type = 'manga';
 			const flagClass =
 				$el.find('.typeflag').attr('class') ||
@@ -129,7 +128,6 @@ export class KomikindoSource extends BaseSource {
 			else if (/\bmanhua\b/i.test(flagClass)) type = 'manhua';
 			else if (/\bmanga\b/i.test(flagClass)) type = 'manga';
 			else {
-				// fallback teks / path
 				const t = ($el.text() + ' ' + href).toLowerCase();
 				if (t.includes('manhwa')) type = 'manhwa';
 				else if (t.includes('manhua')) type = 'manhua';
@@ -292,11 +290,15 @@ export class KomikindoSource extends BaseSource {
 				$li.find('.dt a, .dt, .chapterdate').first().text().replace(/\s+/g, ' ').trim() ||
 				'';
 
+			// Number dari path (jangan pakai `0 || fallback`)
 			const fromPath = id.match(/-chapter-(\d+(?:\.\d+)?)/i);
-			const number =
-				(fromPath ? parseFloat(fromPath[1]) : 0) ||
-				this.parseChapterNumber(chTitle) ||
-				chapters.length + 1;
+			let number = fromPath ? parseFloat(fromPath[1]) : NaN;
+			if (!Number.isFinite(number)) {
+				number = this.parseChapterNumber(chTitle);
+			}
+			if (!Number.isFinite(number) || number < 0) {
+				number = chapters.length + 1;
+			}
 
 			chapters.push({
 				id,
@@ -306,7 +308,12 @@ export class KomikindoSource extends BaseSource {
 			});
 		});
 
-		chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
+		// Newest first: 339 → … → 1 → 0
+		chapters.sort((a, b) => {
+			const na = a.number ?? -1;
+			const nb = b.number ?? -1;
+			return nb - na;
+		});
 
 		const latestUpdate = chapters[0]?.date || '';
 		const latestChapter = chapters[0]?.number;
