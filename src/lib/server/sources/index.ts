@@ -36,6 +36,8 @@ import { KomikindoSource } from './impl/Komikindo';
 import { MangaindoSource } from './impl/Mangaindo';
 import { VoratoonSource } from './impl/Voratoon';
 import { ZonaTmoSource } from './impl/ZonaTmo';
+import { LectorTmoSource } from './impl/LectorTmo';
+import { MangaCopySource } from './impl/MangaCopy';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -68,7 +70,9 @@ const sources: Record<string, IMangaSource> = {
     komikindo: new KomikindoSource(),
     mangaindo: new MangaindoSource(),
     voratoon: new VoratoonSource(),
-    zonatmo: new ZonaTmoSource()
+    zonatmo: new ZonaTmoSource(),
+    lectortmo: new LectorTmoSource(),
+    mangacopy: new MangaCopySource()
 };
 
 /**
