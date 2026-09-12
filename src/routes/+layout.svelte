@@ -216,7 +216,7 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link
-		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+		href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap"
 		rel="stylesheet"
 	/>
 	<script>
@@ -232,7 +232,7 @@
 </svelte:head>
 
 <div
-	class="theme-root min-h-screen font-[Inter,system-ui,sans-serif] {isDarkMode
+	class="theme-root min-h-screen font-[Kodchasan,system-ui,sans-serif] {isDarkMode
 		? 'bg-zinc-950 text-zinc-100'
 		: 'bg-[#f5f5f7] text-zinc-900'}"
 >
