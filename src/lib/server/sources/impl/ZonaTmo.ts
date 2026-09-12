@@ -3,13 +3,10 @@ import type { Manga, MangaDetails, Chapter } from '../types';
 import * as cheerio from 'cheerio';
 
 /**
- * ZonaTMO (zonatmo.org) adapter
- * Fokus: hanya Últimas subidas
- *
- * Paths:
- * - Latest: /ultimas-subidas  (atau /ultimas-subidas?page=N)
+ * ZonaTMO (zonatmo.org)
+ * - Latest: /biblioteca + /ultimas-subidas (target 24 unique)
  * - Manga:  /library/manga/{id}/{slug}
- * - Chapter: /view_uploads/{id}  → viewer /viewer/{uniqid}/cascade
+ * - Chapter:/view_uploads/{id} → /viewer/{uniqid}/cascade
  */
 export class ZonaTmoSource extends BaseSource {
 	id = 'zonatmo';
@@ -44,115 +41,182 @@ export class ZonaTmoSource extends BaseSource {
 		const t = (text || '').toLowerCase();
 		if (t.includes('manhwa')) return 'manhwa';
 		if (t.includes('manhua')) return 'manhua';
-		if (t.includes('webtoon') || t.includes('comic') || t.includes('one_shot') || t.includes('one shot')) {
+		if (
+			t.includes('webtoon') ||
+			t.includes('comic') ||
+			t.includes('one_shot') ||
+			t.includes('one shot')
+		) {
 			return 'manhwa';
 		}
 		return 'manga';
 	}
 
-	// ── Últimas subidas (satu-satunya list yang di-support) ──────────────────
+	private parseMangaList(html: string): Manga[] {
+		const $ = cheerio.load(html);
+		const mangas: Manga[] = [];
+		const seen = new Set<string>();
 
-	async getLatestManga(page: number): Promise<Manga[]> {
-	// Últimas subidas
-	const path =
-		page <= 1
-			? '/ultimas-subidas'
-			: `/ultimas-subidas?page=${page}`;
+		$('a[href*="/library/manga/"]').each((_, el) => {
+			const $a = $(el);
+			const href = $a.attr('href') || '';
+			if (!href.includes('/library/manga/')) return;
 
-	const html = await this.fetchHtml(path);
-	const $ = cheerio.load(html);
+			const id = this.cleanId(href);
+			if (seen.has(id)) return;
+			seen.add(id);
 
-	const mangas: Manga[] = [];
-	const seen = new Set<string>();
-
-	// Selector utama (pola TMO / ZonaTMO)
-	const cards = $(
-		'div.element, div.book-item, .element-bg, .upload-item, a[href*="/library/manga/"]'
-	);
-
-	cards.each((_, el) => {
-		const $el = $(el);
-
-		// Link manga
-		const $a =
-			$el.is('a[href*="/library/"]')
-				? $el
-				: $el.find('a[href*="/library/manga/"]').first().length
-					? $el.find('a[href*="/library/manga/"]').first()
-					: $el.find('a[href*="/library/"]').first();
-
-		const href = $a.attr('href') || '';
-		if (!href || !href.includes('/library/')) return;
-
-		const id = this.cleanId(href);
-		if (seen.has(id)) return;
-		seen.add(id);
-
-		// Title
-		let title =
-			$a.find('h4, h3, .title').first().text().trim() ||
-			$el.find('h4, h3, .title').first().text().trim() ||
-			$a.attr('title')?.trim() ||
-			$a.text().replace(/\s+/g, ' ').trim();
-
-		// Bersihkan sisa "Capítulo X"
-		title = title
-			.replace(/\s*Cap[ií]tulo\s*\d+(?:\.\d+)?.*$/i, '')
-			.replace(/\s*Chapter\s*\d+(?:\.\d+)?.*$/i, '')
-			.replace(/\s+/g, ' ')
-			.trim();
-
-		if (!title || title.length < 2) return;
-
-		// Cover: img dulu, fallback background-image / data-bg
-		let cover = '';
-		const $img = $el.find('img').first();
-		if ($img.length) {
-			cover =
-				$img.attr('src') ||
-				$img.attr('data-src') ||
-				$img.attr('data-original') ||
-				'';
-		}
-
-		if (!cover) {
-			const style =
-				$el.find('.thumbnail, .thumb, .book-thumbnail').attr('style') ||
-				$el.attr('style') ||
-				'';
-			const bgMatch = style.match(
-				/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/i
+			const $card = $a.closest(
+				'div.element, div.book-item, .element-bg, .element, .card, article, li, .col'
 			);
-			if (bgMatch) cover = bgMatch[1];
-		}
 
-		if (!cover) {
-			cover = $el.attr('data-bg') || $el.find('[data-bg]').attr('data-bg') || '';
-		}
+			let title =
+				$a.find('h4, h3, h2, .title, .name').first().text().trim() ||
+				($card.length ? $card.find('h4, h3, h2, .title').first().text().trim() : '') ||
+				$a.attr('title')?.trim() ||
+				$a.text().replace(/\s+/g, ' ').trim();
 
-		cover = this.absUrl(cover);
+			title = title
+				.replace(/\s*Cap[ií]tulo\s*\d+(?:\.\d+)?.*$/i, '')
+				.replace(/\s*Chapter\s*\d+(?:\.\d+)?.*$/i, '')
+				.replace(/\s+/g, ' ')
+				.trim();
 
-		const type = this.detectType($el.text());
+			if (!title || title.length < 2) {
+				const slug = id.split('/').pop() || '';
+				title = decodeURIComponent(slug).replace(/-/g, ' ').trim();
+			}
+			if (!title) return;
 
-		mangas.push({
-			id,
-			title,
-			cover,
-			sourceId: this.id,
-			type
+			let cover = '';
+			const $img = ($card.length ? $card : $a).find('img').first();
+			if ($img.length) {
+				cover =
+					$img.attr('src') ||
+					$img.attr('data-src') ||
+					$img.attr('data-original') ||
+					$img.attr('data-lazy-src') ||
+					'';
+			}
+			if (!cover && $card.length) {
+				const style =
+					$card
+						.find('.thumbnail, .thumb, .book-thumbnail, [style*="background"]')
+						.attr('style') ||
+					$card.attr('style') ||
+					'';
+				const m = style.match(/url\(['"]?(https?:\/\/[^'")\s]+)/i);
+				if (m) cover = m[1];
+				if (!cover) cover = $card.attr('data-bg') || '';
+			}
+
+			mangas.push({
+				id,
+				title,
+				cover: this.absUrl(cover),
+				sourceId: this.id,
+				type: this.detectType(($card.length ? $card : $a).text())
+			});
 		});
-	});
 
-	return mangas.slice(0, this.PER_PAGE);
-}
+		if (mangas.length === 0) {
+			const re = /href=["']([^"']*\/library\/manga\/\d+\/[^"'?#]+)/gi;
+			let m: RegExpExecArray | null;
+			while ((m = re.exec(html)) !== null) {
+				const id = this.cleanId(m[1]);
+				if (seen.has(id)) continue;
+				seen.add(id);
+				const slug = id.split('/').pop() || id;
+				mangas.push({
+					id,
+					title: decodeURIComponent(slug).replace(/-/g, ' '),
+					cover: '',
+					sourceId: this.id,
+					type: 'manga'
+				});
+			}
+		}
 
-	async searchManga(query: string, opts?: { page?: number }): Promise<Manga[]> {
-		// Karena request hanya fokus ke Últimas subidas, search dikembalikan kosong
-		// atau bisa diarahkan ke library kalau mau diperluas nanti
-		return [];
+		return mangas;
 	}
 
-	// ── Manga Details ────────────────────────────────────────────────────────
+	// ── Latest ───────────────────────────────────────────────────────────────
+
+	async getLatestManga(page: number): Promise<Manga[]> {
+		const mangas: Manga[] = [];
+		const seen = new Set<string>();
+
+		const paths =
+			page <= 1
+				? [
+						'/biblioteca?order_item=creation&order_dir=desc&page=1',
+						'/ultimas-subidas',
+						'/?tab=trending'
+					]
+				: [
+						`/biblioteca?order_item=creation&order_dir=desc&page=${page}`,
+						`/ultimas-subidas?page=${page}`
+					];
+
+		for (const path of paths) {
+			if (mangas.length >= this.PER_PAGE) break;
+			try {
+				const html = await this.fetchHtml(path);
+				if (html.length < 3000) {
+					console.warn(`[zonatmo] short html on ${path} len=${html.length}`);
+					continue;
+				}
+				const batch = this.parseMangaList(html);
+				for (const item of batch) {
+					if (seen.has(item.id)) continue;
+					seen.add(item.id);
+					mangas.push(item);
+					if (mangas.length >= this.PER_PAGE) break;
+				}
+				console.log(`[zonatmo] ${path} batch=${batch.length} unique=${mangas.length}`);
+			} catch (e) {
+				console.error(`[zonatmo] fetch fail ${path}:`, e);
+			}
+		}
+
+		if (mangas.length < this.PER_PAGE && page <= 1) {
+			for (let p = 2; p <= 3 && mangas.length < this.PER_PAGE; p++) {
+				try {
+					const html = await this.fetchHtml(
+						`/biblioteca?order_item=creation&order_dir=desc&page=${p}`
+					);
+					const batch = this.parseMangaList(html);
+					for (const item of batch) {
+						if (seen.has(item.id)) continue;
+						seen.add(item.id);
+						mangas.push(item);
+						if (mangas.length >= this.PER_PAGE) break;
+					}
+				} catch {
+					/* ignore */
+				}
+			}
+		}
+
+		return mangas.slice(0, this.PER_PAGE);
+	}
+
+	async searchManga(query: string, opts?: { page?: number }): Promise<Manga[]> {
+		const q = (query || '').trim();
+		if (!q) return this.getLatestManga(opts?.page || 1);
+		const page = Math.max(1, opts?.page || 1);
+		try {
+			const html = await this.fetchHtml(
+				`/biblioteca?title=${encodeURIComponent(q)}&page=${page}`
+			);
+			return this.parseMangaList(html).slice(0, this.PER_PAGE);
+		} catch (e) {
+			console.error('[zonatmo] search fail:', e);
+			return [];
+		}
+	}
+
+	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
@@ -164,19 +228,24 @@ export class ZonaTmoSource extends BaseSource {
 		const $ = cheerio.load(html);
 
 		const title =
-			$('h1').first().text().trim() ||
-			$('meta[property="og:title"]').attr('content')?.replace(/\s*\|?\s*ZonaTMO.*$/i, '').trim() ||
+			$('h1.element-title, h1:not(.book-type), h2.title').first().text().trim() ||
+			$('meta[property="og:title"]')
+				.attr('content')
+				?.replace(/\s*\|?\s*ZonaTMO.*$/i, '')
+				.trim() ||
 			path;
 
 		let cover =
 			$('meta[property="og:image"]').attr('content') ||
-			$('.cover img, .manga-cover img, img[itemprop="image"]').first().attr('src') ||
-			$('img').first().attr('src') ||
+			$('.book-thumbnail img, .thumb img, .cover img').first().attr('src') ||
+			$('img[itemprop="image"]').attr('src') ||
 			'';
 		cover = this.absUrl(cover);
 
-		let description =
-			$('[itemprop="description"], .description, .sinopsis, .synopsis, .summary')
+		const description =
+			$(
+				'p.element-description, #manga-synopsis, .element-description, .sinopsis, .description'
+			)
 				.first()
 				.text()
 				.replace(/\s+/g, ' ')
@@ -184,77 +253,111 @@ export class ZonaTmoSource extends BaseSource {
 			$('meta[name="description"]').attr('content')?.trim() ||
 			'';
 
-		// Status
 		let status = 'Ongoing';
-		const statusText = $('body').text().toLowerCase();
-		if (/completado|finalizado|tamat|finished|completed/.test(statusText)) {
-			status = 'Completed';
-		} else if (/publicándose|en emisión|ongoing/.test(statusText)) {
-			status = 'Ongoing';
-		}
+		const statusRaw =
+			$('.status, .book-status, .element-status').first().text().toLowerCase() || '';
+		if (/finalizado|completado|terminado|completed/.test(statusRaw)) status = 'Completed';
+		else if (/pausado|hiatus/.test(statusRaw)) status = 'Hiatus';
 
-		// Type
 		const type = this.detectType($('body').text());
 
-		// Genres
 		const genres: string[] = [];
-		$('a[href*="/tag/"], .genres a, .genre a, [class*="genre"] a').each((_, el) => {
+		$('.genres a, .badge-primary, a[href*="/tag/"]').each((_, el) => {
 			const g = $(el).text().trim();
 			if (g && !genres.includes(g)) genres.push(g);
 		});
 
-		// Authors (kalau ada)
 		const authors: string[] = [];
-		$('a[href*="author"], .author a, [itemprop="author"]').each((_, el) => {
+		$('.author a, a[href*="author"]').each((_, el) => {
 			const a = $(el).text().trim();
 			if (a && !authors.includes(a)) authors.push(a);
 		});
 
-		// Chapters
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
-		$('a[href*="/view_uploads/"]').each((i, el) => {
-			const $a = $(el);
-			const href = $a.attr('href') || '';
-			if (!href) return;
+		const rows = $(
+			'li.upload-link, ul.chapters-list li, .chapter-list li, .chapters li, .upload-link'
+		);
 
-			const id = this.cleanId(href);
-			if (seen.has(id)) return;
-			seen.add(id);
+		if (rows.length > 0) {
+			rows.each((_, el) => {
+				const $el = $(el);
+				const $a =
+					$el.find('a[href*="/view_uploads/"]').first().length > 0
+						? $el.find('a[href*="/view_uploads/"]').first()
+						: $el.find('.chapter-detail a.btn-primary, a.btn-primary').first();
 
-			// Cari judul chapter di sekitar link
-			const $row = $a.closest('div, li, tr, .chapter, .upload');
-			let rawTitle =
-				$row.find('a[href*="/view_uploads/"]').not($a).first().text().trim() ||
-				$row.text().replace(/\s+/g, ' ').trim() ||
-				$a.text().replace(/\s+/g, ' ').trim() ||
-				`Capítulo ${i + 1}`;
+				const href = $a.attr('href') || '';
+				if (!href || href === '#' || !href.includes('/view_uploads/')) return;
 
-			// Ambil nomor
-			const numMatch =
-				rawTitle.match(/(?:capítulo|capitulo|chapter|cap\.?)\s*(\d+(?:\.\d+)?)/i) ||
-				rawTitle.match(/(\d+(?:\.\d+)?)/);
-			const number = numMatch ? parseFloat(numMatch[1]) : i + 1;
+				const id = this.cleanId(href);
+				if (seen.has(id)) return;
+				seen.add(id);
 
-			// Date
-			const dateMatch = rawTitle.match(
-				/(\d+\s*(?:hour|day|week|month|year|hora|día|dia|semana|mes|año)s?\s*ago|\d{1,2}\/\d{1,2}\/\d{4}|yesterday|today)/i
-			);
-			const date = dateMatch ? dateMatch[1] : '';
+				const nameEl = $el
+					.find('.btn-collapse, .chapter-link, .chapter-number, a.btn-collapse, .chapter-name')
+					.first();
 
-			const chTitle = `Capítulo ${number}`;
+				let rawName =
+					nameEl.text().replace(/\s+/g, ' ').trim() ||
+					$el.find('h4, h5, .title').first().text().replace(/\s+/g, ' ').trim() ||
+					'';
+				if (/^leer online$/i.test(rawName)) rawName = '';
 
-			chapters.push({
-				id,
-				title: chTitle,
-				number,
-				date
+				const numMatch =
+					rawName.match(/cap[ií]tulo\s*(\d+(?:\.\d+)?)/i) ||
+					rawName.match(/chapter\s*(\d+(?:\.\d+)?)/i) ||
+					rawName.match(/\b(\d+(?:\.\d+)?)\b/);
+				const number = numMatch ? parseFloat(numMatch[1]) : NaN;
+
+				const group =
+					$el.find('.group-name, .scan-group, .team, a[href*="/groups/"]').first().text().trim() ||
+					'';
+				const date =
+					$el.find('.date, .chapter-date, time, .text-muted').last().text().replace(/\s+/g, ' ').trim() ||
+					'';
+
+				const chTitle = Number.isFinite(number)
+					? group
+						? `Capítulo ${number} — ${group}`
+						: `Capítulo ${number}`
+					: rawName || `Capítulo ${chapters.length + 1}`;
+
+				chapters.push({
+					id,
+					title: chTitle,
+					number: Number.isFinite(number) ? number : chapters.length + 1,
+					date
+				});
 			});
-		});
+		}
 
-		// Sort newest first
+		if (chapters.length === 0) {
+			$('a[href*="/view_uploads/"]').each((i, el) => {
+				const href = $(el).attr('href') || '';
+				if (!href) return;
+				const id = this.cleanId(href);
+				if (seen.has(id)) return;
+				seen.add(id);
+
+				const rowText = $(el).closest('li, tr, .upload-link, div').text().replace(/\s+/g, ' ');
+				const numMatch =
+					rowText.match(/cap[ií]tulo\s*(\d+(?:\.\d+)?)/i) ||
+					rowText.match(/chapter\s*(\d+(?:\.\d+)?)/i);
+				const number = numMatch ? parseFloat(numMatch[1]) : i + 1;
+
+				chapters.push({
+					id,
+					title: `Capítulo ${number}`,
+					number,
+					date: ''
+				});
+			});
+		}
+
 		chapters.sort((a, b) => b.number - a.number);
+		console.log(`[zonatmo] details ${path} chapters=${chapters.length}`);
 
 		return {
 			id: path,
@@ -270,68 +373,131 @@ export class ZonaTmoSource extends BaseSource {
 		};
 	}
 
-	// ── Chapter Pages ────────────────────────────────────────────────────────
+	// ── Pages ────────────────────────────────────────────────────────────────
 
-	async getChapterPages(chapterId: string): Promise<string[]> {
-		let path = this.cleanId(chapterId);
-
-		// view_uploads → coba ambil uniqid lalu ke cascade viewer
-		if (path.includes('/view_uploads/')) {
-			const html = await this.fetchHtml(path);
-			const uniqidMatch = html.match(/uniqid\s*[:=]\s*['"]([^'"]+)['"]/i);
-			if (uniqidMatch) {
-				path = `/viewer/${uniqidMatch[1]}/cascade`;
-			} else {
-				// fallback: coba ganti path
-				const id = path.split('/').pop();
-				if (id) path = `/viewer/${id}/cascade`;
-			}
-		} else if (path.includes('/viewer/') && !path.endsWith('/cascade')) {
-			path = path.replace(/\/?$/, '') + '/cascade';
-		}
-
-		const html = await this.fetchHtml(path);
+	private extractPagesFromHtml(html: string): string[] {
 		const $ = cheerio.load(html);
-
 		const pages: string[] = [];
 		const seen = new Set<string>();
 
+		const push = (raw: string) => {
+			const src = this.absUrl(raw || '');
+			if (!src || seen.has(src)) return;
+			if (/logo|icon|avatar|spinner|ads|placeholder|banner|emoji/i.test(src)) return;
+			if (
+				!/\.(jpg|jpeg|png|webp|avif|gif)(\?|$)/i.test(src) &&
+				!/\/(images?|uploads?|pages?|cascade)\//i.test(src)
+			) {
+				return;
+			}
+			seen.add(src);
+			pages.push(src);
+		};
+
 		const selectors = [
+			'#reader-wrap img.reader-image',
+			'#reader-wrap img',
+			'img.reader-image',
+			'#viewer img',
+			'.viewer img',
 			'#viewer-container img',
 			'.viewer-image img',
 			'.reading-content img',
 			'#chapter-content img',
-			'.page-img img',
 			'img[data-original]',
 			'img[data-src]',
-			'img.img-fluid',
-			'img'
+			'#main-container img'
 		];
 
 		for (const sel of selectors) {
 			$(sel).each((_, img) => {
-				let src =
-					$(img).attr('data-original') ||
-					$(img).attr('data-src') ||
-					$(img).attr('data-lazy-src') ||
-					$(img).attr('src') ||
-					'';
-
-				src = this.absUrl(src);
-
-				if (
-					src &&
-					!seen.has(src) &&
-					/\.(jpg|jpeg|png|webp|avif)/i.test(src) &&
-					!/logo|icon|avatar|spinner|ads|placeholder|lazy|thumb|banner/i.test(src)
-				) {
-					seen.add(src);
-					pages.push(src);
-				}
+				const $img = $(img);
+				push(
+					$img.attr('data-original') ||
+						$img.attr('data-src') ||
+						$img.attr('data-lazy-src') ||
+						$img.attr('src') ||
+						''
+				);
 			});
-			if (pages.length > 3) break; // cukup yakin
+			if (pages.length > 0) break;
+		}
+
+		if (pages.length === 0) {
+			const re = /["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi;
+			let m: RegExpExecArray | null;
+			while ((m = re.exec(html)) !== null) push(m[1]);
+		}
+
+		if (pages.length === 0) {
+			$('img').each((_, img) => {
+				const $img = $(img);
+				push($img.attr('data-original') || $img.attr('data-src') || $img.attr('src') || '');
+			});
 		}
 
 		return pages;
+	}
+
+	async getChapterPages(chapterId: string): Promise<string[]> {
+		let path = this.cleanId(chapterId);
+		if (!path.startsWith('/')) path = `/${path}`;
+
+		if (!path.includes('/view_uploads/') && !path.includes('/viewer/')) {
+			const onlyNum = path.replace(/\//g, '');
+			if (/^\d+$/.test(onlyNum)) path = `/view_uploads/${onlyNum}`;
+		}
+
+		console.log(`[zonatmo] pages input="${chapterId}" path="${path}"`);
+
+		try {
+			let html = await this.fetchHtml(path);
+			console.log(`[zonatmo] step1 len=${html.length}`);
+
+			if (path.includes('/view_uploads/')) {
+				const uniqid =
+					html.match(/uniqid\s*[:=]\s*['"]([a-f0-9]{16,})['"]/i)?.[1] ||
+					html.match(/["']uniqid["']\s*:\s*["']([a-f0-9]{16,})['"]/i)?.[1] ||
+					html.match(/\/viewer\/([a-f0-9]{16,})/i)?.[1] ||
+					'';
+
+				if (uniqid) {
+					path = `/viewer/${uniqid}/cascade`;
+					html = await this.fetchHtml(path);
+					console.log(`[zonatmo] cascade len=${html.length} uniqid=${uniqid}`);
+				} else {
+					const cascadeLink = html.match(
+						/href=["']([^"']*\/viewer\/[^"']*cascade[^"']*)["']/i
+					)?.[1];
+					if (cascadeLink) {
+						path = this.cleanId(cascadeLink);
+						html = await this.fetchHtml(path);
+						console.log(`[zonatmo] cascade-link len=${html.length}`);
+					}
+				}
+			} else if (path.includes('/viewer/') && !path.includes('/cascade')) {
+				path = path.replace(/\/?$/, '') + '/cascade';
+				html = await this.fetchHtml(path);
+			}
+
+			let pages = this.extractPagesFromHtml(html);
+			console.log(`[zonatmo] pages=${pages.length}`);
+
+			if (pages.length === 0 && path.includes('/cascade')) {
+				const paged = path.replace('/cascade', '/paginated');
+				try {
+					const html2 = await this.fetchHtml(paged);
+					pages = this.extractPagesFromHtml(html2);
+					console.log(`[zonatmo] paginated pages=${pages.length}`);
+				} catch {
+					/* ignore */
+				}
+			}
+
+			return pages;
+		} catch (e) {
+			console.error('[zonatmo] getChapterPages error:', e);
+			return [];
+		}
 	}
 }
