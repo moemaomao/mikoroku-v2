@@ -33,6 +33,9 @@ import { BacaKomikSource } from './impl/Bacakomik';
 import { PixHentaiSource } from './impl/PixHentai';
 import { MgkomikSource } from './impl/Mgkomik';
 import { KomikindoSource } from './impl/Komikindo';
+import { MangaindoSource } from './impl/Mangaindo';
+import { VoratoonSource } from './impl/Voratoon';
+import { ZonaTmoSource } from './impl/ZonaTmo';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
@@ -62,7 +65,10 @@ const sources: Record<string, IMangaSource> = {
     bacakomik: new BacaKomikSource(),
     pixhentai: new PixHentaiSource(),
     mgkomik: new MgkomikSource(),
-    komikindo: new KomikindoSource()
+    komikindo: new KomikindoSource(),
+    mangaindo: new MangaindoSource(),
+    voratoon: new VoratoonSource(),
+    zonatmo: new ZonaTmoSource()
 };
 
 /**
