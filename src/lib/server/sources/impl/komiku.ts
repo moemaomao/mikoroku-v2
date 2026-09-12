@@ -4,15 +4,18 @@ import * as cheerio from 'cheerio';
 
 /**
  * Komiku (komiku.org) adapter – Manga / Manhwa / Manhua Bahasa Indonesia
+ *
+ * List   : https://api.komiku.org/manga/  |  /manga/page/{n}/
+ * Search : https://api.komiku.org/manga/?s=QUERY
+ * Detail : https://komiku.org/manga/{slug}/
+ * Chapter: /{slug}-chapter-{n}/   (desimal: chapter-1.1 atau chapter-1-1)
  */
 export class KomikuSource extends BaseSource {
 	id = 'komiku';
 	name = 'Komiku';
 	baseUrl = 'https://komiku.org';
 
-	/** API base (HTMX load) */
 	private readonly apiBase = 'https://api.komiku.org';
-
 	private readonly PER_PAGE = 24;
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -30,13 +33,11 @@ export class KomikuSource extends BaseSource {
 			try {
 				id = new URL(id).pathname;
 			} catch {
-				// ignore
+				/* ignore */
 			}
 		}
 		if (!id.startsWith('/')) id = `/${id}`;
-		// hapus trailing slash + query
-		id = id.replace(/\/+$/, '').split('?')[0];
-		return id;
+		return id.replace(/\/+$/, '').split('?')[0] || '/';
 	}
 
 	private normalizeTitle(raw: string): string {
@@ -49,6 +50,38 @@ export class KomikuSource extends BaseSource {
 			.replace(/^Komik\s+/i, '')
 			.trim();
 	}
+
+	/**
+	 * Parse chapter number dari teks ATAU path.
+	 * Support: "Chapter 1.1", "Ch 1-2", path "...-chapter-1.1", "...-chapter-1-2"
+	 */
+	private parseChapterNumber(text: string, path = ''): number {
+		const fromPath = path.match(/-chapter-(\d+)(?:[.-](\d+))?/i);
+		if (fromPath) {
+			const major = parseInt(fromPath[1], 10);
+			if (fromPath[2] != null) {
+				return parseFloat(`${major}.${fromPath[2]}`);
+			}
+			return major;
+		}
+
+		const m = String(text).match(
+			/(?:chapter|chap|ch\.?|episode|ep\.?)\s*(\d+)(?:[.,](\d+))?/i
+		);
+		if (m) {
+			if (m[2] != null) return parseFloat(`${m[1]}.${m[2]}`);
+			return parseInt(m[1], 10);
+		}
+
+		// "1-2" / "1.2" di title
+		const d = String(text).match(/\b(\d+)[.-](\d+)\b/);
+		if (d) return parseFloat(`${d[1]}.${d[2]}`);
+
+		const n = String(text).match(/\b(\d+(?:\.\d+)?)\b/);
+		return n ? parseFloat(n[1]) : 0;
+	}
+
+	// ── List cards ───────────────────────────────────────────────────────────
 
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const mangas: Manga[] = [];
@@ -91,8 +124,32 @@ export class KomikuSource extends BaseSource {
 
 			const badgeText = $el.find('.tpe, .status, span, .tpe1_inf').text().toLowerCase();
 			let status = 'Ongoing';
-			if (/\b(tamat|end|completed|complete)\b/.test(badgeText) && !/\b(ongoing)\b/.test(badgeText)) {
+			if (
+				/\b(tamat|end|completed|complete)\b/.test(badgeText) &&
+				!/\b(ongoing)\b/.test(badgeText)
+			) {
 				status = 'Completed';
+			}
+
+			// Badge chapter: ambil .new1 terakhir (biasanya "Terbaru"), fallback semua .new1
+			let latestChapter: number | undefined;
+			const newLinks = $el.find('.new1 a[href*="-chapter-"]');
+			if (newLinks.length) {
+				const $latest = newLinks.last();
+				const chHref = $latest.attr('href') || '';
+				const chText = $latest.text() || $latest.attr('title') || '';
+				const n = this.parseChapterNumber(chText, this.cleanId(chHref));
+				if (n > 0) latestChapter = n;
+			}
+			if (latestChapter == null) {
+				const anyCh = $el.find('a[href*="-chapter-"]').last();
+				if (anyCh.length) {
+					const n = this.parseChapterNumber(
+						anyCh.text() || anyCh.attr('title') || '',
+						this.cleanId(anyCh.attr('href') || '')
+					);
+					if (n > 0) latestChapter = n;
+				}
 			}
 
 			mangas.push({
@@ -101,21 +158,20 @@ export class KomikuSource extends BaseSource {
 				cover: this.absUrl(cover),
 				sourceId: this.id,
 				status,
-				type
-			} as Manga);
+				type,
+				latestChapter
+			});
 		});
 
 		return mangas;
 	}
 
-	// ── List / Search ────────────────────────────────────────────────────────
+	// ── Catalog ──────────────────────────────────────────────────────────────
 
 	async getLatestManga(page: number): Promise<Manga[]> {
 		const mangas: Manga[] = [];
 		const seen = new Set<string>();
 
-		// API selalu return 10 item per page.
-		// Kita ambil 3 halaman supaya cukup untuk target 24 item.
 		const startPage = (page - 1) * 3 + 1;
 		const pagesToFetch = [startPage, startPage + 1, startPage + 2];
 
@@ -126,9 +182,7 @@ export class KomikuSource extends BaseSource {
 			try {
 				const html = await this.fetchHtml(path);
 				const $ = cheerio.load(html);
-				const items = this.parseCards($);
-
-				for (const item of items) {
+				for (const item of this.parseCards($)) {
 					if (!seen.has(item.id)) {
 						seen.add(item.id);
 						mangas.push(item);
@@ -139,6 +193,7 @@ export class KomikuSource extends BaseSource {
 			}
 		}
 
+		console.log(`[komiku] latest page=${page} → ${mangas.length} items`);
 		return mangas.slice(0, this.PER_PAGE);
 	}
 
@@ -150,7 +205,7 @@ export class KomikuSource extends BaseSource {
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 		const mangas = this.parseCards($);
-
+		console.log(`[komiku] search "${q}" → ${mangas.length} items`);
 		return mangas.slice(0, this.PER_PAGE);
 	}
 
@@ -158,12 +213,13 @@ export class KomikuSource extends BaseSource {
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		const path = this.cleanId(
-			mangaId.startsWith('/manga/') ? mangaId : `/manga/${mangaId.replace(/^\//, '')}`
+			mangaId.startsWith('/manga/')
+				? mangaId
+				: `/manga/${mangaId.replace(/^\//, '')}`
 		);
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
-		// Title
 		let title =
 			$('h1').first().text().trim() ||
 			$('table.inftable td:contains("Judul:")').next().text().trim() ||
@@ -171,7 +227,6 @@ export class KomikuSource extends BaseSource {
 			path;
 		title = this.normalizeTitle(title);
 
-		// Cover
 		let cover =
 			$('.ims img').attr('src') ||
 			$('.ims img').attr('data-src') ||
@@ -180,7 +235,6 @@ export class KomikuSource extends BaseSource {
 			'';
 		cover = this.absUrl(cover);
 
-		// Sinopsis
 		let description = '';
 		$('h2').each((_, h2) => {
 			if ($(h2).text().toLowerCase().includes('sinopsis')) {
@@ -201,7 +255,6 @@ export class KomikuSource extends BaseSource {
 					.trim() || '';
 		}
 
-		// Status
 		let status = 'Ongoing';
 		$('table.inftable tr').each((_, tr) => {
 			const label = $(tr).find('td').first().text().toLowerCase();
@@ -211,7 +264,6 @@ export class KomikuSource extends BaseSource {
 			}
 		});
 
-		// Authors
 		const authors: string[] = [];
 		$('table.inftable tr').each((_, tr) => {
 			const label = $(tr).find('td').first().text().toLowerCase();
@@ -221,7 +273,6 @@ export class KomikuSource extends BaseSource {
 			}
 		});
 
-		// Genres
 		const genres: string[] = [];
 		$('table.inftable tr').each((_, tr) => {
 			const label = $(tr).find('td').first().text().toLowerCase();
@@ -248,38 +299,56 @@ export class KomikuSource extends BaseSource {
 			if (t && !genres.includes(t)) genres.push(t);
 		});
 
-		// Chapters
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
-		$('#Daftar_Chapter tr, table#Daftar_Chapter tr, .bixbox .listing tr, table.ttingkat tr').each(
-			(_, el) => {
-				const $el = $(el);
-				const $a = $el.find('a[href*="chapter"], a[href*="ch-"], a[href*="/ch/"]').first();
-				const href = $a.attr('href') || '';
-				if (!href) return;
+		$(
+			'#Daftar_Chapter tr, table#Daftar_Chapter tr, .bixbox .listing tr, table.ttingkat tr, #chapter_list li, .daftar-chapter li'
+		).each((_, el) => {
+			const $el = $(el);
+			const $a = $el
+				.find('a[href*="-chapter-"], a[href*="chapter"], a[href*="ch-"], a[href*="/ch/"]')
+				.first();
+			const href = $a.attr('href') || '';
+			if (!href) return;
 
+			const id = this.cleanId(href);
+			if (seen.has(id)) return;
+			if (!/-chapter-/i.test(id) && !/chapter/i.test(id)) return;
+			seen.add(id);
+
+			const chapterTitle =
+				$a.text().replace(/\s+/g, ' ').trim() ||
+				$a.attr('title') ||
+				`Chapter ${chapters.length + 1}`;
+
+			const number =
+				this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
+
+			const date =
+				$el.find('.tanggalseries, .date, td:last-child').text().replace(/\s+/g, ' ').trim() ||
+				'';
+
+			chapters.push({ id, title: chapterTitle, number, date });
+		});
+
+		// Fallback: semua link chapter di halaman
+		if (chapters.length === 0) {
+			$('a[href*="-chapter-"]').each((_, a) => {
+				const href = $(a).attr('href') || '';
 				const id = this.cleanId(href);
 				if (seen.has(id)) return;
 				seen.add(id);
-
 				const chapterTitle =
-					$a.text().replace(/\s+/g, ' ').trim() ||
-					$a.attr('title') ||
-					`Chapter ${chapters.length + 1}`;
+					$(a).text().replace(/\s+/g, ' ').trim() ||
+					$(a).attr('title') ||
+					'Chapter';
+				const number = this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
+				chapters.push({ id, title: chapterTitle, number, date: '' });
+			});
+		}
 
-				const numMatch =
-	               chapterTitle.match(/(?:chapter|ch\.?|episode|ep\.?)\s*(\d+(?:\.\d+)?)/i) ||
-	               chapterTitle.match(/(\d+(?:\.\d+)?)/);
-
-                const number = numMatch?.[1] ? parseFloat(numMatch[1]) : chapters.length + 1;
-				const date = $el.find('.tanggalseries, .date, td:last-child').text().trim() || '';
-
-				chapters.push({ id, title: chapterTitle, number, date });
-			}
-		);
-
-		// Urutkan dari chapter kecil ke besar (penting untuk next/prev)
+		// ascending → next/prev di reader benar
 		chapters.sort((a, b) => a.number - b.number);
 
 		return {
@@ -293,7 +362,9 @@ export class KomikuSource extends BaseSource {
 			status,
 			chapters,
 			type: 'manga',
-			latestChapter: chapters.length ? chapters[chapters.length - 1].number : undefined
+			latestChapter: chapters.length
+				? chapters[chapters.length - 1].number
+				: undefined
 		};
 	}
 
@@ -307,7 +378,6 @@ export class KomikuSource extends BaseSource {
 		const images: string[] = [];
 		const seen = new Set<string>();
 
-		// Selector utama
 		$('#Baca_Komik img, #readerarea img, .reader img, .img-land img, .post-reading img').each(
 			(_, img) => {
 				let src =
@@ -330,7 +400,6 @@ export class KomikuSource extends BaseSource {
 			}
 		);
 
-		// Fallback kalau selector utama kosong
 		if (images.length === 0) {
 			$('img').each((_, img) => {
 				let src = $(img).attr('data-src') || $(img).attr('src') || '';
@@ -349,6 +418,7 @@ export class KomikuSource extends BaseSource {
 			});
 		}
 
+		console.log(`[komiku] ${images.length} pages → ${path}`);
 		return images;
 	}
 }
