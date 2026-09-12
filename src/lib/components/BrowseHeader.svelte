@@ -78,7 +78,9 @@
         love4u: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+        voratoon: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         komikindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+        mangaindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         mgkomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         doujindesu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
         crotpedia: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
@@ -88,13 +90,15 @@
         hentai2read: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         hentairead: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         hentaiera: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
-        simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' }
+        simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+        zonatmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
     };
 
     const LANG_LABELS: Record<string, string> = {
         EN: 'English',
         JP: 'Japanese',
         ID: 'Indonesian',
+        ES: 'Spanish',
         Multi: 'Multilingual'
     };
 
