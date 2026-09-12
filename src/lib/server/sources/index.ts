@@ -31,7 +31,7 @@ import { DoujinDesuSource } from './impl/DoujinDesu';
 import { CrotpediaSource } from './impl/Crotpedia';
 import { BacaKomikSource } from './impl/Bacakomik';
 import { PixHentaiSource } from './impl/PixHentai';
-import { MgkomikSource } from './impl/MGkomik';
+import { MgkomikSource } from './impl/Mgkomik';
 import type { IMangaSource } from './types';
 
 const sources: Record<string, IMangaSource> = {
