@@ -92,6 +92,8 @@
         hentaiera: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
         simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         zonatmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
+        lectortmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
+        mangacopy: { flag: 'ch', lang: 'CH', isR18: false, color: 'bg-red-500' }
     };
 
     const LANG_LABELS: Record<string, string> = {
@@ -99,6 +101,7 @@
         JP: 'Japanese',
         ID: 'Indonesian',
         ES: 'Spanish',
+        CH: 'Chiness',
         Multi: 'Multilingual'
     };
 
