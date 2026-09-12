@@ -11,15 +11,12 @@
 
 	let loading = $state(false);
 	let isDarkMode = $state(true);
-
-	// State untuk input "Jump to Page"
 	let jumpPageInput = $state('');
 
 	// Membaca state awal filter dari search params URL
 	let selectedLang = $state($page.url.searchParams.get('lang') || 'all');
 	let selectedType = $state($page.url.searchParams.get('type') || 'all');
 
-	// Menyelaraskan filter & input halaman saat URL/currentPage berubah
 	$effect(() => {
 		selectedLang = $page.url.searchParams.get('lang') || 'all';
 		selectedType = $page.url.searchParams.get('type') || 'all';
@@ -91,7 +88,6 @@
 		}
 	}
 
-	// Helper Generasi Nomor Halaman
 	function getPaginationRange(current: number) {
 		const delta = 2;
 		const range: (number | string)[] = [];
@@ -223,7 +219,7 @@
 									</div>
 								{/if}
 
-								<!-- BADGE STATUS (Atas Kiri) -->
+								<!-- BADGE STATUS -->
 								<span
 									class="absolute top-1 left-1 z-20 rounded px-1 py-0.5 text-[8px] font-bold uppercase text-white sm:text-[9px] {statusClass(
 										manga.status
@@ -232,16 +228,16 @@
 									{manga.status || 'ONGOING'}
 								</span>
 
-								<!-- BADGE CHAPTER (Bawah Status) -->
+								<!-- BADGE CHAPTER -->
 								{#if manga.latestChapter || (manga as any).chapter}
 									<span
-										class="absolute top-[18px] left-1 z-20 rounded bg-yellow-400 px-1 py-0.5 text-[8px] font-bold text-black sm:text-[9px]"
+										class="absolute top-[24px] left-1 z-20 rounded bg-yellow-400 px-1 py-0.5 text-[8px] font-bold text-black sm:text-[9px]"
 									>
 										Ch. {manga.latestChapter || (manga as any).chapter}
 									</span>
 								{/if}
 
-								<!-- BADGE TYPE (Turun Mentok ke Bawah Kiri) -->
+								<!-- BADGE TYPE -->
 								<span
 									class="absolute bottom-1 left-1 z-20 rounded px-1 py-0.5 text-[8px] font-bold uppercase text-white shadow-sm sm:text-[9px] {typeBadgeClass(
 										manga.type
@@ -250,7 +246,7 @@
 									{manga.type || 'manga'}
 								</span>
 
-								<!-- TITLE CONTAINER (Expand ke atas saat Hover / Active pada Mobile & Desktop) -->
+								<!-- TITLE CONTAINER -->
 								<div
 									class="absolute inset-x-0 bottom-0 z-10 max-h-12 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-1 pt-4 pb-1 transition-all duration-300 group-hover:max-h-full group-hover:pt-8 group-active:max-h-full group-active:pt-8"
 								>
