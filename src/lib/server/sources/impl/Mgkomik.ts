@@ -3,27 +3,24 @@ import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
 /**
- * id.mgkomik.cc (Madara)
- * Path manga : /komik/{slug}/
- * Project    : /komik-tag/project/  (hanya Project Update)
+ * MGKomik adapter (Madara) — style mirip Rawkuma
+ *
+ * Domain  : https://web.mgkomik.cc
+ * List    : /komik/?m_orderby=latest  |  /komik/page/{n}/?m_orderby=latest
+ * Project : /komik-tag/project/
+ * Search  : /?s=QUERY&post_type=wp-manga
+ * Detail  : /komik/{slug}/
+ * Chapter : /komik/{slug}/...
  */
 export class MgkomikSource extends BaseSource {
 	id = 'mgkomik';
 	name = 'MGKomik';
-	baseUrl = 'https://id.mgkomik.cc';
+	baseUrl = 'https://web.mgkomik.cc';
 
 	private readonly PER_PAGE = 24;
-	/** Path segment Madara di situs ini = komik, bukan manga */
 	private readonly SUB = 'komik';
 
-	protected override headers: Record<string, string> = {
-		'User-Agent':
-			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-		Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-		'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-		'Cache-Control': 'no-cache',
-		Pragma: 'no-cache'
-	};
+	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -42,7 +39,7 @@ export class MgkomikSource extends BaseSource {
 			}
 		}
 		if (!id.startsWith('/')) id = `/${id}`;
-		return id.replace(/\/+$/, '').split('?')[0] || '/';
+		return id.replace(/\/+$/, '') || '/';
 	}
 
 	private parseChapterNumber(text: string): number {
@@ -62,19 +59,15 @@ export class MgkomikSource extends BaseSource {
 		);
 	}
 
-	/** Deteksi Cloudflare challenge */
-	private isBlocked(html: string): boolean {
-		return (
-			/just a moment|cf-browser-verification|challenge-platform|turnstile/i.test(html) &&
-			!/page-item-detail|post-title|wp-manga/i.test(html)
-		);
-	}
+	// ── List parser ──────────────────────────────────────────────────────────
 
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		$('.page-item-detail, .c-tabs-item__content, .manga, .bs, .listupd .bs').each((_, el) => {
+		$(
+			'.page-item-detail, .c-tabs-item__content, .bs, .listupd .bs, .manga'
+		).each((_, el) => {
 			const $el = $(el);
 
 			const a = $el
@@ -84,12 +77,9 @@ export class MgkomikSource extends BaseSource {
 			if (!href) return;
 
 			const id = this.cleanId(href);
-			// Hanya link series, skip chapter
-			if (!id.includes(`/${this.SUB}/`)) return;
-			if (/\/chapter|chapter-|\/ch-/i.test(id)) return;
-			// slug series biasanya /komik/slug/ (1 segment setelah komik)
-			const parts = id.split('/').filter(Boolean);
-			if (parts.length > 2) return;
+			// series only: /komik/{slug}
+			const m = id.match(new RegExp(`^/${this.SUB}/([^/]+)$`));
+			if (!m) return;
 			if (seen.has(id)) return;
 			seen.add(id);
 
@@ -102,7 +92,7 @@ export class MgkomikSource extends BaseSource {
 				.replace(/\s+/g, ' ')
 				.replace(/\s*(Chapter|Ch\.?)\s*\d+.*$/i, '')
 				.trim();
-			if (!title) return;
+			if (!title || title.length < 2) return;
 
 			const img = $el.find('img').first();
 			let cover = this.imgSrc(img);
@@ -110,14 +100,14 @@ export class MgkomikSource extends BaseSource {
 
 			const chText =
 				$el
-					.find('.chapter a, .list-chapter a, .chapter-item a, .epxs, .latest-chap a, .chapter')
+					.find('.chapter a, .list-chapter a, .epxs, .latest-chap a, .chapter')
 					.first()
 					.text() || '';
 			const latestChapter = this.parseChapterNumber(chText) || undefined;
 
 			let status = 'Ongoing';
 			const badge = $el.find('.manga-title-badges, .status, .badge').text().toLowerCase();
-			if (/complete|selesai|end|tamat/.test(badge)) status = 'Completed';
+			if (/complete|selesai|tamat|end/.test(badge)) status = 'Completed';
 
 			let type = 'manga';
 			const t = ($el.text() + ' ' + title).toLowerCase();
@@ -138,47 +128,37 @@ export class MgkomikSource extends BaseSource {
 		return out;
 	}
 
-	/** Project Update = tag "project" */
-	private async fetchProjectList(page: number): Promise<Manga[]> {
-		// Coba beberapa URL yang umum di Madara untuk tag project
-		const candidates =
-			page <= 1
-				? [
-						`/${this.SUB}-tag/project/`,
-						`/manga-tag/project/`,
-						`/tag/project/`,
-						`/${this.SUB}/?m_orderby=latest` // fallback last resort
-					]
-				: [
-						`/${this.SUB}-tag/project/page/${page}/`,
-						`/manga-tag/project/page/${page}/`,
-						`/${this.SUB}/page/${page}/?m_orderby=latest`
-					];
+	// ── Catalog ──────────────────────────────────────────────────────────────
 
-		for (const path of candidates) {
-			try {
-				const html = await this.fetchHtml(path);
-				if (this.isBlocked(html)) {
-					console.error(`[mgkomik] Cloudflare blocked: ${path}`);
-					continue;
-				}
-				const $ = cheerio.load(html);
-				const list = this.parseCards($);
-				if (list.length > 0) {
-					console.log(`[mgkomik] ${path} → ${list.length} items`);
-					return list;
-				}
-			} catch (e) {
-				console.error(`[mgkomik] fetch ${path}`, e);
-			}
-		}
-		return [];
-	}
-
-	async getLatestManga(page: number): Promise<Manga[]> {
+	async getLatestManga(
+		page: number,
+		_opts?: { lang?: string; type?: string }
+	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			const list = await this.fetchProjectList(p);
+
+			// Prioritas: tag Project (Project Update)
+			const projectPath =
+				p <= 1
+					? `/${this.SUB}-tag/project/`
+					: `/${this.SUB}-tag/project/page/${p}/`;
+
+			let html = await this.fetchHtml(projectPath);
+			let $ = cheerio.load(html);
+			let list = this.parseCards($);
+
+			// Fallback: latest archive
+			if (list.length === 0) {
+				const latestPath =
+					p <= 1
+						? `/${this.SUB}/?m_orderby=latest`
+						: `/${this.SUB}/page/${p}/?m_orderby=latest`;
+				html = await this.fetchHtml(latestPath);
+				$ = cheerio.load(html);
+				list = this.parseCards($);
+			}
+
+			console.log(`[mgkomik] latest page=${p} → ${list.length} items`);
 			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[mgkomik] getLatestManga', e);
@@ -186,28 +166,32 @@ export class MgkomikSource extends BaseSource {
 		}
 	}
 
-	async searchManga(query: string, opts?: { page?: number }): Promise<Manga[]> {
+	async searchManga(
+		query: string,
+		opts?: { page?: number; lang?: string; type?: string }
+	): Promise<Manga[]> {
 		const q = (query || '').trim();
 		const page = Math.max(1, opts?.page || 1);
-		if (!q) return this.getLatestManga(page);
+		if (!q) return this.getLatestManga(page, opts);
 
 		try {
 			const path =
 				page <= 1
 					? `/?s=${encodeURIComponent(q)}&post_type=wp-manga`
 					: `/page/${page}/?s=${encodeURIComponent(q)}&post_type=wp-manga`;
+
 			const html = await this.fetchHtml(path);
-			if (this.isBlocked(html)) {
-				console.error('[mgkomik] Cloudflare blocked search');
-				return [];
-			}
 			const $ = cheerio.load(html);
-			return this.parseCards($).slice(0, this.PER_PAGE);
+			const list = this.parseCards($);
+			console.log(`[mgkomik] search "${q}" → ${list.length} items`);
+			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[mgkomik] searchManga', e);
 			return [];
 		}
 	}
+
+	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
@@ -215,10 +199,7 @@ export class MgkomikSource extends BaseSource {
 			path = `/${this.SUB}/${path.replace(/^\//, '')}`;
 		}
 
-		const html = await this.fetchHtml(path);
-		if (this.isBlocked(html)) {
-			throw new Error('Cloudflare blocked manga details');
-		}
+		const html = await this.fetchHtml(path.endsWith('/') ? path : `${path}/`);
 		const $ = cheerio.load(html);
 
 		const title =
@@ -227,7 +208,7 @@ export class MgkomikSource extends BaseSource {
 			'Unknown';
 
 		let cover =
-			this.imgSrc($('.summary_image img, .manga-thumb img, .thumb img').first()) ||
+			this.imgSrc($('.summary_image img, .manga-thumb img, .thumb img, img.wp-post-image').first()) ||
 			$('meta[property="og:image"]').attr('content') ||
 			'';
 		cover = this.absUrl((cover || '').split('?')[0]);
@@ -236,7 +217,7 @@ export class MgkomikSource extends BaseSource {
 		$('.post-content_item, .summary-content, .imptdt').each((_, el) => {
 			const t = $(el).text().toLowerCase();
 			if (/status/.test(t)) {
-				if (/complete|selesai|tamat|end/.test(t)) status = 'Completed';
+				if (/complete|selesai|tamat|end|finished/.test(t)) status = 'Completed';
 				else if (/hiatus/.test(t)) status = 'Hiatus';
 			}
 		});
@@ -257,7 +238,7 @@ export class MgkomikSource extends BaseSource {
 		});
 
 		const genres: string[] = [];
-		$('.genres-content a, .mgen a').each((_, a) => {
+		$('.genres-content a, .mgen a, .genres a').each((_, a) => {
 			const g = $(a).text().trim();
 			if (g && !genres.includes(g) && g.length < 40) genres.push(g);
 		});
@@ -267,7 +248,9 @@ export class MgkomikSource extends BaseSource {
 				.first()
 				.text()
 				.replace(/\s+/g, ' ')
-				.trim() || '';
+				.trim() ||
+			$('meta[name="description"]').attr('content')?.trim() ||
+			'';
 
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
@@ -296,10 +279,10 @@ export class MgkomikSource extends BaseSource {
 			});
 		});
 
-		chapters.sort((a, b) => b.number - a.number);
+		chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
 
 		return {
-			id: path,
+			id: path.replace(/\/+$/, ''),
 			sourceId: this.id,
 			title,
 			cover,
@@ -313,34 +296,40 @@ export class MgkomikSource extends BaseSource {
 		};
 	}
 
+	// ── Pages ────────────────────────────────────────────────────────────────
+
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);
-		const html = await this.fetchHtml(path);
-		if (this.isBlocked(html)) return [];
+		try {
+			const html = await this.fetchHtml(path.endsWith('/') ? path : `${path}/`);
+			const $ = cheerio.load(html);
+			const urls: string[] = [];
+			const seen = new Set<string>();
 
-		const $ = cheerio.load(html);
-		const urls: string[] = [];
-		const seen = new Set<string>();
+			for (const sel of [
+				'.reading-content img',
+				'#readerarea img',
+				'.page-break img',
+				'.entry-content img'
+			]) {
+				$(sel).each((_, img) => {
+					let src = this.imgSrc($(img));
+					if (!src || src.startsWith('data:')) return;
+					src = this.absUrl(src.split('?')[0]);
+					if (!/^https?:\/\//i.test(src)) return;
+					if (/logo|icon|avatar|ads|banner|spinner|placeholder/i.test(src)) return;
+					if (seen.has(src)) return;
+					seen.add(src);
+					urls.push(src);
+				});
+				if (urls.length) break;
+			}
 
-		for (const sel of [
-			'.reading-content img',
-			'#readerarea img',
-			'.page-break img',
-			'.entry-content img'
-		]) {
-			$(sel).each((_, img) => {
-				let src = this.imgSrc($(img));
-				if (!src || src.startsWith('data:')) return;
-				src = this.absUrl(src.split('?')[0]);
-				if (!/^https?:\/\//i.test(src)) return;
-				if (/logo|icon|avatar|ads|banner|spinner|placeholder/i.test(src)) return;
-				if (seen.has(src)) return;
-				seen.add(src);
-				urls.push(src);
-			});
-			if (urls.length) break;
+			console.log(`[mgkomik] ${urls.length} pages → ${path}`);
+			return urls;
+		} catch (e) {
+			console.error('[mgkomik] getChapterPages', path, e);
+			return [];
 		}
-
-		return urls;
 	}
 }
