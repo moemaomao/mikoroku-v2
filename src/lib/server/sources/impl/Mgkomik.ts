@@ -15,7 +15,7 @@ import * as cheerio from 'cheerio';
 export class MgkomikSource extends BaseSource {
 	id = 'mgkomik';
 	name = 'MGKomik';
-	baseUrl = 'https://id.mgkomik.cc';
+	baseUrl = 'https://web1.mgkomik.cc';
 
 	private readonly PER_PAGE = 24;
 	private readonly SUB = 'komik';
