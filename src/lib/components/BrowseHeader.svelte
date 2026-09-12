@@ -78,6 +78,7 @@
         love4u: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+        komikindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         mgkomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         doujindesu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
         crotpedia: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
