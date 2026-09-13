@@ -8,6 +8,7 @@
     import { goto, beforeNavigate, afterNavigate } from '$app/navigation';
     import NProgress from 'nprogress';
     import 'nprogress/nprogress.css';
+    import Footer from '$lib/components/Footer.svelte';
     import {
         Menu,
         X,
@@ -534,14 +535,10 @@
             {/if}
 
             <!-- Footer -->
-            {#if !isReaderPage}
-                <footer
-                    class="border-t py-5 text-center text-xs
-                        {isDarkMode ? 'border-zinc-800/50 text-zinc-500' : 'border-zinc-200 text-zinc-500'}"
-                >
-                    Mikoroku - Manga Reader
-                </footer>
-            {/if}
+            <!-- Footer -->
+{#if !isReaderPage}
+	<Footer {isDarkMode} />
+{/if}
         </div>
 
         <!-- History Widget Desktop -->
