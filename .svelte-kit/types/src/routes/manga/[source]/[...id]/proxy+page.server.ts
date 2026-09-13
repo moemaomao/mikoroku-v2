@@ -1,9 +1,11 @@
 // @ts-nocheck
 import { getSource } from '$lib/server/sources';
+import { getCached } from '$lib/server/cache';
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 const LOAD_TIMEOUT_MS = 12000;
+const DETAIL_CACHE_TTL = 600;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -30,11 +32,19 @@ export const load = async ({ params, url, setHeaders }: Parameters<PageServerLoa
 		throw error(400, 'Invalid manga path');
 	}
 
+	const cacheKey = `manga:${sourceId}:${mangaId}:lang=${lang}`;
+
 	try {
-		const adapter = getSource(sourceId);
-		const manga = await withTimeout(
-			adapter.getMangaDetails(mangaId, { lang }),
-			LOAD_TIMEOUT_MS
+		const manga = await getCached(
+			cacheKey,
+			async () => {
+				const adapter = getSource(sourceId);
+				return await withTimeout(
+					adapter.getMangaDetails(mangaId, { lang }),
+					LOAD_TIMEOUT_MS
+				);
+			},
+			DETAIL_CACHE_TTL
 		);
 
 		if (!manga || !manga.title) {
