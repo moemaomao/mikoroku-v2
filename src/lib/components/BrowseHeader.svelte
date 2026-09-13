@@ -97,7 +97,8 @@
         lectortmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
         mangacopy: { flag: 'cn', lang: 'CN', isR18: false, color: 'bg-red-500' },
         omegascans: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
-        luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' }
+        luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+        kiryuu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
     };
 
     const LANG_LABELS: Record<string, string> = {

@@ -42,6 +42,7 @@ import { OmegaScansSource } from './impl/OmegaScans';
 import { MangaDexSource } from './impl/MangaDex';
 import { LuvyaaSource } from './impl/Luvyaa';
 import { SoftkomikSource } from './impl/Softkomik';
+import { KiryuuSource } from './impl/Kiryuu';
 import type { IMangaSource } from './types';
 
 
@@ -82,6 +83,7 @@ const sources: Record<string, IMangaSource> = {
     mangadex: new MangaDexSource(),
     luvyaa: new LuvyaaSource(),
     softkomik: new SoftkomikSource(),
+    kiryuu: new KiryuuSource()
 };
 
 /**
