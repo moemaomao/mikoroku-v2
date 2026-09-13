@@ -7,6 +7,7 @@ import type { PageServerLoad } from './$types';
 
 const LOAD_TIMEOUT_MS = 12000;
 const MAX_MANGAS = 40;
+const CACHE_TTL = 300;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -23,7 +24,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	});
 }
 
-/** Samakan english/indonesian/... dengan kode ISO (en/id/...) */
 function normLang(lang?: string): string {
 	const raw = String(lang || '')
 		.trim()
@@ -54,6 +54,42 @@ function normLang(lang?: string): string {
 	return aliases[raw] || raw;
 }
 
+async function getCached<T>(
+	key: string,
+	fetcher: () => Promise<T>,
+	ttlSeconds = CACHE_TTL
+): Promise<T> {
+	// @ts-ignore - caches hanya ada di Cloudflare runtime
+	const cache = typeof caches !== 'undefined' ? caches.default : null;
+
+	if (!cache) {
+		return await fetcher();
+	}
+
+	const cacheKey = new Request(`https://cache.internal/${key}`);
+
+	const cached = await cache.match(cacheKey);
+	if (cached) {
+		try {
+			return (await cached.json()) as T;
+		} catch {
+		}
+	}
+
+	const data = await fetcher();
+
+	const response = new Response(JSON.stringify(data), {
+		headers: {
+			'Content-Type': 'application/json',
+			'Cache-Control': `public, max-age=${ttlSeconds}`
+		}
+	});
+
+	cache.put(cacheKey, response).catch(console.error);
+
+	return data;
+}
+
 export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	const sourceParam = url.searchParams.get('source');
 	const sourceId = sourceParam; // biarkan null kalau belum ada
@@ -65,23 +101,24 @@ export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	const sources = getAllSources().map((s) => ({ id: s.id, name: s.name }));
 	let mangas: any[] = [];
 
-	// Hanya fetch manga kalau sudah ada source
 	if (sourceId) {
 		depends(`browse:${sourceId}`);
 
+		const cacheKey = `browse:${sourceId}:p${pageNum}:q=${encodeURIComponent(query)}:lang=${lang}:type=${type}`;
+
 		try {
-			const adapter = getSource(sourceId);
+			mangas = await getCached(cacheKey, async () => {
+				const adapter = getSource(sourceId);
 
-			const fetchPromise = query
-				? adapter.searchManga(query, { page: pageNum, lang, type })
-				: adapter.getLatestManga(pageNum, { lang, type });
+				const fetchPromise = query
+					? adapter.searchManga(query, { page: pageNum, lang, type })
+					: adapter.getLatestManga(pageNum, { lang, type });
 
-			const result = await withTimeout(fetchPromise, LOAD_TIMEOUT_MS);
-			let list = Array.isArray(result) ? result : [];
+				const result = await withTimeout(fetchPromise, LOAD_TIMEOUT_MS);
+				let list = Array.isArray(result) ? result : [];
 
-			// ... filter lang & type tetap sama seperti sebelumnya ...
-
-			mangas = list.slice(0, MAX_MANGAS);
+				return list.slice(0, MAX_MANGAS);
+			});
 		} catch (e) {
 			console.error('[Browse] load failed:', e);
 			mangas = [];
@@ -95,11 +132,11 @@ export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	return {
 		mangas,
 		sources,
-		currentSource: sourceId,      // bisa null
+		currentSource: sourceId,
 		currentPage: pageNum,
 		searchQuery: query,
 		selectedLang: lang,
 		selectedType: type,
-		needsSource: !sourceId        // flag untuk UI
+		needsSource: !sourceId
 	};
 };
