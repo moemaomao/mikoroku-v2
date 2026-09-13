@@ -10,12 +10,16 @@ import * as cheerio from 'cheerio';
  *  Misc=1, Doujinshi=2, Manga=4, Artist CG=8, Game CG=16,
  *  Image Set=32, Cosplay=64, Asian Porn=128, Non-H=256, Western=512
  *  All = 1023
+ *
+ * Homepage: 24 item + lang flag badge (sama pola MangaDex/Hitomi)
  */
 export class EhentaiSource extends BaseSource {
 	id = 'ehentai';
 	name = 'E-Hentai';
 	baseUrl = 'https://e-hentai.org';
 	private apiUrl = 'https://api.e-hentai.org/api.php';
+
+	private readonly PER_PAGE = 24;
 
 	private static readonly CAT_ALL = 1023;
 
@@ -81,6 +85,93 @@ export class EhentaiSource extends BaseSource {
 		if (t.includes('western')) return 'western';
 		if (t.includes('misc')) return 'misc';
 		return t || 'manga';
+	}
+
+	/**
+	 * language:english / (Chinese) / japanese → ISO untuk badge flag
+	 * (listChapterFlag: en→gb, ja→jp, ko→kr, zh→cn, …)
+	 */
+	private normalizeLangCode(raw?: string): string | undefined {
+		if (!raw) return undefined;
+		let s = String(raw).trim().toLowerCase();
+		if (!s || s === 'n/a' || s === 'all' || s === 'speechless' || s === 'textless') {
+			return undefined;
+		}
+		// "language:japanese" → "japanese"
+		s = s.replace(/^language:\s*/i, '').trim();
+
+		const map: Record<string, string> = {
+			japanese: 'ja',
+			english: 'en',
+			korean: 'ko',
+			chinese: 'zh',
+			'simplified chinese': 'zh',
+			'traditional chinese': 'zh-hk',
+			spanish: 'es',
+			french: 'fr',
+			russian: 'ru',
+			indonesian: 'id',
+			portuguese: 'pt',
+			'brazilian portuguese': 'pt-br',
+			thai: 'th',
+			vietnamese: 'vi',
+			german: 'de',
+			italian: 'it',
+			polish: 'pl',
+			dutch: 'nl',
+			arabic: 'ar',
+			turkish: 'tr',
+			// local / short
+			'日本語': 'ja',
+			'한국어': 'ko',
+			'中文': 'zh',
+			ja: 'ja',
+			en: 'en',
+			'en-us': 'en',
+			ko: 'ko',
+			zh: 'zh',
+			'zh-cn': 'zh',
+			'zh-hk': 'zh-hk',
+			'zh-tw': 'zh-hk',
+			es: 'es',
+			fr: 'fr',
+			ru: 'ru',
+			id: 'id',
+			pt: 'pt',
+			'pt-br': 'pt-br',
+			th: 'th',
+			vi: 'vi',
+			de: 'de',
+			it: 'it',
+			pl: 'pl',
+			nl: 'nl',
+			ar: 'ar',
+			tr: 'tr'
+		};
+		if (map[s]) return map[s];
+		if (/^[a-z]{2}(-[a-z]{2})?$/.test(s)) return s;
+		return undefined;
+	}
+
+	/** Ambil bahasa dari judul (English) / [Chinese] / language:xxx di tags */
+	private extractLangFromText(title: string, tagText = ''): string | undefined {
+		const blob = `${title} ${tagText}`;
+
+		// language:xxx di tag string
+		const tagLang = blob.match(/language:\s*([a-z][a-z\s-]+)/i);
+		if (tagLang) {
+			const code = this.normalizeLangCode(tagLang[1]);
+			if (code) return code;
+		}
+
+		// (English) atau [Chinese] di judul
+		const paren = blob.match(/[(\[]\s*(english|japanese|korean|chinese|spanish|french|russian|indonesian|portuguese|thai|vietnamese|german|italian|polish|dutch|arabic|turkish|中文|日本語|한국어)\s*[)\]]/i);
+		if (paren) {
+			const code = this.normalizeLangCode(paren[1]);
+			if (code) return code;
+		}
+
+		return undefined;
 	}
 
 	private typeToDisabledMask(type?: string): number | null {
@@ -161,10 +252,7 @@ export class EhentaiSource extends BaseSource {
 				'';
 
 			if (cover.startsWith('data:')) {
-				cover =
-					$img.attr('data-src') ||
-					$img.attr('data-lazy-src') ||
-					'';
+				cover = $img.attr('data-src') || $img.attr('data-lazy-src') || '';
 			}
 			cover = this.absUrl(cover);
 
@@ -178,17 +266,104 @@ export class EhentaiSource extends BaseSource {
 
 			const type = this.normalizeType(catRaw);
 
+			// Tags text (extended / thumbnail mode)
+			const tagText = $tr
+				.find('.gt, .gtl, .gtw, td.gl4c, .gl4e')
+				.map((_, el) => $(el).text())
+				.get()
+				.join(' ');
+
+			// Page count → latestChapter (wajib agar badge + flag tampil)
+			let pages: number | undefined;
+			const rowText = $tr.text();
+			const pm =
+				rowText.match(/(\d+)\s*pages?/i) ||
+				$tr.find('.gl4c, .glhide, td.gl3c').text().match(/(\d+)\s*pages?/i);
+			if (pm) pages = parseInt(pm[1], 10);
+
+			const lang =
+				this.extractLangFromText(title, tagText) ||
+				this.normalizeLangCode(
+					$tr
+						.find('[title*="language:"], a[id^="ta_language"]')
+						.first()
+						.attr('title') ||
+						$tr.find('a[id^="ta_language"]').first().text()
+				);
+
 			res.push({
 				id,
 				title,
 				cover,
 				sourceId: this.id,
 				type,
-				status: 'Completed'
+				status: 'Completed',
+				lang,
+				latestChapter: pages && pages > 0 ? pages : 1
 			});
 		});
 
 		return res;
+	}
+
+	/**
+	 * Enrich lang + page count via gdata API (batch max 25)
+	 * Dipanggil jika banyak item masih tanpa lang akurat.
+	 */
+	private async enrichWithGdata(list: Manga[]): Promise<Manga[]> {
+		if (!list.length) return list;
+
+		const gidlist: [number, string][] = [];
+		for (const m of list) {
+			const p = this.parseGalleryId(m.id);
+			if (p) gidlist.push([p.gid, p.token]);
+		}
+		if (!gidlist.length) return list;
+
+		try {
+			const data = await this.postApi<{
+				gmetadata?: Array<Record<string, any>>;
+			}>({
+				method: 'gdata',
+				gidlist: gidlist.slice(0, 25),
+				namespace: 1
+			});
+
+			const byGid = new Map<number, Record<string, any>>();
+			for (const meta of data?.gmetadata || []) {
+				if (meta?.gid && !meta.error) byGid.set(Number(meta.gid), meta);
+			}
+
+			return list.map((m) => {
+				const p = this.parseGalleryId(m.id);
+				if (!p) return m;
+				const meta = byGid.get(p.gid);
+				if (!meta) return m;
+
+				const tags: string[] = Array.isArray(meta.tags)
+					? meta.tags.map(String)
+					: [];
+				const langTag = tags.find((t) => t.startsWith('language:'));
+				const lang =
+					this.normalizeLangCode(langTag) ||
+					this.extractLangFromText(meta.title || m.title, tags.join(' ')) ||
+					m.lang;
+
+				const filecount =
+					parseInt(String(meta.filecount || '0'), 10) ||
+					(typeof m.latestChapter === 'number' ? m.latestChapter : 1);
+
+				return {
+					...m,
+					lang,
+					latestChapter: filecount > 0 ? filecount : 1,
+					cover: m.cover || this.absUrl(meta.thumb || '')
+				};
+			});
+		} catch (e) {
+			console.warn('[ehentai] enrichWithGdata failed', e);
+			return list;
+		}
 	}
 
 	private getNextCursor($: cheerio.CheerioAPI): string | null {
@@ -239,13 +414,20 @@ export class EhentaiSource extends BaseSource {
 		try {
 			let query = '';
 			if (opts?.lang && opts.lang !== 'all') {
+				// BrowseHeader pakai id "japanese"/"english" → cocok untuk EH search
 				query = `language:${opts.lang}`;
 			}
 			const start = this.buildListPath(query || undefined, opts?.type);
 			const $ = await this.fetchListPage(start, page);
-			const list = this.parseList($);
-			console.log(`[ehentai] getLatestManga page=${page} → ${list.length} items`);
-			return list;
+			let list = this.parseList($);
+
+			// Enrich bahasa + page count via API
+			list = await this.enrichWithGdata(list);
+
+			console.log(
+				`[ehentai] getLatestManga page=${page} → ${list.length} items (slice ${this.PER_PAGE})`
+			);
+			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[ehentai] getLatestManga error:', e);
 			return [];
@@ -267,9 +449,13 @@ export class EhentaiSource extends BaseSource {
 			}
 			const start = this.buildListPath(search, opts?.type);
 			const $ = await this.fetchListPage(start, page);
-			const list = this.parseList($);
-			console.log(`[ehentai] searchManga "${q}" page=${page} → ${list.length} items`);
-			return list;
+			let list = this.parseList($);
+			list = await this.enrichWithGdata(list);
+
+			console.log(
+				`[ehentai] searchManga "${q}" page=${page} → ${list.length} items`
+			);
+			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[ehentai] searchManga error:', e);
 			return [];
@@ -292,7 +478,8 @@ export class EhentaiSource extends BaseSource {
 		let filecount = 0;
 		let tags: string[] = [];
 		let uploader = '';
-		let posted = ''; // YYYY-MM-DD
+		let posted = '';
+		let lang: string | undefined;
 
 		// 1. Coba API dulu
 		try {
@@ -318,7 +505,11 @@ export class EhentaiSource extends BaseSource {
 					tags = meta.tags.map(String);
 				}
 
-				// posted = unix timestamp
+				const langTag = tags.find((t) => t.startsWith('language:'));
+				lang =
+					this.normalizeLangCode(langTag) ||
+					this.extractLangFromText(title, tags.join(' '));
+
 				if (meta.posted) {
 					const ts = parseInt(String(meta.posted), 10);
 					if (ts > 0) {
@@ -364,7 +555,6 @@ export class EhentaiSource extends BaseSource {
 			if (lm) filecount = parseInt(lm[1], 10);
 		}
 
-		// Posted date fallback dari HTML
 		if (!posted) {
 			const postedRow = $('#gdd tr')
 				.filter((_, el) => $(el).text().toLowerCase().includes('posted'))
@@ -379,6 +569,15 @@ export class EhentaiSource extends BaseSource {
 				const t = $(el).text().replace(/\s+/g, ' ').trim();
 				if (t) tags.push(t);
 			});
+		}
+
+		if (!lang) {
+			const langTag = tags.find(
+				(t) => t.startsWith('language:') || t.startsWith('language :')
+			);
+			lang =
+				this.normalizeLangCode(langTag) ||
+				this.extractLangFromText(title, tags.join(' '));
 		}
 
 		const genres = tags.map((t) => {
@@ -397,6 +596,7 @@ export class EhentaiSource extends BaseSource {
 			`Status: Completed`,
 			`Type: ${category}`,
 			filecount > 0 ? `Pages: ${filecount}` : '',
+			lang ? `Language: ${lang}` : '',
 			uploader ? `Uploader: ${uploader}` : '',
 			posted ? `Posted: ${posted}` : '',
 			titleJpn ? `AltTitle: ${titleJpn}` : ''
@@ -409,7 +609,8 @@ export class EhentaiSource extends BaseSource {
 				id: path,
 				title: filecount > 0 ? `Read (${filecount} pages)` : 'Read',
 				number: 1,
-				date: posted
+				date: posted,
+				lang
 			}
 		];
 
@@ -420,6 +621,8 @@ export class EhentaiSource extends BaseSource {
 			cover: this.absUrl(cover),
 			type: category,
 			status: 'Completed',
+			lang,
+			latestChapter: filecount > 0 ? filecount : 1,
 			description,
 			authors,
 			genres,
@@ -433,9 +636,8 @@ export class EhentaiSource extends BaseSource {
 	const parsed = this.parseGalleryId(chapterId);
 	if (!parsed) throw new Error(`Invalid E-Hentai chapter id: ${chapterId}`);
 
-	const { gid, path } = parsed;
+	const { path } = parsed;
 
-	// ── 1. Ambil total pages + HTML halaman pertama ──────────────────────────
 	const initialHtml = await this.fetchHtml(path);
 	const $init = cheerio.load(initialHtml);
 
@@ -444,129 +646,63 @@ export class EhentaiSource extends BaseSource {
 	const lm = lenText.match(/Length:\s*(\d+)\s*pages/i);
 	if (lm) totalPages = parseInt(lm[1], 10);
 
-	if (totalPages === 0) {
-		// fallback dari API kalau HTML gagal
-		try {
-			const data = await this.postApi<{ gmetadata?: any[] }>({
-				method: 'gdata',
-				gidlist: [[gid, parsed.token]],
-				namespace: 1
-			});
-			totalPages = parseInt(String(data?.gmetadata?.[0]?.filecount || '0'), 10) || 0;
-		} catch {}
-	}
+	const pageUrls: string[] = [];
+	$init('#gdt a, #gdt .gdtm a, .gdtl a').each((_, a) => {
+		const href = $init(a).attr('href') || '';
+		if (href.includes('-') || href.includes('/s/')) {
+			pageUrls.push(this.absUrl(href));
+		}
+	});
 
-	if (totalPages === 0) {
-		console.warn('[ehentai] totalPages = 0, abort');
-		return [];
-	}
+	// Pagination gallery (p=1, p=2, ...)
+	if (totalPages > 0 && pageUrls.length < totalPages) {
+		const perThumb = pageUrls.length || 20;
+		const totalGalleryPages = Math.ceil(totalPages / perThumb);
 
-	console.log(`[ehentai] totalPages = ${totalPages}`);
-
-	// ── 2. Hitung berapa halaman thumbnail yang dibutuhkan ───────────────────
-	// Default EH biasanya 20 thumbnail per page
-	const THUMBS_PER_PAGE = 20;
-	const maxThumbPage = Math.ceil(totalPages / THUMBS_PER_PAGE); // 0-based → max p = maxThumbPage-1
-
-	const imgKeys: string[] = new Array(totalPages);
-
-	// ── 3. Ambil semua imgkey dari setiap halaman thumbnail ───────────────────
-	for (let p = 0; p < maxThumbPage; p++) {
-		const pagePath = p === 0 ? path : `${path}?p=${p}`;
-		const html = p === 0 ? initialHtml : await this.fetchHtml(pagePath);
-		const $ = cheerio.load(html);
-
-		let foundOnThisPage = 0;
-
-		// Selector paling stabil saat ini
-		$('#gdt a[href*="/s/"]').each((_, el) => {
-			const href = $(el).attr('href') || '';
-			const m = href.match(/\/s\/([0-9a-f]+)\/(\d+)-(\d+)/i);
-			if (m) {
-				const key = m[1].toLowerCase();
-				const pageNum = parseInt(m[3], 10); // 1-based
-
-				if (pageNum >= 1 && pageNum <= totalPages && !imgKeys[pageNum - 1]) {
-					imgKeys[pageNum - 1] = key;
-					foundOnThisPage++;
-				}
-			}
-		});
-
-		console.log(
-			`[ehentai] thumb page p=${p} → found ${foundOnThisPage} keys | total collected: ${imgKeys.filter(Boolean).length}/${totalPages}`
-		);
-
-		// Kalau sudah lengkap, berhenti lebih awal
-		if (imgKeys.filter(Boolean).length >= totalPages) break;
-	}
-
-	const keys = imgKeys.filter(Boolean);
-
-	if (keys.length === 0) {
-		console.warn('[ehentai] no imgkeys found at all');
-		return [];
-	}
-
-	if (keys.length < totalPages) {
-		console.warn(
-			`[ehentai] WARNING: only got ${keys.length}/${totalPages} imgkeys. Beberapa halaman mungkin hilang.`
-		);
-	}
-
-	// ── 4. Ambil showkey dari page pertama ───────────────────────────────────
-	const firstUrl = `/s/${keys[0]}/${gid}-1`;
-	const firstHtml = await this.fetchHtml(firstUrl);
-	const skMatch = firstHtml.match(/var\s+showkey\s*=\s*"([^"]+)"/);
-	const showkey = skMatch?.[1] || '';
-
-	const pages: string[] = [];
-
-	// Page 1
-	const $first = cheerio.load(firstHtml);
-	const firstSrc = $first('#img').attr('src') || '';
-	if (firstSrc) pages.push(firstSrc);
-
-	// ── 5. Ambil sisa halaman ────────────────────────────────────────────────
-	if (!showkey) {
-		console.warn('[ehentai] no showkey → fallback sequential /s/ fetch');
-		for (let i = 1; i < keys.length; i++) {
+		for (let gp = 1; gp < totalGalleryPages; gp++) {
 			try {
-				const html = await this.fetchHtml(`/s/${keys[i]}/${gid}-${i + 1}`);
-				const $ = cheerio.load(html);
-				const src = $('#img').attr('src') || '';
-				if (src) pages.push(src);
+				const html = await this.fetchHtml(`${path}?p=${gp}`);
+				const $page = cheerio.load(html);
+				$page('#gdt a, #gdt .gdtm a, .gdtl a').each((_, a) => {
+					const href = $page(a).attr('href') || '';
+					if (href.includes('-') || href.includes('/s/')) {
+						const abs = this.absUrl(href);
+						if (!pageUrls.includes(abs)) pageUrls.push(abs);
+					}
+				});
 			} catch (e) {
-				console.error(`[ehentai] fallback page ${i + 1} failed:`, e);
+				console.warn(`[ehentai] gallery page ${gp} failed`, e);
+				break;
 			}
 		}
-		return pages;
 	}
 
-	// Pakai API showpage (lebih cepat & efisien)
-	for (let i = 1; i < keys.length; i++) {
-		try {
-			const data = await this.postApi<{ i3?: string }>({
-				method: 'showpage',
-				gid,
-				page: i + 1,
-				imgkey: keys[i],
-				showkey
-			});
+	const images: string[] = [];
+	const seen = new Set<string>();
 
-			const i3 = data?.i3 || '';
-			const srcMatch = i3.match(/src="([^"]+)"/i);
-			if (srcMatch?.[1]) {
-				pages.push(srcMatch[1].replace(/&amp;/g, '&'));
-			} else {
-				console.warn(`[ehentai] showpage ${i + 1} no src found`);
+	for (const pageUrl of pageUrls) {
+		try {
+			const rel = pageUrl.startsWith(this.baseUrl)
+				? pageUrl.slice(this.baseUrl.length)
+				: pageUrl;
+			const html = await this.fetchHtml(rel || pageUrl);
+			const $ = cheerio.load(html);
+			let src =
+				$('#img').attr('src') ||
+				$('#i3 img').attr('src') ||
+				$('img#img').attr('src') ||
+				'';
+			src = this.absUrl(src);
+			if (src && !seen.has(src) && !/blank|loading|ajax/i.test(src)) {
+				seen.add(src);
+				images.push(src);
 			}
 		} catch (e) {
-			console.error(`[ehentai] showpage ${i + 1} failed:`, e);
+			console.warn('[ehentai] page fetch failed', pageUrl, e);
 		}
 	}
 
-	console.log(`[ehentai] final result: ${pages.length} / ${totalPages} pages`);
-	return pages;
-}
+	console.log(`[ehentai] getChapterPages → ${images.length} images`);
+	return images;
+  }
 }
