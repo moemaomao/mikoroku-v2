@@ -2,7 +2,7 @@
  * Image Proxy
  * - Hemat CPU: redirect ke weserv jika ada `w` dan domain tidak butuh referer khusus
  * - Hitomi / ihlv1 / nhentai / hentairead / klz9 / love4u / rawkuma /
- *   mangakatana / mangabats / mangabatscom / doujindesu → fetch langsung + Referer benar
+ *   mangakatana / mangabats / mangabatscom / doujindesu / mangacopy → fetch langsung + Referer benar
  */
 
 import type { RequestHandler } from './$types';
@@ -44,8 +44,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			sourceId === 'mangakatana' ||
 			/mangakatana\.com|i\d*\.mangakatana\.com/i.test(decodedUrl);
 		const isMangaBats =
-	        sourceId === 'mangabats' ||
-	        /mangabats\.xyz|amzim\.beer/i.test(decodedUrl);
+			sourceId === 'mangabats' ||
+			/mangabats\.xyz|amzim\.beer/i.test(decodedUrl);
 		const isMangaBatsCom =
 			sourceId === 'mangabatscom' ||
 			/mangabats\.com|2xstorage\.com/i.test(decodedUrl);
@@ -55,16 +55,23 @@ export const GET: RequestHandler = async ({ url }) => {
 				decodedUrl
 			);
 		const isCrotpedia =
-	        sourceId === 'crotpedia' ||
-	        /crotpedia\.net|eromanga\.cfd|reader\.eromanga\.cfd|cover\.eromanga\.cfd/i.test(
-		       decodedUrl
-	        );
+			sourceId === 'crotpedia' ||
+			/crotpedia\.net|eromanga\.cfd|reader\.eromanga\.cfd|cover\.eromanga\.cfd/i.test(
+				decodedUrl
+			);
 		const isBacaKomik =
-	        sourceId === 'bacakomik' ||
-	        /bacakomik\.pics|warungkomikcdn\.icu/i.test(decodedUrl);
+			sourceId === 'bacakomik' ||
+			/bacakomik\.pics|warungkomikcdn\.icu/i.test(decodedUrl);
 		const isPixHentai =
-	        sourceId === 'pixhentai' ||
-	        /pixhentai\.com|openhentai\.net/i.test(decodedUrl);
+			sourceId === 'pixhentai' ||
+			/pixhentai\.com|openhentai\.net/i.test(decodedUrl);
+
+		// MangaCopy / CopyManga CDN (anti-hotlink)
+		const isMangaCopy =
+			sourceId === 'mangacopy' ||
+			/mangafun[a-z]*\.(fun|xyz)|mangacopy\.com|copy2000\.|copy-manga\.|202[0-9]copy\.|copy20\.com/i.test(
+				decodedUrl
+			);
 
 		// Domain yang butuh referer khusus → jangan redirect weserv
 		const skipWeserv =
@@ -78,7 +85,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			isMangaKatana ||
 			isMangaBats ||
 			isMangaBatsCom ||
-			isDoujinDesu;
+			isDoujinDesu ||
+			isMangaCopy;
 
 		// ===== Hemat CPU: redirect ke weserv =====
 		if (w && !skipWeserv && /^https?:\/\//i.test(decodedUrl)) {
@@ -127,12 +135,14 @@ export const GET: RequestHandler = async ({ url }) => {
 		} else if (isDoujinDesu) {
 			referer = 'https://doujin.desu.xxx/';
 		} else if (isCrotpedia) {
-	       referer = 'https://crotpedia.net/';
-        } else if (isBacaKomik) {
-	       referer = 'https://bacakomik.pics/';
-        } else if (isPixHentai) {
-	       referer = 'https://pixhentai.com/';
-        }
+			referer = 'https://crotpedia.net/';
+		} else if (isBacaKomik) {
+			referer = 'https://bacakomik.pics/';
+		} else if (isPixHentai) {
+			referer = 'https://pixhentai.com/';
+		} else if (isMangaCopy) {
+			referer = 'https://www.mangacopy.com/';
+		}
 
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -143,7 +153,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					'User-Agent': USER_AGENT,
 					Referer: referer,
 					Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
-					'Accept-Language': 'en-US,en;q=0.9'
+					'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
 				},
 				signal: controller.signal
 			});
