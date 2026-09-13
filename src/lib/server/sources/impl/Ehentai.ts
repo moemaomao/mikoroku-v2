@@ -636,9 +636,9 @@ export class EhentaiSource extends BaseSource {
 	const parsed = this.parseGalleryId(chapterId);
 	if (!parsed) throw new Error(`Invalid E-Hentai chapter id: ${chapterId}`);
 
-	const { gid, path } = parsed;
+	const { gid, token, path } = parsed;
 
-	// ── 1. Halaman gallery pertama ───────────────────────────────────────────
+	// ── 1. Gallery page → total images + semua imgkey dari thumbnail ────────
 	const initialHtml = await this.fetchHtml(path);
 	const $init = cheerio.load(initialHtml);
 
@@ -647,98 +647,147 @@ export class EhentaiSource extends BaseSource {
 	const lm = lenText.match(/Length:\s*(\d+)\s*pages/i);
 	if (lm) totalImages = parseInt(lm[1], 10);
 
-	// Jumlah halaman thumbnail dari tabel pagination (.ptt)
-	// Contoh: [1] 2 3 4 5 → last number before ">" 
-	let totalThumbPages = 1;
-	const pttLinks = $init('.ptt td a, table.ptt td a');
-	if (pttLinks.length) {
-		let maxP = 0;
-		pttLinks.each((_, a) => {
-			const href = $init(a).attr('href') || '';
-			const m = href.match(/[?&]p=(\d+)/);
-			if (m) maxP = Math.max(maxP, parseInt(m[1], 10));
-			const t = $init(a).text().trim();
-			const n = parseInt(t, 10);
-			if (!isNaN(n)) maxP = Math.max(maxP, n - 1); // tampilan 1-based
-		});
-		totalThumbPages = maxP + 1;
-	} else if (totalImages > 0) {
-		// fallback: default EH ~40 thumb/halaman
-		const firstCount = $init('#gdt a[href*="/s/"], .gdtm a[href*="/s/"], .gdtl a[href*="/s/"]').length;
-		const perPage = firstCount > 0 ? firstCount : 40;
-		totalThumbPages = Math.ceil(totalImages / perPage);
-	}
+	// Map pageNum (1-based) → imgkey
+	const imgkeys = new Map<number, string>();
 
-	// ── 2. Kumpulkan SEMUA link /s/ dari semua halaman thumbnail ─────────────
-	const pageUrlMap = new Map<number, string>(); // pageNum → url
-
-	const collectThumbs = ($: cheerio.CheerioAPI) => {
+	const collectKeys = ($: cheerio.CheerioAPI) => {
 		$('a[href*="/s/"]').each((_, a) => {
 			const href = $(a).attr('href') || '';
-			if (!href.includes('/s/')) return;
-			const abs = this.absUrl(href);
-			// URL: /s/{token}/{gid}-{pageNum}
-			const m = abs.match(new RegExp(`/s/[^/]+/${gid}-(\\d+)`, 'i'));
-			const pageNum = m ? parseInt(m[1], 10) : pageUrlMap.size + 1;
-			if (!pageUrlMap.has(pageNum)) pageUrlMap.set(pageNum, abs);
+			// /s/{imgkey}/{gid}-{page}
+			const m = href.match(/\/s\/([0-9a-f]+)\/(\d+)-(\d+)/i);
+			if (!m) return;
+			if (parseInt(m[2], 10) !== gid) return;
+			const pageNum = parseInt(m[3], 10);
+			if (!imgkeys.has(pageNum)) imgkeys.set(pageNum, m[1]);
 		});
 	};
 
-	collectThumbs($init);
+	collectKeys($init);
 
-	// p=1, p=2, ... (p=0 = halaman pertama, sudah di-fetch)
+	// Pagination thumbnail ?p=1,2,... (p=0 = halaman ini)
+	let totalThumbPages = 1;
+	const firstCount = imgkeys.size || 40;
+	if (totalImages > 0) {
+		totalThumbPages = Math.max(1, Math.ceil(totalImages / firstCount));
+	}
+	// Baca juga .ptt kalau ada
+	$init('.ptt td a, table.ptt td a').each((_, a) => {
+		const href = $init(a).attr('href') || '';
+		const m = href.match(/[?&]p=(\d+)/);
+		if (m) totalThumbPages = Math.max(totalThumbPages, parseInt(m[1], 10) + 1);
+	});
+
 	for (let p = 1; p < totalThumbPages; p++) {
 		try {
 			const html = await this.fetchHtml(`${path}?p=${p}`);
-			collectThumbs(cheerio.load(html));
+			collectKeys(cheerio.load(html));
 		} catch (e) {
-			console.warn(`[ehentai] thumb page p=${p} failed`, e);
+			console.warn(`[ehentai] thumb p=${p} failed`, e);
 		}
 	}
 
-	const sortedPageUrls = [...pageUrlMap.entries()]
-		.sort((a, b) => a[0] - b[0])
-		.map(([, url]) => url);
-
 	console.log(
-		`[ehentai] thumbs: ${sortedPageUrls.length}/${totalImages || '?'} (thumbPages=${totalThumbPages})`
+		`[ehentai] imgkeys=${imgkeys.size} totalImages=${totalImages} thumbPages=${totalThumbPages}`
 	);
 
-	if (!sortedPageUrls.length) return [];
+	if (!imgkeys.size) return [];
 
-	// ── 3. Fetch gambar secara concurrent (batch) biar tidak timeout ─────────
-	const CONCURRENCY = 6;
-	const images: string[] = new Array(sortedPageUrls.length).fill('');
+	// ── 2. Ambil showkey dari halaman gambar pertama ─────────────────────────
+	const firstPage = Math.min(...imgkeys.keys());
+	const firstKey = imgkeys.get(firstPage)!;
+	const firstPageUrl = `/s/${firstKey}/${gid}-${firstPage}`;
 
-	const fetchOne = async (pageUrl: string, index: number) => {
+	let showkey = '';
+	try {
+		const pageHtml = await this.fetchHtml(firstPageUrl);
+		const sk =
+			pageHtml.match(/showkey\s*=\s*["']([0-9a-f]+)["']/i) ||
+			pageHtml.match(/var\s+showkey\s*=\s*["']([^"']+)["']/i);
+		showkey = sk?.[1] || '';
+	} catch (e) {
+		console.error('[ehentai] failed to get showkey', e);
+	}
+
+	if (!showkey) {
+		// Fallback terakhir: parse <img id="img"> dari tiap halaman (lambat)
+		console.warn('[ehentai] no showkey, fallback HTML scrape');
+		return this.scrapeImagesFromPages(gid, imgkeys);
+	}
+
+	// ── 3. Resolve URL gambar lewat API showpage (cepat, concurrent) ─────────
+	const pages = [...imgkeys.entries()].sort((a, b) => a[0] - b[0]);
+	const images: string[] = new Array(pages.length).fill('');
+	const CONCURRENCY = 8;
+
+	const resolveOne = async (pageNum: number, imgkey: string, index: number) => {
 		try {
-			const rel = pageUrl.startsWith(this.baseUrl)
-				? pageUrl.slice(this.baseUrl.length)
-				: pageUrl;
-			const html = await this.fetchHtml(rel.startsWith('/') ? rel : pageUrl);
-			const $ = cheerio.load(html);
-			let src =
-				$('#img').attr('src') ||
-				$('#i3 img').attr('src') ||
-				$('img#img').attr('src') ||
-				$('#i3 a img').attr('src') ||
-				'';
-			src = this.absUrl(src);
-			if (src && !/blank|loading|ajax|ehgt\.org\/g\//i.test(src)) {
+			const data = await this.postApi<{ i3?: string; error?: string }>({
+				method: 'showpage',
+				gid,
+				page: pageNum,
+				imgkey,
+				showkey
+			});
+			if (data?.error || !data?.i3) {
+				console.warn(`[ehentai] showpage ${pageNum} error`, data?.error);
+				return;
+			}
+			// i3 = HTML snippet berisi <img id="img" src="...">
+			const srcMatch =
+				data.i3.match(/id=["']img["'][^>]*src=["']([^"']+)["']/i) ||
+				data.i3.match(/src=["']([^"']+)["'][^>]*id=["']img["']/i) ||
+				data.i3.match(/src=["'](https?:\/\/[^"']+)["']/i);
+			const src = (srcMatch?.[1] || '').replace(/&amp;/g, '&');
+			if (src && !/blank|loading|ajax/i.test(src)) {
 				images[index] = src;
 			}
 		} catch (e) {
-			console.warn('[ehentai] image page failed', pageUrl, e);
+			console.warn(`[ehentai] showpage ${pageNum} failed`, e);
 		}
 	};
 
-	for (let i = 0; i < sortedPageUrls.length; i += CONCURRENCY) {
-		const chunk = sortedPageUrls.slice(i, i + CONCURRENCY);
-		await Promise.all(chunk.map((url, j) => fetchOne(url, i + j)));
+	for (let i = 0; i < pages.length; i += CONCURRENCY) {
+		const chunk = pages.slice(i, i + CONCURRENCY);
+		await Promise.all(
+			chunk.map(([pageNum, imgkey], j) => resolveOne(pageNum, imgkey, i + j))
+		);
 	}
 
 	const result = images.filter(Boolean);
-	console.log(`[ehentai] getChapterPages → ${result.length} images`);
+	console.log(`[ehentai] getChapterPages → ${result.length}/${pages.length}`);
 	return result;
- }
+}
+
+/** Fallback lambat kalau showkey tidak ketemu */
+private async scrapeImagesFromPages(
+	gid: number,
+	imgkeys: Map<number, string>
+): Promise<string[]> {
+	const pages = [...imgkeys.entries()].sort((a, b) => a[0] - b[0]);
+	const images: string[] = [];
+	const CONCURRENCY = 4;
+
+	for (let i = 0; i < pages.length; i += CONCURRENCY) {
+		const chunk = pages.slice(i, i + CONCURRENCY);
+		const batch = await Promise.all(
+			chunk.map(async ([pageNum, imgkey]) => {
+				try {
+					const html = await this.fetchHtml(`/s/${imgkey}/${gid}-${pageNum}`);
+					const $ = cheerio.load(html);
+					const src =
+						$('#img').attr('src') ||
+						$('#i3 img').attr('src') ||
+						'';
+					return this.absUrl(src);
+				} catch {
+					return '';
+				}
+			})
+		);
+		for (const src of batch) {
+			if (src && !/blank|loading/i.test(src)) images.push(src);
+		}
+	}
+	return images;
+}
 }
