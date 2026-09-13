@@ -402,4 +402,6 @@ export class MangaindoSource extends BaseSource {
 			return [];
 		}
 	}
-}
+ }
+
+

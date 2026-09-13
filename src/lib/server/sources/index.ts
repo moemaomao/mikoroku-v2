@@ -38,7 +38,11 @@ import { VoratoonSource } from './impl/Voratoon';
 import { ZonaTmoSource } from './impl/ZonaTmo';
 import { LectorTmoSource } from './impl/LectorTmo';
 import { MangaCopySource } from './impl/MangaCopy';
+import { OmegaScansSource } from './impl/OmegaScans';
+import { MangaDexSource } from './impl/MangaDex';
+import { LuvyaaSource } from './impl/Luvyaa';
 import type { IMangaSource } from './types';
+
 
 const sources: Record<string, IMangaSource> = {
     asura: new AsuraSource(),
@@ -72,7 +76,10 @@ const sources: Record<string, IMangaSource> = {
     voratoon: new VoratoonSource(),
     zonatmo: new ZonaTmoSource(),
     lectortmo: new LectorTmoSource(),
-    mangacopy: new MangaCopySource()
+    mangacopy: new MangaCopySource(),
+    omegascans: new OmegaScansSource(),
+    mangadex: new MangaDexSource(),
+    luvyaa: new LuvyaaSource()
 };
 
 /**

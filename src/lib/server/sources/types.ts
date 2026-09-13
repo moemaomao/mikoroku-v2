@@ -6,6 +6,7 @@ export interface Manga {
 	type?: string;
 	status?: string;
 	latestChapter?: string | number;
+	lang?: string;
 }
 
 export interface Chapter {
@@ -14,6 +15,7 @@ export interface Chapter {
 	number: number;
 	date?: string;
 	cover?: string;
+	lang?: string;
 }
 
 export interface MangaDetails extends Manga {
@@ -39,7 +41,10 @@ export interface IMangaSource {
 		opts?: { page?: number; lang?: string; type?: string }
 	): Promise<Manga[]>;
 
-	getMangaDetails(mangaId: string): Promise<MangaDetails>;
+	getMangaDetails(
+		mangaId: string,
+		opts?: { lang?: string }
+	): Promise<MangaDetails>;
 
 	getChapterPages(chapterId: string): Promise<string[]>;
 }

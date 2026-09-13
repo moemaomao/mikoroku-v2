@@ -76,6 +76,7 @@
         klmanga: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         klz9: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         love4u: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+        mangadex: { flag: 'un', lang: 'Multi', isR18: false, color: 'bg-yellow-500' },
         rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         voratoon: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
@@ -93,7 +94,9 @@
         simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         zonatmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
         lectortmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
-        mangacopy: { flag: 'ch', lang: 'CH', isR18: false, color: 'bg-red-500' }
+        mangacopy: { flag: 'ch', lang: 'CH', isR18: false, color: 'bg-red-500' },
+        omegascans: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+        luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' }
     };
 
     const LANG_LABELS: Record<string, string> = {
@@ -121,7 +124,23 @@
             groups[langKey].push(src);
         }
 
-        return groups;
+        const customOrder = ['Multi', 'JP', 'EN', 'ID', 'ES', 'CH'];
+        const sortedKeys = Object.keys(groups).sort((a, b) => {
+            const indexA = customOrder.indexOf(a);
+            const indexB = customOrder.indexOf(b);
+
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return a.localeCompare(b);
+        });
+
+        const sortedGroups: Record<string, SourceItem[]> = {};
+        for (const key of sortedKeys) {
+            sortedGroups[key] = groups[key];
+        }
+
+        return sortedGroups;
     });
 
     // Derived Helper
@@ -270,16 +289,13 @@
                 class="dropdown-menu absolute left-0 top-full z-50 mt-2 w-[280px] overflow-hidden rounded-2xl border shadow-2xl"
             >
                 <div class="max-h-[60vh] overflow-y-auto p-1.5">
-                    <!-- LOOP BERDASARKAN KELOMPOK BAHASA -->
                     {#each Object.entries(groupedSources) as [langKey, items]}
-                        <!-- SECTION HEADER (English, Japanese, etc.) -->
                         <div
                             class="dropdown-header sticky top-0 z-10 -mx-1.5 my-1 px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
                         >
                             {LANG_LABELS[langKey] || langKey}
                         </div>
 
-                        <!-- ITEM DALAM KELOMPOK TERSEBUT -->
                         {#each items as source (source.id)}
                             {@const meta = getMeta(source.id)}
                             {@const isSelected = source.id.toLowerCase() === currentSource.toLowerCase()}
@@ -322,7 +338,7 @@
     </div>
 
     <!-- ========== CUSTOM LANGUAGE DROPDOWN ========== -->
-    {#if ['hitomi', 'nhentai','imhentai','ehentai','hentaiera'].includes(currentSource.toLowerCase())}
+    {#if ['hitomi', 'nhentai','imhentai','ehentai','hentaiera','mangadex'].includes(currentSource.toLowerCase())}
         <div class="relative">
             <button
                 type="button"

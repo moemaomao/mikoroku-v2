@@ -27,7 +27,7 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/api" | "/api/pages" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]" | "/sources";
+		RouteId(): "/" | "/api" | "/api/pages" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]";
 		RouteParams(): {
 			"/manga/[source]": { source: string };
 			"/manga/[source]/[...id]": { source: string; id: string };
@@ -46,10 +46,9 @@ declare module "$app/types" {
 			"/manga/[source]/[...id]": { source: string; id: string };
 			"/reader": { source?: string; id?: string };
 			"/reader/[source]": { source: string; id?: string };
-			"/reader/[source]/[...id]": { source: string; id: string };
-			"/sources": Record<string, never>
+			"/reader/[source]/[...id]": { source: string; id: string }
 		};
-		Pathname(): "/" | "/api" | "/api/" | "/api/pages" | "/api/pages/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/sources" | "/sources/";
+		Pathname(): "/" | "/api" | "/api/" | "/api/pages" | "/api/pages/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {};
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/assetsignore.txt" | "/robots.txt" | string & {};
 	}

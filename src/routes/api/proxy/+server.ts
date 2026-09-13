@@ -44,8 +44,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			sourceId === 'mangakatana' ||
 			/mangakatana\.com|i\d*\.mangakatana\.com/i.test(decodedUrl);
 		const isMangaBats =
-			sourceId === 'mangabats' ||
-			/mangabats\.xyz|amzim\.beer|uploads\.mangadex\.org/i.test(decodedUrl);
+	        sourceId === 'mangabats' ||
+	        /mangabats\.xyz|amzim\.beer/i.test(decodedUrl);
 		const isMangaBatsCom =
 			sourceId === 'mangabatscom' ||
 			/mangabats\.com|2xstorage\.com/i.test(decodedUrl);

@@ -7,13 +7,13 @@
 	import BrowseHeader from '$lib/components/BrowseHeader.svelte';
 
 	const { data }: { data: PageData } = $props();
-	let { mangas, sources, currentSource, currentPage, searchQuery } = $derived(data);
+
+	let { mangas, sources, currentSource, currentPage, searchQuery, needsSource } = $derived(data);
 
 	let loading = $state(false);
 	let isDarkMode = $state(true);
 	let jumpPageInput = $state('');
 
-	// Membaca state awal filter dari search params URL
 	let selectedLang = $state($page.url.searchParams.get('lang') || 'all');
 	let selectedType = $state($page.url.searchParams.get('type') || 'all');
 
@@ -38,7 +38,7 @@
 	});
 
 	function proxyImage(url: string): string {
-		if (!url) return '';
+		if (!url || !currentSource) return '';
 		let u = String(url).trim();
 		if (u.startsWith('//')) u = 'https:' + u;
 		return `/api/proxy?url=${encodeURIComponent(u)}&source=${currentSource}&w=120&h=180`;
@@ -47,7 +47,7 @@
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;
 		const original = img.dataset.original;
-		if (!original) return;
+		if (!original || !currentSource) return;
 		if (img.dataset.fallback === '1') {
 			img.style.opacity = '0';
 			return;
@@ -70,7 +70,7 @@
 	}
 
 	function goToPage(p: number) {
-		if (p < 1 || p === currentPage || loading) return;
+		if (!currentSource || p < 1 || p === currentPage || loading) return;
 		const params = new URLSearchParams();
 		params.set('source', currentSource);
 		params.set('page', String(p));
@@ -105,7 +105,7 @@
 			}
 		}
 
-		for (let i of range) {
+		for (const i of range) {
 			rangeWithDots.push(i);
 		}
 
@@ -146,6 +146,40 @@
 				return 'bg-[#c91714]';
 		}
 	}
+
+	function listChapterFlag(lang?: string): string {
+		const l = String(lang || '').trim().toLowerCase();
+		const map: Record<string, string> = {
+			en: 'gb',
+			'en-us': 'us',
+			id: 'id',
+			ja: 'jp',
+			'ja-ro': 'jp',
+			ko: 'kr',
+			'ko-ro': 'kr',
+			zh: 'cn',
+			'zh-hk': 'hk',
+			'zh-ro': 'cn',
+			fr: 'fr',
+			pl: 'pl',
+			es: 'es',
+			'es-la': 'mx',
+			'pt-br': 'br',
+			pt: 'pt',
+			ru: 'ru',
+			vi: 'vn',
+			th: 'th',
+			ar: 'sa',
+			de: 'de',
+			it: 'it',
+			tr: 'tr',
+			uk: 'ua',
+			hi: 'in',
+			ms: 'my',
+			nl: 'nl'
+		};
+		return map[l] || '';
+	}
 </script>
 
 <svelte:head>
@@ -156,178 +190,194 @@
 	<!-- HEADER / FILTER -->
 	<BrowseHeader
 		{sources}
-		{currentSource}
+		currentSource={currentSource ?? ''}
 		{searchQuery}
 		bind:loading
 		bind:selectedLang
 		bind:selectedType
 	/>
 
-	<!-- Sub-Header Title -->
-	<div class="mb-3 flex items-center gap-0">
-		<div class="h-px flex-1 {isDarkMode ? 'bg-zinc-800' : 'bg-zinc-300'}"></div>
-		<span
-			class="mx-3 inline-flex items-center rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors sm:text-[13px] {isDarkMode
-				? 'border-zinc-700 bg-zinc-900 text-white'
-				: 'border-zinc-300 bg-white text-zinc-800 shadow-sm'}"
-		>
-			Latest Manga
-		</span>
-		<div class="h-px flex-1 {isDarkMode ? 'bg-zinc-800' : 'bg-zinc-300'}"></div>
-	</div>
-
-	<!-- Content Area -->
-	{#if loading}
-		<div class="flex min-h-[50vh] w-full items-center justify-center py-20">
-			<div class="flex flex-col items-center gap-3">
-				<Loader2 class="h-10 w-10 animate-spin text-red-500" />
-				<span class="text-sm font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}">
-					Loading manga...
-				</span>
+	{#if needsSource}
+		<!-- First visit: belum pilih source -->
+		<div class="flex min-h-[60vh] w-full items-center justify-center px-4">
+			<div class="text-center">
+				<h2 class="text-2xl font-bold text-white sm:text-3xl">
+					Pilih Source untuk Mulai Membaca
+				</h2>
+				<p class="mt-3 max-w-md mx-auto text-sm text-zinc-400">
+					Silakan pilih sumber manga di dropdown Source di atas untuk mulai menjelajahi katalog.
+				</p>
 			</div>
-		</div>
-	{:else if mangas.length === 0}
-		<div class="py-16 text-center {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
-			<p>No manga found matching the selected filters.</p>
 		</div>
 	{:else}
-		{#key currentSource}
-			<div
-				class="grid grid-cols-3 gap-1.5 sm:grid-cols-4 sm:gap-2 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-8"
+		<!-- Sub-Header Title -->
+		<div class="mb-3 flex items-center gap-0">
+			<div class="h-px flex-1 {isDarkMode ? 'bg-zinc-800' : 'bg-zinc-300'}"></div>
+			<span
+				class="mx-3 inline-flex items-center rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors sm:text-[13px] {isDarkMode
+					? 'border-zinc-700 bg-zinc-900 text-white'
+					: 'border-zinc-300 bg-white text-zinc-800 shadow-sm'}"
 			>
-				{#each mangas as manga (manga.id)}
-					<a href="/manga/{manga.sourceId}{manga.id}" class="group block">
-						<div
-							class="relative overflow-hidden rounded-md bg-zinc-900 ring-1 ring-black/5 dark:ring-white/5"
+				Latest Manga
+			</span>
+			<div class="h-px flex-1 {isDarkMode ? 'bg-zinc-800' : 'bg-zinc-300'}"></div>
+		</div>
+
+		<!-- Content Area -->
+		{#if loading}
+			<div class="flex min-h-[50vh] w-full items-center justify-center py-20">
+				<div class="flex flex-col items-center gap-3">
+					<Loader2 class="h-10 w-10 animate-spin text-red-500" />
+					<span class="text-sm font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}">
+						Loading manga...
+					</span>
+				</div>
+			</div>
+		{:else if mangas.length === 0}
+			<div class="py-16 text-center {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
+				<p>No manga found matching the selected filters.</p>
+			</div>
+		{:else}
+			{#key currentSource}
+				<div
+					class="grid grid-cols-3 gap-1.5 sm:grid-cols-4 sm:gap-2 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-8"
+				>
+					{#each mangas as manga (manga.id)}
+						<a
+							href="/manga/{manga.sourceId}{manga.id}{selectedLang !== 'all' ? `?lang=${selectedLang}` : ''}"
+							class="group block"
 						>
-							<div class="relative aspect-[3/4] w-full overflow-hidden">
-								{#if manga.cover}
-									<img
-										src={proxyImage(manga.cover)}
-										data-original={manga.cover}
-										alt={manga.title}
-										loading="lazy"
-										decoding="async"
-										onerror={onCoverError}
-										class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-									/>
-								{:else}
-									<div
-										class="flex h-full w-full items-center justify-center bg-zinc-800 text-xl text-zinc-600"
-									>
-										📚
-									</div>
-								{/if}
+							<div
+								class="relative overflow-hidden rounded-md bg-zinc-900 ring-1 ring-black/5 dark:ring-white/5"
+							>
+								<div class="relative aspect-[3/4] w-full overflow-hidden">
+									{#if manga.cover}
+										<img
+											src={proxyImage(manga.cover)}
+											data-original={manga.cover}
+											alt={manga.title}
+											loading="lazy"
+											decoding="async"
+											onerror={onCoverError}
+											class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+										/>
+									{:else}
+										<div
+											class="flex h-full w-full items-center justify-center bg-zinc-800 text-xl text-zinc-600"
+										>
+											📚
+										</div>
+									{/if}
 
-								<!-- BADGE STATUS -->
-								<span
-									class="absolute top-1 left-1 z-20 rounded px-1 py-0.5 text-[8px] font-bold uppercase text-white sm:text-[9px] {statusClass(
-										manga.status
-									)}"
-								>
-									{manga.status || 'ONGOING'}
-								</span>
-
-								<!-- BADGE CHAPTER -->
-								{#if manga.latestChapter || (manga as any).chapter}
+									<!-- BADGE STATUS -->
 									<span
-										class="absolute top-[24px] left-1 z-20 rounded bg-yellow-400 px-1 py-0.5 text-[8px] font-bold text-black sm:text-[9px]"
+										class="absolute top-1 left-1 z-20 rounded px-1 py-0.5 text-[8px] font-bold uppercase text-white sm:text-[9px] {statusClass(
+											manga.status
+										)}"
 									>
-										Ch. {manga.latestChapter || (manga as any).chapter}
+										{manga.status || 'ONGOING'}
 									</span>
-								{/if}
 
-								<!-- BADGE TYPE -->
-								<span
-									class="absolute bottom-1 left-1 z-20 rounded px-1 py-0.5 text-[8px] font-bold uppercase text-white shadow-sm sm:text-[9px] {typeBadgeClass(
-										manga.type
-									)}"
-								>
-									{manga.type || 'manga'}
-								</span>
+									<!-- BADGE CHAPTER -->
+									{#if manga.latestChapter || (manga as any).chapter}
+										<span
+											class="absolute top-[24px] left-1 z-20 flex items-center gap-0.5 rounded bg-yellow-400 px-1 py-0.5 text-[8px] font-bold text-black sm:text-[9px]"
+										>
+											{#if listChapterFlag(manga.lang)}
+												<span
+													class="fi fi-{listChapterFlag(manga.lang)} text-[9px] sm:text-[10px] leading-none"
+												></span>
+											{/if}
+											<span>Ch. {manga.latestChapter || (manga as any).chapter}</span>
+										</span>
+									{/if}
 
-								<!-- TITLE CONTAINER -->
-								<div
-									class="absolute inset-x-0 bottom-0 z-10 max-h-12 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-1 pt-4 pb-1 transition-all duration-300 group-hover:max-h-full group-hover:pt-8 group-active:max-h-full group-active:pt-8"
-								>
-									<h3
-										class="line-clamp-2 text-center text-[10px] font-semibold leading-tight text-white drop-shadow-md transition-all duration-300 group-hover:line-clamp-none group-active:line-clamp-none sm:text-[11px]"
+									<!-- BADGE TYPE -->
+									<span
+										class="absolute bottom-1 left-1 z-20 rounded px-1 py-0.5 text-[8px] font-bold uppercase text-white shadow-sm sm:text-[9px] {typeBadgeClass(
+											manga.type
+										)}"
 									>
-										{manga.title}
-									</h3>
+										{manga.type || 'manga'}
+									</span>
+
+									<!-- TITLE -->
+									<div
+										class="absolute inset-x-0 bottom-0 z-10 max-h-12 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-1 pt-4 pb-1 transition-all duration-300 group-hover:max-h-full group-hover:pt-8 group-active:max-h-full group-active:pt-8"
+									>
+										<h3
+											class="line-clamp-2 text-center text-[10px] font-semibold leading-tight text-white drop-shadow-md transition-all duration-300 group-hover:line-clamp-none group-active:line-clamp-none sm:text-[11px]"
+										>
+											{manga.title}
+										</h3>
+									</div>
 								</div>
 							</div>
-						</div>
-					</a>
-				{/each}
-			</div>
-		{/key}
-
-		<!-- PAGINATION MODERN & JUMP PAGE -->
-		<div
-			class="mt-8 flex flex-col items-center justify-center gap-4 border-t pt-6 {isDarkMode
-				? 'border-zinc-800/80'
-				: 'border-zinc-200'}"
-		>
-			<div class="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-				<div class="flex items-center gap-1 sm:gap-1.5">
-					<!-- Prev Button -->
-					<button
-						onclick={() => goToPage(currentPage - 1)}
-						disabled={currentPage <= 1 || loading}
-						aria-label="Previous Page"
-						class="flex h-9 w-9 items-center justify-center rounded-xl border transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {isDarkMode
-							? 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
-							: 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
-					>
-						<ChevronLeft class="h-4 w-4" />
-					</button>
-
-					<!-- Numbers -->
-					{#each getPaginationRange(currentPage) as item}
-						{#if item === '...'}
-							<span
-								class="px-1.5 text-xs font-semibold {isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}"
-							>
-								•••
-							</span>
-						{:else}
-							<button
-								onclick={() => goToPage(Number(item))}
-								disabled={loading}
-								class="h-9 min-w-[36px] rounded-xl px-2.5 text-xs font-semibold transition active:scale-95 {currentPage ===
-								item
-									? 'bg-red-600 text-white shadow-md shadow-red-600/30'
-									: isDarkMode
-										? 'border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
-										: 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
-							>
-								{item}
-							</button>
-						{/if}
+						</a>
 					{/each}
-
-					<!-- Next Button -->
-					<button
-						onclick={() => goToPage(currentPage + 1)}
-						disabled={loading}
-						aria-label="Next Page"
-						class="flex h-9 w-9 items-center justify-center rounded-xl border transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {isDarkMode
-							? 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
-							: 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
-					>
-						<ChevronRight class="h-4 w-4" />
-					</button>
 				</div>
+			{/key}
 
-				<div class="hidden h-5 w-px bg-zinc-700/50 sm:block"></div>
+			<!-- PAGINATION -->
+			<div
+				class="mt-8 flex flex-col items-center justify-center gap-4 border-t pt-6 {isDarkMode
+					? 'border-zinc-800/80'
+					: 'border-zinc-200'}"
+			>
+				<div class="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+					<div class="flex items-center gap-1 sm:gap-1.5">
+						<button
+							onclick={() => goToPage(currentPage - 1)}
+							disabled={currentPage <= 1 || loading}
+							aria-label="Previous Page"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {isDarkMode
+								? 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
+								: 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
+						>
+							<ChevronLeft class="h-4 w-4" />
+						</button>
 
-				<!-- Jump Page Form -->
-				<form onsubmit={handleJumpPage} class="flex items-center gap-2">
-					<span class="text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
-						Page
-					</span>
-					<div class="relative flex items-center">
+						{#each getPaginationRange(currentPage) as item}
+							{#if item === '...'}
+								<span
+									class="px-1.5 text-xs font-semibold {isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}"
+								>
+									•••
+								</span>
+							{:else}
+								<button
+									onclick={() => goToPage(Number(item))}
+									disabled={loading}
+									class="h-9 min-w-[36px] rounded-xl px-2.5 text-xs font-semibold transition active:scale-95 {currentPage ===
+									item
+										? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+										: isDarkMode
+											? 'border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
+											: 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
+								>
+									{item}
+								</button>
+							{/if}
+						{/each}
+
+						<button
+							onclick={() => goToPage(currentPage + 1)}
+							disabled={loading}
+							aria-label="Next Page"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {isDarkMode
+								? 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800'
+								: 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
+						>
+							<ChevronRight class="h-4 w-4" />
+						</button>
+					</div>
+
+					<div class="hidden h-5 w-px bg-zinc-700/50 sm:block"></div>
+
+					<form onsubmit={handleJumpPage} class="flex items-center gap-2">
+						<span class="text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
+							Page
+						</span>
 						<input
 							type="number"
 							min="1"
@@ -337,17 +387,17 @@
 								? 'border-zinc-800 bg-zinc-900 text-zinc-100 placeholder:text-zinc-600'
 								: 'border-zinc-200 bg-white text-zinc-800 shadow-sm placeholder:text-zinc-400'}"
 						/>
-					</div>
-					<button
-						type="submit"
-						disabled={loading || !jumpPageInput}
-						aria-label="Go to page"
-						class="flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white transition hover:bg-red-500 active:scale-95 disabled:opacity-40"
-					>
-						<ArrowRight class="h-4 w-4" />
-					</button>
-				</form>
+						<button
+							type="submit"
+							disabled={loading || !jumpPageInput}
+							aria-label="Go to page"
+							class="flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 text-white transition hover:bg-red-500 active:scale-95 disabled:opacity-40"
+						>
+							<ArrowRight class="h-4 w-4" />
+						</button>
+					</form>
+				</div>
 			</div>
-		</div>
+		{/if}
 	{/if}
 </div>

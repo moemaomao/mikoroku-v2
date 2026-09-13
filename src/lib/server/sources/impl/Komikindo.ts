@@ -391,4 +391,6 @@ export class KomikindoSource extends BaseSource {
 			return [];
 		}
 	}
+
 }
+

@@ -162,6 +162,41 @@
 		return chapter?.cover || manga?.cover || '';
 	}
 
+		/** Sama seperti BrowseHeader: en → gb, id → id, dst. */
+	function chapterFlag(lang?: string): string {
+		const l = String(lang || '').trim().toLowerCase();
+		const map: Record<string, string> = {
+			en: 'gb',
+			'en-us': 'us',
+			id: 'id',
+			ja: 'jp',
+			'ja-ro': 'jp',
+			ko: 'kr',
+			'ko-ro': 'kr',
+			zh: 'cn',
+			'zh-hk': 'hk',
+			'zh-ro': 'cn',
+			fr: 'fr',
+			pl: 'pl',
+			es: 'es',
+			'es-la': 'mx',
+			'pt-br': 'br',
+			pt: 'pt',
+			ru: 'ru',
+			vi: 'vn',
+			th: 'th',
+			ar: 'sa',
+			de: 'de',
+			it: 'it',
+			tr: 'tr',
+			uk: 'ua',
+			hi: 'in',
+			ms: 'my',
+			nl: 'nl'
+		};
+		return map[l] || '';
+	}
+
 	onMount(() => {
 		try {
 			const savedView = localStorage.getItem(VIEW_KEY) as typeof viewMode | null;
@@ -615,7 +650,7 @@
 					<div class="detail-divider h-px flex-1"></div>
 				</div>
 
-				{#if chapters.length}
+								{#if chapters.length}
 					{#if viewMode === 'grid-thumb'}
 						<div
 							class="grid w-full grid-cols-4 gap-2.5 pb-8 sm:grid-cols-5 md:grid-cols-6 md:gap-3.5 lg:grid-cols-8 lg:gap-4"
@@ -636,8 +671,15 @@
 										/>
 									{/if}
 									<div class="absolute inset-x-0 bottom-0 bg-black/85 px-1 py-1.5 text-center">
-										<p class="line-clamp-2 text-[11px] leading-snug font-bold text-white sm:text-xs">
-											{chapter.title}
+										<p
+											class="line-clamp-2 flex items-center justify-center gap-1 text-[11px] leading-snug font-bold text-white sm:text-xs"
+										>
+											{#if chapterFlag(chapter.lang)}
+												<span
+													class="fi fi-{chapterFlag(chapter.lang)} shrink-0 rounded-[2px] text-[12px]"
+												></span>
+											{/if}
+											<span class="min-w-0">{chapter.title}</span>
 										</p>
 										{#if chapter.date}
 											<p class="mt-0.5 text-[9px] text-white/80">{formatDateOnly(chapter.date)}</p>
@@ -653,9 +695,18 @@
 									href="/reader/{source}{chapter.id}?server={activeServer}"
 									class="detail-chapter-text flex min-h-[60px] flex-col justify-center rounded-[10px] border px-3 py-3 hover:border-blue-500/40"
 								>
-									<p class="detail-title text-[12px] leading-tight font-bold">{chapter.title}</p>
+									<p class="detail-title flex items-center gap-1.5 text-[12px] leading-tight font-bold">
+										{#if chapterFlag(chapter.lang)}
+											<span
+												class="fi fi-{chapterFlag(chapter.lang)} shrink-0 rounded-[2px] text-[14px]"
+											></span>
+										{/if}
+										<span class="min-w-0">{chapter.title}</span>
+									</p>
 									{#if chapter.date}
-										<p class="detail-muted mt-1 text-[10px] opacity-70">{formatDateOnly(chapter.date)}</p>
+										<p class="detail-muted mt-1 text-[10px] opacity-70">
+											{formatDateOnly(chapter.date)}
+										</p>
 									{/if}
 								</a>
 							{/each}
@@ -680,8 +731,17 @@
 										{/if}
 									</div>
 									<div class="min-w-0 flex-1 px-3 py-3">
-										<p class="detail-title truncate text-sm font-bold">{chapter.title}</p>
-										<p class="detail-muted mt-1 text-[11px]">{formatDateOnly(chapter.date) || '—'}</p>
+										<p class="detail-title flex items-center gap-2 truncate text-sm font-bold">
+											{#if chapterFlag(chapter.lang)}
+												<span
+													class="fi fi-{chapterFlag(chapter.lang)} shrink-0 rounded-[2px] text-[16px]"
+												></span>
+											{/if}
+											<span class="truncate">{chapter.title}</span>
+										</p>
+										<p class="detail-muted mt-1 text-[11px]">
+											{formatDateOnly(chapter.date) || '—'}
+										</p>
 									</div>
 								</a>
 							{/each}

@@ -24,9 +24,5 @@
 	"/reader/[source]/[...id]": [
 		"src/routes/reader/[source]/[...id]/+page.server.ts",
 		"src/routes/+layout.server.ts"
-	],
-	"/sources": [
-		"src/routes/sources/+page.server.ts",
-		"src/routes/+layout.server.ts"
 	]
 }

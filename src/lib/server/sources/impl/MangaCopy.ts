@@ -337,4 +337,6 @@ export class MangaCopySource extends BaseSource {
 			return [];
 		}
 	}
-}
+  }
+
+

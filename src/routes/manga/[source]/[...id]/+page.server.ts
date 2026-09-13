@@ -19,10 +19,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	});
 }
 
-export const load: PageServerLoad = async ({ params, setHeaders }) => {
+export const load: PageServerLoad = async ({ params, url, setHeaders }) => {
 	const sourceId = params.source;
 	const idParts = Array.isArray(params.id) ? params.id : [params.id];
 	const mangaId = '/' + idParts.filter(Boolean).join('/');
+	const lang = (url.searchParams.get('lang') || 'all').toLowerCase();
 
 	if (!sourceId || !mangaId || mangaId === '/') {
 		throw error(400, 'Invalid manga path');
@@ -30,7 +31,10 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 
 	try {
 		const adapter = getSource(sourceId);
-		const manga = await withTimeout(adapter.getMangaDetails(mangaId), LOAD_TIMEOUT_MS);
+		const manga = await withTimeout(
+			adapter.getMangaDetails(mangaId, { lang }),
+			LOAD_TIMEOUT_MS
+		);
 
 		if (!manga || !manga.title) {
 			throw error(404, 'Manga tidak ditemukan');
@@ -42,7 +46,8 @@ export const load: PageServerLoad = async ({ params, setHeaders }) => {
 
 		return {
 			manga,
-			source: sourceId
+			source: sourceId,
+			selectedLang: lang
 		};
 	} catch (e: any) {
 		console.error('[Manga Detail] load failed:', e);
