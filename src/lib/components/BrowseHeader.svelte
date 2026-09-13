@@ -80,6 +80,7 @@
         rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
         komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         voratoon: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+        softkomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         komikindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         mangaindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
         mgkomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
