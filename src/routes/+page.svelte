@@ -198,18 +198,17 @@
 	/>
 
 	{#if needsSource}
-		<!-- First visit: belum pilih source -->
-		<div class="flex min-h-[60vh] w-full items-center justify-center px-4">
-			<div class="text-center">
-				<h2 class="text-2xl font-bold text-white sm:text-3xl">
-					Pilih Source untuk Mulai Membaca
-				</h2>
-				<p class="mt-3 max-w-md mx-auto text-sm text-zinc-400">
-					Silakan pilih sumber manga di dropdown Source di atas untuk mulai menjelajahi katalog.
-				</p>
-			</div>
+	<div class="flex min-h-[60vh] w-full items-center justify-center px-4">
+		<div class="text-center">
+			<h2 class="text-2xl font-bold text-white sm:text-3xl">
+				Select a Source to Start Reading
+			</h2>
+			<p class="mt-3 max-w-md mx-auto text-sm text-zinc-400">
+				Please choose a manga source from the Source dropdown above to browse the catalog.
+			</p>
 		</div>
-	{:else}
+	</div>
+{:else}
 		<!-- Sub-Header Title -->
 		<div class="mb-3 flex items-center gap-0">
 			<div class="h-px flex-1 {isDarkMode ? 'bg-zinc-800' : 'bg-zinc-300'}"></div>
