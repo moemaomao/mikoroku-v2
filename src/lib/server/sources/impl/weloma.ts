@@ -105,101 +105,113 @@ export class WelomaSource extends BaseSource {
     }
 
     private parseCards($: cheerio.CheerioAPI): Manga[] {
-        const mangas: Manga[] = [];
-        const seen = new Set<string>();
+    const mangas: Manga[] = [];
+    const seen = new Set<string>();
 
-        $('.thumb-item-flow').each((_, el) => {
-            const $el = $(el);
-            const a = $el.find('a[href*="/m/"]').first();
-            const href = a.attr('href') || '';
-            if (!href) return;
+    $('.thumb-item-flow').each((_, el) => {
+        const $el = $(el);
+        const a = $el.find('a[href*="/m/"]').first();
+        const href = a.attr('href') || '';
+        if (!href) return;
 
+        const id = this.cleanId(href);
+        if (seen.has(id)) return;
+        seen.add(id);
+
+        const rawTitle =
+            $el.find('.thumb_attr.series-title a').attr('title') ||
+            $el.find('.thumb_attr.series-title a').text() ||
+            $el.find('.series-title').text() ||
+            a.attr('title') ||
+            '';
+        const title = this.normalizeTitle(rawTitle);
+        if (!title) return;
+
+        // ── Latest chapter (untuk badge di homepage) ─────────────────────
+        const chText =
+            $el.find('.chapter-title a').attr('title') ||
+            $el.find('.chapter-title a').text() ||
+            $el.find('.thumb_attr.chapter-title').attr('title') ||
+            $el.find('.thumb_attr.chapter-title').text() ||
+            '';
+        const chMatch = chText.match(
+            /(?:last\s*chapter|chap(?:ter)?|ch\.?)[:\s]*(\d+(?:\.\d+)?)/i
+        ) || chText.match(/(\d+(?:\.\d+)?)/);
+        const latestChapter = chMatch?.[1] ? parseFloat(chMatch[1]) : undefined;
+
+        mangas.push({
+            id,
+            title,
+            cover: this.extractCover($el as any),
+            sourceId: this.id,
+            status: 'Ongoing',
+            latestChapter
+        });
+    });
+
+    // Fallback jika struktur card berubah
+    if (mangas.length === 0) {
+        $('a[href*="/m/"]').each((_, el) => {
+            const href = $(el).attr('href') || '';
             const id = this.cleanId(href);
-            if (seen.has(id)) return;
+            if (!/\/m\/[A-Za-z0-9]+/.test(id) || seen.has(id)) return;
             seen.add(id);
 
-            const rawTitle =
-                $el.find('.thumb_attr.series-title a').attr('title') ||
-                $el.find('.thumb_attr.series-title a').text() ||
-                $el.find('.series-title').text() ||
-                a.attr('title') ||
-                '';
-            const title = this.normalizeTitle(rawTitle);
-            if (!title) return;
-
-            mangas.push({
-                id,
-                title,
-                cover: this.extractCover($el as any),
-                sourceId: this.id,
-                status: 'Ongoing'
-            });
+            const title = this.normalizeTitle(
+                (($(el).attr('title') || $(el).text()) as string).trim()
+            );
+            if (title) {
+                mangas.push({
+                    id,
+                    title,
+                    cover: '',
+                    sourceId: this.id,
+                    status: 'Ongoing'
+                });
+            }
         });
-
-        // Fallback jika struktur card berubah
-        if (mangas.length === 0) {
-            $('a[href*="/m/"]').each((_, el) => {
-                const href = $(el).attr('href') || '';
-                const id = this.cleanId(href);
-                if (!/\/m\/[A-Za-z0-9]+/.test(id) || seen.has(id)) return;
-                seen.add(id);
-
-                const title = this.normalizeTitle(
-                    (($(el).attr('title') || $(el).text()) as string).trim()
-                );
-                if (title) {
-                    mangas.push({
-                        id,
-                        title,
-                        cover: '',
-                        sourceId: this.id,
-                        status: 'Ongoing'
-                    });
-                }
-            });
-        }
-
-        return mangas;
     }
+
+    return mangas;
+}
 
     // ── List / Search ────────────────────────────────────────────────────────
 
     async getLatestManga(page: number): Promise<Manga[]> {
-        const p = Math.max(1, page | 0);
+    const p = Math.max(1, page | 0);
+    const SITE_PER_PAGE = 20; // WeLoMa fixed 20/page
+    const need = this.PER_PAGE; // 24
+
+    // index 0-based di “stream” manga situs
+    const start = (p - 1) * need;
+    const end = start + need;
+
+    const firstSitePage = Math.floor(start / SITE_PER_PAGE) + 1;
+    const lastSitePage = Math.floor((end - 1) / SITE_PER_PAGE) + 1;
+
+    const all: Manga[] = [];
+    const seen = new Set<string>();
+
+    for (let sp = firstSitePage; sp <= lastSitePage; sp++) {
         const path =
-            p <= 1
+            sp <= 1
                 ? '/l/0OYCn?&sort=last_update'
-                : `/l/0OYCn?&sort=last_update&page=${p}`;
+                : `/l/0OYCn?&sort=last_update&page=${sp}`;
 
         const html = await this.fetchHtml(path);
         const $ = cheerio.load(html);
-        let mangas = this.parseCards($);
+        const batch = this.parseCards($);
 
-        if (mangas.length === 0) {
-            const seen = new Set<string>();
-            $('a[href*="/m/"]').each((_, el) => {
-                const href = $(el).attr('href') || '';
-                const id = this.cleanId(href);
-                if (!/\/m\/[A-Za-z0-9]+/.test(id) || seen.has(id)) return;
-                seen.add(id);
-
-                const title = this.normalizeTitle(
-                    (($(el).attr('title') || $(el).text()) as string).trim()
-                );
-                if (title) {
-                    mangas.push({
-                        id,
-                        title,
-                        cover: '',
-                        sourceId: this.id,
-                        status: 'Ongoing'
-                    });
-                }
-            });
+        for (const m of batch) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            all.push(m);
         }
-
-        return mangas.slice(0, this.PER_PAGE);
     }
+
+    const offsetInWindow = start - (firstSitePage - 1) * SITE_PER_PAGE;
+    return all.slice(offsetInWindow, offsetInWindow + need);
+}
 
     async searchManga(query: string): Promise<Manga[]> {
         const q = encodeURIComponent((query || '').trim());
