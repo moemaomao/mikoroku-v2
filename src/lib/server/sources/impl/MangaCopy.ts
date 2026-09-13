@@ -375,4 +375,8 @@ export class MangaCopySource extends BaseSource {
 			return [];
 		}
 	}
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)

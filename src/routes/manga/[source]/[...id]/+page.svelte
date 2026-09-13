@@ -162,7 +162,6 @@
 		return chapter?.cover || manga?.cover || '';
 	}
 
-		/** Sama seperti BrowseHeader: en → gb, id → id, dst. */
 	function chapterFlag(lang?: string): string {
 		const l = String(lang || '').trim().toLowerCase();
 		const map: Record<string, string> = {
@@ -221,7 +220,6 @@
 	});
 </script>
 
-<!-- WAJIB di luar {#if} -->
 <svelte:head>
 	<title>{manga?.title || 'Manga'} | Mikoroku</title>
 	<meta name="description" content={synopsis?.slice(0, 160) || manga?.title || ''} />

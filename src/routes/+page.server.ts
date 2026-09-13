@@ -3,11 +3,16 @@
  */
 
 import { getAllSources, getSource } from '$lib/server/sources';
+import { getCached } from '$lib/server/cache';
 import type { PageServerLoad } from './$types';
 
 const LOAD_TIMEOUT_MS = 12000;
 const MAX_MANGAS = 40;
+<<<<<<< HEAD
 const CACHE_TTL = 300;
+=======
+const LIST_CACHE_TTL = 300;
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -24,6 +29,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	});
 }
 
+<<<<<<< HEAD
 function normLang(lang?: string): string {
 	const raw = String(lang || '')
 		.trim()
@@ -90,9 +96,11 @@ async function getCached<T>(
 	return data;
 }
 
+=======
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
 export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	const sourceParam = url.searchParams.get('source');
-	const sourceId = sourceParam; // biarkan null kalau belum ada
+	const sourceId = sourceParam;
 	const pageNum = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
 	const query = (url.searchParams.get('q') || '').trim();
 	const lang = (url.searchParams.get('lang') || 'all').toLowerCase();
@@ -104,6 +112,7 @@ export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	if (sourceId) {
 		depends(`browse:${sourceId}`);
 
+<<<<<<< HEAD
 		const cacheKey = `browse:${sourceId}:p${pageNum}:q=${encodeURIComponent(query)}:lang=${lang}:type=${type}`;
 
 		try {
@@ -119,6 +128,33 @@ export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 
 				return list.slice(0, MAX_MANGAS);
 			});
+=======
+		const cacheKey = [
+			'browse',
+			sourceId,
+			`p=${pageNum}`,
+			`q=${query}`,
+			`lang=${lang}`,
+			`type=${type}`
+		].join(':');
+
+		try {
+			const list = await getCached(
+				cacheKey,
+				async () => {
+					const adapter = getSource(sourceId);
+					const fetchPromise = query
+						? adapter.searchManga(query, { page: pageNum, lang, type })
+						: adapter.getLatestManga(pageNum, { lang, type });
+
+					const result = await withTimeout(fetchPromise, LOAD_TIMEOUT_MS);
+					return Array.isArray(result) ? result : [];
+				},
+				LIST_CACHE_TTL
+			);
+
+			mangas = list.slice(0, MAX_MANGAS);
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
 		} catch (e) {
 			console.error('[Browse] load failed:', e);
 			mangas = [];

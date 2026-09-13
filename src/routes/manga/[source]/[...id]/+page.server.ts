@@ -1,9 +1,14 @@
 import { getSource } from '$lib/server/sources';
+import { getCached } from '$lib/server/cache';
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 const LOAD_TIMEOUT_MS = 12000;
+<<<<<<< HEAD
 const CACHE_TTL = 600;
+=======
+const DETAIL_CACHE_TTL = 600;
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -69,6 +74,7 @@ export const load: PageServerLoad = async ({ params, url, setHeaders }) => {
 	const cacheKey = `manga:${sourceId}:${mangaId}:lang=${lang}`;
 
 	try {
+<<<<<<< HEAD
 		const manga = await getCached(cacheKey, async () => {
 			const adapter = getSource(sourceId);
 			return await withTimeout(
@@ -76,6 +82,19 @@ export const load: PageServerLoad = async ({ params, url, setHeaders }) => {
 				LOAD_TIMEOUT_MS
 			);
 		});
+=======
+		const manga = await getCached(
+			cacheKey,
+			async () => {
+				const adapter = getSource(sourceId);
+				return await withTimeout(
+					adapter.getMangaDetails(mangaId, { lang }),
+					LOAD_TIMEOUT_MS
+				);
+			},
+			DETAIL_CACHE_TTL
+		);
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
 
 		if (!manga || !manga.title) {
 			throw error(404, 'Manga tidak ditemukan');

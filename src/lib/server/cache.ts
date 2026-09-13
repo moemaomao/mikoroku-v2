@@ -3,13 +3,18 @@
  * Cocok untuk caching hasil scraping / API response
  */
 
+<<<<<<< HEAD
 const DEFAULT_TTL = 300; // 5 menit (detik)
+=======
+const DEFAULT_TTL = 300;
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
 
 export async function getCached<T>(
 	key: string,
 	fetcher: () => Promise<T>,
 	ttlSeconds = DEFAULT_TTL
 ): Promise<T> {
+<<<<<<< HEAD
 	// Cache API hanya tersedia di Cloudflare runtime
 	// @ts-ignore
 	const cache = typeof caches !== 'undefined' ? caches.default : null;
@@ -53,3 +58,43 @@ export async function getCached<T>(
 
 	return data;
 }
+=======
+	// @ts-expect-error caches is available in CF Workers
+	const cache = typeof caches !== 'undefined' ? caches.default : null;
+
+	if (!cache) {
+		return await fetcher();
+	}
+
+	const cacheKey = new Request(`https://cache.internal/${encodeURIComponent(key)}`, {
+		method: 'GET'
+	});
+
+	try {
+		const cached = await cache.match(cacheKey);
+		if (cached) {
+			const data = (await cached.json()) as T;
+			return data;
+		}
+	} catch {
+	}
+
+	const data = await fetcher();
+
+	try {
+		const response = new Response(JSON.stringify(data), {
+			headers: {
+				'Content-Type': 'application/json',
+				'Cache-Control': `public, max-age=${ttlSeconds}`
+			}
+		});
+		cache.put(cacheKey, response).catch((err: unknown) => {
+			console.error('[cache] put failed:', key, err);
+		});
+	} catch (err: unknown) {
+		console.error('[cache] serialize failed:', key, err);
+	}
+
+	return data;
+}
+>>>>>>> ec3c23b (feat: add shared getCached and cache homepage + pages API)
