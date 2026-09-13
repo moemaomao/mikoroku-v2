@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
 import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 
@@ -11,48 +11,74 @@ export class MangaCopySource extends BaseSource {
 	baseUrl = 'https://www.mangacopy.com';
 
 	private readonly API_HOSTS = [
+		'https://api.copy2000.online',
 		'https://api.mangacopy.com',
-		'https://api.copy2000.online'
-		// jangan pakai www.mangacopy.com untuk API
+		'https://api.copy-manga.com'
 	];
 
 	private readonly PER_PAGE = 24;
 	private activeApi = this.API_HOSTS[0];
-
-	/** Secret HMAC (dari client resmi) */
 	private readonly AUTH_SECRET = Buffer.from(
 		'M2FmMDg1OTAzMTEwMzJlZmUwNjYwNTUwYTA1NjNhNTM=',
 		'base64'
 	);
 
+	private readonly deviceinfo: string;
+	private readonly device: string;
+	private readonly pseudoid: string;
+
+	constructor() {
+		super();
+		this.deviceinfo = `${this.randInt(1000000, 9999999)}V-${this.randInt(1000, 9999)}`;
+		this.device = this.genDevice();
+		this.pseudoid = this.genPseudoid();
+	}
+
+	private randInt(min: number, max: number): number {
+		return Math.floor(Math.random() * (max - min + 1)) + min;
+	}
+
+	private genDevice(): string {
+		const A = () => String.fromCharCode(65 + this.randInt(0, 25));
+		const D = () => String.fromCharCode(48 + this.randInt(0, 9));
+		return `${A()}${A()}${D()}${A()}.${D()}${D()}${D()}${D()}${D()}${D()}.${D()}${D()}${D()}`;
+	}
+
+	private genPseudoid(): string {
+		const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+		let s = '';
+		for (let i = 0; i < 16; i++) s += chars[this.randInt(0, chars.length - 1)];
+		return s;
+	}
+
 	// ── API helpers ──────────────────────────────────────────────────────────
 
 	private apiHeaders(): Record<string, string> {
-	const ts = Math.floor(Date.now() / 1000).toString();
-	const sig = createHmac('sha256', this.AUTH_SECRET).update(ts).digest('hex');
-	const now = new Date();
-	const dt = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(
-		now.getDate()
-	).padStart(2, '0')}`;
+		const ts = Math.floor(Date.now() / 1000).toString();
+		const sig = createHmac('sha256', this.AUTH_SECRET).update(ts).digest('hex');
+		const now = new Date();
+		const dt = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(
+			now.getDate()
+		).padStart(2, '0')}`;
 
-	return {
-		'User-Agent': 'COPY/3.0.6',
-		source: 'copyApp',
-		platform: '3',
-		version: '3.0.6',
-		referer: 'com.copymanga.app-3.0.6',
-		Accept: 'application/json',
-		region: '1',
-		dt,
-		deviceinfo: '1234567V-4321',
-		device: 'AB1C.123456.789',
-		pseudoid: 'mikoroku01234567',
-		authorization: 'Token',
-		umstring: 'b4c89ca4104ea9a97750314d791520ac',
-		'x-auth-timestamp': ts,
-		'x-auth-signature': sig
-	};
-}
+		return {
+			'User-Agent': 'COPY/3.0.6',
+			source: 'copyApp',
+			platform: '3',
+			version: '3.0.6',
+			referer: 'com.copymanga.app-3.0.6',
+			Accept: 'application/json',
+			region: '0',
+			dt,
+			deviceinfo: this.deviceinfo,
+			device: this.device,
+			pseudoid: this.pseudoid,
+			authorization: 'Token',
+			umstring: 'b4c89ca4104ea9a97750314d791520ac',
+			'x-auth-timestamp': ts,
+			'x-auth-signature': sig
+		};
+	}
 
 	private async apiGet(path: string): Promise<any> {
 		const hosts = [this.activeApi, ...this.API_HOSTS.filter((h) => h !== this.activeApi)];
@@ -73,11 +99,13 @@ export class MangaCopySource extends BaseSource {
 				}
 				const json: any = await res.json();
 
-				// Deteksi results null (biasanya signature / region)
 				if (json?.code === 210) {
-	console.error('[mangacopy] kena ban code 210:', json.message);
-	throw new Error('MangaCopy memblokir request (code 210). Coba tunggu 1 jam / ganti jaringan.');
-}
+					const msg =
+						json.message ||
+						'MangaCopy memblokir request (code 210). Tunggu ~1 jam / ganti jaringan / restart server.';
+					console.error('[mangacopy] kena ban code 210:', msg);
+					throw new Error(msg);
+				}
 
 				if (json?.code != null && json.code !== 200 && json.code !== '200') {
 					lastErr = new Error(`API code ${json.code}: ${json.message || ''}`);
@@ -87,6 +115,9 @@ export class MangaCopySource extends BaseSource {
 				return json;
 			} catch (e) {
 				lastErr = e;
+				if (e instanceof Error && /code 210|memblokir|限制/i.test(e.message)) {
+					throw e;
+				}
 			}
 		}
 		throw lastErr || new Error('MangaCopy API failed');
@@ -199,101 +230,108 @@ export class MangaCopySource extends BaseSource {
 	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-	const pathWord = this.pathWordFromId(mangaId);
+		const pathWord = this.pathWordFromId(mangaId);
 
-	const json = await this.apiGet(
-		`/api/v3/comic2/${encodeURIComponent(pathWord)}?platform=3`
-	);
-	const results = json?.results;
-	if (!results?.comic) {
-		console.error('[mangacopy] empty comic2 for', pathWord, JSON.stringify(json)?.slice(0, 300));
-		throw new Error(`MangaCopy: detail kosong untuk ${pathWord}`);
-	}
+		const json = await this.apiGet(
+			`/api/v3/comic2/${encodeURIComponent(pathWord)}?platform=3`
+		);
+		const results = json?.results;
+		if (!results?.comic) {
+			console.error(
+				'[mangacopy] empty comic2 for',
+				pathWord,
+				JSON.stringify(json)?.slice(0, 300)
+			);
+			throw new Error(`MangaCopy: detail kosong untuk ${pathWord}`);
+		}
 
-	const comic = results.comic;
-	const groups = results.groups || {};
+		const comic = results.comic;
+		const groups = results.groups || {};
 
-	const title = comic.name || pathWord;
-	const cover = comic.cover || '';
-	const brief = comic.brief || comic.desc || '';
-	const authors: string[] = Array.isArray(comic.author)
-		? comic.author.map((a: any) => a?.name).filter(Boolean)
-		: [];
-	const genres: string[] = Array.isArray(comic.theme)
-		? comic.theme.map((t: any) => t?.name).filter(Boolean)
-		: [];
+		const title = comic.name || pathWord;
+		const cover = comic.cover || '';
+		const brief = comic.brief || comic.desc || '';
+		const authors: string[] = Array.isArray(comic.author)
+			? comic.author.map((a: any) => a?.name).filter(Boolean)
+			: [];
+		const genres: string[] = Array.isArray(comic.theme)
+			? comic.theme.map((t: any) => t?.name).filter(Boolean)
+			: [];
 
-	let status = 'Ongoing';
-	const st = (comic.status?.display || '').toString();
-	if (/完結|完结|已完結|已完结|結束/.test(st)) status = 'Completed';
-	else if (/連載|连载/.test(st)) status = 'Ongoing';
+		let status = 'Ongoing';
+		const st = (comic.status?.display || '').toString();
+		if (/完結|完结|已完結|已完结|結束/.test(st)) status = 'Completed';
+		else if (/連載|连载/.test(st)) status = 'Ongoing';
 
-	const typeText = genres.join(' ') + (comic.region?.display || '');
-	let type: 'manga' | 'manhwa' | 'manhua' = 'manga';
-	if (/韩|韓|korea/i.test(typeText)) type = 'manhwa';
-	else if (/中|国|國|china/i.test(typeText)) type = 'manhua';
+		const typeText = genres.join(' ') + (comic.region?.display || '');
+		let type: 'manga' | 'manhwa' | 'manhua' = 'manga';
+		if (/韩|韓|korea/i.test(typeText)) type = 'manhwa';
+		else if (/中|国|國|china/i.test(typeText)) type = 'manhua';
 
-	const chapters: Chapter[] = [];
-	const groupEntries = Object.entries(groups) as [string, any][];
+		const chapters: Chapter[] = [];
+		const groupEntries = Object.entries(groups) as [string, any][];
 
-	for (const [, g] of groupEntries) {
-		const gPath = g?.path_word || g?.pathWord || 'default';
-		let offset = 0;
-		const limit = 100;
-		let total = Infinity;
+		for (const [, g] of groupEntries) {
+			const gPath = g?.path_word || g?.pathWord || 'default';
+			let offset = 0;
+			const limit = 100;
+			let total = Infinity;
 
-		while (offset < total) {
-			try {
-				const chJson = await this.apiGet(
-					`/api/v3/comic/${encodeURIComponent(pathWord)}/group/${encodeURIComponent(
-						gPath
-					)}/chapters?limit=${limit}&offset=${offset}&platform=3`
-				);
-				const list = chJson?.results?.list || [];
-				total = chJson?.results?.total ?? list.length;
+			while (offset < total) {
+				try {
+					const chJson = await this.apiGet(
+						`/api/v3/comic/${encodeURIComponent(pathWord)}/group/${encodeURIComponent(
+							gPath
+						)}/chapters?limit=${limit}&offset=${offset}&platform=3`
+					);
+					const list = chJson?.results?.list || [];
+					total = chJson?.results?.total ?? list.length;
 
-				for (const ch of list) {
-					const uuid = ch.uuid || ch.id;
-					if (!uuid) continue;
-					const name = ch.name || ch.title || '';
-					const numMatch = String(name).match(/(\d+(?:\.\d+)?)/);
-					chapters.push({
-						id: `/comic/${pathWord}/chapter/${uuid}`,
-						title: name || `Chapter ${chapters.length + 1}`,
-						number: numMatch ? parseFloat(numMatch[1]) : chapters.length + 1,
-						date: ch.datetime_created || ch.create_at || ''
-					});
+					for (const ch of list) {
+						const uuid = ch.uuid || ch.id;
+						if (!uuid) continue;
+						const name = ch.name || ch.title || '';
+						const numMatch = String(name).match(/(\d+(?:\.\d+)?)/);
+						chapters.push({
+							id: `/comic/${pathWord}/chapter/${uuid}`,
+							title: name || `Chapter ${chapters.length + 1}`,
+							number: numMatch ? parseFloat(numMatch[1]) : chapters.length + 1,
+							date: ch.datetime_created || ch.create_at || ''
+						});
+					}
+					offset += limit;
+					if (!list.length) break;
+				} catch (e) {
+					console.warn(
+						`[mangacopy] gagal ambil chapter group ${gPath} offset ${offset}`,
+						e
+					);
+					break;
 				}
-				offset += limit;
-				if (!list.length) break;
-			} catch (e) {
-				console.warn(`[mangacopy] gagal ambil chapter group ${gPath} offset ${offset}`, e);
-				break; // jangan biarkan error chapter menghancurkan seluruh detail
 			}
 		}
+
+		chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
+
+		const alt = comic.alias ? `Alternative: ${comic.alias}` : '';
+		const description = [alt, brief].filter(Boolean).join('\n\n');
+
+		console.log(`[mangacopy] details ${pathWord} chapters=${chapters.length}`);
+
+		return {
+			id: `/comic/${pathWord}`,
+			sourceId: this.id,
+			title,
+			cover,
+			type,
+			status,
+			description,
+			authors,
+			genres,
+			chapters,
+			latestChapter: chapters[0]?.number ?? comic.last_chapter?.name
+		};
 	}
-
-	chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
-
-	const alt = comic.alias ? `Alternative: ${comic.alias}` : '';
-	const description = [alt, brief].filter(Boolean).join('\n\n');
-
-	console.log(`[mangacopy] details ${pathWord} chapters=${chapters.length}`);
-
-	return {
-		id: `/comic/${pathWord}`,
-		sourceId: this.id,
-		title,
-		cover,
-		type,
-		status,
-		description,
-		authors,
-		genres,
-		chapters,
-		latestChapter: chapters[0]?.number ?? comic.last_chapter?.name
-	};
-}
 
 	// ── Pages ────────────────────────────────────────────────────────────────
 
@@ -337,6 +375,4 @@ export class MangaCopySource extends BaseSource {
 			return [];
 		}
 	}
-  }
-
-
+}
