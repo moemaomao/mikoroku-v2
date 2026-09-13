@@ -124,43 +124,51 @@ export class MangaCopySource extends BaseSource {
 	}
 
 	private parseComicItem(raw: any): Manga | null {
-		const comic = raw?.comic ?? raw;
-		if (!comic) return null;
-		const pathWord = comic.path_word || comic.pathWord;
-		if (!pathWord) return null;
+	const comic = raw?.comic ?? raw;
+	if (!comic) return null;
+	const pathWord = comic.path_word || comic.pathWord;
+	if (!pathWord) return null;
 
-		const title = comic.name || comic.title || pathWord;
-		const cover = comic.cover || comic.img || '';
+	const title = comic.name || comic.title || pathWord;
+	const cover = comic.cover || comic.img || '';
 
-		let latestChapter: string | number | undefined =
-			comic.last_chapter_name ||
-			comic.last_chapter?.name ||
-			comic.last_chapter ||
-			undefined;
+	// update/newest: raw.name = nama chapter, comic.last_chapter_name juga ada
+	// /comics: field chapter biasanya kosong
+	let latestRaw: unknown =
+		comic.last_chapter_name ??
+		raw?.name ?? // chapter name di root (endpoint update/newest)
+		comic.last_chapter?.name ??
+		comic.last_chapter?.display ??
+		raw?.last_chapter_name ??
+		undefined;
 
-		if (typeof latestChapter === 'string') {
-			const n = latestChapter.match(/(\d+(?:\.\d+)?)/);
-			if (n) latestChapter = parseFloat(n[1]);
-		}
-
-		const themeText = Array.isArray(comic.theme)
-			? comic.theme.map((t: any) => t?.name || '').join(' ')
-			: '';
-		const region = (comic.region?.display || comic.region || '').toString().toLowerCase();
-		let type: 'manga' | 'manhwa' | 'manhua' = 'manga';
-		if (/korea|韩|韓|韩漫/.test(region + themeText)) type = 'manhwa';
-		else if (/china|中|国|國|大陆/.test(region + themeText)) type = 'manhua';
-
-		return {
-			id: `/comic/${pathWord}`,
-			sourceId: this.id,
-			title,
-			cover,
-			type,
-			latestChapter,
-			status: comic.status?.display || comic.status || undefined
-		};
+	let latestChapter: string | number | undefined;
+	if (typeof latestRaw === 'number' && !Number.isNaN(latestRaw)) {
+		latestChapter = latestRaw;
+	} else if (typeof latestRaw === 'string' && latestRaw.trim()) {
+		const n = latestRaw.match(/(\d+(?:\.\d+)?)/);
+		latestChapter = n ? parseFloat(n[1]) : latestRaw.trim();
 	}
+
+	const themeText = Array.isArray(comic.theme)
+		? comic.theme.map((t: any) => t?.name || '').join(' ')
+		: '';
+	const region = (comic.region?.display || comic.region || '').toString().toLowerCase();
+	let type: 'manga' | 'manhwa' | 'manhua' = 'manga';
+	if (/korea|韩|韓|韩漫/.test(region + themeText)) type = 'manhwa';
+	else if (/china|中|国|國|大陆/.test(region + themeText)) type = 'manhua';
+
+	return {
+		id: `/comic/${pathWord}`,
+		sourceId: this.id,
+		title,
+		cover,
+		type,
+		lang: 'zh',
+		latestChapter,
+		status: comic.status?.display || comic.status || undefined
+	};
+}
 
 	private pathWordFromId(mangaId: string): string {
 		const id = (mangaId || '').replace(/^\/+/, '').replace(/\/+$/, '');
@@ -171,37 +179,37 @@ export class MangaCopySource extends BaseSource {
 	// ── Latest ───────────────────────────────────────────────────────────────
 
 	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
-		const p = Math.max(1, Number(page) || 1);
-		const offset = (p - 1) * this.PER_PAGE;
+	page: number,
+	_opts?: { lang?: string; type?: string }
+): Promise<Manga[]> {
+	const p = Math.max(1, Number(page) || 1);
+	const offset = (p - 1) * this.PER_PAGE;
 
-		const paths = [
-			`/api/v3/comics?free_type=1&limit=${this.PER_PAGE}&offset=${offset}&ordering=-datetime_updated&_update=true&platform=3`,
-			`/api/v3/update/newest?limit=${this.PER_PAGE}&offset=${offset}&platform=3`
-		];
+	const paths = [
+		`/api/v3/update/newest?limit=${this.PER_PAGE}&offset=${offset}&platform=3`,
+		`/api/v3/comics?free_type=1&limit=${this.PER_PAGE}&offset=${offset}&ordering=-datetime_updated&_update=true&platform=3`
+	];
 
-		for (const path of paths) {
-			try {
-				const json = await this.apiGet(path);
-				const list = json?.results?.list || json?.results || [];
-				const arr = Array.isArray(list) ? list : [];
-				const mangas = arr
-					.map((item: any) => this.parseComicItem(item))
-					.filter(Boolean) as Manga[];
+	for (const path of paths) {
+		try {
+			const json = await this.apiGet(path);
+			const list = json?.results?.list || json?.results || [];
+			const arr = Array.isArray(list) ? list : [];
+			const mangas = arr
+				.map((item: any) => this.parseComicItem(item))
+				.filter(Boolean) as Manga[];
 
-				console.log(
-					`[mangacopy] ${path} → ${mangas.length}`,
-					mangas.slice(0, 3).map((m) => m.title)
-				);
-				if (mangas.length > 0) return mangas.slice(0, this.PER_PAGE);
-			} catch (e) {
-				console.warn('[mangacopy] latest path fail', path, e);
-			}
+			console.log(
+				`[mangacopy] ${path} → ${mangas.length}`,
+				mangas.slice(0, 3).map((m) => `${m.title} ch=${m.latestChapter}`)
+			);
+			if (mangas.length > 0) return mangas.slice(0, this.PER_PAGE);
+		} catch (e) {
+			console.warn('[mangacopy] latest path fail', path, e);
 		}
-		return [];
 	}
+	return [];
+}
 
 	async searchManga(
 		query: string,
