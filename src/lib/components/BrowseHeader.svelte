@@ -94,7 +94,7 @@
         simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         zonatmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
         lectortmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
-        mangacopy: { flag: 'ch', lang: 'CH', isR18: false, color: 'bg-red-500' },
+        mangacopy: { flag: 'cn', lang: 'CN', isR18: false, color: 'bg-red-500' },
         omegascans: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
         luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' }
     };
@@ -104,7 +104,7 @@
         JP: 'Japanese',
         ID: 'Indonesian',
         ES: 'Spanish',
-        CH: 'Chiness',
+        CN: 'Chiness',
         Multi: 'Multilingual'
     };
 
@@ -124,7 +124,7 @@
             groups[langKey].push(src);
         }
 
-        const customOrder = ['Multi', 'JP', 'EN', 'ID', 'ES', 'CH'];
+        const customOrder = ['Multi', 'JP', 'EN', 'ID', 'ES', 'CN'];
         const sortedKeys = Object.keys(groups).sort((a, b) => {
             const indexA = customOrder.indexOf(a);
             const indexB = customOrder.indexOf(b);
