@@ -64,10 +64,8 @@ export class KiryuuSource extends BaseSource {
 		const mangas: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Prioritas: kartu di #search-results (Latest Updates)
 		let $cards = $('#search-results > div');
 		if ($cards.length === 0) {
-			// fallback: semua container yang punya link /manga/ + chapter
 			$cards = $('div').filter((_, el) => {
 				const $el = $(el);
 				return (
@@ -247,22 +245,29 @@ export class KiryuuSource extends BaseSource {
 		const seen = new Set<string>();
 
 		$('a[href*="/chapter-"]').each((_, a) => {
-			const href = $(a).attr('href') || '';
-			const id = this.cleanId(href);
-			if (seen.has(id) || !id.includes('/chapter-')) return;
-			seen.add(id);
+            const $a = $(a);
+            const href = $a.attr('href') || '';
+            const id = this.cleanId(href);
+            if (seen.has(id) || !id.includes('/chapter-')) return;
+            seen.add(id);
 
-			const chapterTitle =
-				$(a).text().replace(/\s+/g, ' ').trim() ||
-				`Chapter ${chapters.length + 1}`;
-			const number =
-				this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
+            let rawText = $a.text().replace(/\s+/g, ' ').trim();
+            
+            const chapterTitle = rawText
+                .replace(/\s*\d+\s*(hours?|hrs?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\s*ago.*$/i, '')
+                .replace(/\s*\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '')
+                .trim() || `Chapter ${chapters.length + 1}`;
 
-			const date =
-				$(a).closest('div, li').find('span, time').last().text().trim() || '';
+            const number =
+                this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
 
-			chapters.push({ id, title: chapterTitle, number, date });
-		});
+            const date =
+                $a.parent().find('span, time').not($a).last().text().trim() ||
+                $a.closest('li, div').find('span, time').last().text().trim() ||
+                '';
+
+            chapters.push({ id, title: chapterTitle, number, date });
+        });
 
 		chapters.sort((a, b) => a.number - b.number);
 
