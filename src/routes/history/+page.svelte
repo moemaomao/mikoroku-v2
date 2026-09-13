@@ -41,107 +41,107 @@
 </script>
 
 <svelte:head>
-	<title>History | Mikoroku</title>
+	<title>My History</title>
 </svelte:head>
 
-<div class="max-w-3xl mx-auto px-4 py-6">
-	<div class="flex items-center justify-between mb-6">
-		<div>
-			<h1
-				class="text-2xl sm:text-3xl font-bold text-[var(--color-primary)]"
-			>
-				Reading History
-			</h1>
-			<p class="text-sm text-zinc-500 mt-1">{history.length} entries</p>
-		</div>
+<div class="mx-auto max-w-7xl p-4 md:p-6">
+    <div class="mb-6 flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div>
+            <h1 class="text-xl font-bold text-[var(--color-primary)] md:text-2xl">
+                Reading History
+            </h1>
+            <p class="mt-1 text-sm text-zinc-500">{history.length} entries</p>
+        </div>
 
-		{#if history.length > 0}
-			<button
-				onclick={handleClear}
-				class="flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors"
-			>
-				<Trash2 class="w-4 h-4" />
-				Clear All
-			</button>
-		{/if}
-	</div>
+        {#if history.length > 0}
+            <button
+                onclick={handleClear}
+                class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-red-400 hover:bg-red-400/10 hover:text-red-300 transition-colors"
+            >
+                <Trash2 class="h-4 w-4" />
+                Clear All
+            </button>
+        {/if}
+    </div>
 
-	{#if history.length === 0}
-		<div class="text-center py-20">
-			<History class="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-			<p class="text-zinc-500">No reading history yet.</p>
-			<p class="text-sm text-zinc-600 mt-1">Start reading to track your progress.</p>
-		</div>
-	{:else}
-		<div class="space-y-2">
-			{#each history as entry}
-				{@const mangaHref = `/manga/${entry.sourceId}${entry.mangaId}`}
-				{@const readHref = `/reader/${entry.sourceId}${entry.chapterId}`}
+    {#if history.length === 0}
+        <div class="flex flex-col items-center justify-center py-20 text-center">
+            <History class="mx-auto mb-4 h-12 w-12 text-zinc-700" />
+            <p class="text-zinc-500">No reading history yet.</p>
+            <p class="mt-1 text-sm text-zinc-600">Start reading to track your progress.</p>
+        </div>
+    {:else}
+        <div class="grid grid-cols-3 gap-3 sm:gap-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+            {#each history as entry (entry.mangaId + entry.sourceId)}
+                {@const mangaHref = `/manga/${entry.sourceId}${entry.mangaId}`}
+                {@const readHref = `/reader/${entry.sourceId}${entry.chapterId}`}
 
-				<div
-					class="flex items-center gap-4 p-3 bg-zinc-900/50 border border-zinc-800/50 rounded-xl group"
-				>
-					<!-- Cover -->
-					<a
-						href={mangaHref}
-						onclick={(e) => handleNavigate(e, mangaHref)}
-						class="shrink-0"
-					>
-						<div class="w-14 h-20 bg-zinc-800 rounded-lg overflow-hidden">
-							{#if entry.cover}
-								<img
-									src="/api/proxy?url={encodeURIComponent(entry.cover)}&source={entry.sourceId}"
-									alt=""
-									class="w-full h-full object-cover"
-								/>
-							{:else}
-								<div class="w-full h-full flex items-center justify-center">
-									<BookOpen class="w-5 h-5 text-zinc-700" />
-								</div>
-							{/if}
-						</div>
-					</a>
+                <div
+                    class="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700"
+                >
+                    <!-- Cover -->
+                    <a
+                        href={mangaHref}
+                        onclick={(e) => handleNavigate(e, mangaHref)}
+                        class="relative aspect-[3/4] w-full overflow-hidden bg-zinc-800"
+                    >
+                        {#if entry.cover}
+                            <img
+                                src="/api/proxy?url={encodeURIComponent(entry.cover)}&source={entry.sourceId}"
+                                alt={entry.mangaTitle}
+                                class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                            />
+                        {:else}
+                            <div class="flex h-full w-full items-center justify-center">
+                                <BookOpen class="h-8 w-8 text-zinc-700" />
+                            </div>
+                        {/if}
 
-					<!-- Info -->
-					<div class="flex-1 min-w-0">
-						<a
-							href={mangaHref}
-							onclick={(e) => handleNavigate(e, mangaHref)}
-							class="font-medium text-zinc-300 hover:text-white transition-colors line-clamp-1"
-						>
-							{entry.mangaTitle}
-						</a>
-						<a
-							href={readHref}
-							onclick={(e) => handleNavigate(e, readHref)}
-							class="text-sm text-[var(--color-primary)] hover:opacity-80 transition-colors line-clamp-1"
-						>
-							{entry.chapterTitle}
-						</a>
-						<div class="flex items-center gap-1 text-xs text-zinc-600 mt-1">
-							<Clock class="w-3 h-3" />
-							{formatTime(entry.timestamp)}
-						</div>
-					</div>
+                        <span
+                            class="absolute top-2 left-2 rounded-md bg-black/75 px-1.5 py-0.5 text-[9px] font-bold capitalize text-white backdrop-blur-md"
+                        >
+                            {entry.sourceId}
+                        </span>
+                    </a>
 
-					<!-- Actions -->
-					<div class="flex items-center gap-2">
-						<a
-							href={readHref}
-							onclick={(e) => handleNavigate(e, readHref)}
-							class="px-3 py-1.5 bg-[var(--color-primary)] hover:opacity-90 rounded-lg text-sm font-medium transition-colors"
-						>
-							Continue
-						</a>
-						<button
-							onclick={() => handleRemove(entry.mangaId)}
-							class="p-1.5 text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-						>
-							<Trash2 class="w-4 h-4" />
-						</button>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
+                    <!-- Info & Actions -->
+                    <div class="flex flex-1 flex-col justify-between p-2.5">
+                        <div class="space-y-1">
+                            <a
+                                href={mangaHref}
+                                onclick={(e) => handleNavigate(e, mangaHref)}
+                                class="line-clamp-1 text-xs font-semibold text-zinc-300 hover:text-white transition-colors"
+                                title={entry.mangaTitle}
+                            >
+                                {entry.mangaTitle}
+                            </a>
+                            <a
+                                href={readHref}
+                                onclick={(e) => handleNavigate(e, readHref)}
+                                class="line-clamp-1 text-[11px] text-[var(--color-primary)] hover:opacity-80 transition-colors"
+                                title={entry.chapterTitle}
+                            >
+                                {entry.chapterTitle}
+                            </a>
+                        </div>
+
+                        <div class="mt-3 flex items-center justify-between pt-2 border-t border-zinc-800/60">
+                            <span class="flex items-center gap-1 text-[10px] text-zinc-500">
+                                <Clock class="h-3 w-3" />
+                                {formatTime(entry.timestamp)}
+                            </span>
+
+                            <button
+                                onclick={() => handleRemove(entry.mangaId)}
+                                class="text-zinc-600 hover:text-red-400 transition-colors"
+                                title="Remove entry"
+                            >
+                                <Trash2 class="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            {/each}
+        </div>
+    {/if}
 </div>
