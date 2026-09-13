@@ -1,7 +1,7 @@
 <script lang="ts">
     import './layout.css';
     import favicon from '$lib/assets/favicon.ico';
-    import logo from '$lib/assets/rokuyomu.png';   // ← logo lokal
+    import logo from '$lib/assets/rokuyomu.png';
     import { page } from '$app/stores';
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
