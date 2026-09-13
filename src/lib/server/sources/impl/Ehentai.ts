@@ -299,7 +299,7 @@ export class EhentaiSource extends BaseSource {
 				type,
 				status: 'Completed',
 				lang,
-				latestChapter: pages && pages > 0 ? pages : 1
+				latestChapter: 1
 			});
 		});
 
@@ -356,7 +356,7 @@ export class EhentaiSource extends BaseSource {
 				return {
 					...m,
 					lang,
-					latestChapter: filecount > 0 ? filecount : 1,
+					latestChapter: 1,
 					cover: m.cover || this.absUrl(meta.thumb || '')
 				};
 			});
@@ -622,7 +622,7 @@ export class EhentaiSource extends BaseSource {
 			type: category,
 			status: 'Completed',
 			lang,
-			latestChapter: filecount > 0 ? filecount : 1,
+			latestChapter: 1,
 			description,
 			authors,
 			genres,
