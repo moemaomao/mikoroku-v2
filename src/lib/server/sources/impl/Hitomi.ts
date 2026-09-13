@@ -10,6 +10,7 @@ import * as cheerio from 'cheerio';
  * Pages : hash + gg.js → CDN
  * Cover : webpsmalltn (~16KB)
  * Tags  : female:xxx / male:xxx untuk UI split
+ * Lang  : language → ISO code untuk badge flag (sama pola MangaDex)
  *
  * ID format: "/{numericId}"
  */
@@ -164,6 +165,67 @@ export class HitomiSource extends BaseSource {
 		return map[t] || t;
 	}
 
+	/**
+	 * Hitomi "japanese" / "日本語" / "en" → ISO code untuk badge flag UI
+	 * (listChapterFlag di +page.svelte: ja→jp, en→gb, ko→kr, …)
+	 */
+	private normalizeLangCode(raw?: string): string | undefined {
+		if (!raw) return undefined;
+		const s = String(raw).trim().toLowerCase();
+		if (!s || s === 'n/a' || s === 'all') return undefined;
+
+		const map: Record<string, string> = {
+			// full name (Hitomi)
+			japanese: 'ja',
+			english: 'en',
+			korean: 'ko',
+			chinese: 'zh',
+			spanish: 'es',
+			french: 'fr',
+			russian: 'ru',
+			indonesian: 'id',
+			portuguese: 'pt',
+			thai: 'th',
+			vietnamese: 'vi',
+			german: 'de',
+			italian: 'it',
+			polish: 'pl',
+			dutch: 'nl',
+			arabic: 'ar',
+			turkish: 'tr',
+			// localname
+			'日本語': 'ja',
+			'한국어': 'ko',
+			'中文': 'zh',
+			// already ISO / alias
+			ja: 'ja',
+			en: 'en',
+			'en-us': 'en',
+			ko: 'ko',
+			zh: 'zh',
+			'zh-cn': 'zh',
+			'zh-hk': 'zh-hk',
+			es: 'es',
+			'es-la': 'es',
+			fr: 'fr',
+			ru: 'ru',
+			id: 'id',
+			pt: 'pt',
+			'pt-br': 'pt-br',
+			th: 'th',
+			vi: 'vi',
+			de: 'de',
+			it: 'it',
+			pl: 'pl',
+			nl: 'nl',
+			ar: 'ar',
+			tr: 'tr'
+		};
+		if (map[s]) return map[s];
+		if (/^[a-z]{2}(-[a-z]{2})?$/.test(s)) return s;
+		return undefined;
+	}
+
 	/** Map tag Hitomi → female:xxx / male:xxx / plain */
 	private mapTag(t: any): string {
 		const name = String(t?.tag || '').trim();
@@ -174,92 +236,143 @@ export class HitomiSource extends BaseSource {
 	}
 
 	private parseBlock(html: string, gid: number): Manga | null {
-		const $ = cheerio.load(html);
+	const $ = cheerio.load(html);
 
-		const title = (
-			$('h1 a').first().text() ||
-			$('a.lillie').first().text() ||
-			$('a[href*=".html"]').first().text() ||
-			`Gallery ${gid}`
-		)
-			.replace(/\s+/g, ' ')
-			.trim();
+	const title = (
+		$('h1 a').first().text() ||
+		$('a.lillie').first().text() ||
+		$('a[href*=".html"]').first().text() ||
+		`Gallery ${gid}`
+	)
+		.replace(/\s+/g, ' ')
+		.trim();
 
-		let cover =
-			$('img.lazyload').attr('data-src') ||
-			$('source[data-srcset]').attr('data-srcset')?.split(/[\s,]+/)[0] ||
-			$('img').attr('data-src') ||
-			$('img').attr('src') ||
-			'';
-		cover = this.normalizeCover(cover);
+	let cover =
+		$('img.lazyload').attr('data-src') ||
+		$('source[data-srcset]').attr('data-srcset')?.split(/[\s,]+/)[0] ||
+		$('img').attr('data-src') ||
+		$('img').attr('src') ||
+		'';
+	cover = this.normalizeCover(cover);
 
-		let typeRaw = '';
+	let typeRaw = '';
+	const href =
+		$('a.lillie').attr('href') ||
+		$('a[href*=".html"]').first().attr('href') ||
+		'';
+	const hrefMatch = href.match(
+		/\/(doujinshi|manga|artistcg|gamecg|imageset|anime|western|non-h)\//i
+	);
+	if (hrefMatch) typeRaw = hrefMatch[1];
 
-		const href =
-			$('a.lillie').attr('href') ||
-			$('a[href*=".html"]').first().attr('href') ||
-			'';
-		const hrefMatch = href.match(
-			/\/(doujinshi|manga|artistcg|gamecg|imageset|anime|western|non-h)\//i
+	if (!typeRaw) {
+		const root = $.root().children('div').first();
+		const cls = (root.attr('class') || '').toLowerCase();
+		const clsMatch = cls.match(
+			/\b(dj|acg|doujinshi|manga|artistcg|gamecg|imageset|anime|western|non-h)\b/
 		);
-		if (hrefMatch) typeRaw = hrefMatch[1];
+		if (clsMatch) typeRaw = clsMatch[1];
+	}
 
-		if (!typeRaw) {
-			const root = $.root().children('div').first();
-			const cls = (root.attr('class') || '').toLowerCase();
-			const clsMatch = cls.match(
-				/\b(dj|acg|doujinshi|manga|artistcg|gamecg|imageset|anime|western|non-h)\b/
-			);
-			if (clsMatch) typeRaw = clsMatch[1];
+	if (!typeRaw) {
+		const text = $.root().text().toLowerCase();
+		if (text.includes('artist cg') || text.includes('artistcg')) typeRaw = 'artistcg';
+		else if (text.includes('game cg') || text.includes('gamecg')) typeRaw = 'gamecg';
+		else if (text.includes('doujinshi')) typeRaw = 'doujinshi';
+		else if (text.includes('image set') || text.includes('imageset')) typeRaw = 'imageset';
+	}
+
+	// Language
+	let langRaw = '';
+	const langHref =
+		$('a[href*="index-"]').attr('href') ||
+		$('a[href*="/index-"]').attr('href') ||
+		'';
+	const langFromHref = langHref.match(/index-([a-z-]+)\.html/i)?.[1];
+	if (langFromHref && langFromHref !== 'all') langRaw = langFromHref;
+
+	if (!langRaw) {
+		const tableLang = $('td')
+			.filter((_, el) => /language/i.test($(el).text()))
+			.next()
+			.text()
+			.trim();
+		if (tableLang) langRaw = tableLang;
+	}
+
+	// Page count (untuk latestChapter biar badge muncul)
+	let pages: number | undefined;
+	const pagesText =
+		$('.page-count, .lillie + div, td')
+			.filter((_, el) => /\d+\s*pages?/i.test($(el).text()))
+			.first()
+			.text() || '';
+	const pm = pagesText.match(/(\d+)\s*pages?/i);
+	if (pm) pages = parseInt(pm[1], 10);
+
+	if (!title) return null;
+
+	return {
+		id: this.toId(gid),
+		title,
+		cover,
+		sourceId: this.id,
+		type: this.normalizeType(typeRaw) || 'manga',
+		status: 'Completed',
+		lang: this.normalizeLangCode(langRaw),
+		// WAJIB: tanpa ini badge + flag tidak tampil di homepage
+		latestChapter: pages && pages > 0 ? pages : 1
+	};
+}
+	/** List: 1 req (galleryblock). JS hanya fallback. */
+	private async loadBrief(gid: number): Promise<Manga | null> {
+	try {
+		const block = await this.getText(`${this.ltn}/galleryblock/${gid}.html`);
+		const m = this.parseBlock(block, gid);
+		if (m?.title) {
+			// Kalau block tidak dapat lang, coba lengkapi dari JS (1 extra req)
+			if (!m.lang) {
+				try {
+					const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
+					const info = this.parseGalleryInfo(js);
+					m.lang = this.normalizeLangCode(
+						String(info.language || info.language_localname || '')
+					);
+					const n = info.files?.length;
+					if (n && n > 0) m.latestChapter = n;
+				} catch {
+					/* ignore */
+				}
+			}
+			return m;
 		}
+	} catch {
+		/* fallback */
+	}
 
-		if (!typeRaw) {
-			const text = $.root().text().toLowerCase();
-			if (text.includes('artist cg') || text.includes('artistcg')) typeRaw = 'artistcg';
-			else if (text.includes('game cg') || text.includes('gamecg')) typeRaw = 'gamecg';
-			else if (text.includes('doujinshi')) typeRaw = 'doujinshi';
-			else if (text.includes('image set') || text.includes('imageset')) typeRaw = 'imageset';
-		}
-
-		if (!title) return null;
+	try {
+		const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
+		const info = this.parseGalleryInfo(js);
+		const hash = info.files?.[0]?.hash || '';
+		const pageCount = info.files?.length || 0;
 
 		return {
 			id: this.toId(gid),
-			title,
-			cover,
+			title: String(info.title || info.japanese_title || `Gallery ${gid}`).trim(),
+			cover: hash ? this.thumbFromHash(hash) : '',
 			sourceId: this.id,
-			type: this.normalizeType(typeRaw) || 'manga',
-			status: 'Completed'
+			type: this.normalizeType(String(info.type || '')) || 'manga',
+			status: 'Completed',
+			lang: this.normalizeLangCode(
+				String(info.language || info.language_localname || '')
+			),
+			latestChapter: pageCount > 0 ? pageCount : 1
 		};
+	} catch (e) {
+		console.error(`[Hitomi] gid=${gid}`, e);
+		return null;
 	}
-
-	/** List: 1 req (galleryblock). JS hanya fallback. */
-	private async loadBrief(gid: number): Promise<Manga | null> {
-		try {
-			const block = await this.getText(`${this.ltn}/galleryblock/${gid}.html`);
-			const m = this.parseBlock(block, gid);
-			if (m?.title) return m;
-		} catch {
-			/* fallback */
-		}
-
-		try {
-			const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
-			const info = this.parseGalleryInfo(js);
-			const hash = info.files?.[0]?.hash || '';
-			return {
-				id: this.toId(gid),
-				title: String(info.title || info.japanese_title || `Gallery ${gid}`).trim(),
-				cover: hash ? this.thumbFromHash(hash) : '',
-				sourceId: this.id,
-				type: this.normalizeType(String(info.type || '')) || 'manga',
-				status: 'Completed'
-			};
-		} catch (e) {
-			console.error(`[Hitomi] gid=${gid}`, e);
-			return null;
-		}
-	}
+}
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
@@ -290,7 +403,10 @@ export class HitomiSource extends BaseSource {
 		return [...new Set(candidates)];
 	}
 
-	async getLatestManga(page: number, opts?: { lang?: string; type?: string }): Promise<Manga[]> {
+	async getLatestManga(
+		page: number,
+		opts?: { lang?: string; type?: string }
+	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
 			const per = this.PER_PAGE;
@@ -320,7 +436,10 @@ export class HitomiSource extends BaseSource {
 			if (!buf) {
 				console.warn('[Hitomi] semua path type/lang gagal, fallback ke index-all');
 				try {
-					buf = await this.getBuf(`${this.ltn}/index-all.nozomi`, `bytes=${start}-${end}`);
+					buf = await this.getBuf(
+						`${this.ltn}/index-all.nozomi`,
+						`bytes=${start}-${end}`
+					);
 					usedPath = 'index-all.nozomi';
 				} catch {
 					console.error('[Hitomi] index-all juga gagal');
@@ -381,10 +500,12 @@ export class HitomiSource extends BaseSource {
 				} else if (ns === 'type') {
 					paths = [`${val}-all.nozomi`, `n/${val}-all.nozomi`];
 				} else {
-					paths = [`tag/${ns}:${val}-all.nozomi`, `n/tag/${ns}:${val}-all.nozomi`];
+					paths = [
+						`tag/${ns}:${val}-all.nozomi`,
+						`n/tag/${ns}:${val}-all.nozomi`
+					];
 				}
 			} else {
-				// Teks biasa: cari di index-all (bukan buildNozomiPath)
 				paths = ['index-all.nozomi', 'n/index-all.nozomi'];
 			}
 
@@ -416,7 +537,6 @@ export class HitomiSource extends BaseSource {
 				const rows = await Promise.all(chunk.map((id) => this.loadBrief(id)));
 				for (const m of rows) {
 					if (!m) continue;
-					// Namespace → terima semua; teks → cocokkan judul
 					if (isNamespace || m.title.toLowerCase().includes(needle)) {
 						out.push(m);
 					}
@@ -452,6 +572,9 @@ export class HitomiSource extends BaseSource {
 		const type = this.normalizeType(String(info.type || '')) || 'manga';
 		const id = this.toId(gid);
 		const pageCount = info.files?.length || 0;
+		const lang = this.normalizeLangCode(
+			String(info.language || info.language_localname || '')
+		);
 
 		return {
 			id,
@@ -460,6 +583,7 @@ export class HitomiSource extends BaseSource {
 			cover,
 			type,
 			status: 'Completed',
+			lang,
 			description: [
 				info.japanese_title && `AltTitle: ${info.japanese_title}`,
 				type && `Type: ${type}`,
@@ -478,7 +602,8 @@ export class HitomiSource extends BaseSource {
 					id,
 					title: 'Read',
 					number: 1,
-					date: info.date || ''
+					date: info.date || '',
+					lang
 				}
 			]
 		};
