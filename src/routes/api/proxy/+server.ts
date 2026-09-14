@@ -121,6 +121,13 @@ export const GET: RequestHandler = async ({ url }) => {
 			/mangafun[a-z]*\.(fun|xyz)|mangacopy\.com|copy2000\.|copy-manga\.|202[0-9]copy\.|copy20\.com/i.test(
 				decodedUrl
 			);
+	    const isIsekaiKomik =
+	        sourceId === 'isekaikomik' ||
+	       /isekaikomik\.(site|com)|cdn\.isekaikomik\.com/i.test(decodedUrl);
+
+        const isIkiru =
+	        sourceId === 'ikiru' ||
+	        /ikiru\.wtf|cdn\.uqni\.net/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -135,6 +142,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			isMangaBatsCom ||
 			isDoujinDesu ||
 			isMangaCopy;
+			isIsekaiKomik ||
+	        isIkiru;
 
 		// ============================================================
 		// WESERV
@@ -202,7 +211,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://pixhentai.com/';
 		} else if (isMangaCopy) {
 			referer = 'https://www.mangacopy.com/';
-		}
+		} else if (isIsekaiKomik) {
+	        referer = 'https://ch1.isekaikomik.site/';
+        } else if (isIkiru) {
+	        referer = 'https://08.ikiru.wtf/';
+        }
 
 		// ============================================================
 		// FETCH IMAGE

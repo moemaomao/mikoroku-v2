@@ -11,7 +11,9 @@ const ROOT_CHAPTER_PREFIX: Record<string, string> = {
     komiku: '/manga',
     komikindo: '/komik',
     mangaindo: '/manga',
-    komikstation: '/manga'
+    komikstation: '/manga',
+    isekaikomik: '/manga',
+    maid: '/manga'
 };
 
 function parseChapterNum(input: string): number | null {
@@ -24,11 +26,13 @@ function parseChapterNum(input: string): number | null {
 }
 
 function parseRootChapter(chapterId: string): { slug: string; num: number } | null {
-    const m = chapterId.match(/^\/(.+)-chapter-(\d+(?:[.-]\d+)?)\/?$/i);
-    if (!m?.[1]) return null;
-    const num = parseChapterNum(`chapter-${m[2]}`);
-    if (num == null) return null;
-    return { slug: m[1], num };
+	const m = chapterId.match(
+		/^\/(.+?)-chapter-(\d+(?:\.\d+)?)(?:-bahasa-indonesia)?\/?$/i
+	);
+	if (!m?.[1]) return null;
+	const num = parseFloat(m[2]);
+	if (!Number.isFinite(num)) return null;
+	return { slug: m[1], num };
 }
 
 async function resolveMangaId(

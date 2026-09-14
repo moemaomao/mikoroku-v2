@@ -55,6 +55,8 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	doujinku: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 	holodek: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	ikiru: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	isekaikomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	maid: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {
