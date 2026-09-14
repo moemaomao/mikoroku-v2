@@ -54,6 +54,7 @@ import { HolodekSource } from './impl/Holodek';
 import { IkiruSource } from './impl/Ikiru';
 import { IsekaiKomikSource } from './impl/IsekaiKomik';
 import { MaidSource } from './impl/Maid';
+import { MangakuriSource } from './impl/Mangakuri';
 import type { IMangaSource } from './types';
 
 
@@ -106,6 +107,7 @@ const sources: Record<string, IMangaSource> = {
     ikiru: new IkiruSource(),
     isekaikomik: new IsekaiKomikSource(),
     maid: new MaidSource(),
+    mangakuri: new MangakuriSource(),
 };
 
 /**

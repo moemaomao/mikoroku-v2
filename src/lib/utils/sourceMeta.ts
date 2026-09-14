@@ -57,6 +57,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	ikiru: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	isekaikomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	maid: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	mangakuri: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {

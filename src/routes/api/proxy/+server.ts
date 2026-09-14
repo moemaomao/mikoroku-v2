@@ -128,6 +128,9 @@ export const GET: RequestHandler = async ({ url }) => {
         const isIkiru =
 	        sourceId === 'ikiru' ||
 	        /ikiru\.wtf|cdn\.uqni\.net/i.test(decodedUrl);
+	    const isMangakuri =
+	        sourceId === 'mangakuri' ||
+	        /mangakuri\.online|cdnmangakuri|lonedev\.my\.id/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -215,6 +218,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	        referer = 'https://ch1.isekaikomik.site/';
         } else if (isIkiru) {
 	        referer = 'https://08.ikiru.wtf/';
+        } else if (isMangakuri) {
+	        referer = 'https://lc2.mangakuri.online/';
         }
 
 		// ============================================================
