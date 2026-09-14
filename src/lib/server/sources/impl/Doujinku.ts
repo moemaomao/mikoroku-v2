@@ -150,48 +150,59 @@ export class DoujinkuSource extends BaseSource {
 	}
 
 	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
-		try {
-			const p = Math.max(1, Number(page) || 1);
-			// ~12/page → merge 2 site pages → 24
-			const siteStart = (p - 1) * 2 + 1;
-			const paths = [
-				siteStart <= 1
+	page: number,
+	_opts?: { lang?: string; type?: string }
+): Promise<Manga[]> {
+	try {
+		const p = Math.max(1, Number(page) || 1);
+		const siteStart = (p - 1) * 2 + 1;
+		const sitePages = [siteStart, siteStart + 1];
+
+		const seen = new Set<string>();
+		const merged: Manga[] = [];
+
+		for (const sitePage of sitePages) {
+			if (merged.length >= this.PER_PAGE) break;
+
+			const path =
+				sitePage <= 1
 					? `/manga/?order=update`
-					: `/manga/page/${siteStart}/?order=update`,
-				`/manga/page/${siteStart + 1}/?order=update`
-			];
+					: `/manga/?order=update&page=${sitePage}`;
 
-			const seen = new Set<string>();
-			const merged: Manga[] = [];
+			try {
+				const html = await this.fetchHtml(path);
+				const $ = cheerio.load(html);
+				const batch = this.parseCards($);
 
-			for (const path of paths) {
-				if (merged.length >= this.PER_PAGE) break;
-				try {
-					const html = await this.fetchHtml(path);
-					const $ = cheerio.load(html);
-					const batch = this.parseCards($);
-					console.log(`[doujinku] ${path} → ${batch.length}`);
-					for (const m of batch) {
-						if (seen.has(m.id)) continue;
-						seen.add(m.id);
-						merged.push(m);
-						if (merged.length >= this.PER_PAGE) break;
-					}
-				} catch (e) {
-					console.warn(`[doujinku] fail ${path}`, e);
+				console.log(
+					`[doujinku] sitePage=${sitePage} path=${path} → ${batch.length}`
+				);
+
+				if (!batch.length) {
+					console.warn(`[doujinku] empty on ${path}`);
+					continue;
 				}
-			}
 
-			console.log(`[doujinku] latest page=${p} → ${merged.length}`);
-			return merged.slice(0, this.PER_PAGE);
-		} catch (e) {
-			console.error('[doujinku] getLatestManga', e);
-			return [];
+				for (const m of batch) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					merged.push(m);
+					if (merged.length >= this.PER_PAGE) break;
+				}
+			} catch (e) {
+				console.warn(`[doujinku] fail sitePage=${sitePage}`, e);
+			}
 		}
+
+		console.log(
+			`[doujinku] app page=${p} site=${sitePages.join(',')} → ${merged.length} unique`
+		);
+		return merged.slice(0, this.PER_PAGE);
+	} catch (e) {
+		console.error('[doujinku] getLatestManga', e);
+		return [];
 	}
+}
 
 	async searchManga(
 		query: string,
