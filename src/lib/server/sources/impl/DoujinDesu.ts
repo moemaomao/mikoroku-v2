@@ -17,9 +17,10 @@ export class DoujinDesuSource extends BaseSource {
     id = 'doujindesu';
     name = 'DoujinDesu';
     baseUrl = 'https://doujin.desu.xxx';
-    badge = 'Indo';
+    badge = 'ID';
 
     private readonly PER_PAGE = 24;
+    private readonly DEFAULT_LANG = 'id';
     private readonly APP_SECRET = 'dfdf72051dbfdc7d76889ebd31324e74';
     private readonly SALT = 'doujindesu-scrapers-cannot-read-this-super-secret-salt-2026-v2';
     private readonly WINDOW_MS = 3_600_000;
@@ -132,6 +133,14 @@ export class DoujinDesuSource extends BaseSource {
         return 'manga';
     }
 
+    private mapStatus(status?: string | null): string {
+        const s = String(status || '').toUpperCase();
+        if (s.includes('COMPLETE') || s.includes('FINISHED') || s.includes('END'))
+            return 'Completed';
+        if (s.includes('HIATUS')) return 'Hiatus';
+        return 'Ongoing';
+    }
+
     // ── Map API row → Manga ──────────────────────────────────────────────────
 
     private mapManga(row: any): Manga | null {
@@ -141,17 +150,13 @@ export class DoujinDesuSource extends BaseSource {
         if (!title) return null;
 
         const chs = Array.isArray(row.chapters) ? row.chapters : [];
-        const latest =
-            chs.length > 0
-                ? Math.max(
-                        ...chs.map((c: any) =>
-                            typeof c.chapter_number === 'number' ? c.chapter_number : 0
-                        )
-                    )
+        const latestRaw = chs[0]?.chapter_number;
+        const latestNum = parseFloat(String(latestRaw ?? ''));
+        const latestChapter = Number.isFinite(latestNum)
+            ? String(latestNum)
+            : latestRaw != null
+                ? String(latestRaw).replace(/\.00$/, '')
                 : undefined;
-
-        const statusRaw = String(row.status || '').toLowerCase();
-        const status = /complete|finished|end/.test(statusRaw) ? 'Completed' : 'Ongoing';
 
         return {
             id: `/manga/${slug}`,
@@ -159,9 +164,11 @@ export class DoujinDesuSource extends BaseSource {
             title,
             cover: this.absUrl(row.cover_url || ''),
             type: this.detectType(row.type),
-            status,
-            latestChapter: latest || undefined
-        };
+            status: this.mapStatus(row.status),
+            badge: this.badge,
+            latestChapter,
+            lang: this.DEFAULT_LANG
+        } as Manga & { badge?: string; lang?: string };
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -210,7 +217,10 @@ export class DoujinDesuSource extends BaseSource {
         }
     }
 
-    async getMangaDetails(mangaId: string): Promise<MangaDetails> {
+    async getMangaDetails(
+        mangaId: string,
+        _opts?: { lang?: string }
+    ): Promise<MangaDetails> {
         let path = this.cleanId(mangaId);
 
         if (/^\/reader\//i.test(path)) {
@@ -228,14 +238,13 @@ export class DoujinDesuSource extends BaseSource {
 
         const title = String(data.title || slug).trim();
         const cover = this.absUrl(data.cover_url || '');
-        const statusRaw = String(data.status || '').toLowerCase();
-        const status = /complete|finished|end/.test(statusRaw) ? 'Completed' : 'Ongoing';
+        const status = this.mapStatus(data.status);
         const type = this.detectType(data.type);
         const alt = String(data.alt_titles || '')
             .split('|')
             .map((s: string) => s.trim())
             .filter(Boolean)
-            .join(', ');
+            .join(' · ');
 
         const authors: string[] = [];
         for (const field of [data.author, data.artist]) {
@@ -267,7 +276,7 @@ export class DoujinDesuSource extends BaseSource {
         }
 
         const rating =
-            data.rating != null && data.rating !== '' ? String(data.rating) : '';
+            data.rating != null && data.rating !== '' ? String(data.rating) : null;
 
         const chapters: Chapter[] = [];
         const seen = new Set<string>();
@@ -295,23 +304,24 @@ export class DoujinDesuSource extends BaseSource {
                 date
             });
         }
-        chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
+        chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
 
-        const latestChapter = chapters[chapters.length - 1]?.number;
+        const latestChapter =
+            chapters[0]?.number != null ? String(chapters[0].number) : undefined;
         const synopsis = String(data.description || '')
             .replace(/\s+/g, ' ')
             .trim();
 
-        const description = [
+        const metaLines = [
             alt && `Alternative: ${alt}`,
-            authors.length && `Author(s): ${authors.join(', ')}`,
             rating && `Rating: ${rating}`,
+            authors.length && `Author: ${authors.join(' · ')}`,
+            `Language: Indonesian`,
             data.serialization && `Serialization: ${data.serialization}`,
-            latestChapter != null && `Latest chapter: ${latestChapter}`,
-            synopsis
-        ]
-            .filter(Boolean)
-            .join('\n\n');
+            `Type: ${type}`
+        ].filter(Boolean);
+
+        const description = [...metaLines, synopsis].filter(Boolean).join('\n');
 
         console.log(
             `[doujindesu] details ${slug} → ch=${chapters.length}, genres=${genres.join(',')}`
@@ -324,12 +334,13 @@ export class DoujinDesuSource extends BaseSource {
             cover,
             type,
             status,
+            badge: this.badge,
             description,
             authors,
             genres,
             chapters,
             latestChapter
-        };
+        } as MangaDetails & { badge?: string };
     }
 
     async getChapterPages(chapterId: string): Promise<string[]> {
