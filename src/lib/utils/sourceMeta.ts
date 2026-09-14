@@ -47,7 +47,8 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 	kiryuu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	komikstation: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
-	shinigami: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' }
+	shinigami: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+    ainzscans: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' }
 };
 
 export const DEFAULT_META: SourceMeta = {
