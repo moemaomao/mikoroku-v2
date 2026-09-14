@@ -48,6 +48,7 @@ import { ShinigamiSource } from './impl/Shinigami';
 import { AinzScansSource } from './impl/AinzScans';
 import { BacamiSource } from './impl/Bacami';
 import { ComicasoSource } from './impl/Comicaso';
+import { DojingSource } from './impl/Dojing';
 import type { IMangaSource } from './types';
 
 
@@ -94,6 +95,7 @@ const sources: Record<string, IMangaSource> = {
     ainzscans: new AinzScansSource(),
     bacami: new BacamiSource(),
     comicaso: new ComicasoSource(),
+    dojing: new DojingSource(),
 };
 
 /**
