@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { Search, Loader2, ChevronDown, Check, Layers } from 'lucide-svelte';
-	import { getImpl, setImpl } from '$lib/stores/impl';
+	import { getImpl, setImpl, setMultiMode } from '$lib/stores/impl';
 	import {
 		getSourceMeta,
 		groupSourcesByLang,
@@ -14,20 +14,21 @@
 
 	let {
 		sources,
-		currentSource,
+		currentSource = '',
 		searchQuery = '',
 		loading = $bindable(false),
 		selectedLang = $bindable('all'),
 		selectedType = $bindable('all')
 	}: {
 		sources: SourceItem[];
-		currentSource: string;
+		currentSource?: string;
 		searchQuery?: string;
 		loading?: boolean;
 		selectedLang?: string;
 		selectedType?: string;
 	} = $props();
 
+	// ── Constants ────────────────────────────────────────────────────────────
 	const LANGUAGES = [
 		{ id: 'all', name: 'All Languages', flag: 'un', code: 'ALL' },
 		{ id: 'english', name: 'English', flag: 'gb', code: 'EN' },
@@ -62,9 +63,11 @@
 		{ id: 'misc', name: 'Miscellaneous', icon: '📦' }
 	] as const;
 
+	// ── State ────────────────────────────────────────────────────────────────
 	let searchInput = $state('');
 	let activeDropdown = $state<'source' | 'lang' | 'type' | null>(null);
 
+	// ── Derived ──────────────────────────────────────────────────────────────
 	let isMultiMode = $derived(!currentSource);
 	let groupedSources = $derived(groupSourcesByLang(sources));
 	let currentSourceName = $derived(
@@ -72,81 +75,117 @@
 			? 'Multi (Preferred)'
 			: sources.find((s) => s.id === currentSource)?.name || currentSource || 'Select Source'
 	);
-	let currentLangObj = $derived(LANGUAGES.find((l) => l.id === selectedLang) || LANGUAGES[0]);
-	let currentTypeObj = $derived(TYPES.find((t) => t.id === selectedType) || TYPES[0]);
+	let currentLangObj = $derived(LANGUAGES.find((l) => l.id === selectedLang) ?? LANGUAGES[0]);
+	let currentTypeObj = $derived(TYPES.find((t) => t.id === selectedType) ?? TYPES[0]);
 	let showLangFilter = $derived(
 		!isMultiMode && LANG_FILTER_SOURCES.includes((currentSource || '').toLowerCase())
 	);
+	let hasActiveFilters = $derived(
+		!!searchQuery || selectedLang !== 'all' || selectedType !== 'all'
+	);
 
+	// ── Effects ──────────────────────────────────────────────────────────────
 	$effect(() => {
 		searchInput = searchQuery;
 	});
 
+	onMount(() => {
+		if (currentSource && currentSource !== getImpl()) {
+			setImpl(currentSource);
+		}
+	});
+
+	// ── Helpers ──────────────────────────────────────────────────────────────
 	function toggleDropdown(type: 'source' | 'lang' | 'type') {
 		activeDropdown = activeDropdown === type ? null : type;
 	}
+
 	function closeDropdown() {
 		activeDropdown = null;
 	}
+
 	function clickOutside(node: HTMLElement) {
 		const handler = (e: MouseEvent) => {
 			if (!node.contains(e.target as Node)) closeDropdown();
 		};
 		document.addEventListener('click', handler, true);
-		return { destroy: () => document.removeEventListener('click', handler, true) };
+		return {
+			destroy: () => document.removeEventListener('click', handler, true)
+		};
 	}
-
-	onMount(() => {
-		if (currentSource && currentSource !== getImpl()) setImpl(currentSource);
-	});
 
 	async function navigate(params: URLSearchParams) {
 		loading = true;
 		try {
 			const qs = params.toString();
-			await goto(qs ? `/?${qs}` : '/', { invalidateAll: true, keepFocus: true, noScroll: false });
+			await goto(qs ? `/?${qs}` : '/', {
+				invalidateAll: true,
+				keepFocus: true,
+				noScroll: false
+			});
 		} finally {
 			loading = false;
 		}
 	}
 
-	function applyFilters() {
+	function buildParams(overrides: Record<string, string> = {}) {
 		const params = new URLSearchParams();
-		if (!isMultiMode && currentSource) params.set('source', currentSource);
-		if (searchInput.trim()) params.set('q', searchInput.trim());
-		if (selectedLang !== 'all') params.set('lang', selectedLang);
-		if (selectedType !== 'all') params.set('type', selectedType);
-		navigate(params);
+
+		const source = overrides.source ?? (isMultiMode ? '' : currentSource);
+		if (source) params.set('source', source);
+
+		const q = overrides.q ?? searchInput.trim();
+		if (q) params.set('q', q);
+
+		const lang = overrides.lang ?? selectedLang;
+		if (lang !== 'all') params.set('lang', lang);
+
+		const type = overrides.type ?? selectedType;
+		if (type !== 'all') params.set('type', type);
+
+		return params;
+	}
+
+	// ── Actions ──────────────────────────────────────────────────────────────
+	function applyFilters() {
+		navigate(buildParams());
 	}
 
 	function selectLang(id: string) {
 		selectedLang = id;
 		closeDropdown();
-		applyFilters();
+		navigate(buildParams({ lang: id }));
 	}
+
 	function selectType(id: string) {
 		selectedType = id;
 		closeDropdown();
-		applyFilters();
+		navigate(buildParams({ type: id }));
 	}
+
 	function selectSource(id: string) {
 		closeDropdown();
 		if (id === currentSource) return;
+
 		setImpl(id);
 		selectedLang = 'all';
 		selectedType = 'all';
 		goto(`/?source=${id}`, { invalidateAll: true, keepFocus: true });
 	}
+
 	function selectMulti() {
-		closeDropdown();
-		selectedLang = 'all';
-		selectedType = 'all';
-		goto('/', { invalidateAll: true, keepFocus: true });
-	}
+	closeDropdown();
+	selectedLang = 'all';
+	selectedType = 'all';
+	setMultiMode();
+	goto('/', { invalidateAll: true, keepFocus: true });
+}
+
 	function handleSearch(e: SubmitEvent) {
 		e.preventDefault();
 		applyFilters();
 	}
+
 	function clearFilters() {
 		selectedLang = 'all';
 		selectedType = 'all';
@@ -163,6 +202,15 @@
 	{/if}
 {/snippet}
 
+{#snippet chevron(open: boolean)}
+	<ChevronDown
+		class="ml-auto h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 {open
+			? 'rotate-180'
+			: ''}"
+	/>
+{/snippet}
+
+<!-- ── Filter Bar ─────────────────────────────────────────────────────────── -->
 <div
 	class="relative z-30 mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
 	use:clickOutside
@@ -182,20 +230,22 @@
 					{@render renderIcon(getSourceMeta(currentSource).flag)}
 				</span>
 			{/if}
+
 			<span class="max-w-[120px] truncate">{currentSourceName}</span>
+
 			{#if !isMultiMode && getSourceMeta(currentSource).isR18}
 				<span class="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">R18</span>
 			{/if}
-			<ChevronDown
-				class="ml-auto h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 {activeDropdown === 'source'
-					? 'rotate-180'
-					: ''}"
-			/>
+
+			{@render chevron(activeDropdown === 'source')}
 		</button>
 
 		{#if activeDropdown === 'source'}
-			<div class="dropdown-menu absolute left-0 top-full z-[200] mt-2 w-[280px] overflow-hidden rounded-2xl border shadow-2xl">
+			<div
+				class="dropdown-menu absolute left-0 top-full z-[200] mt-2 w-[280px] overflow-hidden rounded-2xl border shadow-2xl"
+			>
 				<div class="max-h-[60vh] overflow-y-auto p-1.5">
+					<!-- Multi option -->
 					<button
 						type="button"
 						onclick={selectMulti}
@@ -223,10 +273,13 @@
 						>
 							{LANG_LABELS[langKey] || langKey}
 						</div>
+
 						{#each items as source (source.id)}
 							{@const meta = getSourceMeta(source.id)}
 							{@const isSelected =
-								!isMultiMode && source.id.toLowerCase() === (currentSource || '').toLowerCase()}
+								!isMultiMode &&
+								source.id.toLowerCase() === (currentSource || '').toLowerCase()}
+
 							<button
 								type="button"
 								onclick={() => selectSource(source.id)}
@@ -234,14 +287,20 @@
 									? 'active-item'
 									: ''}"
 							>
-								<span class="icon-wrapper flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg">
+								<span
+									class="icon-wrapper flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg"
+								>
 									{@render renderIcon(meta.flag)}
 								</span>
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2">
 										<span class="truncate text-sm font-medium">{source.name}</span>
 										{#if meta.isR18}
-											<span class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">R18</span>
+											<span
+												class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white"
+											>
+												R18
+											</span>
 										{/if}
 									</div>
 									<p class="mt-0.5 text-[11px] opacity-60">{meta.lang}</p>
@@ -257,7 +316,7 @@
 		{/if}
 	</div>
 
-	<!-- LANGUAGE -->
+	<!-- LANGUAGE (hanya untuk source yang support) -->
 	{#if showLangFilter}
 		<div class="relative">
 			<button
@@ -270,14 +329,13 @@
 					{@render renderIcon(currentLangObj.flag)}
 				</span>
 				<span class="max-w-[90px] truncate">{currentLangObj.name}</span>
-				<ChevronDown
-					class="ml-auto h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 {activeDropdown === 'lang'
-						? 'rotate-180'
-						: ''}"
-				/>
+				{@render chevron(activeDropdown === 'lang')}
 			</button>
+
 			{#if activeDropdown === 'lang'}
-				<div class="dropdown-menu absolute left-0 top-full z-[200] mt-2 w-[240px] overflow-hidden rounded-2xl border shadow-2xl">
+				<div
+					class="dropdown-menu absolute left-0 top-full z-[200] mt-2 w-[240px] overflow-hidden rounded-2xl border shadow-2xl"
+				>
 					<div class="max-h-[60vh] overflow-y-auto p-1.5">
 						{#each LANGUAGES as lang (lang.id)}
 							{@const isSelected = lang.id === selectedLang}
@@ -292,7 +350,9 @@
 									{@render renderIcon(lang.flag)}
 								</span>
 								<span class="flex-1 truncate text-sm font-medium">{lang.name}</span>
-								<span class="code-badge rounded px-1.5 py-0.5 font-mono text-[10px] uppercase opacity-70">
+								<span
+									class="code-badge rounded px-1.5 py-0.5 font-mono text-[10px] uppercase opacity-70"
+								>
 									{lang.code}
 								</span>
 								{#if isSelected}
@@ -318,14 +378,13 @@
 				{@render renderIcon(currentTypeObj.icon)}
 			</span>
 			<span class="max-w-[90px] truncate">{currentTypeObj.name}</span>
-			<ChevronDown
-				class="ml-auto h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 {activeDropdown === 'type'
-					? 'rotate-180'
-					: ''}"
-			/>
+			{@render chevron(activeDropdown === 'type')}
 		</button>
+
 		{#if activeDropdown === 'type'}
-			<div class="dropdown-menu absolute left-0 top-full z-[200] mt-2 w-[220px] overflow-hidden rounded-2xl border shadow-2xl">
+			<div
+				class="dropdown-menu absolute left-0 top-full z-[200] mt-2 w-[220px] overflow-hidden rounded-2xl border shadow-2xl"
+			>
 				<div class="max-h-[60vh] overflow-y-auto p-1.5">
 					{#each TYPES as t (t.id)}
 						{@const isSelected = t.id === selectedType}
@@ -351,7 +410,10 @@
 	</div>
 
 	<!-- SEARCH -->
-	<form class="flex min-w-0 w-full basis-full gap-2 sm:max-w-md sm:flex-1 sm:basis-auto" onsubmit={handleSearch}>
+	<form
+		class="flex min-w-0 w-full basis-full gap-2 sm:max-w-md sm:flex-1 sm:basis-auto"
+		onsubmit={handleSearch}
+	>
 		<div class="relative min-w-0 flex-1">
 			<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 opacity-40" />
 			<input
@@ -375,7 +437,8 @@
 	</form>
 </div>
 
-{#if searchQuery || selectedLang !== 'all' || selectedType !== 'all'}
+<!-- ── Active Filters Indicator ───────────────────────────────────────────── -->
+{#if hasActiveFilters}
 	<p class="mb-3 text-sm opacity-70">
 		Filtering active:
 		{#if searchQuery}

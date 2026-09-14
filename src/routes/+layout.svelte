@@ -8,6 +8,7 @@
 	import { goto, beforeNavigate, afterNavigate } from '$app/navigation';
 	import NProgress from 'nprogress';
 	import 'nprogress/nprogress.css';
+	import { isMultiMode } from '$lib/stores/impl';
 
 	// Components
 	import Footer from '$lib/components/Footer.svelte';
@@ -82,11 +83,6 @@
 	let isHeaderHidden = $state(false);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
-	function homeHref(extra: Record<string, string> = {}): string {
-	    const params = new URLSearchParams(extra);
-	    const qs = params.toString();
-	    return qs ? `/?${qs}` : '/';
-    }
 
     function formatMangaHref(sourceId: string, mangaId: string): string {
 	   const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
@@ -201,10 +197,34 @@
     }
 
 	function goHome(e: MouseEvent) {
-	    e.preventDefault();
-	    closeOverlays();
-	    goto('/', { invalidateAll: true });
-    }
+	e.preventDefault();
+	closeOverlays();
+
+	// Kalau user sedang prefer multi mode → selalu ke multi
+	if (isMultiMode()) {
+		goto('/', { invalidateAll: true });
+		return;
+	}
+
+	// Single mode → coba ambil source dari query / path / localStorage
+	let source = $page.url.searchParams.get('source');
+
+	if (!source) {
+		const match = $page.url.pathname.match(/^\/(manga|reader)\/([^/]+)/);
+		if (match) source = match[2];
+	}
+
+	if (!source && browser) {
+		source = getImpl();
+	}
+
+	if (source) {
+		goto(`/?source=${source}`, { invalidateAll: true });
+	} else {
+		goto('/', { invalidateAll: true });
+	}
+}
+
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
