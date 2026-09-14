@@ -57,6 +57,7 @@
     let isAuthOpen = $state(false);
     let isHistoryOpen = $state(true);
     let bookmarks = $state<BookmarkEntry[]>([]);
+    let isHeaderHidden = $state(false);
 
     // ❌ Hapus constant LOGO yang pakai URL eksternal
     // const LOGO = 'https://blogger.googleusercontent.com/...';
@@ -175,13 +176,15 @@
         goto(homeHref());
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────────────────
+      // ── Lifecycle ────────────────────────────────────────────────────────────
     onMount(() => {
         const mq = window.matchMedia('(min-width: 1024px)');
+
         const applyMq = () => {
             isDesktop = mq.matches;
             if (!isDesktop) isSidebarOpen = false;
         };
+
         applyMq();
         mq.addEventListener('change', applyMq);
 
@@ -198,17 +201,47 @@
 
         const onDocClick = (e: MouseEvent) => {
             const t = e.target as HTMLElement;
+
             if (!t.closest('[data-dropdown]') && !t.closest('[data-dropdown-btn]')) {
                 isBookmarkOpen = false;
                 isAuthOpen = false;
             }
         };
+
         document.addEventListener('click', onDocClick);
+
+        // ── Header auto-hide on scroll ───────────────────────────────────────
+        let lastScrollY = window.scrollY;
+
+        const handleScroll = () => {
+            const currentScrollY = window.scrollY;
+
+            // Selalu tampil di posisi paling atas
+            if (currentScrollY <= 10) {
+                isHeaderHidden = false;
+                lastScrollY = currentScrollY;
+                return;
+            }
+
+            // Scroll ke bawah → sembunyikan
+            if (currentScrollY > lastScrollY) {
+                isHeaderHidden = true;
+            }
+            // Scroll ke atas → tampilkan
+            else if (currentScrollY < lastScrollY) {
+                isHeaderHidden = false;
+            }
+
+            lastScrollY = currentScrollY;
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
 
         return () => {
             mq.removeEventListener('change', applyMq);
             window.removeEventListener('bookmarks-changed', loadBookmarks);
             document.removeEventListener('click', onDocClick);
+            window.removeEventListener('scroll', handleScroll);
         };
     });
 </script>
@@ -235,7 +268,7 @@
 
 <div
     class="theme-root min-h-screen font-[Kodchasan,system-ui,sans-serif] {isDarkMode
-        ? 'bg-zinc-950 text-zinc-100'
+        ? 'bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910] text-zinc-100'
         : 'bg-[#f5f5f7] text-zinc-900'}"
 >
     <!-- ========== LEFT SIDEBAR ========== -->
@@ -250,11 +283,11 @@
     <aside
         class="fixed top-0 bottom-0 left-0 z-50 flex w-[260px] flex-col border-r transition-transform duration-300
             {isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            {isDarkMode ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-200 bg-white'}"
+            {isDarkMode ? 'border-zinc-800/80 bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910]' : 'border-zinc-200 bg-white'}"
     >
         <div
             class="relative z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4
-                {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}"
+                {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"
         >
             <a href="/" onclick={goHome} class="flex min-w-0 items-center">
                 <img src={logo} alt="Rokuyomu" class="h-12 w-auto" />
@@ -300,7 +333,7 @@
                 <FileText class="h-5 w-5 shrink-0" /> Commission
             </a>
 
-            <div class="my-2 border-t {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}"></div>
+            <div class="my-2 border-t {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"></div>
 
             <a
                 href="https://discord.gg/kkt669knaG"
@@ -334,11 +367,13 @@
         <div class="flex min-h-screen min-w-0 flex-1 flex-col">
             <!-- Header -->
             <header
-                class="sticky top-0 z-30 w-full border-b backdrop-blur-xl
-                    {isDarkMode
-                    ? 'border-zinc-800/50 bg-zinc-950/90'
-                    : 'border-zinc-200/80 bg-white/90'}"
-            >
+    class="sticky top-0 z-30 w-full border-b backdrop-blur-xl
+        transition-transform duration-300 ease-in-out
+        {isHeaderHidden ? '-translate-y-full' : 'translate-y-0'}
+        {isDarkMode
+            ? 'border-zinc-800/50 bg-gradient-to-b from-violet-950/70 via-[#0c0910]/90 to-[#0c0910]/90'
+            : 'border-zinc-200/80 bg-white/90'}"
+>
                 <div class="flex h-14 w-full items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-5">
                     <div class="flex shrink-0 items-center gap-2">
                         {#if !isSidebarOpen}
@@ -424,7 +459,7 @@
                                                 {@const mangaHref = formatMangaHref(bm.sourceId, bm.mangaId)}
                                                 <div
                                                     class="group flex items-center gap-3 rounded-lg p-2 transition
-                                                        {isDarkMode ? 'hover:bg-zinc-800' : 'hover:bg-zinc-100'}"
+                                                        {isDarkMode ? 'hover:bg-zinc-800/80' : 'hover:bg-zinc-100'}"
                                                 >
                                                     <a
                                                         href={mangaHref}
@@ -514,7 +549,7 @@
 
             <!-- History Widget Mobile -->
             {#if !isReaderPage}
-                <div class="border-t xl:hidden {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
+                <div class="border-t xl:hidden {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}">
                     {#if isHistoryOpen}
                         <div class="flex h-[min(420px,55vh)] max-h-[420px] flex-col overflow-hidden">
                             <HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
@@ -535,10 +570,9 @@
             {/if}
 
             <!-- Footer -->
-            <!-- Footer -->
-{#if !isReaderPage}
-	<Footer {isDarkMode} />
-{/if}
+            {#if !isReaderPage}
+                <Footer {isDarkMode} />
+            {/if}
         </div>
 
         <!-- History Widget Desktop -->

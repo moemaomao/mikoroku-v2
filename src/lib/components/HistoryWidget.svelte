@@ -82,10 +82,10 @@
 </script>
 
 <aside
-	class="history-widget flex h-full min-h-0 w-full flex-col border-l transition-transform duration-300 ease-in-out
-		xl:w-[280px]
-		{open ? 'translate-x-0' : 'translate-x-full'}
-		{isDarkMode ? 'border-zinc-800/80 bg-zinc-950/95' : 'border-zinc-200 bg-white/95'}"
+    class="history-widget flex h-full min-h-0 w-full flex-col border-l transition-transform duration-300 ease-in-out
+        xl:w-[280px]
+        {open ? 'translate-x-0' : 'translate-x-full'}
+        {isDarkMode ? 'border-zinc-800 bg-gradient-to-b from-violet-950/80 via-zinc-900 to-zinc-950' : 'border-zinc-200 bg-white/95'}"
 >
 	<!-- Header -->
 	<div
