@@ -334,22 +334,22 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 								<!-- SOURCE badge (multi mode) -->
 								{#if isMulti && manga.sourceId}
 									<span
-										class="absolute right-1 bottom-1 z-20 max-w-[60%] truncate rounded bg-black/80 px-1 py-0.5 text-[8px] font-bold uppercase text-white shadow-sm sm:text-[9px]"
+										class="absolute right-1 bottom-1 z-20 max-w-[60%] truncate rounded bg-purple-500/50 px-1 py-0.5 text-[8px] font-bold uppercase text-white shadow-sm sm:text-[9px]"
 									>
 										{manga.sourceId}
 									</span>
 								{/if}
 
 								<!-- TITLE -->
-								<div
-									class="absolute inset-x-0 bottom-0 z-10 max-h-12 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-1 pt-4 pb-1 transition-all duration-300 group-hover:max-h-full group-hover:pt-8 group-active:max-h-full group-active:pt-8"
-								>
-									<h3
-										class="line-clamp-2 text-center text-[10px] font-semibold leading-tight text-white drop-shadow-md transition-all duration-300 group-hover:line-clamp-none group-active:line-clamp-none sm:text-[11px]"
-									>
-										{manga.title}
-									</h3>
-								</div>
+                                <div
+                                    class="absolute inset-x-0 bottom-0 z-10 max-h-12 bg-gradient-to-t from-black/95 via-black/80 to-transparent px-1 pt-4 pb-13 transition-all duration-300 group-hover:max-h-full group-hover:pt-8 group-active:max-h-full group-active:pt-8"
+                                >
+                                    <h3
+                                        class="line-clamp-2 text-center text-[10px] font-semibold leading-tight text-white drop-shadow-md transition-all duration-300 group-hover:line-clamp-none group-active:line-clamp-none sm:text-[11px]"
+                                    >
+                                        {manga.title}
+                                    </h3>
+                                </div>
 							</div>
 						</div>
 					</a>
