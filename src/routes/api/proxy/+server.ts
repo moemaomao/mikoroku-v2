@@ -1,8 +1,9 @@
 /**
  * Image Proxy
- * - Hemat CPU: redirect ke weserv jika ada `w` dan domain tidak butuh referer khusus
- * - Hitomi / ihlv1 / nhentai / hentairead / klz9 / love4u / rawkuma /
- *   mangakatana / mangabats / mangabatscom / doujindesu / mangacopy → fetch langsung + Referer benar
+ *
+ * - Hemat CPU: redirect ke Weserv jika ada `w` dan domain tidak butuh referer khusus.
+ * - Domain tertentu → fetch langsung dengan Referer yang sesuai.
+ * - Mempertahankan nama file asli melalui Content-Disposition.
  */
 
 import type { RequestHandler } from './$types';
@@ -11,6 +12,43 @@ const USER_AGENT =
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const FETCH_TIMEOUT_MS = 12000;
+
+function getFilename(url: string, contentType: string): string {
+	let filename = 'image';
+
+	try {
+		const pathname = new URL(url).pathname;
+		const lastPart = pathname.split('/').pop() || '';
+
+		if (lastPart) {
+			filename = decodeURIComponent(lastPart);
+		}
+	} catch {
+	}
+
+	filename = filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
+
+	if (!filename) {
+		filename = 'image';
+	}
+
+	if (!/\.[a-zA-Z0-9]{2,5}$/.test(filename)) {
+		const extension = contentType.split('/')[1]?.split(';')[0];
+
+		const extensionMap: Record<string, string> = {
+			jpeg: 'jpg',
+			pjpeg: 'jpg',
+			webp: 'webp',
+			png: 'png',
+			gif: 'gif',
+			avif: 'avif'
+		};
+
+		filename += `.${extensionMap[extension] || 'jpg'}`;
+	}
+
+	return filename;
+}
 
 export const GET: RequestHandler = async ({ url }) => {
 	const targetUrl = url.searchParams.get('url');
@@ -24,56 +62,74 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	try {
 		let decodedUrl = decodeURIComponent(targetUrl);
-		if (decodedUrl.startsWith('//')) decodedUrl = 'https:' + decodedUrl;
+
+		if (decodedUrl.startsWith('//')) {
+			decodedUrl = 'https:' + decodedUrl;
+		}
 
 		const isHitomi =
 			/hitomi\.la|gold-usergeneratedcontent\.net/i.test(decodedUrl);
-		const isBlockedWeserv = /ihlv1\.xyz|jfimv2\.xyz/i.test(decodedUrl);
-		const isNhentai = /nhentai\.net/i.test(decodedUrl);
+
+		const isBlockedWeserv =
+			/ihlv1\.xyz|jfimv2\.xyz/i.test(decodedUrl);
+
+		const isNhentai =
+			/nhentai\.net/i.test(decodedUrl);
+
 		const isHentairead =
 			sourceId === 'hentairead' ||
 			/hentairead\.com|hencover|henread/i.test(decodedUrl);
+
 		const isKlz9 =
-			sourceId === 'klz9' || /klz9\.com|jfimv2\.xyz/i.test(decodedUrl);
+			sourceId === 'klz9' ||
+			/klz9\.com|jfimv2\.xyz/i.test(decodedUrl);
+
 		const isLove4u =
-			sourceId === 'love4u' || /love4u\.net/i.test(decodedUrl);
+			sourceId === 'love4u' ||
+			/love4u\.net/i.test(decodedUrl);
+
 		const isRawkuma =
 			sourceId === 'rawkuma' ||
 			/rawkuma\.(net|com)|kuma\.kyut\.dev/i.test(decodedUrl);
+
 		const isMangaKatana =
 			sourceId === 'mangakatana' ||
-			/mangakatana\.com|i\d*\.mangakatana\.com/i.test(decodedUrl);
+			/mangakatana\.com|i\d+\.mangakatana\.com/i.test(decodedUrl);
+
 		const isMangaBats =
 			sourceId === 'mangabats' ||
 			/mangabats\.xyz|amzim\.beer/i.test(decodedUrl);
+
 		const isMangaBatsCom =
 			sourceId === 'mangabatscom' ||
 			/mangabats\.com|2xstorage\.com/i.test(decodedUrl);
+
 		const isDoujinDesu =
 			sourceId === 'doujindesu' ||
 			/desu\.xxx|desu\.pics|amz-ch\.desu\.pics|pic\.desu\.xxx|cdn-static\.desu\.xxx/i.test(
 				decodedUrl
 			);
+
 		const isCrotpedia =
 			sourceId === 'crotpedia' ||
 			/crotpedia\.net|eromanga\.cfd|reader\.eromanga\.cfd|cover\.eromanga\.cfd/i.test(
 				decodedUrl
 			);
+
 		const isBacaKomik =
 			sourceId === 'bacakomik' ||
 			/bacakomik\.pics|warungkomikcdn\.icu/i.test(decodedUrl);
+
 		const isPixHentai =
 			sourceId === 'pixhentai' ||
 			/pixhentai\.com|openhentai\.net/i.test(decodedUrl);
 
-		// MangaCopy / CopyManga CDN (anti-hotlink)
 		const isMangaCopy =
 			sourceId === 'mangacopy' ||
 			/mangafun[a-z]*\.(fun|xyz)|mangacopy\.com|copy2000\.|copy-manga\.|202[0-9]copy\.|copy20\.com/i.test(
 				decodedUrl
 			);
 
-		// Domain yang butuh referer khusus → jangan redirect weserv
 		const skipWeserv =
 			isHitomi ||
 			isBlockedWeserv ||
@@ -88,24 +144,36 @@ export const GET: RequestHandler = async ({ url }) => {
 			isDoujinDesu ||
 			isMangaCopy;
 
-		// ===== Hemat CPU: redirect ke weserv =====
-		if (w && !skipWeserv && /^https?:\/\//i.test(decodedUrl)) {
+		// ============================================================
+		// WESERV
+		// ============================================================
+
+		if (
+			w &&
+			!skipWeserv &&
+			/^https?:\/\//i.test(decodedUrl)
+		) {
 			const weserv =
 				'https://images.weserv.nl/?url=' +
 				encodeURIComponent(decodedUrl) +
 				`&w=${encodeURIComponent(w)}` +
-				(h ? `&h=${encodeURIComponent(h)}&fit=cover` : '') +
+				(h
+					? `&h=${encodeURIComponent(h)}&fit=cover`
+					: '') +
 				'&q=70&output=webp&n=-1';
+
 			return Response.redirect(weserv, 302);
 		}
 
-		// ===== Tentukan Referer =====
+		// ============================================================
+		// REFERER
+		// ============================================================
+
 		let referer = 'https://nhentai.net/';
 
 		try {
 			referer = new URL(decodedUrl).origin + '/';
 		} catch {
-			/* keep default */
 		}
 
 		if (sourceId === 'hitomi' || isHitomi) {
@@ -144,8 +212,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://www.mangacopy.com/';
 		}
 
+		// ============================================================
+		// FETCH IMAGE
+		// ============================================================
+
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+		const timer = setTimeout(() => {
+			controller.abort();
+		}, FETCH_TIMEOUT_MS);
 
 		try {
 			const imageResponse = await fetch(decodedUrl, {
@@ -161,17 +236,26 @@ export const GET: RequestHandler = async ({ url }) => {
 			if (!imageResponse.ok) {
 				return new Response(
 					`Failed to fetch image: ${imageResponse.status}`,
-					{ status: imageResponse.status }
+					{
+						status: imageResponse.status
+					}
 				);
 			}
 
 			const contentType =
 				imageResponse.headers.get('content-type') || 'image/jpeg';
 
+			const filename = getFilename(decodedUrl, contentType);
+
 			return new Response(imageResponse.body, {
 				headers: {
 					'Content-Type': contentType,
-					'Cache-Control': 'public, max-age=31536000, immutable',
+
+					'Content-Disposition': `inline; filename="${filename}"`,
+
+					'Cache-Control':
+						'public, max-age=31536000, immutable',
+
 					'Access-Control-Allow-Origin': '*'
 				}
 			});
@@ -180,6 +264,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 	} catch (error) {
 		console.error('Proxy error:', error);
-		return new Response('Failed to proxy image', { status: 500 });
+
+		return new Response('Failed to proxy image', {
+			status: 500
+		});
 	}
 };
