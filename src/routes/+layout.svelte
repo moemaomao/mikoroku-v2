@@ -65,16 +65,22 @@
 		speed: 400
 	});
 	beforeNavigate(() => NProgress.start());
-	afterNavigate(() => NProgress.done());
+	afterNavigate(() => {
+		NProgress.done();
+		if (browser && !isDesktop) {
+			isSidebarOpen = false;
+		}
+	});
 
 	// ── Props & derived ──────────────────────────────────────────────────────
 	let { data, children } = $props();
 
 	let isReaderPage = $derived($page.url.pathname.startsWith('/reader/'));
-	let isSidebarOpen = $derived(data.sidebarOpen);
 
 	// ── UI state ─────────────────────────────────────────────────────────────
 	let isDesktop = $state(true);
+	let isSidebarOpen = $state(data.sidebarOpen);
+	let hasHydrated = $state(false);
 	let isDarkMode = $state(true);
 	let isBookmarkOpen = $state(false);
 	let isAuthOpen = $state(false);
@@ -83,11 +89,10 @@
 	let isHeaderHidden = $state(false);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
-
-    function formatMangaHref(sourceId: string, mangaId: string): string {
-	   const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
-	   return `/manga/${sourceId}${clean}`;
-    }
+	function formatMangaHref(sourceId: string, mangaId: string): string {
+		const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
+		return `/manga/${sourceId}${clean}`;
+	}
 
 	function navClass(): string {
 		return isDarkMode
@@ -138,7 +143,7 @@
 	// ── Sidebar ──────────────────────────────────────────────────────────────
 	function toggleSidebar() {
 		isSidebarOpen = !isSidebarOpen;
-		if (browser) {
+		if (browser && isDesktop) {
 			document.cookie = `sidebar_open=${isSidebarOpen}; path=/; max-age=31536000`;
 		}
 	}
@@ -191,40 +196,37 @@
 
 	// ── Navigation ───────────────────────────────────────────────────────────
 	function handleNavigate(e: MouseEvent, href: string) {
-	    e.preventDefault();
-	    closeOverlays();
-	    goto(href);
-    }
+		e.preventDefault();
+		closeOverlays();
+		goto(href);
+	}
 
 	function goHome(e: MouseEvent) {
-	e.preventDefault();
-	closeOverlays();
+		e.preventDefault();
+		closeOverlays();
 
-	// Kalau user sedang prefer multi mode → selalu ke multi
-	if (isMultiMode()) {
-		goto('/', { invalidateAll: true });
-		return;
+		if (isMultiMode()) {
+			goto('/', { invalidateAll: true });
+			return;
+		}
+
+		let source = $page.url.searchParams.get('source');
+
+		if (!source) {
+			const match = $page.url.pathname.match(/^\/(manga|reader)\/([^/]+)/);
+			if (match) source = match[2];
+		}
+
+		if (!source && browser) {
+			source = getImpl();
+		}
+
+		if (source) {
+			goto(`/?source=${source}`, { invalidateAll: true });
+		} else {
+			goto('/', { invalidateAll: true });
+		}
 	}
-
-	// Single mode → coba ambil source dari query / path / localStorage
-	let source = $page.url.searchParams.get('source');
-
-	if (!source) {
-		const match = $page.url.pathname.match(/^\/(manga|reader)\/([^/]+)/);
-		if (match) source = match[2];
-	}
-
-	if (!source && browser) {
-		source = getImpl();
-	}
-
-	if (source) {
-		goto(`/?source=${source}`, { invalidateAll: true });
-	} else {
-		goto('/', { invalidateAll: true });
-	}
-}
-
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
@@ -232,11 +234,20 @@
 
 		const applyMq = () => {
 			isDesktop = mq.matches;
-			if (!isDesktop) isSidebarOpen = false;
+
+			if (isDesktop) {
+				isSidebarOpen = data.sidebarOpen;
+			} else {
+				isSidebarOpen = false;
+			}
 		};
 
 		applyMq();
 		mq.addEventListener('change', applyMq);
+
+		requestAnimationFrame(() => {
+			hasHydrated = true;
+		});
 
 		const savedTheme = localStorage.getItem('darkMode');
 		applyTheme(savedTheme === null ? true : savedTheme === 'true');
@@ -335,7 +346,8 @@
 	{/if}
 
 	<aside
-		class="fixed top-0 bottom-0 left-0 z-50 flex w-[260px] flex-col border-r transition-transform duration-300
+		class="fixed top-0 bottom-0 left-0 z-50 flex w-[260px] flex-col border-r
+			{hasHydrated ? 'transition-transform duration-300' : ''}
 			{isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
 			{isDarkMode
 			? 'border-zinc-800/80 bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910]'
@@ -386,12 +398,12 @@
 				<History class="h-5 w-5 shrink-0" /> History
 			</a>
 			<a
-	            href="/settings"
-	            onclick={(e) => handleNavigate(e, '/settings')}
-	            class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
->
-	          <Settings class="h-5 w-5 shrink-0" /> Settings
-            </a>
+				href="/settings"
+				onclick={(e) => handleNavigate(e, '/settings')}
+				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+			>
+				<Settings class="h-5 w-5 shrink-0" /> Settings
+			</a>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
 				<FileText class="h-5 w-5 shrink-0" /> Commission
 			</a>
@@ -422,7 +434,8 @@
 
 	<!-- ========== MAIN + HISTORY ========== -->
 	<div
-		class="flex min-h-screen transition-[margin] duration-300
+		class="flex min-h-screen
+			{hasHydrated ? 'transition-[margin] duration-300' : ''}
 			{isSidebarOpen ? 'lg:ml-[260px]' : 'ml-0'}
 			{!isReaderPage ? 'xl:flex-row' : 'flex-col'}"
 	>
