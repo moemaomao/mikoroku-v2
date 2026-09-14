@@ -1,686 +1,733 @@
 <script lang="ts">
-    import './layout.css';
-    import favicon from '$lib/assets/favicon.ico';
-    import logo from '$lib/assets/rokuyomu.png';
-    import { page } from '$app/stores';
-    import { onMount } from 'svelte';
-    import { browser } from '$app/environment';
-    import { goto, beforeNavigate, afterNavigate } from '$app/navigation';
-    import NProgress from 'nprogress';
-    import 'nprogress/nprogress.css';
+	import './layout.css';
+	import favicon from '$lib/assets/favicon.ico';
+	import logo from '$lib/assets/rokuyomu.png';
+	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+	import { goto, beforeNavigate, afterNavigate } from '$app/navigation';
+	import NProgress from 'nprogress';
+	import 'nprogress/nprogress.css';
 
-    // Components
-    import Footer from '$lib/components/Footer.svelte';
-    import HistoryWidget from '$lib/components/HistoryWidget.svelte';
-    import EmailLoginForm from '$lib/components/EmailLoginForm.svelte';
+	// Components
+	import Footer from '$lib/components/Footer.svelte';
+	import HistoryWidget from '$lib/components/HistoryWidget.svelte';
+	import EmailLoginForm from '$lib/components/EmailLoginForm.svelte';
 
-    // Auth store
-    import {
-        getUser,
-        isLoading,
-        getAuthError,
-        clearAuthError,
-        loginWithEmail,
-        registerWithEmail,
-        loginWithGoogle,
-        loginWithGithub,
-        logout
-    } from '$lib/stores/auth.svelte';
+	// Auth
+	import {
+		getUser,
+		isLoading,
+		loginWithGoogle,
+		loginWithGithub,
+		logout
+	} from '$lib/stores/auth.svelte';
 
-    // Icons
-    import {
-        Menu,
-        X,
-        BookOpen,
-        Sun,
-        Moon,
-        Bookmark,
-        User,
-        Library,
-        History,
-        MessageSquare,
-        DollarSign,
-        Trash2,
-        FileText,
-        Shield,
-        LogOut,
-        Github
-    } from 'lucide-svelte';
+	// Hybrid sync
+	import { syncBookmarksOnLogin } from '$lib/stores/bookmark.svelte';
+	import { syncHistoryOnLogin } from '$lib/stores/history';
 
-    // Stores
-    import {
-        getBookmarks,
-        removeBookmark,
-        type BookmarkEntry
-    } from '$lib/stores/bookmark.svelte';
-    import { getImpl } from '$lib/stores/impl';
+	// Icons
+	import {
+		Menu,
+		X,
+		BookOpen,
+		Sun,
+		Moon,
+		Bookmark,
+		Library,
+		History,
+		MessageSquare,
+		DollarSign,
+		Trash2,
+		FileText,
+		Shield,
+		LogOut,
+		Github
+	} from 'lucide-svelte';
 
-    // ── Progress bar ─────────────────────────────────────────────────────────
-    NProgress.configure({
-        showSpinner: false,
-        trickleSpeed: 100,
-        minimum: 0.08,
-        easing: 'ease',
-        speed: 400
-    });
-    beforeNavigate(() => NProgress.start());
-    afterNavigate(() => NProgress.done());
+	// Stores
+	import {
+		getBookmarks,
+		removeBookmark,
+		type BookmarkEntry
+	} from '$lib/stores/bookmark.svelte';
+	import { getImpl } from '$lib/stores/impl';
 
-    // ── Props & derived ──────────────────────────────────────────────────────
-    let { data, children } = $props();
+	// ── Progress bar ─────────────────────────────────────────────────────────
+	NProgress.configure({
+		showSpinner: false,
+		trickleSpeed: 100,
+		minimum: 0.08,
+		easing: 'ease',
+		speed: 400
+	});
+	beforeNavigate(() => NProgress.start());
+	afterNavigate(() => NProgress.done());
 
-    let isReaderPage = $derived($page.url.pathname.startsWith('/reader/'));
-    let isSidebarOpen = $derived(data.sidebarOpen);
+	// ── Props & derived ──────────────────────────────────────────────────────
+	let { data, children } = $props();
 
-    // ── UI state ─────────────────────────────────────────────────────────────
-    let isDesktop = $state(true);
-    let isDarkMode = $state(true);
-    let isBookmarkOpen = $state(false);
-    let isAuthOpen = $state(false);
-    let isHistoryOpen = $state(true);
-    let bookmarks = $state<BookmarkEntry[]>([]);
-    let isHeaderHidden = $state(false);
+	let isReaderPage = $derived($page.url.pathname.startsWith('/reader/'));
+	let isSidebarOpen = $derived(data.sidebarOpen);
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    function homeHref(extra: Record<string, string> = {}): string {
-        const source = (browser && getImpl()) || 'asura';
-        const params = new URLSearchParams({ source, ...extra });
-        return `/?${params.toString()}`;
-    }
+	// ── UI state ─────────────────────────────────────────────────────────────
+	let isDesktop = $state(true);
+	let isDarkMode = $state(true);
+	let isBookmarkOpen = $state(false);
+	let isAuthOpen = $state(false);
+	let isHistoryOpen = $state(true);
+	let bookmarks = $state<BookmarkEntry[]>([]);
+	let isHeaderHidden = $state(false);
 
-    function formatMangaHref(sourceId: string, mangaId: string): string {
-        const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
-        return `/manga/${sourceId}${clean}`;
-    }
+	// ── Helpers ──────────────────────────────────────────────────────────────
+	function homeHref(extra: Record<string, string> = {}): string {
+		const source = (browser && getImpl()) || 'asura';
+		const params = new URLSearchParams({ source, ...extra });
+		return `/?${params.toString()}`;
+	}
 
-    function navClass(): string {
-        return isDarkMode
-            ? 'hover:bg-zinc-900/80 hover:text-white'
-            : 'hover:bg-black/5 hover:text-zinc-900';
-    }
+	function formatMangaHref(sourceId: string, mangaId: string): string {
+		const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
+		return `/manga/${sourceId}${clean}`;
+	}
 
-    function iconBtnClass(active = false): string {
-        const base = isDarkMode
-            ? 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
-            : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900';
-        return active ? `${base} text-[var(--color-primary)]` : base;
-    }
+	function navClass(): string {
+		return isDarkMode
+			? 'hover:bg-zinc-900/80 hover:text-white'
+			: 'hover:bg-black/5 hover:text-zinc-900';
+	}
 
-    function proxyCover(url: string, sourceId: string, w = 80, h = 120): string {
-        if (!url) return '';
-        let u = String(url).trim();
-        if (u.startsWith('//')) u = 'https:' + u;
-        if (!/^https?:\/\//i.test(u)) return '';
-        return `/api/proxy?url=${encodeURIComponent(u)}&source=${sourceId}&w=${w}&h=${h}`;
-    }
+	function iconBtnClass(active = false): string {
+		const base = isDarkMode
+			? 'text-zinc-300 hover:bg-zinc-800/60 hover:text-white'
+			: 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900';
+		return active ? `${base} text-[var(--color-primary)]` : base;
+	}
 
-    function onCoverError(e: Event) {
-        const img = e.currentTarget as HTMLImageElement;
-        const original = img.dataset.original;
-        if (!original || img.dataset.fallback === '1') {
-            img.style.display = 'none';
-            return;
-        }
-        img.dataset.fallback = '1';
-        const u = original.startsWith('//') ? 'https:' + original : original;
-        img.src = `/api/proxy?url=${encodeURIComponent(u)}&source=${img.dataset.source || ''}`;
-    }
+	function proxyCover(url: string, sourceId: string, w = 80, h = 120): string {
+		if (!url) return '';
+		let u = String(url).trim();
+		if (u.startsWith('//')) u = 'https:' + u;
+		if (!/^https?:\/\//i.test(u)) return '';
+		return `/api/proxy?url=${encodeURIComponent(u)}&source=${sourceId}&w=${w}&h=${h}`;
+	}
 
-    // ── Theme ────────────────────────────────────────────────────────────────
-    function applyTheme(dark: boolean) {
-        isDarkMode = dark;
-        if (!browser) return;
-        document.documentElement.classList.toggle('dark', dark);
-        document.documentElement.classList.toggle('light', !dark);
-        localStorage.setItem('darkMode', String(dark));
-    }
+	function onCoverError(e: Event) {
+		const img = e.currentTarget as HTMLImageElement;
+		const original = img.dataset.original;
+		if (!original || img.dataset.fallback === '1') {
+			img.style.display = 'none';
+			return;
+		}
+		img.dataset.fallback = '1';
+		const u = original.startsWith('//') ? 'https:' + original : original;
+		img.src = `/api/proxy?url=${encodeURIComponent(u)}&source=${img.dataset.source || ''}`;
+	}
 
-    function toggleDarkMode() {
-        applyTheme(!isDarkMode);
-    }
+	// ── Theme ────────────────────────────────────────────────────────────────
+	function applyTheme(dark: boolean) {
+		isDarkMode = dark;
+		if (!browser) return;
+		document.documentElement.classList.toggle('dark', dark);
+		document.documentElement.classList.toggle('light', !dark);
+		localStorage.setItem('darkMode', String(dark));
+	}
 
-    // ── Sidebar ──────────────────────────────────────────────────────────────
-    function toggleSidebar() {
-        isSidebarOpen = !isSidebarOpen;
-        if (browser) {
-            document.cookie = `sidebar_open=${isSidebarOpen}; path=/; max-age=31536000`;
-        }
-    }
+	function toggleDarkMode() {
+		applyTheme(!isDarkMode);
+	}
 
-    function closeOverlays() {
-        if (!isDesktop) isSidebarOpen = false;
-        isBookmarkOpen = false;
-        isAuthOpen = false;
-    }
+	// ── Sidebar ──────────────────────────────────────────────────────────────
+	function toggleSidebar() {
+		isSidebarOpen = !isSidebarOpen;
+		if (browser) {
+			document.cookie = `sidebar_open=${isSidebarOpen}; path=/; max-age=31536000`;
+		}
+	}
 
-    // ── History widget ───────────────────────────────────────────────────────
-    function toggleHistory() {
-        isHistoryOpen = !isHistoryOpen;
-        if (browser) {
-            localStorage.setItem('history_widget_open', String(isHistoryOpen));
-        }
-    }
+	function closeOverlays() {
+		if (!isDesktop) isSidebarOpen = false;
+		isBookmarkOpen = false;
+		isAuthOpen = false;
+	}
 
-    // ── Bookmark / Auth panels ───────────────────────────────────────────────
-    function loadBookmarks() {
-        bookmarks = getBookmarks();
-    }
+	// ── History widget ───────────────────────────────────────────────────────
+	function toggleHistory() {
+		isHistoryOpen = !isHistoryOpen;
+		if (browser) {
+			localStorage.setItem('history_widget_open', String(isHistoryOpen));
+		}
+	}
 
-    function toggleBookmarkPanel() {
-        isBookmarkOpen = !isBookmarkOpen;
-        isAuthOpen = false;
-        if (isBookmarkOpen) loadBookmarks();
-    }
+	// ── Bookmark / Auth panels ───────────────────────────────────────────────
+	function loadBookmarks() {
+		bookmarks = getBookmarks();
+	}
 
-    function handleRemoveBookmark(mangaId: string) {
-        removeBookmark(mangaId);
-        loadBookmarks();
-    }
+	function toggleBookmarkPanel() {
+		isBookmarkOpen = !isBookmarkOpen;
+		isAuthOpen = false;
+		if (isBookmarkOpen) loadBookmarks();
+	}
 
-    function toggleAuth() {
-        isAuthOpen = !isAuthOpen;
-        isBookmarkOpen = false;
-    }
+	function handleRemoveBookmark(mangaId: string) {
+		removeBookmark(mangaId);
+		loadBookmarks();
+	}
 
-    // ── Navigation ───────────────────────────────────────────────────────────
-    function handleNavigate(e: MouseEvent, href: string) {
-        e.preventDefault();
-        closeOverlays();
-        goto(href);
-    }
+	function toggleAuth() {
+		isAuthOpen = !isAuthOpen;
+		isBookmarkOpen = false;
+	}
 
-    function goHome(e: MouseEvent) {
-        e.preventDefault();
-        closeOverlays();
-        goto(homeHref());
-    }
+	/** Setelah login berhasil → tutup dropdown + sync hybrid */
+	async function handleAuthSuccess() {
+		isAuthOpen = false;
+		await Promise.all([syncBookmarksOnLogin(), syncHistoryOnLogin()]);
+		loadBookmarks(); // refresh UI
+	}
 
-    // ── Lifecycle ────────────────────────────────────────────────────────────
-    onMount(() => {
-        const mq = window.matchMedia('(min-width: 1024px)');
+	async function handleLogout() {
+		await logout();
+		isAuthOpen = false;
+	}
 
-        const applyMq = () => {
-            isDesktop = mq.matches;
-            if (!isDesktop) isSidebarOpen = false;
-        };
+	// ── Navigation ───────────────────────────────────────────────────────────
+	function handleNavigate(e: MouseEvent, href: string) {
+		e.preventDefault();
+		closeOverlays();
+		goto(href);
+	}
 
-        applyMq();
-        mq.addEventListener('change', applyMq);
+	function goHome(e: MouseEvent) {
+		e.preventDefault();
+		closeOverlays();
+		goto(homeHref());
+	}
 
-        const savedTheme = localStorage.getItem('darkMode');
-        applyTheme(savedTheme === null ? true : savedTheme === 'true');
+	// ── Lifecycle ────────────────────────────────────────────────────────────
+	onMount(() => {
+		const mq = window.matchMedia('(min-width: 1024px)');
 
-        const savedHistory = localStorage.getItem('history_widget_open');
-        if (savedHistory !== null) {
-            isHistoryOpen = savedHistory === 'true';
-        }
+		const applyMq = () => {
+			isDesktop = mq.matches;
+			if (!isDesktop) isSidebarOpen = false;
+		};
 
-        loadBookmarks();
-        window.addEventListener('bookmarks-changed', loadBookmarks);
+		applyMq();
+		mq.addEventListener('change', applyMq);
 
-        const onDocClick = (e: MouseEvent) => {
-            const t = e.target as HTMLElement;
-            if (!t.closest('[data-dropdown]') && !t.closest('[data-dropdown-btn]')) {
-                isBookmarkOpen = false;
-                isAuthOpen = false;
-            }
-        };
-        document.addEventListener('click', onDocClick);
+		const savedTheme = localStorage.getItem('darkMode');
+		applyTheme(savedTheme === null ? true : savedTheme === 'true');
 
-        // Header auto-hide on scroll
-        let lastScrollY = window.scrollY;
+		const savedHistory = localStorage.getItem('history_widget_open');
+		if (savedHistory !== null) {
+			isHistoryOpen = savedHistory === 'true';
+		}
 
-        const handleScroll = () => {
-            const currentScrollY = window.scrollY;
+		loadBookmarks();
+		window.addEventListener('bookmarks-changed', loadBookmarks);
 
-            if (currentScrollY <= 10) {
-                isHeaderHidden = false;
-                lastScrollY = currentScrollY;
-                return;
-            }
+		const onDocClick = (e: MouseEvent) => {
+			const t = e.target as HTMLElement;
+			if (!t.closest('[data-dropdown]') && !t.closest('[data-dropdown-btn]')) {
+				isBookmarkOpen = false;
+				isAuthOpen = false;
+			}
+		};
+		document.addEventListener('click', onDocClick);
 
-            if (currentScrollY > lastScrollY) {
-                isHeaderHidden = true;
-            } else if (currentScrollY < lastScrollY) {
-                isHeaderHidden = false;
-            }
+		// Header auto-hide on scroll
+		let lastScrollY = window.scrollY;
 
-            lastScrollY = currentScrollY;
-        };
+		const handleScroll = () => {
+			const currentScrollY = window.scrollY;
 
-        window.addEventListener('scroll', handleScroll, { passive: true });
+			if (currentScrollY <= 10) {
+				isHeaderHidden = false;
+				lastScrollY = currentScrollY;
+				return;
+			}
 
-        return () => {
-            mq.removeEventListener('change', applyMq);
-            window.removeEventListener('bookmarks-changed', loadBookmarks);
-            document.removeEventListener('click', onDocClick);
-            window.removeEventListener('scroll', handleScroll);
-        };
-    });
+			if (currentScrollY > lastScrollY) {
+				isHeaderHidden = true;
+			} else if (currentScrollY < lastScrollY) {
+				isHeaderHidden = false;
+			}
+
+			lastScrollY = currentScrollY;
+		};
+
+		window.addEventListener('scroll', handleScroll, { passive: true });
+
+		return () => {
+			mq.removeEventListener('change', applyMq);
+			window.removeEventListener('bookmarks-changed', loadBookmarks);
+			document.removeEventListener('click', onDocClick);
+			window.removeEventListener('scroll', handleScroll);
+		};
+	});
+
+	// Auto-sync ketika user sudah login (misalnya setelah refresh)
+	$effect(() => {
+		const user = getUser();
+		if (user && browser) {
+			const t = setTimeout(() => {
+				syncBookmarksOnLogin();
+				syncHistoryOnLogin();
+			}, 600);
+			return () => clearTimeout(t);
+		}
+	});
 </script>
 
 <svelte:head>
-    <link rel="icon" href={favicon} />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-    <link
-        href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap"
-        rel="stylesheet"
-    />
-    <script>
-        (function () {
-            try {
-                var d = localStorage.getItem('darkMode');
-                var dark = d === null ? true : d === 'true';
-                document.documentElement.classList.toggle('dark', dark);
-                document.documentElement.classList.toggle('light', !dark);
-            } catch (e) {}
-        })();
-    </script>
+	<link rel="icon" href={favicon} />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap"
+		rel="stylesheet"
+	/>
+	<script>
+		(function () {
+			try {
+				var d = localStorage.getItem('darkMode');
+				var dark = d === null ? true : d === 'true';
+				document.documentElement.classList.toggle('dark', dark);
+				document.documentElement.classList.toggle('light', !dark);
+			} catch (e) {}
+		})();
+	</script>
 </svelte:head>
 
 <div
-    class="theme-root min-h-screen font-[Kodchasan,system-ui,sans-serif] {isDarkMode
-        ? 'bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910] text-zinc-100'
-        : 'bg-[#f5f5f7] text-zinc-900'}"
+	class="theme-root min-h-screen font-[Kodchasan,system-ui,sans-serif] {isDarkMode
+		? 'bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910] text-zinc-100'
+		: 'bg-[#f5f5f7] text-zinc-900'}"
 >
-    <!-- ========== LEFT SIDEBAR ========== -->
-    {#if isSidebarOpen && !isDesktop}
-        <button
-            onclick={closeOverlays}
-            class="fixed inset-0 z-40 border-none bg-black/50 backdrop-blur-sm"
-            aria-label="Close sidebar"
-        ></button>
-    {/if}
+	<!-- ========== LEFT SIDEBAR ========== -->
+	{#if isSidebarOpen && !isDesktop}
+		<button
+			onclick={closeOverlays}
+			class="fixed inset-0 z-40 border-none bg-black/50 backdrop-blur-sm"
+			aria-label="Close sidebar"
+		></button>
+	{/if}
 
-    <aside
-        class="fixed top-0 bottom-0 left-0 z-50 flex w-[260px] flex-col border-r transition-transform duration-300
-            {isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            {isDarkMode ? 'border-zinc-800/80 bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910]' : 'border-zinc-200 bg-white'}"
-    >
-        <div
-            class="relative z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4
-                {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"
-        >
-            <a href="/" onclick={goHome} class="flex min-w-0 items-center">
-                <img src={logo} alt="Rokuyomu" class="h-12 w-auto" />
-            </a>
-            <button
-                onclick={toggleSidebar}
-                class="shrink-0 rounded-lg p-1.5 transition
-                    {isDarkMode ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'}"
-                aria-label="Close sidebar"
-            >
-                <X class="h-5 w-5" />
-            </button>
-        </div>
+	<aside
+		class="fixed top-0 bottom-0 left-0 z-50 flex w-[260px] flex-col border-r transition-transform duration-300
+			{isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+			{isDarkMode
+			? 'border-zinc-800/80 bg-gradient-to-b from-violet-950/70 via-[#0c0910] to-[#0c0910]'
+			: 'border-zinc-200 bg-white'}"
+	>
+		<div
+			class="relative z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4
+				{isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"
+		>
+			<a href="/" onclick={goHome} class="flex min-w-0 items-center">
+				<img src={logo} alt="Rokuyomu" class="h-12 w-auto" />
+			</a>
+			<button
+				onclick={toggleSidebar}
+				class="shrink-0 rounded-lg p-1.5 transition
+					{isDarkMode ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'}"
+				aria-label="Close sidebar"
+			>
+				<X class="h-5 w-5" />
+			</button>
+		</div>
 
-        <nav
-            class="relative z-10 flex-1 space-y-0.5 overflow-y-auto p-3 text-sm
-                {isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}"
-        >
-            <a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-                <BookOpen class="h-5 w-5 shrink-0" /> Manga List
-            </a>
-            <a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-                <BookOpen class="h-5 w-5 shrink-0" /> Hentai List
-            </a>
-            <a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-                <Library class="h-5 w-5 shrink-0" /> Genre List
-            </a>
-            <a
-                href="/bookmark"
-                onclick={(e) => handleNavigate(e, '/bookmark')}
-                class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
-            >
-                <Bookmark class="h-5 w-5 shrink-0" /> Bookmark
-            </a>
-            <a
-                href="/history"
-                onclick={(e) => handleNavigate(e, '/history')}
-                class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
-            >
-                <History class="h-5 w-5 shrink-0" /> History
-            </a>
-            <a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-                <FileText class="h-5 w-5 shrink-0" /> Commission
-            </a>
+		<nav
+			class="relative z-10 flex-1 space-y-0.5 overflow-y-auto p-3 text-sm
+				{isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}"
+		>
+			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<BookOpen class="h-5 w-5 shrink-0" /> Manga List
+			</a>
+			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<BookOpen class="h-5 w-5 shrink-0" /> Hentai List
+			</a>
+			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<Library class="h-5 w-5 shrink-0" /> Genre List
+			</a>
+			<a
+				href="/bookmark"
+				onclick={(e) => handleNavigate(e, '/bookmark')}
+				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+			>
+				<Bookmark class="h-5 w-5 shrink-0" /> Bookmark
+			</a>
+			<a
+				href="/history"
+				onclick={(e) => handleNavigate(e, '/history')}
+				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+			>
+				<History class="h-5 w-5 shrink-0" /> History
+			</a>
+			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<FileText class="h-5 w-5 shrink-0" /> Commission
+			</a>
 
-            <div class="my-2 border-t {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"></div>
+			<div class="my-2 border-t {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"></div>
 
-            <a
-                href="https://discord.gg/kkt669knaG"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
-            >
-                <MessageSquare class="h-5 w-5 shrink-0" /> Discord
-            </a>
-            <a
-                href="https://trakteer.id/mikorokuscan"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
-            >
-                <DollarSign class="h-5 w-5 shrink-0" /> Donation
-            </a>
-            <a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-                <Shield class="h-5 w-5 shrink-0" /> Admin Panel
-            </a>
-        </nav>
-    </aside>
+			<a
+				href="https://discord.gg/kkt669knaG"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+			>
+				<MessageSquare class="h-5 w-5 shrink-0" /> Discord
+			</a>
+			<a
+				href="https://trakteer.id/mikorokuscan"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+			>
+				<DollarSign class="h-5 w-5 shrink-0" /> Donation
+			</a>
+			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
+				<Shield class="h-5 w-5 shrink-0" /> Admin Panel
+			</a>
+		</nav>
+	</aside>
 
-    <!-- ========== MAIN + HISTORY ========== -->
-    <div
-        class="flex min-h-screen transition-[margin] duration-300
-            {isSidebarOpen ? 'lg:ml-[260px]' : 'ml-0'}
-            {!isReaderPage ? 'xl:flex-row' : 'flex-col'}"
-    >
-        <!-- Left column -->
-        <div class="flex min-h-screen min-w-0 flex-1 flex-col">
-            <!-- Header -->
-            <header
-    class="sticky top-0 z-30 w-full border-b backdrop-blur-xl
-        transition-transform duration-300 ease-in-out
-        {isHeaderHidden ? '-translate-y-full' : 'translate-y-0'}
-        {isDarkMode
-            ? 'border-zinc-800/50 bg-gradient-to-b from-violet-950/70 via-[#0c0910]/90 to-[#0c0910]/90'
-            : 'border-zinc-200/80 bg-white/90'}"
->
-                <div class="flex h-14 w-full items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-5">
-                    <div class="flex shrink-0 items-center gap-2">
-                        {#if !isSidebarOpen}
-                            <button
-                                onclick={toggleSidebar}
-                                class="rounded-xl p-2 transition {iconBtnClass()}"
-                                aria-label="Toggle menu"
-                            >
-                                <Menu class="h-6 w-6" />
-                            </button>
-                        {/if}
+	<!-- ========== MAIN + HISTORY ========== -->
+	<div
+		class="flex min-h-screen transition-[margin] duration-300
+			{isSidebarOpen ? 'lg:ml-[260px]' : 'ml-0'}
+			{!isReaderPage ? 'xl:flex-row' : 'flex-col'}"
+	>
+		<!-- Left column -->
+		<div class="flex min-h-screen min-w-0 flex-1 flex-col">
+			<!-- Header -->
+			<header
+				class="sticky top-0 z-30 w-full border-b backdrop-blur-xl
+					transition-transform duration-300 ease-in-out
+					{isHeaderHidden ? '-translate-y-full' : 'translate-y-0'}
+					{isDarkMode
+					? 'border-zinc-800/50 bg-gradient-to-b from-violet-950/70 via-[#0c0910]/90 to-[#0c0910]/90'
+					: 'border-zinc-200/80 bg-white/90'}"
+			>
+				<div class="flex h-14 w-full items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-5">
+					<div class="flex shrink-0 items-center gap-2">
+						{#if !isSidebarOpen}
+							<button
+								onclick={toggleSidebar}
+								class="rounded-xl p-2 transition {iconBtnClass()}"
+								aria-label="Toggle menu"
+							>
+								<Menu class="h-6 w-6" />
+							</button>
+						{/if}
 
-                        {#if !isSidebarOpen}
-                            <a href="/" onclick={goHome} class="flex items-center">
-                                <img src={logo} alt="Rokuyomu" class="h-11 w-auto sm:h-12" />
-                            </a>
-                        {/if}
-                    </div>
+						{#if !isSidebarOpen}
+							<a href="/" onclick={goHome} class="flex items-center">
+								<img src={logo} alt="Rokuyomu" class="h-11 w-auto sm:h-12" />
+							</a>
+						{/if}
+					</div>
 
-                    <div class="relative flex shrink-0 items-center gap-0.5">
-                        <button
-                            onclick={toggleDarkMode}
-                            class="rounded-xl p-2.5 transition
-                                {isDarkMode
-                                ? 'text-zinc-300 hover:bg-zinc-800/60 hover:text-amber-300'
-                                : 'text-zinc-600 hover:bg-zinc-100 hover:text-indigo-600'}"
-                            aria-label="Toggle theme"
-                        >
-                            {#if isDarkMode}
-                                <Sun class="h-6 w-6" />
-                            {:else}
-                                <Moon class="h-6 w-6" />
-                            {/if}
-                        </button>
+					<div class="relative flex shrink-0 items-center gap-0.5">
+						<button
+							onclick={toggleDarkMode}
+							class="rounded-xl p-2.5 transition
+								{isDarkMode
+								? 'text-zinc-300 hover:bg-zinc-800/60 hover:text-amber-300'
+								: 'text-zinc-600 hover:bg-zinc-100 hover:text-indigo-600'}"
+							aria-label="Toggle theme"
+						>
+							{#if isDarkMode}
+								<Sun class="h-6 w-6" />
+							{:else}
+								<Moon class="h-6 w-6" />
+							{/if}
+						</button>
 
-                        {#if !isReaderPage}
-                            <button
-                                onclick={toggleHistory}
-                                class="hidden rounded-xl p-2.5 transition xl:flex {iconBtnClass(isHistoryOpen)}"
-                                aria-label="Toggle history"
-                                title="Reading History"
-                            >
-                                <History class="h-6 w-6" />
-                            </button>
-                        {/if}
+						{#if !isReaderPage}
+							<button
+								onclick={toggleHistory}
+								class="hidden rounded-xl p-2.5 transition xl:flex {iconBtnClass(isHistoryOpen)}"
+								aria-label="Toggle history"
+								title="Reading History"
+							>
+								<History class="h-6 w-6" />
+							</button>
+						{/if}
 
-                        <!-- Bookmark dropdown -->
-                        <div class="relative" data-dropdown>
-                            <button
-                                data-dropdown-btn
-                                onclick={toggleBookmarkPanel}
-                                class="relative rounded-xl p-2.5 transition {iconBtnClass()}"
-                                aria-label="Bookmarks"
-                            >
-                                <Bookmark class="h-6 w-6" />
-                                {#if bookmarks.length > 0}
-                                    <span
-                                        class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white"
-                                    >
-                                        {bookmarks.length > 99 ? '99+' : bookmarks.length}
-                                    </span>
-                                {/if}
-                            </button>
+						<!-- Bookmark dropdown -->
+						<div class="relative" data-dropdown>
+							<button
+								data-dropdown-btn
+								onclick={toggleBookmarkPanel}
+								class="relative rounded-xl p-2.5 transition {iconBtnClass()}"
+								aria-label="Bookmarks"
+							>
+								<Bookmark class="h-6 w-6" />
+								{#if bookmarks.length > 0}
+									<span
+										class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white"
+									>
+										{bookmarks.length > 99 ? '99+' : bookmarks.length}
+									</span>
+								{/if}
+							</button>
 
-                            {#if isBookmarkOpen}
-                                <div
-                                    class="absolute right-0 z-50 mt-2 max-h-[70vh] w-80 overflow-hidden rounded-xl border shadow-2xl
-                                        {isDarkMode ? 'border-zinc-800 bg-zinc-900' : 'border-zinc-200 bg-white'}"
-                                >
-                                    <div
-                                        class="flex items-center justify-between border-b px-4 py-3
-                                            {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}"
-                                    >
-                                        <p class="text-sm font-semibold">Bookmarks</p>
-                                        <span class="text-xs text-zinc-500">{bookmarks.length} item</span>
-                                    </div>
+							{#if isBookmarkOpen}
+								<div
+									class="absolute right-0 z-50 mt-2 max-h-[70vh] w-80 overflow-hidden rounded-xl border shadow-2xl
+										{isDarkMode ? 'border-zinc-800 bg-zinc-900' : 'border-zinc-200 bg-white'}"
+								>
+									<div
+										class="flex items-center justify-between border-b px-4 py-3
+											{isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}"
+									>
+										<p class="text-sm font-semibold">Bookmarks</p>
+										<span class="text-xs text-zinc-500">{bookmarks.length} item</span>
+									</div>
 
-                                    {#if bookmarks.length === 0}
-                                        <p class="px-4 py-8 text-center text-xs text-zinc-500">Belum ada bookmark.</p>
-                                    {:else}
-                                        <div class="max-h-[50vh] overflow-y-auto p-2">
-                                            {#each bookmarks as bm}
-                                                {@const mangaHref = formatMangaHref(bm.sourceId, bm.mangaId)}
-                                                <div
-                                                    class="group flex items-center gap-3 rounded-lg p-2 transition
-                                                        {isDarkMode ? 'hover:bg-zinc-800/80' : 'hover:bg-zinc-100'}"
-                                                >
-                                                    <a
-                                                        href={mangaHref}
-                                                        onclick={(e) => handleNavigate(e, mangaHref)}
-                                                        class="flex min-w-0 flex-1 items-center gap-3"
-                                                    >
-                                                        <div class="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-zinc-800">
-                                                            {#if bm.cover}
-                                                                <img
-                                                                    src={proxyCover(bm.cover, bm.sourceId)}
-                                                                    data-original={bm.cover}
-                                                                    data-source={bm.sourceId}
-                                                                    alt={bm.mangaTitle}
-                                                                    class="h-full w-full object-cover"
-                                                                    loading="lazy"
-                                                                    onerror={onCoverError}
-                                                                />
-                                                            {/if}
-                                                        </div>
-                                                        <div class="min-w-0 flex-1">
-                                                            <p class="line-clamp-2 text-xs font-medium">{bm.mangaTitle}</p>
-                                                            <p class="mt-0.5 text-[10px] text-zinc-500 capitalize">{bm.sourceId}</p>
-                                                        </div>
-                                                    </a>
-                                                    <button
-                                                        onclick={() => handleRemoveBookmark(bm.mangaId)}
-                                                        class="shrink-0 rounded-md p-1.5 text-zinc-500 opacity-0 transition
-                                                            group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
-                                                    >
-                                                        <Trash2 class="h-3.5 w-3.5" />
-                                                    </button>
-                                                </div>
-                                            {/each}
-                                        </div>
-                                    {/if}
-                                </div>
-                            {/if}
-                        </div>
-                                                                      <!-- Auth dropdown -->
-                        <div class="relative" data-dropdown>
-                            <button
-                                data-dropdown-btn
-                                onclick={toggleAuth}
-                                class="rounded-full p-1 transition hover:opacity-90"
-                                aria-label="Account"
-                            >
-                                {#if isLoading()}
-                                    <span class="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-700 text-xs">...</span>
-                                {:else if getUser()}
-                                    {#if getUser()?.photoURL}
-                                        <img
-                                            src={getUser()!.photoURL}
-                                            alt="avatar"
-                                            class="h-8 w-8 rounded-full object-cover ring-2 ring-white/10"
-                                        />
-                                    {:else}
-                                        <span
-                                            class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white ring-2 ring-white/10"
-                                        >
-                                            {(getUser()?.displayName?.[0] || getUser()?.email?.[0] || 'U').toUpperCase()}
-                                        </span>
-                                    {/if}
-                                {:else}
-                                    <!-- Guest icon (SVG) -->
-                                    <span
-                                        class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white ring-2 ring-white/10"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                                            <circle cx="12" cy="7" r="4" />
-                                        </svg>
-                                    </span>
-                                {/if}
-                            </button>
+									{#if bookmarks.length === 0}
+										<p class="px-4 py-8 text-center text-xs text-zinc-500">Belum ada bookmark.</p>
+									{:else}
+										<div class="max-h-[50vh] overflow-y-auto p-2">
+											{#each bookmarks as bm}
+												{@const mangaHref = formatMangaHref(bm.sourceId, bm.mangaId)}
+												<div
+													class="group flex items-center gap-3 rounded-lg p-2 transition
+														{isDarkMode ? 'hover:bg-zinc-800/80' : 'hover:bg-zinc-100'}"
+												>
+													<a
+														href={mangaHref}
+														onclick={(e) => handleNavigate(e, mangaHref)}
+														class="flex min-w-0 flex-1 items-center gap-3"
+													>
+														<div class="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-zinc-800">
+															{#if bm.cover}
+																<img
+																	src={proxyCover(bm.cover, bm.sourceId)}
+																	data-original={bm.cover}
+																	data-source={bm.sourceId}
+																	alt={bm.mangaTitle}
+																	class="h-full w-full object-cover"
+																	loading="lazy"
+																	onerror={onCoverError}
+																/>
+															{/if}
+														</div>
+														<div class="min-w-0 flex-1">
+															<p class="line-clamp-2 text-xs font-medium">{bm.mangaTitle}</p>
+															<p class="mt-0.5 text-[10px] text-zinc-500 capitalize">{bm.sourceId}</p>
+														</div>
+													</a>
+													<button
+														onclick={() => handleRemoveBookmark(bm.mangaId)}
+														class="shrink-0 rounded-md p-1.5 text-zinc-500 opacity-0 transition
+															group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
+													>
+														<Trash2 class="h-3.5 w-3.5" />
+													</button>
+												</div>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
 
-                            {#if isAuthOpen}
-                                <div
-                                    class="absolute right-0 z-50 mt-2 w-72 rounded-xl border py-2 shadow-xl
-                                        {isDarkMode ? 'border-zinc-800 bg-zinc-900' : 'border-zinc-200 bg-white'}"
-                                >
-                                    {#if getUser()}
-                                        <!-- Logged in -->
-                                        <div class="border-b px-4 py-3 {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
-                                            <p class="text-sm font-semibold truncate">{getUser()?.displayName || 'User'}</p>
-                                            <p class="text-xs text-zinc-500 truncate">{getUser()?.email}</p>
-                                        </div>
-                                        <div class="p-2">
-                                            <button
-                                                onclick={async () => {
-                                                    await logout();
-                                                    isAuthOpen = false;
-                                                }}
-                                                class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition
-                                                    {isDarkMode ? 'text-zinc-300 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-100'}"
-                                            >
-                                                <LogOut class="h-4 w-4" /> Logout
-                                            </button>
-                                        </div>
-                                    {:else}
-                                        <!-- Not logged in -->
-                                        <div class="border-b px-4 py-3 {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
-                                            <p class="text-sm font-semibold">Login to Rokuyomu</p>
-                                            <p class="text-xs text-zinc-500">Sync your bookmarks & history</p>
-                                        </div>
+						<!-- Auth dropdown -->
+						<div class="relative" data-dropdown>
+							<button
+								data-dropdown-btn
+								onclick={toggleAuth}
+								class="rounded-full p-1 transition hover:opacity-90"
+								aria-label="Account"
+							>
+								{#if isLoading()}
+									<span class="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-700 text-xs">...</span>
+								{:else if getUser()}
+									{#if getUser()?.photoURL}
+										<img
+											src={getUser()!.photoURL}
+											alt="avatar"
+											class="h-8 w-8 rounded-full object-cover ring-2 ring-white/10"
+										/>
+									{:else}
+										<span
+											class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white ring-2 ring-white/10"
+										>
+											{(getUser()?.displayName?.[0] || getUser()?.email?.[0] || 'U').toUpperCase()}
+										</span>
+									{/if}
+								{:else}
+									<span
+										class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white ring-2 ring-white/10"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											class="h-5 w-5"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+											<circle cx="12" cy="7" r="4" />
+										</svg>
+									</span>
+								{/if}
+							</button>
 
-                                        <div class="space-y-2 p-3">
-                                            <!-- Google -->
-                                            <button
-                                                onclick={async () => {
-                                                    try {
-                                                        await loginWithGoogle();
-                                                        isAuthOpen = false;
-                                                    } catch {}
-                                                }}
-                                                class="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition
-                                                    {isDarkMode
-                                                        ? 'border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-white'
-                                                        : 'border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-800'}"
-                                            >
-                                                <svg class="h-4 w-4" viewBox="0 0 24 24">
-                                                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                                                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                                                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                                                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                                                </svg>
-                                                Continue with Google
-                                            </button>
+							{#if isAuthOpen}
+								<div
+									class="absolute right-0 z-50 mt-2 w-72 rounded-xl border py-2 shadow-xl
+										{isDarkMode ? 'border-zinc-800 bg-zinc-900' : 'border-zinc-200 bg-white'}"
+								>
+									{#if getUser()}
+										<!-- Logged in -->
+										<div class="border-b px-4 py-3 {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
+											<p class="truncate text-sm font-semibold">{getUser()?.displayName || 'User'}</p>
+											<p class="truncate text-xs text-zinc-500">{getUser()?.email}</p>
+										</div>
+										<div class="p-2">
+											<button
+												onclick={handleLogout}
+												class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition
+													{isDarkMode
+													? 'text-zinc-300 hover:bg-zinc-800'
+													: 'text-zinc-700 hover:bg-zinc-100'}"
+											>
+												<LogOut class="h-4 w-4" /> Logout
+											</button>
+										</div>
+									{:else}
+										<!-- Not logged in -->
+										<div class="border-b px-4 py-3 {isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}">
+											<p class="text-sm font-semibold">Login to Rokuyomu</p>
+											<p class="text-xs text-zinc-500">Sync your bookmarks & history</p>
+										</div>
 
-                                            <!-- GitHub -->
-                                            <button
-                                                onclick={async () => {
-                                                    try {
-                                                        await loginWithGithub();
-                                                        isAuthOpen = false;
-                                                    } catch {}
-                                                }}
-                                                class="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition
-                                                    {isDarkMode
-                                                        ? 'border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-white'
-                                                        : 'border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-800'}"
-                                            >
-                                                <Github class="h-4 w-4" />
-                                                Continue with GitHub
-                                            </button>
+										<div class="space-y-2 p-3">
+											<!-- Google -->
+											<button
+												onclick={async () => {
+													try {
+														await loginWithGoogle();
+														await handleAuthSuccess();
+													} catch {}
+												}}
+												class="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition
+													{isDarkMode
+													? 'border-zinc-700 bg-zinc-800 text-white hover:bg-zinc-750'
+													: 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'}"
+											>
+												<svg class="h-4 w-4" viewBox="0 0 24 24">
+													<path
+														fill="currentColor"
+														d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+													/>
+													<path
+														fill="currentColor"
+														d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+													/>
+													<path
+														fill="currentColor"
+														d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+													/>
+													<path
+														fill="currentColor"
+														d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+													/>
+												</svg>
+												Continue with Google
+											</button>
 
-                                            <div class="relative my-3">
-                                                <div class="absolute inset-0 flex items-center">
-                                                    <div class="w-full border-t {isDarkMode ? 'border-zinc-700' : 'border-zinc-200'}"></div>
-                                                </div>
-                                                <div class="relative flex justify-center text-xs">
-                                                    <span class="px-2 {isDarkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-white text-zinc-500'}">or email</span>
-                                                </div>
-                                            </div>
+											<!-- GitHub -->
+											<button
+												onclick={async () => {
+													try {
+														await loginWithGithub();
+														await handleAuthSuccess();
+													} catch {}
+												}}
+												class="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition
+													{isDarkMode
+													? 'border-zinc-700 bg-zinc-800 text-white hover:bg-zinc-750'
+													: 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50'}"
+											>
+												<Github class="h-4 w-4" />
+												Continue with GitHub
+											</button>
 
-                                            <!-- Email form -->
-                                            <EmailLoginForm onSuccess={() => (isAuthOpen = false)} {isDarkMode} />
-                                        </div>
-                                    {/if}
-                                </div>
-                            {/if}
-                        </div>
-                    </div>
-                </div> 
-            </header>
+											<div class="relative my-3">
+												<div class="absolute inset-0 flex items-center">
+													<div class="w-full border-t {isDarkMode ? 'border-zinc-700' : 'border-zinc-200'}"></div>
+												</div>
+												<div class="relative flex justify-center text-xs">
+													<span class="px-2 {isDarkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-white text-zinc-500'}"
+														>or email</span
+													>
+												</div>
+											</div>
 
-            <!-- Page content -->
-            <main class="flex-1">
-                <div class="min-h-full" onclick={closeOverlays} role="presentation">
-                    {@render children()}
-                </div>
-            </main>
+											<!-- Email form -->
+											<EmailLoginForm onSuccess={handleAuthSuccess} {isDarkMode} />
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</header>
 
-            <!-- History Widget Mobile -->
-            {#if !isReaderPage}
-                <div class="border-t xl:hidden {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}">
-                    {#if isHistoryOpen}
-                        <div class="flex h-[min(420px,55vh)] max-h-[420px] flex-col overflow-hidden">
-                            <HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
-                        </div>
-                    {:else}
-                        <button
-                            onclick={toggleHistory}
-                            class="flex w-full items-center justify-center gap-2 py-3.5 text-sm font-medium transition
-                                {isDarkMode
-                                ? 'bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800'
-                                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}"
-                        >
-                            <History class="h-4 w-4" />
-                            Show My History
-                        </button>
-                    {/if}
-                </div>
-            {/if}
+			<!-- Page content -->
+			<main class="flex-1">
+				<div class="min-h-full" onclick={closeOverlays} role="presentation">
+					{@render children()}
+				</div>
+			</main>
 
-            <!-- Footer -->
-            {#if !isReaderPage}
-                <Footer {isDarkMode} />
-            {/if}
-        </div>
+			<!-- History Widget Mobile -->
+			{#if !isReaderPage}
+				<div class="border-t xl:hidden {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}">
+					{#if isHistoryOpen}
+						<div class="flex h-[min(420px,55vh)] max-h-[420px] flex-col overflow-hidden">
+							<HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
+						</div>
+					{:else}
+						<button
+							onclick={toggleHistory}
+							class="flex w-full items-center justify-center gap-2 py-3.5 text-sm font-medium transition
+								{isDarkMode
+								? 'bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800'
+								: 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}"
+						>
+							<History class="h-4 w-4" />
+							Show My History
+						</button>
+					{/if}
+				</div>
+			{/if}
 
-        <!-- History Widget Desktop -->
-        {#if !isReaderPage}
-            <div
-                class="sticky top-0 hidden h-screen shrink-0 overflow-hidden transition-all duration-300 ease-in-out xl:flex
-                    {isHistoryOpen ? 'w-[280px]' : 'w-0'}"
-            >
-                <HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
-            </div>
-        {/if}
-    </div>
+			<!-- Footer -->
+			{#if !isReaderPage}
+				<Footer {isDarkMode} />
+			{/if}
+		</div>
+
+		<!-- History Widget Desktop -->
+		{#if !isReaderPage}
+			<div
+				class="sticky top-0 hidden h-screen shrink-0 overflow-hidden transition-all duration-300 ease-in-out xl:flex
+					{isHistoryOpen ? 'w-[280px]' : 'w-0'}"
+			>
+				<HistoryWidget bind:open={isHistoryOpen} {isDarkMode} />
+			</div>
+		{/if}
+	</div>
 </div>
