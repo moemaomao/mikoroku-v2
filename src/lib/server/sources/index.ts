@@ -43,6 +43,7 @@ import { MangaDexSource } from './impl/MangaDex';
 import { LuvyaaSource } from './impl/Luvyaa';
 import { SoftkomikSource } from './impl/Softkomik';
 import { KiryuuSource } from './impl/Kiryuu';
+import { KomikDewasaSource } from './impl/KomikDewasa';
 import type { IMangaSource } from './types';
 
 
@@ -83,7 +84,8 @@ const sources: Record<string, IMangaSource> = {
     mangadex: new MangaDexSource(),
     luvyaa: new LuvyaaSource(),
     softkomik: new SoftkomikSource(),
-    kiryuu: new KiryuuSource()
+    kiryuu: new KiryuuSource(),
+    komikdewasa: new KomikDewasaSource()
 };
 
 /**
