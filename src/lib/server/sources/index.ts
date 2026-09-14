@@ -46,6 +46,7 @@ import { KiryuuSource } from './impl/Kiryuu';
 import { KomikStationSource } from './impl/KomikStation';
 import { ShinigamiSource } from './impl/Shinigami';
 import { AinzScansSource } from './impl/AinzScans';
+import { BacamiSource } from './impl/Bacami';
 import type { IMangaSource } from './types';
 
 
@@ -90,6 +91,7 @@ const sources: Record<string, IMangaSource> = {
     komikstation: new KomikStationSource(),
     shinigami: new ShinigamiSource(),
     ainzscans: new AinzScansSource(),
+    bacami: new BacamiSource(),
 };
 
 /**
