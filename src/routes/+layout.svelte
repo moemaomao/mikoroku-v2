@@ -9,6 +9,7 @@
 	import NProgress from 'nprogress';
 	import 'nprogress/nprogress.css';
 	import { isMultiMode } from '$lib/stores/impl';
+	import { untrack } from 'svelte';
 
 	// Components
 	import Footer from '$lib/components/Footer.svelte';
@@ -79,7 +80,7 @@
 
 	// ── UI state ─────────────────────────────────────────────────────────────
 	let isDesktop = $state(true);
-	let isSidebarOpen = $state(data.sidebarOpen);
+	let isSidebarOpen = $state(untrack(() => data.sidebarOpen));
 	let hasHydrated = $state(false);
 	let isDarkMode = $state(true);
 	let isBookmarkOpen = $state(false);
