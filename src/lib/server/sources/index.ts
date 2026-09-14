@@ -50,6 +50,7 @@ import { BacamiSource } from './impl/Bacami';
 import { ComicasoSource } from './impl/Comicaso';
 import { DojingSource } from './impl/Dojing';
 import { DoujinkuSource } from './impl/Doujinku';
+import { HolodekSource } from './impl/Holodek';
 import type { IMangaSource } from './types';
 
 
@@ -98,6 +99,7 @@ const sources: Record<string, IMangaSource> = {
     comicaso: new ComicasoSource(),
     dojing: new DojingSource(),
     doujinku: new DoujinkuSource(),
+    holodek: new HolodekSource(),
 };
 
 /**
