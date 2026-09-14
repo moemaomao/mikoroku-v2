@@ -92,7 +92,6 @@ export class AsuraSource extends BaseSource {
 			if (cardText.includes('manhua')) type = 'manhua';
 			else if (cardText.includes('manga') && !cardText.includes('manhwa')) type = 'manga';
 
-			// Status dari badge di card
 			let status = 'Ongoing';
 			const statusSpan = $card
 				.find('span')
@@ -130,7 +129,6 @@ export class AsuraSource extends BaseSource {
 				}
 			});
 
-			// Fallback: link chapter di card
 			if (!latestChapter) {
 				const chHref =
 					$card.find('a[href*="/chapter/"]').first().attr('href') || '';

@@ -1,11 +1,3 @@
-/**
- * Image Proxy
- *
- * - Hemat CPU: redirect ke Weserv jika ada `w` dan domain tidak butuh referer khusus.
- * - Domain tertentu → fetch langsung dengan Referer yang sesuai.
- * - Mempertahankan nama file asli melalui Content-Disposition.
- */
-
 import type { RequestHandler } from './$types';
 
 const USER_AGENT =

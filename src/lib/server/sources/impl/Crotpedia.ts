@@ -53,7 +53,6 @@ export class CrotpediaSource extends BaseSource {
 		return m ? parseFloat(m[1]) : 0;
 	}
 
-	/** /baca/foo-chapter-7-bahasa-indonesia → /baca/series/foo */
 	private seriesIdFromChapterPath(path: string): string | null {
 		const p = this.cleanId(path);
 		const m = p.match(/^\/baca\/(.+?)-chapter-[\d.]+/i);
@@ -100,7 +99,6 @@ export class CrotpediaSource extends BaseSource {
 			});
 		};
 
-		// HANYA Update Terbaru (.flexbox4-item) — jangan .flexbox-item (populer)
 		$('.flexbox4-item').each((_, el) => {
 			const $el = $(el);
 			const a = $el.find('.title a[href*="/baca/series/"]').first().length
@@ -121,7 +119,7 @@ export class CrotpediaSource extends BaseSource {
 			push(href, title, cover, typeText, chText);
 		});
 
-		// Fallback (search / layout beda)
+
 		if (!out.length) {
 			$('a[href*="/baca/series/"]').each((_, el) => {
 				const $a = $(el);
@@ -171,9 +169,7 @@ export class CrotpediaSource extends BaseSource {
 			const seen = new Set<string>();
 			const merged: Manga[] = [];
 
-			// Ambil page situs + page berikutnya sampai cukup 24
-			// Situs sering ~20 item/page di Update Terbaru
-			const startSite = p; // app page 1 → site / & /page/2 jika kurang
+			const startSite = p;
 			let sitePage = startSite;
 
 			while (merged.length < this.PER_PAGE && sitePage < startSite + 3) {
@@ -188,16 +184,10 @@ export class CrotpediaSource extends BaseSource {
 					if (merged.length >= this.PER_PAGE) break;
 				}
 
-				// Untuk app page > 1, cukup 1 page situs dulu;
-				// kalau kurang baru ambil page berikutnya
 				if (batch.length === 0) break;
 				sitePage++;
 			}
 
-			// App page > 1: skip item yang sudah "dimakan" page sebelumnya
-			// Estimasi: tiap page situs ~20, app page butuh 24
-			// Mapping sederhana: offset = (p-1)*PER_PAGE di stream beruntun
-			// Karena kita mulai dari sitePage=p, hasil page 2 situs = konten app-ish page 2
 			const list = merged.slice(0, this.PER_PAGE);
 
 			console.log(`[crotpedia] latest page=${p} → ${list.length} items`);
@@ -235,7 +225,6 @@ export class CrotpediaSource extends BaseSource {
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
 
-		// Chapter path → series path
 		if (!/^\/baca\/series\//i.test(path)) {
 			const series = this.seriesIdFromChapterPath(path);
 			if (series) path = series;
@@ -269,7 +258,6 @@ export class CrotpediaSource extends BaseSource {
 		}
 		cover = this.absUrl((cover || '').split('?')[0]);
 
-		// Meta: <li><b>Label</b><span>Value</span></li>
 		const meta: Record<string, string> = {};
 		$('li').each((_, el) => {
 			const $el = $(el);
@@ -310,7 +298,6 @@ export class CrotpediaSource extends BaseSource {
 		if (/complete|finished|end/i.test(statusHint)) status = 'Completed';
 		else if (/ongoing/i.test(statusHint)) status = 'Ongoing';
 
-		// Rating: <div class="series-infoz score"><span>10</span></div>
 		let rating = $('.series-infoz.score span')
 			.first()
 			.text()
@@ -324,7 +311,6 @@ export class CrotpediaSource extends BaseSource {
 				.trim();
 		}
 
-		// Genres — hanya /baca/genre/
 		const genres: string[] = [];
 		$('a[href*="/baca/genre/"]').each((_, a) => {
 			const g = $(a).text().replace(/\s+/g, ' ').trim();

@@ -55,7 +55,6 @@ async function resolveMangaId(
         return hierarchical;
     }
 
-    // Shinigami: /chapter/{uuid} → ambil manga_id dari API
     if (source === 'shinigami' || chapterId.startsWith('/chapter/')) {
         const cid = chapterId.replace(/^\/chapter\//, '').replace(/^\//, '');
         if (cid && /^[a-f0-9-]{36}$/i.test(cid)) {

@@ -97,7 +97,6 @@ export class HitomiSource extends BaseSource {
 		return `https://${sub}.${this.cdn}/${this.ggB}${s}/${hash}.${ext}`;
 	}
 
-	/** Cover kecil (~16KB). Path webpsmallbigtn = 404. */
 	private thumbFromHash(hash: string): string {
 		if (!hash) return '';
 		const a = hash.slice(-1);
@@ -165,17 +164,12 @@ export class HitomiSource extends BaseSource {
 		return map[t] || t;
 	}
 
-	/**
-	 * Hitomi "japanese" / "日本語" / "en" → ISO code untuk badge flag UI
-	 * (listChapterFlag di +page.svelte: ja→jp, en→gb, ko→kr, …)
-	 */
 	private normalizeLangCode(raw?: string): string | undefined {
 		if (!raw) return undefined;
 		const s = String(raw).trim().toLowerCase();
 		if (!s || s === 'n/a' || s === 'all') return undefined;
 
 		const map: Record<string, string> = {
-			// full name (Hitomi)
 			japanese: 'ja',
 			english: 'en',
 			korean: 'ko',
@@ -193,11 +187,9 @@ export class HitomiSource extends BaseSource {
 			dutch: 'nl',
 			arabic: 'ar',
 			turkish: 'tr',
-			// localname
 			'日本語': 'ja',
 			'한국어': 'ko',
 			'中文': 'zh',
-			// already ISO / alias
 			ja: 'ja',
 			en: 'en',
 			'en-us': 'en',
@@ -226,7 +218,6 @@ export class HitomiSource extends BaseSource {
 		return undefined;
 	}
 
-	/** Map tag Hitomi → female:xxx / male:xxx / plain */
 	private mapTag(t: any): string {
 		const name = String(t?.tag || '').trim();
 		if (!name) return '';
@@ -282,7 +273,6 @@ export class HitomiSource extends BaseSource {
 		else if (text.includes('image set') || text.includes('imageset')) typeRaw = 'imageset';
 	}
 
-	// Language
 	let langRaw = '';
 	const langHref =
 		$('a[href*="index-"]').attr('href') ||
@@ -300,7 +290,6 @@ export class HitomiSource extends BaseSource {
 		if (tableLang) langRaw = tableLang;
 	}
 
-	// Page count (untuk latestChapter biar badge muncul)
 	let pages: number | undefined;
 	const pagesText =
 		$('.page-count, .lillie + div, td')
@@ -320,17 +309,16 @@ export class HitomiSource extends BaseSource {
 		type: this.normalizeType(typeRaw) || 'manga',
 		status: 'Completed',
 		lang: this.normalizeLangCode(langRaw),
-		// WAJIB: tanpa ini badge + flag tidak tampil di homepage
 		latestChapter: pages && pages > 0 ? pages : 1
 	};
 }
-	/** List: 1 req (galleryblock). JS hanya fallback. */
+	
 	private async loadBrief(gid: number): Promise<Manga | null> {
 	try {
 		const block = await this.getText(`${this.ltn}/galleryblock/${gid}.html`);
 		const m = this.parseBlock(block, gid);
 		if (m?.title) {
-			// Kalau block tidak dapat lang, coba lengkapi dari JS (1 extra req)
+		
 			if (!m.lang) {
 				try {
 					const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);

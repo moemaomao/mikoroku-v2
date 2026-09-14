@@ -116,7 +116,6 @@ export class KiryuuSource extends BaseSource {
 				'';
 			cover = this.absUrl(cover);
 
-			// type dari icon svg alt
 			const typeAlt = (
 				$card.find('img[alt="manhwa"], img[alt="manhua"], img[alt="manga"]').attr('alt') ||
 				''
@@ -131,7 +130,6 @@ export class KiryuuSource extends BaseSource {
 				status = 'Completed';
 			}
 
-			// chapter badge: link chapter pertama
 			let latestChapter: number | undefined;
 			const chText =
 				$card.find('a[href*="/chapter-"] p, a[href*="/chapter-"]').first().text() ||

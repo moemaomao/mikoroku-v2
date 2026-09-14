@@ -21,11 +21,10 @@ export class DoujinDesuSource extends BaseSource {
 	private readonly PER_PAGE = 24;
 	private readonly APP_SECRET = 'dfdf72051dbfdc7d76889ebd31324e74';
 	private readonly SALT = 'doujindesu-scrapers-cannot-read-this-super-secret-salt-2026-v2';
-	private readonly WINDOW_MS = 3_600_000; // 36e5
+	private readonly WINDOW_MS = 3_600_000;
 
 	// ── Crypto (port dari JS situs) ──────────────────────────────────────────
 
-	/** signed 32-bit like JS `x|0` */
 	private i32(v: number): number {
 		return v | 0;
 	}
@@ -77,7 +76,6 @@ export class DoujinDesuSource extends BaseSource {
 				const text = decodeURIComponent(raw);
 				return JSON.parse(text);
 			} catch {
-				/* try next key */
 			}
 		}
 		throw new Error('Failed to decrypt API payload');
@@ -214,7 +212,6 @@ export class DoujinDesuSource extends BaseSource {
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
 
-		// Kalau yang dikirim chapter /reader/{uuid} → resolve ke slug dulu
 		if (/^\/reader\//i.test(path)) {
 			const uuid = path.split('/').pop() || '';
 			const ch = await this.apiGet<any>(`/api/chapters/${uuid}`);
@@ -239,7 +236,6 @@ export class DoujinDesuSource extends BaseSource {
 			.filter(Boolean)
 			.join(', ');
 
-		// Authors / artist
 		const authors: string[] = [];
 		for (const field of [data.author, data.artist]) {
 			if (!field) continue;
@@ -259,7 +255,7 @@ export class DoujinDesuSource extends BaseSource {
 			const name = g?.genres?.name || g?.name;
 			if (name && !genres.includes(name) && String(name).length < 40) genres.push(name);
 		}
-		// fallback term_list: "MILF:genre:milf|..."
+	
 		if (!genres.length && data.term_list) {
 			String(data.term_list)
 				.split('|')
@@ -272,7 +268,6 @@ export class DoujinDesuSource extends BaseSource {
 		const rating =
 			data.rating != null && data.rating !== '' ? String(data.rating) : '';
 
-		// Chapters → sort ascending
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 		const rows = Array.isArray(data.chapters) ? data.chapters : [];
@@ -338,7 +333,6 @@ export class DoujinDesuSource extends BaseSource {
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);
-		// /reader/{uuid}  atau uuid polos
 		const uuid =
 			path.match(/\/reader\/([a-f0-9-]{36})/i)?.[1] ||
 			path.match(/^\/?([a-f0-9-]{36})$/i)?.[1] ||

@@ -30,7 +30,6 @@ export class HentaieraSource extends BaseSource {
 		return res.text();
 	}
 
-	/** Last-Modified cover → YYYY-MM-DD */
 	private async fetchCoverDate(coverUrl: string): Promise<string> {
 		if (!coverUrl) return '';
 		try {

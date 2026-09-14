@@ -19,11 +19,8 @@ export class EhentaiSource extends BaseSource {
 	name = 'E-Hentai';
 	baseUrl = 'https://e-hentai.org';
 	private apiUrl = 'https://api.e-hentai.org/api.php';
-
 	private readonly PER_PAGE = 24;
-
 	private static readonly CAT_ALL = 1023;
-
 	private static readonly CAT_BITS: Record<string, number> = {
 		misc: 1,
 		doujinshi: 2,
@@ -48,13 +45,10 @@ export class EhentaiSource extends BaseSource {
 			Referer: this.baseUrl + '/',
 			'Cache-Control': 'no-cache',
 			Pragma: 'no-cache',
-			// TODO: ganti dengan cookie login EH kamu yang valid
-			// ipb_pass_hash harus 32 karakter hex
 			Cookie: 'ipb_member_id=0205118; ipb_pass_hash=cead3ccaa9993b8ecc7074c5a7500c;'
 		};
 	}
 
-	/** Override: selalu pakai getHeaders() supaya Cookie ikut */
 	protected override async fetchHtml(path: string): Promise<string> {
 		const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
 		const res = await fetch(url, {
@@ -104,7 +98,6 @@ export class EhentaiSource extends BaseSource {
 		return t || 'manga';
 	}
 
-	/** language:english / (Chinese) → ISO untuk badge flag */
 	private normalizeLangCode(raw?: string): string | undefined {
 		if (!raw) return undefined;
 		let s = String(raw).trim().toLowerCase();
@@ -601,7 +594,6 @@ export class EhentaiSource extends BaseSource {
 
 		const { gid, path } = parsed;
 
-		// 1. Gallery page → total + imgkeys halaman 1
 		const html0 = await this.fetchHtml(path);
 		const $0 = cheerio.load(html0);
 
@@ -635,7 +627,6 @@ export class EhentaiSource extends BaseSource {
 
 		collect($0);
 
-		// 2. Paginate thumbnail sampai semua key terkumpul
 		const MAX_THUMB_PAGES = 50;
 		for (let p = 1; p < MAX_THUMB_PAGES; p++) {
 			if (totalImages > 0 && imgkeys.size >= totalImages) break;
@@ -658,7 +649,6 @@ export class EhentaiSource extends BaseSource {
 		);
 		if (!imgkeys.size) return [];
 
-		// 3. showkey dari halaman gambar pertama
 		const firstPage = Math.min(...imgkeys.keys());
 		const firstKey = imgkeys.get(firstPage)!;
 		const pageHtml = await this.fetchHtml(`/s/${firstKey}/${gid}-${firstPage}`);
@@ -672,7 +662,6 @@ export class EhentaiSource extends BaseSource {
 			return [];
 		}
 
-		// 4. Resolve URL via API showpage (concurrent)
 		const entries = [...imgkeys.entries()].sort((a, b) => a[0] - b[0]);
 		const images: string[] = new Array(entries.length).fill('');
 		const CONCURRENCY = 10;

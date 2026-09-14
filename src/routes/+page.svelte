@@ -8,7 +8,6 @@
 
 	const { data }: { data: PageData } = $props();
 
-// Cast sementara sampai $types ter-generate ulang
 const pageData = $derived(data as PageData & {
 	isMulti?: boolean;
 	preferredSources?: string[];
@@ -49,7 +48,6 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 		return () => observer.disconnect();
 	});
 
-	/** Proxy cover — di multi mode pakai sourceId dari item */
 	function proxyImage(url: string, sourceId?: string): string {
 		const src = sourceId || currentSource;
 		if (!url || !src) return '';
@@ -88,8 +86,6 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 		if (p < 1 || p === currentPage || loading) return;
 
 		const params = new URLSearchParams();
-		// Multi mode: jangan set source → tetap multi
-		// Single mode: set source
 		if (!isMulti && currentSource) {
 			params.set('source', currentSource);
 		}

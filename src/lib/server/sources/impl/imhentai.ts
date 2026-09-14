@@ -49,7 +49,6 @@ export class ImhentaiSource extends BaseSource {
 		return String(mangaId).replace(/\D/g, '');
 	}
 
-	/** Ambil mediaId dari path cover/thumb: zrocdn.xyz/galleries/{mediaId}/... */
 	private extractMediaId(html: string): string {
 		const m = html.match(/zrocdn\.xyz\/galleries\/(\d+)\//);
 		return m?.[1] || '';
@@ -66,12 +65,9 @@ export class ImhentaiSource extends BaseSource {
 			.trim();
 	}
 
-	/** Parse list gallery dari homepage / search (24 item) */
 	private parseList(html: string): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
-
-		// Block: <div class="thumb" ...> ... <a href="/g/ID/"> ... <img data-src="..."> ... <h2 class="gallery_title">TITLE</h2>
 		const re =
 			/<div class="thumb"[^>]*>[\s\S]*?<a href="\/g\/(\d+)\/">[\s\S]*?<img[^>]+data-src="([^"]+)"[^>]*>[\s\S]*?<h2 class="gallery_title"><a[^>]*>([^<]+)<\/a>/gi;
 
@@ -131,10 +127,8 @@ export class ImhentaiSource extends BaseSource {
 			const p = Math.max(1, Number(page) || 1);
 			let url = p === 1 ? `${this.baseUrl}/` : `${this.baseUrl}/?page=${p}`;
 
-			// Filter sederhana via path jika tersedia
 			const type = (opts?.type || 'all').toLowerCase();
 			if (type && type !== 'all') {
-				// contoh: /category/doujinshi/?page=2
 				url =
 					p === 1
 						? `${this.baseUrl}/category/${encodeURIComponent(type)}/`
@@ -256,7 +250,6 @@ export class ImhentaiSource extends BaseSource {
 				return [];
 			}
 
-			// Hitung jumlah halaman dari thumbs yang ada di HTML
 			const thumbRe = new RegExp(
 				`zrocdn\\.xyz/galleries/${mediaId}/(\\d+)t\\.webp`,
 				'gi'
@@ -269,7 +262,6 @@ export class ImhentaiSource extends BaseSource {
 
 			let pageCount = nums.size;
 
-			// Fallback ke pages_num
 			if (!pageCount) {
 				const pagesM = html.match(/pages_num">(\d+)/i);
 				pageCount = pagesM ? parseInt(pagesM[1], 10) : 0;
@@ -280,7 +272,6 @@ export class ImhentaiSource extends BaseSource {
 				return [];
 			}
 
-			// Prefer .webp (format utama saat ini), urut 1..N
 			const urls: string[] = [];
 			for (let i = 1; i <= pageCount; i++) {
 				urls.push(`${this.cdn}/galleries/${mediaId}/${i}.webp`);

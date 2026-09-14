@@ -19,7 +19,6 @@
 		return `/manga/${sourceId}${cleanMangaId}`;
 	}
 
-	/** Normalisasi + proxy URL cover */
 	function proxyCover(url: string, sourceId: string, w = 200, h = 300): string {
 		if (!url) return '';
 		let u = String(url).trim();
@@ -28,7 +27,6 @@
 		return `/api/proxy?url=${encodeURIComponent(u)}&source=${sourceId}&w=${w}&h=${h}`;
 	}
 
-	/** Fallback kalau gambar gagal load */
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;
 		const original = img.dataset.original;
@@ -37,7 +35,6 @@
 			return;
 		}
 		img.dataset.fallback = '1';
-		// Coba lagi tanpa resize (weserv sering gagal)
 		let u = original.startsWith('//') ? 'https:' + original : original;
 		img.src = `/api/proxy?url=${encodeURIComponent(u)}&source=${img.dataset.source || ''}`;
 	}

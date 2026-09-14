@@ -61,12 +61,10 @@ export class BacaKomikSource extends BaseSource {
 		return 'manga';
 	}
 
-	/** /chapter/foo-chapter-12 → /series/foo */
 	private seriesIdFromChapter(path: string): string | null {
 		const p = this.cleanId(path);
 		const m = p.match(/^\/chapter\/(.+?)-chapter-[\d.]+/i);
 		if (m?.[1]) return `/series/${m[1]}`;
-		// fallback: strip trailing -chapter-N
 		const m2 = p.match(/^\/chapter\/(.+)$/i);
 		if (m2?.[1]) {
 			const slug = m2[1].replace(/-chapter-[\d.]+.*$/i, '');
@@ -77,16 +75,14 @@ export class BacaKomikSource extends BaseSource {
 
 	// ── List ─────────────────────────────────────────────────────────────────
 
-	/** Cards disisipkan di: const postCards = ["<a class=\"card...\">...", ...] */
 	private extractPostCardsHtml(html: string): string[] {
 		const m = html.match(/const\s+postCards\s*=\s*(\[[\s\S]*?\]);/);
 		if (!m) return [];
 		try {
-			// String JSON-like dengan escaped quotes
+	
 			const arr = JSON.parse(m[1].replace(/\\'/g, "'")) as string[];
 			return Array.isArray(arr) ? arr : [];
 		} catch {
-			// Fallback regex per fragment
 			const parts: string[] = [];
 			const re = /<a class=\\"card[^"]*\\"[\s\S]*?<\\\/a>/g;
 			let x: RegExpExecArray | null;
@@ -145,7 +141,6 @@ export class BacaKomikSource extends BaseSource {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Primary: postCards JS array
 		for (const frag of this.extractPostCardsHtml(html)) {
 			const m = this.parseCardHtml(frag);
 			if (!m || seen.has(m.id)) continue;
@@ -153,7 +148,6 @@ export class BacaKomikSource extends BaseSource {
 			out.push(m);
 		}
 
-		// Fallback: DOM cards (kalau pernah di-SSR)
 		if (!out.length) {
 			const $ = cheerio.load(html);
 			$('#komik-grid a.card, a.card[href*="/series/"]').each((_, el) => {
@@ -208,7 +202,6 @@ export class BacaKomikSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			// Situs ~18/page → ambil 2 page situs per app-page agar dapat 24
 			const siteStart = (p - 1) * 2 + 1;
 			const paths = [
 				siteStart <= 1 ? `/series/` : `/series/page/${siteStart}/`,
@@ -252,7 +245,6 @@ export class BacaKomikSource extends BaseSource {
 					: `/page/${page}/?s=${encodeURIComponent(q)}`;
 			let list = await this.fetchListPage(path);
 
-			// Search kadang tidak pakai postCards — fallback link series
 			if (!list.length) {
 				const html = await this.fetchHtml(path);
 				const $ = cheerio.load(html);
@@ -317,7 +309,7 @@ export class BacaKomikSource extends BaseSource {
 		.trim();
 
 	// ── Cover (fix) ──────────────────────────────────────────────────────
-	// Prioritas: img.thumb / .series-thumb img
+
 	let cover =
 		$('img.thumb').attr('src') ||
 		$('.series-thumb img').attr('src') ||
@@ -328,7 +320,6 @@ export class BacaKomikSource extends BaseSource {
 
 	const bodyText = $('body').text().replace(/\s+/g, ' ');
 
-	// ── Alt / Author / Status (tetap pakai regex body) ─────────────────────
 	let alt = '';
 	const altM = bodyText.match(/Alternatif\s*:\s*(.+?)(?:Author|Status|Sinopsis|$)/i);
 	if (altM) alt = altM[1].replace(/\s+/g, ' ').trim().replace(/,$/, '');
@@ -373,8 +364,6 @@ export class BacaKomikSource extends BaseSource {
 
 	const typeHint = $('.cpt-label, .card').first().text() || genres.join(' ');
 
-	// ── Chapters (FIX utama) ───────────────────────────────────────────────
-	// Situs sekarang inject chapter lewat: const chapterData = [...]
 	const chapters: Chapter[] = [];
 	const seen = new Set<string>();
 
@@ -403,7 +392,6 @@ export class BacaKomikSource extends BaseSource {
 		}
 	}
 
-	// Fallback lama (kalau suatu saat mereka SSR lagi)
 	if (!chapters.length) {
 		$('a[href*="/chapter/"]').each((_, a) => {
 			const href = $(a).attr('href') || '';
@@ -475,7 +463,6 @@ export class BacaKomikSource extends BaseSource {
 			src = this.absUrl(src.split('?')[0]);
 			if (!/^https?:\/\//i.test(src)) return;
 
-			// skip ads / logo / gif
 			if (
 				/logo|icon|avatar|emoji|banner|\.gif$|ads|wp-content\/uploads\/2025\/10\/bacakomik|histats|yandex/i.test(
 					src
@@ -483,7 +470,6 @@ export class BacaKomikSource extends BaseSource {
 			)
 				return;
 
-			// skip pure ad CDN (r2 ads), tapi izinkan gudangkomik / warungkomik
 			if (
 				/r2\.dev\//i.test(src) &&
 				!/warungkomik|gudangkomik/i.test(src)
@@ -495,7 +481,6 @@ export class BacaKomikSource extends BaseSource {
 			urls.push(src);
 		};
 
-		// Selector baru (utama) + fallback lama
 		$(
 			'.viewer-komik img, .img-wrapper img, .entry-content img, #readerarea img, .reader-area img, article img'
 		).each((_, img) => {
@@ -509,7 +494,6 @@ export class BacaKomikSource extends BaseSource {
 			);
 		});
 
-		// Prefer CDN komik yang valid
 		const preferred = urls.filter((u) =>
 			/gudangkomik|warungkomikcdn|warungkomik/i.test(u)
 		);

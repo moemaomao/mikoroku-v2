@@ -1,4 +1,3 @@
-// src/lib/stores/history.ts
 import { browser } from '$app/environment';
 import {
 	collection,
@@ -90,14 +89,12 @@ export function clearHistory() {
 	window.dispatchEvent(new CustomEvent('history-changed'));
 }
 
-/** Panggil saat user login → merge local ke cloud */
 export async function syncHistoryOnLogin() {
 	if (!browser || !db) return;
 
 	const user = getUser();
 	if (!user) return;
 
-	// Ambil referensi yang sudah pasti non-null
 	const firestore = db;
 
 	try {

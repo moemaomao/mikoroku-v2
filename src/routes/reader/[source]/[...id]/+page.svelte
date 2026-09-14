@@ -166,7 +166,6 @@
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
-	/** Navigasi chapter — replaceState agar Back browser langsung ke detail */
 	async function goToChapter(target: unknown) {
 		showChapterList = false;
 		isMenuOpen = false;
@@ -417,7 +416,6 @@
 		{/if}
 	</main>
 
-	<!-- Bottom nav: prev / next chapter -->
 	<div
 		class="fixed right-0 bottom-0 left-0 z-[100] flex justify-center gap-[18px] border-t px-5 py-3 transition-opacity duration-300
 			{isDarkMode ? 'border-white/5' : 'border-zinc-300/60 bg-white/70 backdrop-blur-md'}
@@ -472,7 +470,6 @@
 		</button>
 	</div>
 
-	<!-- Settings overlay (kanan bawah) -->
 	<div class="fixed right-[15px] bottom-[78px] z-[300] flex flex-col items-center gap-2.5">
 		<button
 			onclick={scrollToTop}

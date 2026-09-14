@@ -126,7 +126,6 @@ export class HentaireadSource extends BaseSource {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Split per card (lebih stabil daripada regex global)
 		const blocks = html.split(/class="[^"]*manga-item[^"]*"/i);
 
 		for (let i = 1; i < blocks.length; i++) {
@@ -138,7 +137,6 @@ export class HentaireadSource extends BaseSource {
 			if (!slug || seen.has(slug)) continue;
 			seen.add(slug);
 
-			// Cover: prioritaskan srcset → data-srcset → data-src → data-original → src
 			let cover = '';
 			const srcsetM = block.match(/(?:srcset|data-srcset)=["']([^"']+)["']/i);
 			if (srcsetM) {
@@ -152,7 +150,6 @@ export class HentaireadSource extends BaseSource {
 				cover = lazyM?.[1] || srcM?.[1] || '';
 			}
 
-			// Buang placeholder / data-uri
 			if (
 				!cover ||
 				cover.startsWith('data:') ||
@@ -162,7 +159,6 @@ export class HentaireadSource extends BaseSource {
 			}
 			cover = this.normalizeCover(cover);
 
-			// Title
 			const titleM =
 				block.match(
 					/<a[^>]*href="[^"]*\/hentai\/[^"]+"[^>]*>\s*([^<]{2,200})\s*<\/a>/i
@@ -181,7 +177,6 @@ export class HentaireadSource extends BaseSource {
 			});
 		}
 
-		// Fallback kalau class berubah
 		if (!out.length) {
 			const slugRe =
 				/href="(?:https?:\/\/hentairead\.com)?\/hentai\/([a-z0-9_-]+)\/"/gi;
@@ -212,12 +207,10 @@ export class HentaireadSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			// sortby=new = latest
 			const url = `${this.baseUrl}/hentai/page/${p}/?sortby=new&order=desc`;
 			const html = await this.getHtml(url);
 			const list = this.parseList(html);
 			console.log(`[hentairead] latest page=${p} → ${list.length} items`);
-			// Homepage & grid pakai max 24 judul (sama seperti nhentai/hitomi)
 			return list.slice(0, 24);
 		} catch (e) {
 			console.error('[hentairead] getLatestManga', e);
@@ -264,7 +257,6 @@ export class HentaireadSource extends BaseSource {
 		const altM = html.match(/manga-titles[^>]*>[\s\S]*?<h2[^>]*>([^<]+)<\/h2>/i);
 		const alt = altM ? this.decodeHtml(altM[1]) : '';
 
-		// Cover dari srcset / data-src / src
 		let cover = '';
 		const srcsetM = html.match(
 			/manga-item__img[\s\S]{0,500}?(?:srcset|data-srcset)=["']([^"']+)["']/i
@@ -283,7 +275,6 @@ export class HentaireadSource extends BaseSource {
 		}
 		cover = this.normalizeCover(cover);
 
-		// Meta rows: Artist, Tags, Pages, Uploaded, Language, ...
 		const meta: Record<string, string[]> = {};
 		const rowRe =
 			/<div class="flex flex-wrap items-center gap-2"[^>]*>([\s\S]*?)<\/div>/gi;
@@ -371,12 +362,10 @@ export class HentaireadSource extends BaseSource {
 			const urls: string[] = [];
 			const seen = new Set<string>();
 
-			// Ambil isi list lazy-loading
 			const imgRe =
 				/<ul[^>]*class="[^"]*lazy-listing__list[^"]*"[^>]*>([\s\S]*?)<\/ul>/i;
 			const listHtml = html.match(imgRe)?.[1] || html;
 
-			// data-src lebih sering dipakai (lazy), baru src
 			const srcRe = /<img[^>]+(?:data-src|src)=["']([^"']+)["']/gi;
 			let m: RegExpExecArray | null;
 
@@ -386,10 +375,8 @@ export class HentaireadSource extends BaseSource {
 					continue;
 				}
 
-				// hencover → henread, buang /preview
 				src = this.toFullImage(src);
 
-				// absolutkan
 				if (src.startsWith('//')) src = `https:${src}`;
 				else if (src.startsWith('/')) src = `${this.baseUrl}${src}`;
 

@@ -145,7 +145,6 @@ export class Hentai2readSource extends BaseSource {
             const html = await this.getHtml(url);
             let list = this.parseList(html);
 
-            // Jika item kurang dari 24, ambil dari halaman berikutnya agar pas 24 item
             if (list.length < 24 && list.length > 0) {
                 try {
                     const nextUrl = `${this.baseUrl}/latest/${p + 1}/`;
@@ -210,24 +209,20 @@ export class Hentai2readSource extends BaseSource {
 
         const html = await this.getHtml(`${this.baseUrl}/${slug}/`);
 
-        // Perbaikan pengambilan judul agar tidak terkena teks "Home"
         const titleM = 
             html.match(/<h1[^>]*>([^<]+)<\/h1>/i) ||
             html.match(/class="[^"]*manga-title[^"]*"[^>]*>([^<]+)</i) ||
             html.match(/<title>([^|<–-]+)/i);
             
         let title = titleM ? this.decodeHtml(titleM[1]) : slug;
-        // Bersihkan jika masih ada embel-embel nama situs
         title = title.replace(/\s*[-–|].*$/, '').replace(/\s*Hentai by.*$/i, '').trim();
         if (title.toLowerCase() === 'home' || !title) {
             title = slug.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         }
 
-        // Ambil data-mid yang akurat dari halaman detail
         const midM = html.match(/data-mid="(\d+)"/i) || html.match(/manga_id\s*[:=]\s*['"]?(\d+)/i);
         const mid = midM?.[1] || '';
         
-        // Perbaikan pencarian cover unik berdasarkan elemen gambar manga di halaman detail
         let cover = '';
         const imgCoverMatch = html.match(/src="(https:\/\/img\d+\.hentaicdn\.com\/hentai\/cover\/[^"]+)"/i) ||
                               html.match(/data-src="(https:\/\/img\d+\.hentaicdn\.com\/hentai\/cover\/[^"]+)"/i);

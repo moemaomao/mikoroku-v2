@@ -24,7 +24,6 @@ export class KingcomixSource extends BaseSource {
 		return `${this.baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
 	}
 
-	/** Normalize id → path bersih, contoh: /monica-the-tsundere-mewtwo-gammainks/ */
 	private cleanId(link: string): string {
 		let id = (link || '').trim();
 		if (id.startsWith('http')) {
@@ -35,9 +34,7 @@ export class KingcomixSource extends BaseSource {
 			}
 		}
 		if (!id.startsWith('/')) id = `/${id}`;
-		// buang query/hash
 		id = id.split('?')[0].split('#')[0];
-		// pastikan trailing slash konsisten
 		if (!id.endsWith('/')) id += '/';
 		return id;
 	}
@@ -65,14 +62,11 @@ export class KingcomixSource extends BaseSource {
 	private parseList($: cheerio.CheerioAPI): Manga[] {
 		const res: Manga[] = [];
 		const seen = new Set<string>();
-
-		// Homepage pakai .entry, search pakai article.post
 		const cards = $('.entry, article.post, article.type-post');
 
 		cards.each((_, el) => {
 			const $card = $(el);
 
-			// Link utama ke komik
 			const $a = $card
 				.find('a[href*="kingcomix.com/"], a[href^="/"]')
 				.filter((_, a) => {
@@ -84,7 +78,6 @@ export class KingcomixSource extends BaseSource {
 
 			let href = $a.attr('href') || '';
 			if (!href) {
-				// fallback: ambil anchor pertama yang valid di card
 				$card.find('a[href]').each((_, a) => {
 					const h = $(a).attr('href') || '';
 					const path = this.cleanId(h);
@@ -106,19 +99,18 @@ export class KingcomixSource extends BaseSource {
 				$a.text().replace(/\s+/g, ' ').trim() ||
 				id.replace(/\//g, '').replace(/-/g, ' ');
 
-			// Cover — prefer full size, fallback thumbnail
 			const $img = $card.find('img').first();
 			let cover =
 				$img.attr('data-src') ||
 				$img.attr('data-lazy-src') ||
 				$img.attr('src') ||
 				'';
-			// srcset: ambil url terbesar / pertama
+	
 			const srcset = $img.attr('srcset') || '';
 			if (!cover && srcset) {
 				cover = srcset.split(',')[0].trim().split(/\s+/)[0];
 			}
-			// upgrade thumbnail -263x365.webp → full .webp bila memungkinkan
+	
 			cover = cover.replace(/-\d+x\d+(\.(webp|jpe?g|png))$/i, '$1');
 			cover = this.absUrl(cover);
 
@@ -132,7 +124,6 @@ export class KingcomixSource extends BaseSource {
 			});
 		});
 
-		// Fallback kalau selector card kosong: scan semua link valid
 		if (res.length === 0) {
 			$('a[href]').each((_, el) => {
 				const href = $(el).attr('href') || '';
@@ -191,7 +182,7 @@ export class KingcomixSource extends BaseSource {
 		if (!q) return this.getLatestManga(page);
 
 		try {
-			// WordPress search; page 2+ jarang dipakai, tapi sediakan
+		
 			const params = new URLSearchParams();
 			params.set('s', q);
 			if (page > 1) params.set('paged', String(page));
@@ -221,7 +212,6 @@ export class KingcomixSource extends BaseSource {
 				.trim() ||
 			path.replace(/\//g, '').replace(/-/g, ' ');
 
-		// Cover: gambar pertama di content / thumbnail
 		let cover =
 			$('.entry-content img, article img')
 				.filter((_, img) => {
@@ -234,7 +224,6 @@ export class KingcomixSource extends BaseSource {
 			'';
 		cover = this.absUrl(cover);
 
-		// Authors: sering ada di title setelah " – " (contoh: Title – Artist)
 		const authors: string[] = [];
 		const dashSplit = title.split(/\s+[–—-]\s+/);
 		if (dashSplit.length >= 2) {
@@ -242,11 +231,9 @@ export class KingcomixSource extends BaseSource {
 			if (artist && artist.length < 40) authors.push(artist);
 		}
 
-		// Genres dari category + tag di halaman
 		const genres: string[] = [];
 		$('a[href*="/category/"], a[href*="/tag/"]').each((_, el) => {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
-			// skip menu noise
 			if (
 				t &&
 				!genres.includes(t) &&
@@ -257,16 +244,12 @@ export class KingcomixSource extends BaseSource {
 			}
 		});
 
-		// Description
 		let synopsis =
 			$('meta[name="description"]').attr('content')?.trim() ||
 			$('.entry-content p').first().text().replace(/\s+/g, ' ').trim() ||
 			'';
 
-		// Hitung jumlah page image (untuk info)
 		const pageCount = this.extractPageImages($).length;
-
-		// Meta untuk UI (parseMeta)
 		const metaLines: string[] = [
 			`Status: Completed`,
 			`Type: comic`,
@@ -274,8 +257,6 @@ export class KingcomixSource extends BaseSource {
 		].filter(Boolean);
 
 		const description = [...metaLines, synopsis].filter(Boolean).join('\n');
-
-		// One-shot → 1 chapter (id = path yang sama)
 		const chapters: Chapter[] = [
 			{
 				id: path,
@@ -310,11 +291,9 @@ private extractPageImages($: cheerio.CheerioAPI): string[] {
 	const pages: string[] = [];
 	const seen = new Set<string>();
 
-	// Ambil scope yang pasti Element (hindari $.root() yang bertipe Document)
 	let $scope = $('.entry-content').first();
 	if (!$scope.length) $scope = $('article .post-content').first();
 	if (!$scope.length) $scope = $('article').first();
-	// fallback terakhir: seluruh body
 	if (!$scope.length) $scope = $('body');
 
 	$scope.find('img').each((_, img) => {
@@ -325,7 +304,6 @@ private extractPageImages($: cheerio.CheerioAPI): string[] {
 			$img.attr('src') ||
 			'';
 
-		// srcset fallback
 		if ((!src || src.startsWith('data:')) && $img.attr('srcset')) {
 			src = ($img.attr('srcset') || '').split(',')[0].trim().split(/\s+/)[0];
 		}
@@ -341,7 +319,6 @@ private extractPageImages($: cheerio.CheerioAPI): string[] {
 			return;
 		}
 
-		// Upgrade thumbnail -WWxHH.ext → full size
 		src = src.replace(/-\d+x\d+(\.(webp|jpe?g|png))(\?.*)?$/i, '$1');
 		src = this.absUrl(src);
 
@@ -351,7 +328,6 @@ private extractPageImages($: cheerio.CheerioAPI): string[] {
 		}
 	});
 
-	// Sort by trailing number di filename
 	pages.sort((a, b) => {
 		const numA = parseInt(a.match(/(\d+)\.(webp|jpe?g|png)/i)?.[1] || '0', 10);
 		const numB = parseInt(b.match(/(\d+)\.(webp|jpe?g|png)/i)?.[1] || '0', 10);

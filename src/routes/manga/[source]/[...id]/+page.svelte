@@ -129,16 +129,16 @@
 		return 'text-zinc-600 dark:text-zinc-300';
 	}
 
-	function handleBookmark() {
-		if (!manga) return;
-		bookmarked = toggleBookmark({
-			mangaId: manga.id,
-			mangaSlug: manga.id,
-			mangaTitle: manga.title,
-			cover: manga.cover || '',
-			sourceId: source
-		});
-	}
+	async function handleBookmark() {
+         if (!manga) return;
+          bookmarked = await toggleBookmark({
+          mangaId: manga.id,
+          mangaSlug: manga.id,
+          mangaTitle: manga.title,
+          cover: manga.cover || '',
+          sourceId: source
+      });
+    }
 
 	function setViewMode(mode: 'grid-thumb' | 'grid-text' | 'list-thumb') {
 		viewMode = mode;

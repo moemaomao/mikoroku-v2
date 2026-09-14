@@ -190,10 +190,7 @@ export class KlmangaSource extends BaseSource {
 			if (t && !genres.includes(t)) genres.push(t);
 		});
 
-		// Authors – site jarang tampilkan, biarkan kosong
 		const authors: string[] = [];
-
-		// Chapters
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
@@ -228,7 +225,6 @@ export class KlmangaSource extends BaseSource {
 			});
 		});
 
-		// Sort ascending (oldest first) biar konsisten dengan Weloma
 		chapters.sort((a, b) => a.number - b.number);
 
 		return {
@@ -255,7 +251,6 @@ export class KlmangaSource extends BaseSource {
 				: `/raw/${chapterId.replace(/^\//, '')}`
 		);
 
-		// 1. Ambil halaman chapter untuk mendapatkan data-reading-id
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
@@ -265,7 +260,6 @@ export class KlmangaSource extends BaseSource {
 			'';
 
 		if (!readingId) {
-			// Fallback: coba parse langsung dari HTML (kalau ada)
 			const images: string[] = [];
 			const seen = new Set<string>();
 			$('img.image-vertical, img.lazyload[data-src], .container-reader-chapter img').each(
@@ -285,7 +279,6 @@ export class KlmangaSource extends BaseSource {
 			return images;
 		}
 
-		// 2. Fetch JSON API
 		const json = await this.fetchJson<{ status: number; html: string }>(
 			`/json/chapter?mode=vertical&id=${readingId}`
 		);

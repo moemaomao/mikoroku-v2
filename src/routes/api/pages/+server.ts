@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { getSource } from '$lib/server/sources';
 import { getCached } from '$lib/server/cache';
 
-const PAGES_CACHE_TTL = 1800; // 30 menit
+const PAGES_CACHE_TTL = 1800;
 
 export const GET: RequestHandler = async ({ url }) => {
 	const source = url.searchParams.get('source');
@@ -23,7 +23,6 @@ export const GET: RequestHandler = async ({ url }) => {
 			async () => {
 				const adapter = getSource(source);
 
-				// E-Hentai punya method range khusus
 				if (source === 'ehentai' && typeof (adapter as any).getChapterPagesRange === 'function') {
 					return await (adapter as any).getChapterPagesRange(chapterId, start, count);
 				}

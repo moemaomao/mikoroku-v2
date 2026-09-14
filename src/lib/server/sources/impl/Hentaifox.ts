@@ -31,7 +31,6 @@ export class HentaifoxSource extends BaseSource {
         return String(mangaId).replace(/\D/g, '');
     }
 
-    /** 1t.jpg / thumb.jpg → full image */
     private thumbToFull(url: string): string {
         if (!url) return '';
         return url
@@ -86,7 +85,6 @@ export class HentaifoxSource extends BaseSource {
                 'doujinshi';
             type = type.toLowerCase() || 'doujinshi';
 
-            // Ekstrak tanggal jika tersedia pada elemen kartu manga
             let date = '';
             const dateText = $el.find('.date, time, .added, span').text();
             const dateMatch = dateText.match(/(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(\d{4}-\d{2}-\d{2})/);
@@ -253,7 +251,6 @@ export class HentaifoxSource extends BaseSource {
             pageCount = $('div.gallery_thumb a[href*="/g/"]').length;
         }
 
-        // Ekstrak tanggal rilis/update dari halaman detail
         let updateDate = '';
         const bodyText = $.root().text();
         const dateMatch = bodyText.match(/(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|([A-Za-z]+\s+\d{1,2},\s+\d{4})/);

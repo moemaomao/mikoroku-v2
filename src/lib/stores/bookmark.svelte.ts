@@ -1,4 +1,3 @@
-// src/lib/stores/bookmark.svelte.ts
 import { browser } from '$app/environment';
 import {
 	collection,
@@ -107,14 +106,12 @@ export function clearBookmarks() {
 	window.dispatchEvent(new CustomEvent('bookmarks-changed'));
 }
 
-/** Panggil saat user login → merge local ke cloud */
 export async function syncBookmarksOnLogin() {
 	if (!browser || !db) return;
 
 	const user = getUser();
 	if (!user) return;
 
-	// Ambil referensi yang sudah pasti non-null
 	const firestore = db;
 
 	try {
@@ -123,7 +120,6 @@ export async function syncBookmarksOnLogin() {
 		const cloud: BookmarkEntry[] = [];
 		snap.forEach((d) => cloud.push(d.data() as BookmarkEntry));
 
-		// Merge: prioritas yang lebih baru
 		const map = new Map<string, BookmarkEntry>();
 		[...cloud, ...local].forEach((b) => {
 			const existing = map.get(b.mangaId);
@@ -136,10 +132,8 @@ export async function syncBookmarksOnLogin() {
 			.sort((a, b) => b.timestamp - a.timestamp)
 			.slice(0, MAX);
 
-		// Simpan ke local
 		saveLocal(merged);
 
-		// Upload ke cloud
 		const batch = writeBatch(firestore);
 		merged.forEach((b) => {
 			batch.set(doc(firestore, 'users', user.uid, 'bookmarks', b.mangaId), b);
