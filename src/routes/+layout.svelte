@@ -83,15 +83,15 @@
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function homeHref(extra: Record<string, string> = {}): string {
-		const source = (browser && getImpl()) || 'asura';
-		const params = new URLSearchParams({ source, ...extra });
-		return `/?${params.toString()}`;
-	}
+	    const params = new URLSearchParams(extra);
+	    const qs = params.toString();
+	    return qs ? `/?${qs}` : '/';
+    }
 
-	function formatMangaHref(sourceId: string, mangaId: string): string {
-		const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
-		return `/manga/${sourceId}${clean}`;
-	}
+    function formatMangaHref(sourceId: string, mangaId: string): string {
+	   const clean = mangaId.startsWith('/') ? mangaId : `/${mangaId}`;
+	   return `/manga/${sourceId}${clean}`;
+    }
 
 	function navClass(): string {
 		return isDarkMode
@@ -182,11 +182,10 @@
 		isBookmarkOpen = false;
 	}
 
-	/** Setelah login berhasil → tutup dropdown + sync hybrid */
 	async function handleAuthSuccess() {
 		isAuthOpen = false;
 		await Promise.all([syncBookmarksOnLogin(), syncHistoryOnLogin()]);
-		loadBookmarks(); // refresh UI
+		loadBookmarks();
 	}
 
 	async function handleLogout() {
@@ -196,16 +195,16 @@
 
 	// ── Navigation ───────────────────────────────────────────────────────────
 	function handleNavigate(e: MouseEvent, href: string) {
-		e.preventDefault();
-		closeOverlays();
-		goto(href);
-	}
+	    e.preventDefault();
+	    closeOverlays();
+	    goto(href);
+    }
 
 	function goHome(e: MouseEvent) {
-		e.preventDefault();
-		closeOverlays();
-		goto(homeHref());
-	}
+	    e.preventDefault();
+	    closeOverlays();
+	    goto('/', { invalidateAll: true });
+    }
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
@@ -239,7 +238,6 @@
 		};
 		document.addEventListener('click', onDocClick);
 
-		// Header auto-hide on scroll
 		let lastScrollY = window.scrollY;
 
 		const handleScroll = () => {
@@ -270,7 +268,6 @@
 		};
 	});
 
-	// Auto-sync ketika user sudah login (misalnya setelah refresh)
 	$effect(() => {
 		const user = getUser();
 		if (user && browser) {
