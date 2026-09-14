@@ -183,7 +183,7 @@
 </script>
 
 <svelte:head>
-	<title>Mikoroku - Browse Manga</title>
+	<title>Rokuyomu - Manga Source Base</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4">
