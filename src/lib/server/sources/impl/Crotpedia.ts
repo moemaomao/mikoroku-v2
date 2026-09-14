@@ -5,15 +5,11 @@ import * as cheerio from 'cheerio';
 /**
  * crotpedia.net adapter (HTML scrape)
  *
- * List   : /  |  /page/{n}/   → .flexbox4-item (Update Terbaru)
+ * List   : /  |  /page/{n}/   → .flexbox4-item / article
  * Search : /?s=QUERY
  * Detail : /baca/series/{slug}/
  * Chapter: /baca/{slug}-chapter-{n}-bahasa-indonesia/
- * Pages  : .entry-content img (reader.eromanga.cfd)
- *
- * ID format:
- *   manga   : "/baca/series/{slug}"
- *   chapter : "/baca/{slug}-chapter-{n}-bahasa-indonesia"
+ * Pages  : .entry-content img, .reader-area img
  */
 export class CrotpediaSource extends BaseSource {
     id = 'crotpedia';
@@ -22,8 +18,6 @@ export class CrotpediaSource extends BaseSource {
     badge = 'Indo';
 
     private readonly PER_PAGE = 24;
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private absUrl(url: string): string {
         if (!url) return '';
@@ -68,8 +62,6 @@ export class CrotpediaSource extends BaseSource {
         return 'manga';
     }
 
-    // ── List ─────────────────────────────────────────────────────────────────
-
     private parseCards($: cheerio.CheerioAPI): Manga[] {
         const out: Manga[] = [];
         const seen = new Set<string>();
@@ -82,7 +74,7 @@ export class CrotpediaSource extends BaseSource {
             chText = ''
         ) => {
             const id = this.cleanId(href);
-            if (!/^\/baca\/series\/[^/]+$/.test(id)) return;
+            if (!id.includes('/baca/series/')) return;
             if (seen.has(id)) return;
             seen.add(id);
 
@@ -100,27 +92,30 @@ export class CrotpediaSource extends BaseSource {
             });
         };
 
-        $('.flexbox4-item').each((_, el) => {
+        // General selectors for WordPress manga themes
+        $('.flexbox4-item, .bs, .listupd .bs, article, .utao').each((_, el) => {
             const $el = $(el);
-            const a = $el.find('.title a[href*="/baca/series/"]').first().length
-                ? $el.find('.title a[href*="/baca/series/"]').first()
-                : $el.find('a[href*="/baca/series/"]').first();
+            const a = $el.find('a[href*="/baca/series/"]').first();
+            if (!a.length) return;
+
             const href = a.attr('href') || '';
             const title =
                 a.attr('title') ||
                 a.text() ||
+                $el.find('.tt h4, .title, h3, h4').text() ||
                 $el.find('img').attr('alt') ||
                 '';
             const cover =
                 $el.find('img').attr('src') ||
                 $el.find('img').attr('data-src') ||
                 '';
-            const typeText = $el.find('.type').text() || '';
-            const chText = $el.find('ul.chapter a').first().text() || '';
+            const typeText = $el.find('.type, .mtype').text() || '';
+            const chText = $el.find('ul.chapter, .epxs, .chapter').first().text() || '';
+
             push(href, title, cover, typeText, chText);
         });
 
-
+        // Fallback broad selector if structured layout fails
         if (!out.length) {
             $('a[href*="/baca/series/"]').each((_, el) => {
                 const $a = $(el);
@@ -129,9 +124,7 @@ export class CrotpediaSource extends BaseSource {
                     .replace(/\s+/g, ' ')
                     .trim();
                 if (!title || title.length < 2) return;
-                const $parent = $a.closest(
-                    '.flexbox4-item, .flexbox-item, article, li, div'
-                );
+                const $parent = $a.closest('article, li, div');
                 const cover =
                     $parent.find('img').attr('src') ||
                     $parent.find('img').attr('data-src') ||
@@ -167,32 +160,8 @@ export class CrotpediaSource extends BaseSource {
     ): Promise<Manga[]> {
         try {
             const p = Math.max(1, Number(page) || 1);
-            const seen = new Set<string>();
-            const merged: Manga[] = [];
-
-            const startSite = p;
-            let sitePage = startSite;
-
-            while (merged.length < this.PER_PAGE && sitePage < startSite + 3) {
-                const path = sitePage <= 1 ? `/` : `/page/${sitePage}/`;
-                const batch = await this.fetchListPage(path);
-                if (!batch.length) break;
-
-                for (const m of batch) {
-                    if (seen.has(m.id)) continue;
-                    seen.add(m.id);
-                    merged.push(m);
-                    if (merged.length >= this.PER_PAGE) break;
-                }
-
-                if (batch.length === 0) break;
-                sitePage++;
-            }
-
-            const list = merged.slice(0, this.PER_PAGE);
-
-            console.log(`[crotpedia] latest page=${p} → ${list.length} items`);
-            return list;
+            const path = p <= 1 ? `/` : `/page/${p}/`;
+            return await this.fetchListPage(path);
         } catch (e) {
             console.error('[crotpedia] getLatestManga', e);
             return [];
@@ -212,7 +181,7 @@ export class CrotpediaSource extends BaseSource {
                 page <= 1
                     ? `/?s=${encodeURIComponent(q)}`
                     : `/page/${page}/?s=${encodeURIComponent(q)}`;
-            const list = (await this.fetchListPage(path)).slice(0, this.PER_PAGE);
+            const list = await this.fetchListPage(path);
             console.log(`[crotpedia] search "${q}" → ${list.length}`);
             return list;
         } catch (e) {
@@ -221,24 +190,17 @@ export class CrotpediaSource extends BaseSource {
         }
     }
 
-    // ── Details ──────────────────────────────────────────────────────────────
-
     async getMangaDetails(mangaId: string): Promise<MangaDetails> {
         let path = this.cleanId(mangaId);
 
-        if (!/^\/baca\/series\//i.test(path)) {
+        if (!path.includes('/baca/series/')) {
             const series = this.seriesIdFromChapterPath(path);
             if (series) path = series;
-        }
-
-        if (!/^\/baca\/series\/[^/]+$/i.test(path)) {
-            throw new Error(`Invalid crotpedia id: ${mangaId}`);
         }
 
         const html = await this.fetchHtml(path + '/');
         const $ = cheerio.load(html);
 
-        // Title
         let title =
             $('.series-title, .entry-title, h1.title, h1').first().text().trim() ||
             $('meta[property="og:title"]').attr('content') ||
@@ -248,38 +210,25 @@ export class CrotpediaSource extends BaseSource {
             .replace(/\s+/g, ' ')
             .trim();
 
-        // Cover
         let cover =
-            $('.series-thumb img, .flexbox4-thumb img, .thumb img').first().attr('src') ||
+            $('.series-thumb img, .thumb img, .infox img').first().attr('src') ||
             $('meta[property="og:image"]').attr('content') ||
             '';
-        if (/crotpedia-project|logo/i.test(cover)) {
-            cover =
-                $('.series-thumb img, .thumb img').first().attr('src') || cover;
-        }
         cover = this.absUrl((cover || '').split('?')[0]);
 
         const meta: Record<string, string> = {};
-        $('li').each((_, el) => {
+        $('li, .infox tr, .spe span').each((_, el) => {
             const $el = $(el);
-            const label = $el
-                .find('b')
-                .first()
-                .text()
-                .replace(/\s+/g, ' ')
-                .trim()
-                .toLowerCase();
-            const value = $el
-                .find('span')
-                .first()
-                .text()
-                .replace(/\s+/g, ' ')
-                .trim();
-            if (label && value) meta[label] = value;
+            const text = $el.text().replace(/\s+/g, ' ').trim();
+            const parts = text.split(':');
+            if (parts.length >= 2) {
+                const label = parts[0].trim().toLowerCase();
+                const value = parts.slice(1).join(':').trim();
+                if (label && value) meta[label] = value;
+            }
         });
 
         const alt = meta['alternative'] || meta['alternatives'] || '';
-
         const authors: string[] = [];
         const authorRaw = meta['author'] || meta['authors'] || meta['artist'] || '';
         authorRaw
@@ -290,116 +239,68 @@ export class CrotpediaSource extends BaseSource {
                 if (!authors.includes(n)) authors.push(n);
             });
 
-        // Status
         let status = 'Ongoing';
-        const statusHint =
-            $('.series-infoz, .status, .type').text() +
-            ' ' +
-            $('body').text().slice(0, 1500);
+        const statusHint = $('body').text().slice(0, 2000);
         if (/complete|finished|end/i.test(statusHint)) status = 'Completed';
-        else if (/ongoing/i.test(statusHint)) status = 'Ongoing';
 
-        let rating = $('.series-infoz.score span')
+        let rating = $('.rating, .score, [itemprop="ratingValue"]')
             .first()
             .text()
-            .replace(/\s+/g, ' ')
+            .replace(/[^\d.]/g, '')
             .trim();
-        if (!rating || !/\d/.test(rating)) {
-            rating = $('.series-infoz.score')
-                .first()
-                .text()
-                .replace(/[^\d.]/g, '')
-                .trim();
-        }
 
         const genres: string[] = [];
-        $('a[href*="/baca/genre/"]').each((_, a) => {
+        $('a[href*="/genre/"], .genrex a, .genre-info a').each((_, a) => {
             const g = $(a).text().replace(/\s+/g, ' ').trim();
-            if (
-                g &&
-                g.length < 40 &&
-                !genres.includes(g) &&
-                !/^genre list$/i.test(g)
-            ) {
-                genres.push(g);
-            }
+            if (g && g.length < 40 && !genres.includes(g)) genres.push(g);
         });
 
-        // Synopsis
         let synopsis = '';
-        $('p').each((_, el) => {
+        $('.entry-content p, .desc p, .synopsis p, [itemprop="description"]').each((_, el) => {
             const t = $(el).text().replace(/\s+/g, ' ').trim();
-            if (
-                t.length > 40 &&
-                !synopsis &&
-                !/chapter list|comment|subscribe/i.test(t)
-            ) {
-                synopsis = t;
-            }
+            if (t.length > 20 && !synopsis) synopsis = t;
         });
 
-        // Chapters
         const chapters: Chapter[] = [];
         const seen = new Set<string>();
         $('a[href*="/baca/"]').each((_, a) => {
             const $a = $(a);
             const href = $a.attr('href') || '';
-            if (!/chapter/i.test(href)) return;
-            if (/\/series\//i.test(href)) return;
+            if (!/chapter/i.test(href) || href.includes('/series/')) return;
 
             const id = this.cleanId(href);
             if (seen.has(id)) return;
             seen.add(id);
 
             const text = $a.text().replace(/\s+/g, ' ').trim();
-            const number =
-                this.parseChapterNumber(href) || this.parseChapterNumber(text);
-            if (!number && !/chapter/i.test(text)) return;
-
-            let date = '';
-            const dateEl = $a.find('.date').text().trim();
-            if (dateEl) date = dateEl;
-            else {
-                const parentText = $a.parent().text().replace(/\s+/g, ' ').trim();
-                const dm = parentText.match(
-                    /(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}/i
-                );
-                if (dm) date = dm[0];
-            }
+            const number = this.parseChapterNumber(href) || this.parseChapterNumber(text);
 
             chapters.push({
                 id,
                 title: text || `Chapter ${number}`,
                 number: number || 0,
-                date
+                date: $a.find('.date').text().trim()
             });
         });
 
         chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
-
         const latestChapter = chapters[chapters.length - 1]?.number;
-        const typeText = $('.type').first().text() || '';
 
         const description = [
             alt && `Alternative: ${alt}`,
             authors.length && `Author(s): ${authors.join(', ')}`,
             rating && `Rating: ${rating}`,
-            latestChapter != null && `Latest chapter: ${latestChapter}`,
             synopsis
         ]
             .filter(Boolean)
             .join('\n\n');
-
-        console.log(
-            `[crotpedia] details ${path} → authors=${authors.join(',')}, rating=${rating}, ch=${chapters.length}, genres=${genres.join(',')}`
-        );
 
         return {
             id: path,
             sourceId: this.id,
             title,
             cover,
-            type: this.detectType(typeText),
+            type: this.detectType($('.type').text()),
             status,
             description,
             authors,
@@ -409,14 +310,9 @@ export class CrotpediaSource extends BaseSource {
         };
     }
 
-    // ── Pages ────────────────────────────────────────────────────────────────
-
     async getChapterPages(chapterId: string): Promise<string[]> {
         const path = this.cleanId(chapterId);
-        if (!/\/baca\//i.test(path) || /\/series\//i.test(path)) {
-            console.error('[crotpedia] not a chapter path:', chapterId);
-            return [];
-        }
+        if (!path.includes('/baca/') || path.includes('/series/')) return [];
 
         try {
             const html = await this.fetchHtml(path + '/');
@@ -424,35 +320,20 @@ export class CrotpediaSource extends BaseSource {
             const urls: string[] = [];
             const seen = new Set<string>();
 
-            const pick = (src: string) => {
-                if (!src || src.startsWith('data:')) return;
-                src = this.absUrl(src.split('?')[0]);
-                if (!/^https?:\/\//i.test(src)) return;
-                if (
-                    /logo|icon|avatar|donasi|gravatar|banner|wp-content\/uploads\/2021/i.test(
-                        src
-                    )
-                )
-                    return;
-                if (/cover\.eromanga|resize=\d+/i.test(src) && !/reader\./i.test(src))
-                    return;
-                if (seen.has(src)) return;
-                seen.add(src);
-                urls.push(src);
-            };
-
             $('.entry-content img, #readerarea img, .reader-area img, article img').each(
                 (_, img) => {
                     const $img = $(img);
-                    pick($img.attr('src') || $img.attr('data-src') || '');
+                    let src = $img.attr('src') || $img.attr('data-src') || '';
+                    if (!src || src.startsWith('data:')) return;
+                    src = this.absUrl(src.split('?')[0]);
+                    if (!/^https?:\/\//i.test(src) || seen.has(src)) return;
+                    if (/logo|icon|avatar|banner/i.test(src)) return;
+                    seen.add(src);
+                    urls.push(src);
                 }
             );
 
-            const readerOnly = urls.filter((u) => /reader\.eromanga\.cfd/i.test(u));
-            const finalUrls = readerOnly.length ? readerOnly : urls;
-
-            console.log(`[crotpedia] ${finalUrls.length} pages → ${path}`);
-            return finalUrls;
+            return urls;
         } catch (e) {
             console.error('[crotpedia] getChapterPages failed', path, e);
             return [];
