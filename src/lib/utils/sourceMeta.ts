@@ -1,0 +1,98 @@
+export type SourceMeta = {
+	flag: string;
+	lang: string;
+	isR18: boolean;
+	color?: string;
+};
+
+export const SOURCE_META: Record<string, SourceMeta> = {
+	asura: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	mangakatana: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	mangabatscom: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	mangabats: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	asurascans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	weloma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-blue-500' },
+	hitomi: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
+	hitomila: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
+	nhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-rose-600' },
+	nhentainet: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-rose-600' },
+	hentaifox: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-red-600' },
+	pornhwa: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-fuchsia-600' },
+	kingcomix: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+	ehentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-purple-600' },
+	klmanga: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+	klz9: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+	love4u: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+	mangadex: { flag: 'un', lang: 'Multi', isR18: false, color: 'bg-yellow-500' },
+	rawkuma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-yellow-500' },
+	komiku: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	voratoon: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	softkomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	komikindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	mangaindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	mgkomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	doujindesu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	crotpedia: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	bacakomik: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	pixhentai: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	imhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
+	hentai2read: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+	hentairead: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+	hentaiera: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
+	simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+	zonatmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
+	lectortmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
+	mangacopy: { flag: 'cn', lang: 'CN', isR18: false, color: 'bg-red-500' },
+	omegascans: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+	luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	kiryuu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	komikstation: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	shinigami: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' }
+};
+
+export const DEFAULT_META: SourceMeta = {
+	flag: 'un',
+	lang: 'Other',
+	isR18: false,
+	color: 'bg-zinc-600'
+};
+
+export const LANG_LABELS: Record<string, string> = {
+	EN: 'English',
+	JP: 'Japanese',
+	ID: 'Indonesian',
+	ES: 'Spanish',
+	CN: 'Chinese',
+	Multi: 'Multilingual'
+};
+
+export const LANG_FILTER_SOURCES = [
+	'hitomi',
+	'nhentai',
+	'imhentai',
+	'ehentai',
+	'hentaiera',
+	'mangadex'
+];
+
+export function getSourceMeta(id: string): SourceMeta {
+	if (!id) return DEFAULT_META;
+	const clean = id.toLowerCase().replace(/[^a-z0-9]/g, '');
+	if (SOURCE_META[clean]) return SOURCE_META[clean];
+	const key = Object.keys(SOURCE_META).find((k) => clean.includes(k));
+	return key ? SOURCE_META[key] : DEFAULT_META;
+}
+
+export function groupSourcesByLang<T extends { id: string }>(sources: T[]): Record<string, T[]> {
+	const groups: Record<string, T[]> = {};
+	for (const src of sources) {
+		const key = getSourceMeta(src.id).lang || 'Other';
+		if (!groups[key]) groups[key] = [];
+		groups[key].push(src);
+	}
+	const order = ['Multi', 'JP', 'EN', 'ID', 'ES', 'CN'];
+	const sorted: Record<string, T[]> = {};
+	for (const k of order) if (groups[k]) sorted[k] = groups[k];
+	for (const k of Object.keys(groups).sort()) if (!sorted[k]) sorted[k] = groups[k];
+	return sorted;
+}

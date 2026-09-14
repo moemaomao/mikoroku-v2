@@ -11,7 +11,7 @@ import type { Manga } from '$lib/server/sources/types';
 
 const LOAD_TIMEOUT_MS = 10000;
 const MAX_MANGAS = 48;
-const PER_SOURCE_LIMIT = 12; // ambil top N per source biar seimbang
+const PER_SOURCE_LIMIT = 12;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -56,7 +56,6 @@ function normLang(lang?: string): string {
 	return aliases[raw] || raw;
 }
 
-/** Interleave results from multiple sources (round-robin) supaya terasa "realtime newest" */
 function interleaveManga(lists: Manga[][]): Manga[] {
 	const result: Manga[] = [];
 	const maxLen = Math.max(0, ...lists.map((l) => l.length));
@@ -81,19 +80,18 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 	let isMulti = false;
 	let preferredSources: string[] = [];
 
-	// ── Multi mode (tidak ada ?source=) ──────────────────────────────────────
-	if (!sourceParam) {
-		preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
-		const validIds = new Set(sources.map((s) => s.id));
-		preferredSources = preferredSources.filter((id) => validIds.has(id));
+	// ── Multi mode ──────────────────────────────────────
+if (!sourceParam) {
+	preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
+	const validIds = new Set(sources.map((s) => s.id));
+	preferredSources = preferredSources.filter((id) => validIds.has(id));
 
-		if (preferredSources.length === 0) {
-			preferredSources = ['asura']; // fallback
-		}
+	isMulti = true;
+	depends('browse:multi');
 
-		isMulti = true;
-		depends('browse:multi');
-
+	if (preferredSources.length === 0) {
+		mangas = [];
+	} else {
 		try {
 			const fetchPromises = preferredSources.map(async (id) => {
 				try {
@@ -122,6 +120,7 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 			mangas = [];
 		}
 	}
+}
 	// ── Single source mode ───────────────────────────────────────────────────
 	else {
 		depends(`browse:${sourceParam}`);

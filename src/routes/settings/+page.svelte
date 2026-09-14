@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Check, Settings, RotateCcw } from 'lucide-svelte';
-	import {
-		getPreferredSources,
-		setPreferredSources
-	} from '$lib/stores/preferredSources';
+	import { Check, Settings } from 'lucide-svelte';
+	import { getPreferredSources, setPreferredSources } from '$lib/stores/preferredSources';
+	import { getSourceMeta, groupSourcesByLang, LANG_LABELS } from '$lib/utils/sourceMeta';
 	import type { PageData } from './$types';
 
 	const { data }: { data: PageData } = $props();
@@ -13,76 +11,7 @@
 	let isDarkMode = $state(true);
 	let saved = $state(false);
 
-	// Meta sama seperti BrowseHeader (bisa di-extract nanti)
-	const SOURCE_META: Record<string, { flag: string; lang: string; isR18: boolean }> = {
-		asura: { flag: 'gb', lang: 'EN', isR18: false },
-		mangakatana: { flag: 'gb', lang: 'EN', isR18: false },
-		mangabatscom: { flag: 'gb', lang: 'EN', isR18: false },
-		mangabats: { flag: 'gb', lang: 'EN', isR18: false },
-		weloma: { flag: 'jp', lang: 'JP', isR18: false },
-		hitomi: { flag: 'un', lang: 'Multi', isR18: true },
-		nhentai: { flag: 'un', lang: 'Multi', isR18: true },
-		hentaifox: { flag: 'gb', lang: 'EN', isR18: true },
-		pornhwa: { flag: 'gb', lang: 'EN', isR18: true },
-		kingcomix: { flag: 'gb', lang: 'EN', isR18: true },
-		ehentai: { flag: 'un', lang: 'Multi', isR18: true },
-		klmanga: { flag: 'jp', lang: 'JP', isR18: false },
-		klz9: { flag: 'jp', lang: 'JP', isR18: false },
-		love4u: { flag: 'jp', lang: 'JP', isR18: false },
-		mangadex: { flag: 'un', lang: 'Multi', isR18: false },
-		rawkuma: { flag: 'jp', lang: 'JP', isR18: false },
-		komiku: { flag: 'id', lang: 'ID', isR18: false },
-		voratoon: { flag: 'id', lang: 'ID', isR18: false },
-		softkomik: { flag: 'id', lang: 'ID', isR18: false },
-		komikindo: { flag: 'id', lang: 'ID', isR18: false },
-		mangaindo: { flag: 'id', lang: 'ID', isR18: false },
-		mgkomik: { flag: 'id', lang: 'ID', isR18: false },
-		doujindesu: { flag: 'id', lang: 'ID', isR18: true },
-		crotpedia: { flag: 'id', lang: 'ID', isR18: true },
-		bacakomik: { flag: 'id', lang: 'ID', isR18: true },
-		pixhentai: { flag: 'id', lang: 'ID', isR18: true },
-		imhentai: { flag: 'un', lang: 'Multi', isR18: true },
-		hentai2read: { flag: 'gb', lang: 'EN', isR18: true },
-		hentairead: { flag: 'gb', lang: 'EN', isR18: true },
-		hentaiera: { flag: 'un', lang: 'Multi', isR18: true },
-		simplyhentai: { flag: 'gb', lang: 'EN', isR18: true },
-		zonatmo: { flag: 'es', lang: 'ES', isR18: false },
-		lectortmo: { flag: 'es', lang: 'ES', isR18: false },
-		mangacopy: { flag: 'cn', lang: 'CN', isR18: false },
-		omegascans: { flag: 'gb', lang: 'EN', isR18: true },
-		luvyaa: { flag: 'id', lang: 'ID', isR18: true },
-		kiryuu: { flag: 'id', lang: 'ID', isR18: false },
-		komikstation: { flag: 'id', lang: 'ID', isR18: false },
-		shinigami: { flag: 'id', lang: 'ID', isR18: false }
-	};
-
-	const DEFAULT_META = { flag: 'un', lang: 'Other', isR18: false };
-
-	function getMeta(id: string) {
-		const clean = id.toLowerCase().replace(/[^a-z0-9]/g, '');
-		if (SOURCE_META[clean]) return SOURCE_META[clean];
-		const key = Object.keys(SOURCE_META).find((k) => clean.includes(k));
-		return key ? SOURCE_META[key] : DEFAULT_META;
-	}
-
-	let grouped = $derived.by(() => {
-		const groups: Record<string, typeof data.sources> = {};
-		for (const src of data.sources) {
-			const meta = getMeta(src.id);
-			const key = meta.lang || 'Other';
-			if (!groups[key]) groups[key] = [];
-			groups[key].push(src);
-		}
-		const order = ['Multi', 'JP', 'EN', 'ID', 'ES', 'CN'];
-		const sorted: Record<string, typeof data.sources> = {};
-		for (const k of order) {
-			if (groups[k]) sorted[k] = groups[k];
-		}
-		for (const k of Object.keys(groups).sort()) {
-			if (!sorted[k]) sorted[k] = groups[k];
-		}
-		return sorted;
-	});
+	let grouped = $derived(groupSourcesByLang(data.sources));
 
 	onMount(() => {
 		preferred = getPreferredSources();
@@ -95,18 +24,18 @@
 	});
 
 	function toggle(id: string) {
-		if (preferred.includes(id)) {
-			preferred = preferred.filter((s) => s !== id);
-		} else {
-			preferred = [...preferred, id];
-		}
+		preferred = preferred.includes(id)
+			? preferred.filter((s) => s !== id)
+			: [...preferred, id];
 		saved = false;
 	}
 
 	function save() {
 		setPreferredSources(preferred);
 		saved = true;
-		setTimeout(() => (saved = false), 2000);
+		setTimeout(() => {
+			window.location.href = '/';
+		}, 300);
 	}
 
 	function selectAll() {
@@ -116,11 +45,6 @@
 
 	function selectNone() {
 		preferred = [];
-		saved = false;
-	}
-
-	function resetDefault() {
-		preferred = ['asura', 'komiku', 'kiryuu', 'mangadex'];
 		saved = false;
 	}
 </script>
@@ -135,9 +59,10 @@
 			<Settings class="h-6 w-6 text-red-500" />
 		</div>
 		<div>
-			<h1 class="text-xl font-bold sm:text-2xl">Pengaturan Source</h1>
+			<h1 class="text-xl font-bold sm:text-2xl">Source Preferences</h1>
 			<p class="mt-0.5 text-sm {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
-				Pilih source yang ingin ditampilkan di homepage. Manga akan di-merge & diurutkan dari yang terbaru.
+				Choose which sources appear on the homepage. Manga will be merged and sorted from the latest updates.
+				Leave empty to disable multi-source and use the source dropdown instead.
 			</p>
 		</div>
 	</div>
@@ -149,24 +74,17 @@
 			class="rounded-lg border px-3 py-1.5 text-xs font-medium transition
 				{isDarkMode ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-300 hover:bg-zinc-100'}"
 		>
-			Pilih Semua
+			Select All
 		</button>
 		<button
 			onclick={selectNone}
 			class="rounded-lg border px-3 py-1.5 text-xs font-medium transition
 				{isDarkMode ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-300 hover:bg-zinc-100'}"
 		>
-			Hapus Semua
-		</button>
-		<button
-			onclick={resetDefault}
-			class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition
-				{isDarkMode ? 'border-zinc-700 hover:bg-zinc-800' : 'border-zinc-300 hover:bg-zinc-100'}"
-		>
-			<RotateCcw class="h-3.5 w-3.5" /> Reset Default
+			Clear All
 		</button>
 		<span class="ml-auto text-xs {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
-			{preferred.length} source dipilih
+			{preferred.length} source{preferred.length === 1 ? '' : 's'} selected
 		</span>
 	</div>
 
@@ -174,12 +92,16 @@
 	<div class="space-y-5">
 		{#each Object.entries(grouped) as [langKey, items]}
 			<div>
-				<h2 class="mb-2 text-xs font-bold uppercase tracking-wider {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
-					{langKey === 'Multi' ? 'Multilingual' : langKey}
+				<h2
+					class="mb-2 text-xs font-bold uppercase tracking-wider {isDarkMode
+						? 'text-zinc-500'
+						: 'text-zinc-400'}"
+				>
+					{LANG_LABELS[langKey] || langKey}
 				</h2>
 				<div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
 					{#each items as src (src.id)}
-						{@const meta = getMeta(src.id)}
+						{@const meta = getSourceMeta(src.id)}
 						{@const active = preferred.includes(src.id)}
 						<button
 							type="button"
@@ -220,22 +142,23 @@
 	<!-- Save bar -->
 	<div
 		class="sticky bottom-4 mt-8 flex items-center justify-between gap-3 rounded-2xl border p-3 shadow-xl
-			{isDarkMode ? 'border-zinc-800 bg-zinc-900/95 backdrop-blur' : 'border-zinc-200 bg-white/95 backdrop-blur'}"
+			{isDarkMode
+				? 'border-zinc-800 bg-zinc-900/95 backdrop-blur'
+				: 'border-zinc-200 bg-white/95 backdrop-blur'}"
 	>
-		<p class="text-xs {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
+		<p class="max-w-[70%] text-xs {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
 			{#if preferred.length === 0}
-				Pilih minimal 1 source.
+				No sources selected — multi-source homepage will be empty. Use the source dropdown to browse a single source.
 			{:else}
-				{preferred.length} source akan ditampilkan di homepage.
+				{preferred.length} source{preferred.length === 1 ? '' : 's'} will be shown on the homepage.
 			{/if}
 		</p>
 		<button
 			onclick={save}
-			disabled={preferred.length === 0}
-			class="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition
-				hover:bg-red-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+			class="shrink-0 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition
+				hover:bg-red-500 active:scale-95"
 		>
-			{saved ? 'Tersimpan ✓' : 'Simpan'}
+			{saved ? 'Saved ✓' : 'Save'}
 		</button>
 	</div>
 </div>
