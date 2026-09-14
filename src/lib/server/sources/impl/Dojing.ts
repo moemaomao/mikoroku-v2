@@ -125,27 +125,52 @@ export class DojingSource extends BaseSource {
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
 	async getLatestManga(
-		page: number,
-		_opts?: { lang?: string; type?: string }
-	): Promise<Manga[]> {
-		try {
-			const p = Math.max(1, Number(page) || 1);
-			const path =
-				p <= 1
-					? `/manga/?order=update`
-					: `/manga/page/${p}/?order=update`;
+	page: number,
+	_opts?: { lang?: string; type?: string }
+): Promise<Manga[]> {
+	try {
+		const p = Math.max(1, Number(page) || 1);
+		// Situs ~12/page → ambil 2 page situs per app-page
+		const siteStart = (p - 1) * 2 + 1;
+		const paths = [
+			siteStart <= 1
+				? `/manga/?order=update`
+				: `/manga/page/${siteStart}/?order=update`,
+			`/manga/page/${siteStart + 1}/?order=update`
+		];
 
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			const list = this.parseCards($);
+		const seen = new Set<string>();
+		const merged: Manga[] = [];
 
-			console.log(`[dojing] latest page=${p} → ${list.length}`);
-			return list.slice(0, this.PER_PAGE);
-		} catch (e) {
-			console.error('[dojing] getLatestManga', e);
-			return [];
+		for (const path of paths) {
+			if (merged.length >= this.PER_PAGE) break;
+
+			try {
+				const html = await this.fetchHtml(path);
+				if (!html || html.length < 500) continue;
+
+				const $ = cheerio.load(html);
+				const batch = this.parseCards($);
+				console.log(`[dojing] ${path} → ${batch.length}`);
+
+				for (const m of batch) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					merged.push(m);
+					if (merged.length >= this.PER_PAGE) break;
+				}
+			} catch (e) {
+				console.warn(`[dojing] fail ${path}`, e);
+			}
 		}
+
+		console.log(`[dojing] latest page=${p} → ${merged.length}`);
+		return merged.slice(0, this.PER_PAGE);
+	} catch (e) {
+		console.error('[dojing] getLatestManga', e);
+		return [];
 	}
+}
 
 	async searchManga(
 		query: string,
