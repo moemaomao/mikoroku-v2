@@ -51,6 +51,7 @@ import { ComicasoSource } from './impl/Comicaso';
 import { DojingSource } from './impl/Dojing';
 import { DoujinkuSource } from './impl/Doujinku';
 import { HolodekSource } from './impl/Holodek';
+import { IkiruSource } from './impl/Ikiru';
 import type { IMangaSource } from './types';
 
 
@@ -100,6 +101,7 @@ const sources: Record<string, IMangaSource> = {
     dojing: new DojingSource(),
     doujinku: new DoujinkuSource(),
     holodek: new HolodekSource(),
+    ikiru: new IkiruSource(),
 };
 
 /**
