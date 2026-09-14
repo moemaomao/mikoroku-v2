@@ -303,6 +303,7 @@
                         {#each items as source (source.id)}
                             {@const meta = getMeta(source.id)}
                             {@const isSelected = source.id.toLowerCase() === currentSource.toLowerCase()}
+
                             <button
                                 type="button"
                                 onclick={() => selectSource(source.id)}
@@ -317,6 +318,7 @@
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-2">
                                         <span class="truncate text-sm font-medium">{source.name}</span>
+
                                         {#if meta.isR18}
                                             <span
                                                 class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white"
@@ -325,13 +327,14 @@
                                             </span>
                                         {/if}
                                     </div>
+
                                     <p class="mt-0.5 text-[11px] opacity-60">
                                         {meta.lang}
                                     </p>
                                 </div>
 
                                 {#if isSelected}
-                                    <Check class="h-4 w-4 shrink-0 text-red-500" />
+                                    <Check class="h-4 w-4 shrink-0 text-violet-500" />
                                 {/if}
                             </button>
                         {/each}
@@ -342,7 +345,7 @@
     </div>
 
     <!-- ========== CUSTOM LANGUAGE DROPDOWN ========== -->
-    {#if ['hitomi', 'nhentai','imhentai','ehentai','hentaiera','mangadex'].includes(currentSource.toLowerCase())}
+    {#if ['hitomi', 'nhentai', 'imhentai', 'ehentai', 'hentaiera', 'mangadex'].includes(currentSource.toLowerCase())}
         <div class="relative">
             <button
                 type="button"
@@ -353,6 +356,7 @@
                 <span class="flex items-center text-base leading-none">
                     {@render renderIcon(currentLangObj.flag)}
                 </span>
+
                 <span class="max-w-[90px] truncate">{currentLangObj.name}</span>
 
                 <ChevronDown
@@ -367,6 +371,7 @@
                     <div class="max-h-[60vh] overflow-y-auto p-1.5">
                         {#each LANGUAGES as lang (lang.id)}
                             {@const isSelected = lang.id === selectedLang}
+
                             <button
                                 type="button"
                                 onclick={() => selectLang(lang.id)}
@@ -375,14 +380,19 @@
                                 <span class="flex h-7 w-7 shrink-0 items-center justify-center text-base">
                                     {@render renderIcon(lang.flag)}
                                 </span>
-                                <span class="flex-1 truncate text-sm font-medium">{lang.name}</span>
+
+                                <span class="flex-1 truncate text-sm font-medium">
+                                    {lang.name}
+                                </span>
+
                                 <span
                                     class="code-badge rounded px-1.5 py-0.5 font-mono text-[10px] uppercase opacity-70"
                                 >
                                     {lang.code}
                                 </span>
+
                                 {#if isSelected}
-                                    <Check class="h-4 w-4 shrink-0 text-red-500" />
+                                    <Check class="h-4 w-4 shrink-0 text-violet-500" />
                                 {/if}
                             </button>
                         {/each}
@@ -403,6 +413,7 @@
             <span class="flex items-center text-base leading-none">
                 {@render renderIcon(currentTypeObj.icon)}
             </span>
+
             <span class="max-w-[90px] truncate">{currentTypeObj.name}</span>
 
             <ChevronDown
@@ -417,6 +428,7 @@
                 <div class="max-h-[60vh] overflow-y-auto p-1.5">
                     {#each TYPES as t (t.id)}
                         {@const isSelected = t.id === selectedType}
+
                         <button
                             type="button"
                             onclick={() => selectType(t.id)}
@@ -425,9 +437,13 @@
                             <span class="flex h-7 w-7 shrink-0 items-center justify-center text-base">
                                 {@render renderIcon(t.icon)}
                             </span>
-                            <span class="flex-1 truncate text-sm font-medium">{t.name}</span>
+
+                            <span class="flex-1 truncate text-sm font-medium">
+                                {t.name}
+                            </span>
+
                             {#if isSelected}
-                                <Check class="h-4 w-4 shrink-0 text-red-500" />
+                                <Check class="h-4 w-4 shrink-0 text-violet-500" />
                             {/if}
                         </button>
                     {/each}
@@ -437,20 +453,25 @@
     </div>
 
     <!-- SEARCH FORM -->
-<form class="flex min-w-0 w-full basis-full gap-2 sm:max-w-md sm:flex-1 sm:basis-auto" onsubmit={handleSearch}>
+    <form
+        class="flex min-w-0 w-full basis-full gap-2 sm:max-w-md sm:flex-1 sm:basis-auto"
+        onsubmit={handleSearch}
+    >
         <div class="relative min-w-0 flex-1">
             <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-40" />
+
             <input
                 type="text"
                 placeholder="Search manga..."
                 bind:value={searchInput}
-                class="filter-btn w-full rounded-full border py-2.5 pl-9 pr-4 text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-red-500"
+                class="filter-btn w-full rounded-full border py-2.5 pl-9 pr-4 text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-violet-500"
             />
         </div>
+
         <button
             type="submit"
             disabled={loading}
-            class="shrink-0 rounded-full bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+            class="shrink-0 rounded-full bg-violet-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-violet-500 disabled:opacity-50"
         >
             {#if loading}
                 <Loader2 class="h-4 w-4 animate-spin" />
@@ -465,20 +486,31 @@
 {#if searchQuery || selectedLang !== 'all' || selectedType !== 'all'}
     <p class="mb-3 text-sm opacity-70">
         Filtering active:
+
         {#if searchQuery}
-            <span class="font-semibold text-red-500">"{searchQuery}"</span>
+            <span class="font-semibold text-violet-500">
+                "{searchQuery}"
+            </span>
         {/if}
+
         {#if selectedLang !== 'all'}
-            <span class="ml-2 rounded bg-red-500/10 px-2 py-0.5 text-xs text-red-500">
+            <span class="ml-2 rounded bg-violet-500/10 px-2 py-0.5 text-xs text-violet-500">
                 Lang: {currentLangObj.name}
             </span>
         {/if}
+
         {#if selectedType !== 'all'}
-            <span class="ml-2 rounded bg-red-500/10 px-2 py-0.5 text-xs text-red-500">
+            <span class="ml-2 rounded bg-violet-500/10 px-2 py-0.5 text-xs text-violet-500">
                 Type: {currentTypeObj.name}
             </span>
         {/if}
-        <a href="/?source={currentSource}" class="ml-3 text-red-500 hover:underline">Clear all</a>
+
+        <a
+            href="/?source={currentSource}"
+            class="ml-3 text-violet-500 hover:underline"
+        >
+            Clear all
+        </a>
     </p>
 {/if}
 
@@ -513,63 +545,79 @@
     }
 
     .active-item {
-        background-color: rgba(239, 68, 68, 0.12) !important;
-        color: #ef4444 !important;
+        background-color: rgba(139, 92, 246, 0.12) !important;
+        color: #8b5cf6 !important;
     }
 
-    .icon-wrapper, .code-badge {
+    .icon-wrapper,
+    .code-badge {
         background-color: var(--bg-subtle, #f4f4f5);
     }
 
-    /* Refactor Dark Mode agar lebih kontras & jelas */
-    :global(html.dark) .filter-btn,
-    :global(body.dark) .filter-btn,
-    :global(.dark) .filter-btn {
-        background-color: #27272a; /* Lebih terang dari background utama supaya tombol terlihat jelas */
-        color: #f4f4f5;
-        border-color: #3f3f46; /* Border lebih tegas */
-    }
+:global(html.dark) .filter-btn,
+:global(body.dark) .filter-btn,
+:global(.dark) .filter-btn {
+    background-color: #47415c;
+    color: #f5f3ff;
+    border-color: #4a4655;
+}
 
-    :global(html.dark) .filter-btn:hover,
-    :global(body.dark) .filter-btn:hover,
-    :global(.dark) .filter-btn:hover {
-        background-color: #3f3f46;
-    }
+:global(html.dark) .filter-btn:hover,
+:global(body.dark) .filter-btn:hover,
+:global(.dark) .filter-btn:hover {
+    background-color: #393541;
+}
 
-    :global(html.dark) .dropdown-menu,
-    :global(body.dark) .dropdown-menu,
-    :global(.dark) .dropdown-menu {
-        background-color: #18181b;
-        color: #f4f4f5;
-        border-color: #3f3f46; /* Border dropdown diperjelas */
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
-    }
+:global(html.dark) .dropdown-menu,
+:global(body.dark) .dropdown-menu,
+:global(.dark) .dropdown-menu {
+    background-color: #24212d;
+    color: #f5f3ff;
+    border-color: #4a4655;
 
-    :global(html.dark) .dropdown-header,
-    :global(body.dark) .dropdown-header,
-    :global(.dark) .dropdown-header {
-        background-color: #27272a;
-        color: #a1a1aa;
-    }
+    box-shadow:
+        0 20px 25px -5px rgba(0, 0, 0, 0.45),
+        0 10px 10px -5px rgba(0, 0, 0, 0.35);
+}
 
-    :global(html.dark) .dropdown-item,
-    :global(body.dark) .dropdown-item,
-    :global(.dark) .dropdown-item {
-        color: #e4e4e7;
-    }
+:global(html.dark) .dropdown-header,
+:global(body.dark) .dropdown-header,
+:global(.dark) .dropdown-header {
+    background-color: #302c3a;
+    color: #c9c3d9;
+}
 
-    :global(html.dark) .dropdown-item:hover,
-    :global(body.dark) .dropdown-item:hover,
-    :global(.dark) .dropdown-item:hover {
-        background-color: #27272a;
-    }
+:global(html.dark) .dropdown-item,
+:global(body.dark) .dropdown-item,
+:global(.dark) .dropdown-item {
+    color: #eeeaf7;
+}
 
-    :global(html.dark) .icon-wrapper,
-    :global(body.dark) .icon-wrapper,
-    :global(.dark) .icon-wrapper,
-    :global(html.dark) .code-badge,
-    :global(body.dark) .code-badge,
-    :global(.dark) .code-badge {
-        background-color: #27272a;
-    }
+/* Hover item */
+:global(html.dark) .dropdown-item:hover,
+:global(body.dark) .dropdown-item:hover,
+:global(.dark) .dropdown-item:hover {
+    background-color: #393541;
+    color: #ffffff;
+}
+
+:global(html.dark) .active-item,
+:global(body.dark) .active-item,
+:global(.dark) .active-item {
+    background-color: rgba(139, 92, 246, 0.18) !important;
+    color: #a78bfa !important;
+}
+
+:global(html.dark) .icon-wrapper,
+:global(body.dark) .icon-wrapper,
+:global(.dark) .icon-wrapper,
+:global(html.dark) .code-badge,
+:global(body.dark) .code-badge,
+:global(.dark) .code-badge {
+    background-color: #302c3a;
+}
+
+:global(html.dark) .code-badge {
+    color: #d8d2e5;
+}
 </style>
