@@ -43,7 +43,8 @@
 		FileText,
 		Shield,
 		LogOut,
-		Github
+		Github,
+		Settings
 	} from 'lucide-svelte';
 
 	// Stores
@@ -367,6 +368,13 @@
 			>
 				<History class="h-5 w-5 shrink-0" /> History
 			</a>
+			<a
+	            href="/settings"
+	            onclick={(e) => handleNavigate(e, '/settings')}
+	            class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+>
+	          <Settings class="h-5 w-5 shrink-0" /> Settings
+            </a>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
 				<FileText class="h-5 w-5 shrink-0" /> Commission
 			</a>
