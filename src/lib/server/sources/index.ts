@@ -44,6 +44,7 @@ import { LuvyaaSource } from './impl/Luvyaa';
 import { SoftkomikSource } from './impl/Softkomik';
 import { KiryuuSource } from './impl/Kiryuu';
 import { KomikStationSource } from './impl/KomikStation';
+import { ShinigamiSource } from './impl/Shinigami';
 import type { IMangaSource } from './types';
 
 
@@ -86,6 +87,7 @@ const sources: Record<string, IMangaSource> = {
     softkomik: new SoftkomikSource(),
     kiryuu: new KiryuuSource(),
     komikstation: new KomikStationSource(),
+    shinigami: new ShinigamiSource(),
 };
 
 /**
