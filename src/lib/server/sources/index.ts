@@ -47,6 +47,7 @@ import { KomikStationSource } from './impl/KomikStation';
 import { ShinigamiSource } from './impl/Shinigami';
 import { AinzScansSource } from './impl/AinzScans';
 import { BacamiSource } from './impl/Bacami';
+import { ComicasoSource } from './impl/Comicaso';
 import type { IMangaSource } from './types';
 
 
@@ -92,6 +93,7 @@ const sources: Record<string, IMangaSource> = {
     shinigami: new ShinigamiSource(),
     ainzscans: new AinzScansSource(),
     bacami: new BacamiSource(),
+    comicaso: new ComicasoSource(),
 };
 
 /**

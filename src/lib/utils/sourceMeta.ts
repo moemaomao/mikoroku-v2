@@ -49,7 +49,8 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	komikstation: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	shinigami: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
     ainzscans: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
-	bacami: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' }
+	bacami: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	comicaso: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' }
 };
 
 export const DEFAULT_META: SourceMeta = {
