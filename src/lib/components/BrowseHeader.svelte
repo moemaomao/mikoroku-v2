@@ -489,6 +489,10 @@
         border-color: var(--border-color, #e4e4e7);
     }
 
+    .filter-btn:hover {
+        background-color: var(--hover-bg, #f4f4f5);
+    }
+
     .dropdown-menu {
         background-color: var(--bg-card, #ffffff);
         color: var(--text-color, #18181b);
@@ -517,12 +521,19 @@
         background-color: var(--bg-subtle, #f4f4f5);
     }
 
+    /* Refactor Dark Mode agar lebih kontras & jelas */
     :global(html.dark) .filter-btn,
     :global(body.dark) .filter-btn,
     :global(.dark) .filter-btn {
-        background-color: #18181b;
+        background-color: #27272a; /* Lebih terang dari background utama supaya tombol terlihat jelas */
         color: #f4f4f5;
-        border-color: #27272a;
+        border-color: #3f3f46; /* Border lebih tegas */
+    }
+
+    :global(html.dark) .filter-btn:hover,
+    :global(body.dark) .filter-btn:hover,
+    :global(.dark) .filter-btn:hover {
+        background-color: #3f3f46;
     }
 
     :global(html.dark) .dropdown-menu,
@@ -530,7 +541,8 @@
     :global(.dark) .dropdown-menu {
         background-color: #18181b;
         color: #f4f4f5;
-        border-color: #27272a;
+        border-color: #3f3f46; /* Border dropdown diperjelas */
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
     }
 
     :global(html.dark) .dropdown-header,
