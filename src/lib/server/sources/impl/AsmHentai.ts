@@ -135,20 +135,29 @@ export class AsmHentaiSource extends BaseSource {
 			seen.add(id);
 
 			const title =
-				$el.find('.caption a, .caption, h3 a').first().text().replace(/\s+/g, ' ').trim() ||
-				$el.find('a').last().text().replace(/\s+/g, ' ').trim() ||
+				$el.find('h2.caption, .cpt a, .caption a, .caption').first().text().replace(/\s+/g, ' ').trim() ||
 				`Gallery ${idm[1]}`;
 
-			const img = $el.find('.image img, img').first();
+			// Cover HANYA dari .image — selector ", img" sebelumnya mengambil flag dulu
+			const img = $el.find('.image img.lazy, .image img').first();
 			let cover =
 				img.attr('data-src') ||
 				img.attr('data-original') ||
-				img.attr('src') ||
+				img.attr('data-lazy-src') ||
 				'';
-			if (cover.startsWith('data:')) {
-				cover = img.attr('data-src') || img.attr('data-original') || '';
+			if (!cover || cover.startsWith('data:')) {
+				const src = img.attr('src') || '';
+				if (src && !src.startsWith('data:') && !/\/images\/(en|jp|cn)\.png/i.test(src)) {
+					cover = src;
+				}
 			}
+			if (cover.startsWith('//')) cover = `https:${cover}`;
 			cover = this.absUrl(cover);
+			if (/\/images\/(en|jp|cn)\.png/i.test(cover)) cover = '';
+			if (!cover) {
+				// fallback thumb CDN (dir 019 umum; detail page punya dir akurat)
+				cover = `https://images.asmhentai.com/019/${idm[1]}/thumb.jpg`;
+			}
 
 			const type =
 				$el.find('.cl h3 a, a[href*="/category/"]').first().text().replace(/\s+/g, ' ').trim() ||
