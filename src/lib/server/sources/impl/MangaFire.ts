@@ -4,21 +4,17 @@ import type { Chapter, Manga, MangaDetails } from '../types';
 /**
  * MangaFire adapter (https://mangafire.to)
  *
- * API membutuhkan VRF token (HMAC-like multi-stage table encrypt).
+ * /api/titles* butuh VRF. /api/top-titles TIDAK butuh VRF → fallback Workers
+ * (IP datacenter Cloudflare sering kena WAF MangaFire).
  *
- * List/Latest : GET /api/titles?order[chapter_updated_at]=desc&page=&limit=
- * Search      : GET /api/titles?keyword=&page=&limit=
+ * List/Latest : GET /api/titles?order[chapter_updated_at]=desc
+ *               fallback → /api/top-titles?type=trending|new
+ * Search      : GET /api/titles?keyword=
  * Detail      : GET /api/titles/{hid}
- * Chapters    : GET /api/titles/{hid}/chapters?language=&page=&limit=
- * Pages       : GET /api/chapters/{chapterId} → data.pages[].url
+ * Chapters    : GET /api/titles/{hid}/chapters?language=
+ * Pages       : GET /api/chapters/{id} → data.pages[].url
  *
- * Language filter (sama pola MangaDex):
- *   opts.lang → normalize → language[] pada /api/titles
- *   chapters  → ?language=en|es|es-la|fr|ja|pt|pt-br
- *
- * ID format:
- *   manga   : "/title/{hid}"
- *   chapter : "/title/{hid}/chapter/{chapterId}"
+ * ID: manga "/title/{hid}" | chapter "/title/{hid}/chapter/{id}"
  */
 export class MangaFireSource extends BaseSource {
 	id = 'mangafire';
@@ -27,7 +23,6 @@ export class MangaFireSource extends BaseSource {
 
 	private readonly PER_PAGE = 24;
 	private readonly DEFAULT_LANG = 'en';
-
 	private readonly SUPPORTED_LANGS = new Set([
 		'en',
 		'es',
@@ -38,38 +33,71 @@ export class MangaFireSource extends BaseSource {
 		'pt-br'
 	]);
 
+	private static readonly B64_CHARS =
+		'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+	private b64Decode(s: string): Uint8Array {
+		const clean = s.replace(/[^A-Za-z0-9+/]/g, '');
+		const len = clean.length;
+		const outLen = ((len * 3) / 4) | 0;
+		const out = new Uint8Array(outLen);
+		const table = new Uint8Array(128);
+		for (let i = 0; i < MangaFireSource.B64_CHARS.length; i++) {
+			table[MangaFireSource.B64_CHARS.charCodeAt(i)] = i;
+		}
+		let p = 0;
+		for (let i = 0; i < len; i += 4) {
+			const a = table[clean.charCodeAt(i)] ?? 0;
+			const b = table[clean.charCodeAt(i + 1)] ?? 0;
+			const c = table[clean.charCodeAt(i + 2)] ?? 0;
+			const d = table[clean.charCodeAt(i + 3)] ?? 0;
+			out[p++] = (a << 2) | (b >> 4);
+			if (p < outLen) out[p++] = ((b & 15) << 4) | (c >> 2);
+			if (p < outLen) out[p++] = ((c & 3) << 6) | d;
+		}
+		return out;
+	}
+
+	private b64EncodeUrl(bytes: Uint8Array): string {
+		const chars = MangaFireSource.B64_CHARS;
+		let out = '';
+		for (let i = 0; i < bytes.length; i += 3) {
+			const a = bytes[i]!;
+			const b = i + 1 < bytes.length ? bytes[i + 1]! : 0;
+			const c = i + 2 < bytes.length ? bytes[i + 2]! : 0;
+			out += chars[a >> 2];
+			out += chars[((a & 3) << 4) | (b >> 4)];
+			out += i + 1 < bytes.length ? chars[((b & 15) << 2) | (c >> 6)] : '';
+			out += i + 2 < bytes.length ? chars[c & 63] : '';
+		}
+		return out.replace(/\+/g, '-').replace(/\//g, '_');
+	}
 
 	private vrfStages: Array<{ table: Uint8Array; key: Uint8Array; iv: number }> | null =
 		null;
 
 	private getVrfStages() {
 		if (this.vrfStages) return this.vrfStages;
-		const b64 = (s: string): Uint8Array => {
-			const bin = atob(s);
-			const out = new Uint8Array(bin.length);
-			for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-			return out;
-		};
 		this.vrfStages = [
 			{
-				table: b64(
+				table: this.b64Decode(
 					'yINlmUNho8VYJT+ibTIP+9ESiULpVEtMOoD6U6lRE0R/xwXo/Xp9NrUgC4cw/Lmo33vUyjUE40kUoEWIr/fxfNNcq2s79ShQ5NhNrFnJ4hXPwOu/SuXzIbuTQKGFvfm08E9jvCfqAtoDqvQq3dVWPQFmJjgvkISBeXY3BgANR+yVnjGbcxZ47d6kLNfZPIayTq3/YGySb1KuVZodWp/WGNAO5pfMcpaK53Hhs0allBszaMaxuouOwdxbwgxIw6YunSsXjI05Yi0j9j4eHKfSXR8Ifo/Od+8iamRfCXTyvm7NGRGYdcQ0ywcK/u6RXhrbcCm4t2eCtrDgQVecJGkQ+A=='
 				),
-				key: b64('0Ec58JOY3uBzJK9m3zqIOpdlF7UFiax9DmA='),
+				key: this.b64Decode('0Ec58JOY3uBzJK9m3zqIOpdlF7UFiax9DmA='),
 				iv: 0x5a
 			},
 			{
-				table: b64(
+				table: this.b64Decode(
 					'IUFltCxD3Oc2cwCgkJffthaOg9cgPUb0LgW6H/VtfcF0kc5F25t+aWj6JH9VOhOaY0rAFdUxlDnl5BLNvwEJvQtP5qcw7vdb/K+chnbwnspSHT8mz5lqwz41TezG0hkO06FTjJZhsyNuFLDpD2ZZxQj/QIRcF90zpmQ7Byu483WsQqUE0C342HL+JXngRB6fRzxRyVTaKu83h7UYTJ0QMt6ixFh6S3F8gqkKwrGTL3jHNBsD45UnifK8+RGtishQV2K3rujLKEkiZxpr2dYcudFW4oFsDKhad3CLBvuyTqsCo4B7mL5IKQ1vXo/MOOvq1I1d8ar9X6Ttu5KF4fZgiA=='
 				),
-				key: b64('AAdjb1iPY8CiDmq9H34tKTBF8a3oDQ=='),
+				key: this.b64Decode('AAdjb1iPY8CiDmq9H34tKTBF8a3oDQ=='),
 				iv: 0x35
 			},
 			{
-				table: b64(
+				table: this.b64Decode(
 					'NQHlu1/wVO5EmkwQymF810qqY2xG1k2obcas4Z9mCsPEIFl9pRIjFxbJ7ybMHbBckT5Ton85E0FOeHezbh/mjlEYpmpnlXOS8dgrqeq2KfxImTh1YK9y0PeMNhzA1OQzSY9brYOJq/l2QnE/hwOeZIhPixVSKIUlDb5vLcH6RWKxkIEMuP0bDwIqQ71AJJaEaMJL7A6YtyIwoRT+L5v4aZzodN/0+3nOGsfblFjgxSfPzVDjNFeNl5P26+kEC/8AHgdrpAbt3hHz3HrRN1Y6e+JHgF7ncFWnoF0y3THL1S71WgWGCa6KtSzTCCG58n68nTyj2T3Sshk7utqCtMi/ZQ=='
 				),
-				key: b64('DELOJgPsVaCcblDtTGMdHzM='),
+				key: this.b64Decode('DELOJgPsVaCcblDtTGMdHzM='),
 				iv: 0xba
 			}
 		];
@@ -97,9 +125,7 @@ export class MangaFireSource extends BaseSource {
 		for (const stage of this.getVrfStages()) {
 			data = this.encryptStage(data, stage.table, stage.key, stage.iv);
 		}
-		let bin = '';
-		for (let i = 0; i < data.length; i++) bin += String.fromCharCode(data[i]!);
-		return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		return this.b64EncodeUrl(data);
 	}
 
 	private buildSignedUrl(
@@ -108,7 +134,6 @@ export class MangaFireSource extends BaseSource {
 	): string {
 		const path = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
 		const sorted = [...params].sort((a, b) => a[0].localeCompare(b[0]));
-
 		let lastKey = '';
 		let index = 0;
 		const signedParts = sorted.map(([key, value]) => {
@@ -120,29 +145,40 @@ export class MangaFireSource extends BaseSource {
 			}
 			return `${newKey}=${value}`;
 		});
-
-		const toSign =
-			path + (signedParts.length ? `?${signedParts.join('&')}` : '');
+		const toSign = path + (signedParts.length ? `?${signedParts.join('&')}` : '');
 		const vrf = this.signVrf(toSign);
-
 		const url = new URL(`${this.baseUrl}/api${path}`);
-		for (const [k, v] of params) {
-			url.searchParams.append(k, String(v));
-		}
+		for (const [k, v] of params) url.searchParams.append(k, String(v));
 		url.searchParams.set('vrf', vrf);
 		return url.toString();
 	}
 
-	// ── HTTP ─────────────────────────────────────────────────────────────────
-
-	private reqHeaders(): Record<string, string> {
+	private reqHeaders(json = true): Record<string, string> {
 		return {
-			...this.headers,
-			Accept: 'application/json',
+			'User-Agent':
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+			Accept: json
+				? 'application/json, text/plain, */*'
+				: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 			'Accept-Language': 'en-US,en;q=0.9',
 			Origin: this.baseUrl,
-			Referer: `${this.baseUrl}/`
+			Referer: `${this.baseUrl}/`,
+			'Sec-Fetch-Dest': 'empty',
+			'Sec-Fetch-Mode': 'cors',
+			'Sec-Fetch-Site': 'same-origin'
 		};
+	}
+
+	private async rawGet(
+		url: string,
+		json = true
+	): Promise<{ ok: boolean; status: number; text: string }> {
+		const res = await fetch(url, {
+			headers: this.reqHeaders(json),
+			redirect: 'follow'
+		});
+		const text = await res.text();
+		return { ok: res.ok, status: res.status, text };
 	}
 
 	private async apiGet<T = any>(
@@ -155,21 +191,30 @@ export class MangaFireSource extends BaseSource {
 
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 			try {
-				const res = await fetch(url, { headers: this.reqHeaders() });
-				const text = await res.text();
-				if (!res.ok) {
-					console.error(
-						`[mangafire] HTTP ${res.status} ${apiPath}`,
-						text.slice(0, 200)
-					);
-					if (res.status === 429 || res.status === 503) {
-						lastErr = new Error(`MangaFire HTTP ${res.status}`);
-						await new Promise((r) => setTimeout(r, 400 * attempt));
+				const { ok, status, text } = await this.rawGet(url, true);
+				const trimmed = text.trim();
+
+				if (
+					trimmed.startsWith('<') ||
+					/just a moment|cf-browser-verification|challenge-platform/i.test(trimmed)
+				) {
+					lastErr = new Error(`MangaFire blocked (CF) HTTP ${status}`);
+					console.error('[mangafire] CF/HTML block', apiPath, status);
+					await new Promise((r) => setTimeout(r, 300 * attempt));
+					continue;
+				}
+
+				if (!ok) {
+					console.error(`[mangafire] HTTP ${status} ${apiPath}`, trimmed.slice(0, 200));
+					if (status === 429 || status === 503 || status === 403) {
+						lastErr = new Error(`MangaFire HTTP ${status}`);
+						await new Promise((r) => setTimeout(r, 500 * attempt));
 						continue;
 					}
-					throw new Error(`MangaFire HTTP ${res.status}: ${text.slice(0, 120)}`);
+					throw new Error(`MangaFire HTTP ${status}: ${trimmed.slice(0, 120)}`);
 				}
-				return JSON.parse(text) as T;
+
+				return JSON.parse(trimmed) as T;
 			} catch (e) {
 				lastErr = e;
 				if (attempt < maxAttempts) {
@@ -179,19 +224,43 @@ export class MangaFireSource extends BaseSource {
 			}
 		}
 
-		throw lastErr instanceof Error
-			? lastErr
-			: new Error('MangaFire request failed');
+		throw lastErr instanceof Error ? lastErr : new Error('MangaFire request failed');
 	}
 
-	// ── Language ─────────────────────────────────────────────
+	/** Tanpa VRF — lebih lolos di Cloudflare Workers */
+	private async topTitles(
+		kind: 'trending' | 'new' = 'trending',
+		limit = 30,
+		days = 7
+	): Promise<any[]> {
+		const url = new URL(`${this.baseUrl}/api/top-titles`);
+		url.searchParams.set('type', kind);
+		url.searchParams.set('days', String(days));
+		url.searchParams.set('limit', String(limit));
+		url.searchParams.append('genres_ex[]', '7');
+		url.searchParams.append('genres_ex[]', '268929');
+		url.searchParams.append('genres_ex[]', '268930');
+		url.searchParams.append('genres_ex[]', '268932');
+
+		const { ok, status, text } = await this.rawGet(url.toString(), true);
+		if (!ok) {
+			console.error('[mangafire] top-titles HTTP', status, text.slice(0, 120));
+			return [];
+		}
+		if (text.trim().startsWith('<')) return [];
+		try {
+			const data = JSON.parse(text) as { items?: any[] };
+			return Array.isArray(data?.items) ? data.items : [];
+		} catch {
+			return [];
+		}
+	}
 
 	private normalizeLang(lang?: string): string | null {
 		const raw = String(lang || '')
 			.trim()
 			.toLowerCase();
 		if (!raw || raw === 'all' || raw === 'any' || raw === '*') return null;
-
 		const aliases: Record<string, string> = {
 			english: 'en',
 			indonesian: 'id',
@@ -225,11 +294,8 @@ export class MangaFireSource extends BaseSource {
 		const n = this.normalizeLang(lang ?? undefined);
 		if (!n) return this.DEFAULT_LANG;
 		if (this.SUPPORTED_LANGS.has(n)) return n;
-		if (n === 'id') return this.DEFAULT_LANG;
 		return this.DEFAULT_LANG;
 	}
-
-	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	private toMangaId(hid: string): string {
 		return `/title/${String(hid).replace(/^\/+|\/+$/g, '')}`;
@@ -241,7 +307,6 @@ export class MangaFireSource extends BaseSource {
 			.split('/')
 			.filter(Boolean);
 		if (parts[0]?.toLowerCase() === 'title' && parts[1]) {
-			// hid bisa "ro8ro" atau "ro8ro-slug-here"
 			return parts[1].split('-')[0] || parts[1];
 		}
 		return (parts[0] || '').split('-')[0] || '';
@@ -258,10 +323,7 @@ export class MangaFireSource extends BaseSource {
 		const s = String(chapterId).replace(/^\/+/, '');
 		const m = s.match(/^title\/([^/]+)\/chapter\/(.+)$/i);
 		if (m) {
-			return {
-				hid: m[1].split('-')[0] || m[1],
-				chapterId: m[2]
-			};
+			return { hid: m[1].split('-')[0] || m[1], chapterId: m[2] };
 		}
 		const parts = s.split('/').filter(Boolean);
 		return {
@@ -280,14 +342,10 @@ export class MangaFireSource extends BaseSource {
 
 	private mapType(type?: string | null): string {
 		const t = String(type || '').toLowerCase();
-		if (t === 'manhwa') return 'manhwa';
-		if (t === 'manhua') return 'manhua';
-		if (t === 'manga') return 'manga';
-		if (t === 'other') return 'other';
+		if (t === 'manhwa' || t === 'manhua' || t === 'manga' || t === 'other') return t;
 		return t || 'manga';
 	}
 
-	/** Hanya kirim types[] jika valid; "all"/kosong → tidak filter */
 	private normalizeTypeFilter(type?: string | null): string | null {
 		const t = String(type || '')
 			.trim()
@@ -328,17 +386,12 @@ export class MangaFireSource extends BaseSource {
 		if (!hid || !title) return null;
 
 		const cover =
-			item?.poster?.large ||
-			item?.poster?.medium ||
-			item?.poster?.small ||
-			'';
-
+			item?.poster?.large || item?.poster?.medium || item?.poster?.small || '';
 		const latest =
 			item?.latestChapter != null && item.latestChapter !== ''
 				? String(item.latestChapter)
 				: undefined;
-
-		const langCode = this.toApiLang(lang);
+		const langCode = lang ? this.toApiLang(lang) : this.DEFAULT_LANG;
 
 		return {
 			id: this.toMangaId(hid),
@@ -352,8 +405,6 @@ export class MangaFireSource extends BaseSource {
 		} as Manga & { lang?: string };
 	}
 
-	// ── Catalog ──────────────────────────────────────────────────────────────
-
 	async getLatestManga(
 		page: number,
 		opts?: { lang?: string; type?: string }
@@ -361,15 +412,17 @@ export class MangaFireSource extends BaseSource {
 		const p = Math.max(1, Number(page) || 1);
 		const lang = this.normalizeLang(opts?.lang);
 		const apiLang = lang ? this.toApiLang(lang) : null;
+		const typeFilter = this.normalizeTypeFilter(opts?.type);
 
 		try {
 			const params: Array<[string, string | number]> = [
 				['order[chapter_updated_at]', 'desc'],
 				['page', p],
-				['limit', this.PER_PAGE]
+				['limit', this.PER_PAGE],
+				['content_rating[]', 'safe'],
+				['content_rating[]', 'suggestive']
 			];
 			if (apiLang) params.push(['language[]', apiLang]);
-			const typeFilter = this.normalizeTypeFilter(opts?.type);
 			if (typeFilter) params.push(['types[]', typeFilter]);
 
 			const data = await this.apiGet<{ items?: any[] }>('/titles', params);
@@ -377,12 +430,44 @@ export class MangaFireSource extends BaseSource {
 				.map((it) => this.mapListItem(it, apiLang))
 				.filter(Boolean) as Manga[];
 
-			console.log(
-				`[mangafire] latest page=${p} lang=${apiLang ?? 'all'} → ${list.length}`
-			);
-			return list;
+			if (list.length > 0) {
+				console.log(
+					`[mangafire] latest(api) page=${p} lang=${apiLang ?? 'all'} → ${list.length}`
+				);
+				return list;
+			}
 		} catch (e) {
-			console.error('[mangafire] getLatestManga', e);
+			console.error('[mangafire] getLatestManga api failed → top-titles', e);
+		}
+
+		try {
+			const trending = await this.topTitles('trending', 60, 30);
+			const newest = await this.topTitles('new', 60, 30);
+			const seen = new Set<string>();
+			const merged: any[] = [];
+			for (const it of [...trending, ...newest]) {
+				const hid = String(it?.hid || '');
+				if (!hid || seen.has(hid)) continue;
+				seen.add(hid);
+				merged.push(it);
+			}
+
+			let list = merged
+				.map((it) => this.mapListItem(it, apiLang))
+				.filter(Boolean) as Manga[];
+
+			if (typeFilter) {
+				list = list.filter((m) => (m.type || '').toLowerCase() === typeFilter);
+			}
+
+			const start = (p - 1) * this.PER_PAGE;
+			const pageList = list.slice(start, start + this.PER_PAGE);
+			console.log(
+				`[mangafire] latest(top) page=${p} → ${pageList.length} (pool=${list.length})`
+			);
+			return pageList;
+		} catch (e) {
+			console.error('[mangafire] getLatestManga top-titles failed', e);
 			return [];
 		}
 	}
@@ -397,33 +482,50 @@ export class MangaFireSource extends BaseSource {
 
 		const lang = this.normalizeLang(opts?.lang);
 		const apiLang = lang ? this.toApiLang(lang) : null;
+		const typeFilter = this.normalizeTypeFilter(opts?.type);
 
 		try {
 			const params: Array<[string, string | number]> = [
 				['keyword', q],
 				['page', page],
-				['limit', this.PER_PAGE]
+				['limit', this.PER_PAGE],
+				['content_rating[]', 'safe'],
+				['content_rating[]', 'suggestive']
 			];
 			if (apiLang) params.push(['language[]', apiLang]);
-			const typeFilter = this.normalizeTypeFilter(opts?.type);
 			if (typeFilter) params.push(['types[]', typeFilter]);
 
 			const data = await this.apiGet<{ items?: any[] }>('/titles', params);
 			const list = (data?.items || [])
 				.map((it) => this.mapListItem(it, apiLang))
 				.filter(Boolean) as Manga[];
-
 			console.log(
-				`[mangafire] search "${q}" page=${page} lang=${apiLang ?? 'all'} → ${list.length}`
+				`[mangafire] search "${q}" page=${page} → ${list.length}`
 			);
 			return list;
 		} catch (e) {
 			console.error('[mangafire] searchManga', e);
-			return [];
+			try {
+				const pool = [
+					...(await this.topTitles('trending', 60, 30)),
+					...(await this.topTitles('new', 60, 30))
+				];
+				const nq = q.toLowerCase();
+				const filtered = pool.filter((it) =>
+					String(it?.title || '')
+						.toLowerCase()
+						.includes(nq)
+				);
+				const list = filtered
+					.map((it) => this.mapListItem(it, apiLang))
+					.filter(Boolean) as Manga[];
+				const start = (page - 1) * this.PER_PAGE;
+				return list.slice(start, start + this.PER_PAGE);
+			} catch {
+				return [];
+			}
 		}
 	}
-
-	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(
 		mangaId: string,
@@ -433,19 +535,15 @@ export class MangaFireSource extends BaseSource {
 		if (!hid) throw new Error(`Invalid mangafire id: ${mangaId}`);
 
 		const apiLang = this.toApiLang(opts?.lang);
-
-		const detail = await this.apiGet<{ data?: any }>(`/titles/${encodeURIComponent(hid)}`);
+		const detail = await this.apiGet<{ data?: any }>(
+			`/titles/${encodeURIComponent(hid)}`
+		);
 		const data = detail?.data ?? detail;
-		if (!data?.hid && !data?.title) {
-			throw new Error(`Manga not found: ${hid}`);
-		}
+		if (!data?.hid && !data?.title) throw new Error(`Manga not found: ${hid}`);
 
 		const title = String(data.title || hid).trim();
 		const cover =
-			data?.poster?.large ||
-			data?.poster?.medium ||
-			data?.poster?.small ||
-			'';
+			data?.poster?.large || data?.poster?.medium || data?.poster?.small || '';
 		const status = this.mapStatus(data.status);
 		const type = this.mapType(data.type);
 		const synopsis = this.stripHtml(data.synopsisHtml || data.synopsis || '');
@@ -478,7 +576,7 @@ export class MangaFireSource extends BaseSource {
 		do {
 			const chData = await this.apiGet<{
 				items?: any[];
-				meta?: { lastPage?: number; hasNext?: boolean };
+				meta?: { lastPage?: number };
 			}>(`/titles/${encodeURIComponent(hid)}/chapters`, [
 				['language', apiLang],
 				['sort', 'number'],
@@ -488,20 +586,16 @@ export class MangaFireSource extends BaseSource {
 			]);
 
 			lastPage = chData?.meta?.lastPage ?? page;
-			const items = Array.isArray(chData?.items) ? chData.items : [];
-
-			for (const u of items) {
+			for (const u of chData?.items || []) {
 				const cid = String(u?.id ?? '').trim();
 				if (!cid || seen.has(cid)) continue;
 				seen.add(cid);
-
 				const num = parseFloat(String(u?.number ?? ''));
 				const number = Number.isFinite(num) ? num : chapters.length + 1;
 				const extra = String(u?.name || '').trim();
 				const chTitle = extra
 					? `Chapter ${String(u?.number ?? number).replace(/\.0$/, '')} - ${extra}`
 					: `Chapter ${String(u?.number ?? number).replace(/\.0$/, '')}`;
-
 				chapters.push({
 					id: this.toChapterId(hid, cid),
 					title: chTitle,
@@ -510,7 +604,6 @@ export class MangaFireSource extends BaseSource {
 					lang: String(u?.language || apiLang).toLowerCase() || undefined
 				} as Chapter & { lang?: string });
 			}
-
 			page++;
 		} while (page <= lastPage && page <= 20);
 
@@ -533,9 +626,7 @@ export class MangaFireSource extends BaseSource {
 
 		const description = [...metaLines, synopsis].filter(Boolean).join('\n');
 
-		console.log(
-			`[mangafire] details ${hid} lang=${apiLang} → ch=${chapters.length}`
-		);
+		console.log(`[mangafire] details ${hid} lang=${apiLang} → ch=${chapters.length}`);
 
 		return {
 			id: this.toMangaId(hid),
@@ -552,25 +643,20 @@ export class MangaFireSource extends BaseSource {
 		};
 	}
 
-	// ── Pages ────────────────────────────────────────────────────────────────
-
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const { chapterId: cid } = this.extractChapterParts(chapterId);
 		if (!cid) {
 			console.error('[mangafire] getChapterPages bad id:', chapterId);
 			return [];
 		}
-
 		try {
 			const data = await this.apiGet<{
 				data?: { pages?: Array<{ url?: string }> };
 			}>(`/chapters/${encodeURIComponent(cid)}`);
-
 			const pages = Array.isArray(data?.data?.pages) ? data.data.pages : [];
 			const urls = pages
 				.map((p) => String(p?.url || '').trim())
 				.filter((u) => /^https?:\/\//i.test(u));
-
 			console.log(`[mangafire] ${urls.length} pages → chapter ${cid}`);
 			return urls;
 		} catch (e) {
