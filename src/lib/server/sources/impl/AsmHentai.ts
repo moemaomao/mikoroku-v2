@@ -46,15 +46,6 @@ export class AsmHentaiSource extends BaseSource {
 		return await res.text();
 	}
 
-	// ── Language (pola MangaDex) ─────────────────────────────────────────────
-
-	/**
-	 * Normalize → slug path language site:
-	 *   en/english → english
-	 *   ja/jp/japanese → japanese
-	 *   zh/cn/chinese → chinese
-	 *   all → null (no filter)
-	 */
 	private normalizeLang(lang?: string): string | null {
 		const raw = String(lang || '')
 			.trim()
@@ -138,7 +129,6 @@ export class AsmHentaiSource extends BaseSource {
 				$el.find('h2.caption, .cpt a, .caption a, .caption').first().text().replace(/\s+/g, ' ').trim() ||
 				`Gallery ${idm[1]}`;
 
-			// Cover HANYA dari .image — selector ", img" sebelumnya mengambil flag dulu
 			const img = $el.find('.image img.lazy, .image img').first();
 			let cover =
 				img.attr('data-src') ||
@@ -155,7 +145,6 @@ export class AsmHentaiSource extends BaseSource {
 			cover = this.absUrl(cover);
 			if (/\/images\/(en|jp|cn)\.png/i.test(cover)) cover = '';
 			if (!cover) {
-				// fallback thumb CDN (dir 019 umum; detail page punya dir akurat)
 				cover = `https://images.asmhentai.com/019/${idm[1]}/thumb.jpg`;
 			}
 
@@ -179,7 +168,8 @@ export class AsmHentaiSource extends BaseSource {
 				cover,
 				type: type.toLowerCase() || 'doujinshi',
 				status: 'Completed',
-				lang
+				latestChapter: '1',
+				lang: lang || 'ja'
 			} as Manga & { lang?: string });
 		});
 
@@ -196,15 +186,32 @@ export class AsmHentaiSource extends BaseSource {
 		const langSlug = this.normalizeLang(opts?.lang);
 
 		try {
-			let path: string;
+		
+			const candidates: string[] = [];
 			if (langSlug) {
-				path = p <= 1 ? `/language/${langSlug}/` : `/language/${langSlug}/page/${p}/`;
+				if (p <= 1) candidates.push(`/language/${langSlug}/`);
+				else {
+					candidates.push(`/language/${langSlug}/page/${p}/`);
+					candidates.push(`/language/${langSlug}/?page=${p}`);
+				}
 			} else {
-				path = p <= 1 ? '/' : `/page/${p}/`;
+				if (p <= 1) candidates.push(`/`);
+				else {
+					candidates.push(`/page/${p}/`);
+					candidates.push(`/?page=${p}`);
+				}
 			}
 
-			const html = await this.getHtml(path);
-			const list = this.parseList(html, langSlug);
+			let list: Manga[] = [];
+			for (const path of candidates) {
+				try {
+					const html = await this.getHtml(path);
+					list = this.parseList(html, langSlug);
+					if (list.length > 0) break;
+				} catch (e) {
+					console.error('[asmhentai] path failed', path, e);
+				}
+			}
 
 			console.log(
 				`[asmhentai] latest page=${p} lang=${langSlug ?? 'all'} → ${list.length}`
@@ -227,11 +234,10 @@ export class AsmHentaiSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			// Site search: /?q=term  (+ optional language via path filter is limited;
-			// append language: term if user filters lang)
+			
 			let searchQ = q;
 			if (langSlug) {
-				// AsmHentai supports language:english style in search box
+		
 				if (!/\blanguage:/i.test(searchQ)) {
 					searchQ = `${searchQ} language:${langSlug}`;
 				}
@@ -271,10 +277,20 @@ export class AsmHentaiSource extends BaseSource {
 			$('.book_page h1, .title').first().text().replace(/\s+/g, ' ').trim() ||
 			`Gallery ${gid}`;
 
+		const coverImg = $('.book_page img.lazy, .book_page img, img[data-src*="cover"]').first();
 		let cover =
-			$('.book_page img, .cover img, img[src*="/cover."]').first().attr('src') ||
-			$(`img[src*="/${gid}/"]`).first().attr('src') ||
+			coverImg.attr('data-src') ||
+			coverImg.attr('data-original') ||
+			coverImg.attr('src') ||
 			'';
+		if (!cover || cover.startsWith('data:')) {
+			const anyCover = $(`img[data-src*="/${gid}/cover"], img[data-src*="/${gid}/thumb"]`)
+				.first()
+				.attr('data-src');
+			if (anyCover) cover = anyCover;
+		}
+		if (cover.startsWith('//')) cover = `https:${cover}`;
+		if (cover.startsWith('data:')) cover = '';
 		cover = this.absUrl(cover);
 
 		const loadDir =
@@ -282,6 +298,9 @@ export class AsmHentaiSource extends BaseSource {
 			$('input#load_dir').attr('value') ||
 			(cover.match(/images\.asmhentai\.com\/(\d+)\//) || [])[1] ||
 			'';
+		if (!cover && loadDir) {
+			cover = `https://images.asmhentai.com/${loadDir}/${gid}/cover.jpg`;
+		}
 
 		const tPagesRaw =
 			$('#t_pages').attr('value') ||
@@ -345,10 +364,6 @@ export class AsmHentaiSource extends BaseSource {
 			pageCount > 0 && `Pages: ${pageCount}`,
 			loadDir && `Dir: ${loadDir}`
 		].filter(Boolean);
-
-		// Simpan loadDir di description agar getChapterPages bisa fallback;
-		// UI filter META_KEYS tidak kenal "Dir:" → ikut di synopsis; kita buang di parse.
-		// Lebih aman: encode di chapter id tidak perlu — fetch ulang detail di pages.
 
 		const description = metaLines.filter((l) => !String(l).startsWith('Dir:')).join('\n');
 
