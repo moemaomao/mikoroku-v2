@@ -186,7 +186,7 @@ export class MangaFireSource extends BaseSource {
 		params: Array<[string, string | number]> = []
 	): Promise<T> {
 		const url = this.buildSignedUrl(apiPath, params);
-		const maxAttempts = 3;
+		const maxAttempts = 2; // keep short — page.server has 10s timeout
 		let lastErr: unknown;
 
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -200,15 +200,15 @@ export class MangaFireSource extends BaseSource {
 				) {
 					lastErr = new Error(`MangaFire blocked (CF) HTTP ${status}`);
 					console.error('[mangafire] CF/HTML block', apiPath, status);
-					await new Promise((r) => setTimeout(r, 300 * attempt));
+					if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 200));
 					continue;
 				}
 
 				if (!ok) {
 					console.error(`[mangafire] HTTP ${status} ${apiPath}`, trimmed.slice(0, 200));
-					if (status === 429 || status === 503 || status === 403) {
+					if ((status === 429 || status === 503 || status === 403) && attempt < maxAttempts) {
 						lastErr = new Error(`MangaFire HTTP ${status}`);
-						await new Promise((r) => setTimeout(r, 500 * attempt));
+						await new Promise((r) => setTimeout(r, 250));
 						continue;
 					}
 					throw new Error(`MangaFire HTTP ${status}: ${trimmed.slice(0, 120)}`);
@@ -218,7 +218,7 @@ export class MangaFireSource extends BaseSource {
 			} catch (e) {
 				lastErr = e;
 				if (attempt < maxAttempts) {
-					await new Promise((r) => setTimeout(r, 300 * attempt));
+					await new Promise((r) => setTimeout(r, 200));
 					continue;
 				}
 			}
@@ -414,35 +414,13 @@ export class MangaFireSource extends BaseSource {
 		const apiLang = lang ? this.toApiLang(lang) : null;
 		const typeFilter = this.normalizeTypeFilter(opts?.type);
 
+		// Fast path: top-titles dulu (tanpa VRF, ~1 req) — lolos Workers + timeout 10s
+		// API /titles (VRF) sering lambat/diblok di CF Workers → load_timeout di +page.server
 		try {
-			const params: Array<[string, string | number]> = [
-				['order[chapter_updated_at]', 'desc'],
-				['page', p],
-				['limit', this.PER_PAGE],
-				['content_rating[]', 'safe'],
-				['content_rating[]', 'suggestive']
-			];
-			if (apiLang) params.push(['language[]', apiLang]);
-			if (typeFilter) params.push(['types[]', typeFilter]);
-
-			const data = await this.apiGet<{ items?: any[] }>('/titles', params);
-			const list = (data?.items || [])
-				.map((it) => this.mapListItem(it, apiLang))
-				.filter(Boolean) as Manga[];
-
-			if (list.length > 0) {
-				console.log(
-					`[mangafire] latest(api) page=${p} lang=${apiLang ?? 'all'} → ${list.length}`
-				);
-				return list;
-			}
-		} catch (e) {
-			console.error('[mangafire] getLatestManga api failed → top-titles', e);
-		}
-
-		try {
-			const trending = await this.topTitles('trending', 60, 30);
-			const newest = await this.topTitles('new', 60, 30);
+			const [trending, newest] = await Promise.all([
+				this.topTitles('trending', 48, 30),
+				this.topTitles('new', 48, 30)
+			]);
 			const seen = new Set<string>();
 			const merged: any[] = [];
 			for (const it of [...trending, ...newest]) {
@@ -460,14 +438,41 @@ export class MangaFireSource extends BaseSource {
 				list = list.filter((m) => (m.type || '').toLowerCase() === typeFilter);
 			}
 
-			const start = (p - 1) * this.PER_PAGE;
-			const pageList = list.slice(start, start + this.PER_PAGE);
-			console.log(
-				`[mangafire] latest(top) page=${p} → ${pageList.length} (pool=${list.length})`
-			);
-			return pageList;
+			if (list.length > 0) {
+				const start = (p - 1) * this.PER_PAGE;
+				const pageList = list.slice(start, start + this.PER_PAGE);
+				console.log(
+					`[mangafire] latest(top) page=${p} → ${pageList.length} (pool=${list.length})`
+				);
+				return pageList;
+			}
 		} catch (e) {
-			console.error('[mangafire] getLatestManga top-titles failed', e);
+			console.error('[mangafire] top-titles failed', e);
+		}
+
+		// Slow path: signed /api/titles (pagination + language akurat)
+		try {
+			const params: Array<[string, string | number]> = [
+				['order[chapter_updated_at]', 'desc'],
+				['page', p],
+				['limit', this.PER_PAGE],
+				['content_rating[]', 'safe'],
+				['content_rating[]', 'suggestive']
+			];
+			if (apiLang) params.push(['language[]', apiLang]);
+			if (typeFilter) params.push(['types[]', typeFilter]);
+
+			const data = await this.apiGet<{ items?: any[] }>('/titles', params);
+			const list = (data?.items || [])
+				.map((it) => this.mapListItem(it, apiLang))
+				.filter(Boolean) as Manga[];
+
+			console.log(
+				`[mangafire] latest(api) page=${p} lang=${apiLang ?? 'all'} → ${list.length}`
+			);
+			return list;
+		} catch (e) {
+			console.error('[mangafire] getLatestManga api failed', e);
 			return [];
 		}
 	}
