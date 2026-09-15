@@ -8,6 +8,7 @@ export type SourceMeta = {
 export const SOURCE_META: Record<string, SourceMeta> = {
 	asura: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	manhuarmtl: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	onemanga: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangakatana: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangabatscom: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangabats: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
