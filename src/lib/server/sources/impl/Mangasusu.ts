@@ -6,9 +6,9 @@ import * as cheerio from 'cheerio';
  * Mangasusu adapter (mangasusuku.com)
  *
  * Theme: Themesia / WordPress manga
- * Latest   : /komik/?order=update  &  /komik/page/{n}/?order=update
+ * Latest   : /komik/?order=update&page={n}   (bukan /komik/page/n/)
  * Project  : /project/
- * Search   : /?s=
+ * Search   : /?s=&page={n}
  * Detail   : /komik/{slug}/
  * Chapter  : /{slug}-chapter-{num}/
  * Pages    : #readerarea img  /  cdn.uqni.net
@@ -22,7 +22,9 @@ export class MangasusuSource extends BaseSource {
 	name = 'Mangasusu';
 	baseUrl = 'https://mangasusuku.com';
 
-	private readonly PER_PAGE = 20;
+	private readonly PER_PAGE = 24;
+	/** Site Themesia default ~20 item/halaman */
+	private readonly SITE_PER_PAGE = 20;
 	private readonly DEFAULT_LANG = 'id';
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -176,23 +178,55 @@ export class MangasusuSource extends BaseSource {
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
+	/**
+	 * Themesia pagination pakai query `?page=N`, BUKAN `/page/N/`.
+	 * Site hanya ~20 item/halaman → fetch 2 halaman situs lalu slice 24.
+	 */
+	private async fetchCatalogPages(
+		buildPath: (sitePage: number) => string,
+		appPage: number
+	): Promise<Manga[]> {
+		const p = Math.max(1, Number(appPage) || 1);
+		const start = (p - 1) * this.PER_PAGE;
+		const siteStart = Math.floor(start / this.SITE_PER_PAGE) + 1;
+		const offsetInFirst = start % this.SITE_PER_PAGE;
+
+		const merged: Manga[] = [];
+		const seen = new Set<string>();
+
+		// Ambil cukup halaman situs sampai kepotong 24 item
+		for (let sp = siteStart; sp <= siteStart + 2 && merged.length < offsetInFirst + this.PER_PAGE; sp++) {
+			try {
+				const html = await this.fetchHtml(buildPath(sp));
+				const list = this.parseCards(cheerio.load(html));
+				for (const m of list) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					merged.push(m);
+				}
+				if (list.length === 0) break;
+			} catch (e) {
+				console.error('[mangasusu] catalog page', sp, e);
+				break;
+			}
+		}
+
+		return merged.slice(offsetInFirst, offsetInFirst + this.PER_PAGE);
+	}
+
 	async getLatestManga(
 		page: number,
 		_opts?: { lang?: string; type?: string }
 	): Promise<Manga[]> {
 		try {
-			const p = Math.max(1, Number(page) || 1);
-			const path =
-				p <= 1
-					? `/komik/?order=update`
-					: `/komik/page/${p}/?order=update`;
+			const list = await this.fetchCatalogPages((sitePage) => {
+				const params = new URLSearchParams({ order: 'update' });
+				if (sitePage > 1) params.set('page', String(sitePage));
+				return `/komik/?${params.toString()}`;
+			}, page);
 
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			const list = this.parseCards($);
-
-			console.log(`[mangasusu] latest page=${p} → ${list.length}`);
-			return list.slice(0, this.PER_PAGE);
+			console.log(`[mangasusu] latest appPage=${page} → ${list.length}`);
+			return list;
 		} catch (e) {
 			console.error('[mangasusu] getLatestManga', e);
 			return [];
@@ -208,16 +242,14 @@ export class MangasusuSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			const path =
-				page <= 1
-					? `/?s=${encodeURIComponent(q)}`
-					: `/page/${page}/?s=${encodeURIComponent(q)}`;
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			const list = this.parseCards($);
+			const list = await this.fetchCatalogPages((sitePage) => {
+				const params = new URLSearchParams({ s: q });
+				if (sitePage > 1) params.set('page', String(sitePage));
+				return `/?${params.toString()}`;
+			}, page);
 
-			console.log(`[mangasusu] search "${q}" page=${page} → ${list.length}`);
-			return list.slice(0, this.PER_PAGE);
+			console.log(`[mangasusu] search "${q}" appPage=${page} → ${list.length}`);
+			return list;
 		} catch (e) {
 			console.error('[mangasusu] searchManga', e);
 			return [];
