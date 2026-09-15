@@ -68,6 +68,7 @@ import { Pornhwa18Source } from './impl/Pornhwa18';
 import { RyukomikSource } from './impl/Ryukomik';
 import { SasangeyouSource } from './impl/Sasangeyou';
 import { SektedoujinSource } from './impl/Sektedoujin';
+import { SiikomikSource } from './impl/Siikomik';
 import type { IMangaSource } from './types';
 
 
@@ -134,6 +135,7 @@ const sources: Record<string, IMangaSource> = {
     ryukomik: new RyukomikSource(),
     sasangeyou: new SasangeyouSource(),
     sektedoujin: new SektedoujinSource(),
+    siikomik: new SiikomikSource(),
 };
 
 /**

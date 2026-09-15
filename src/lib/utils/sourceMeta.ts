@@ -71,6 +71,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	ryukomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	sasangeyou: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 	sektedoujin: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	siikomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {
