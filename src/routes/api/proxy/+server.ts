@@ -136,10 +136,10 @@ export const GET: RequestHandler = async ({ url }) => {
 	        /manhwaindo\.my|upload\.gmbr\.pro|kacu\.gmbr\.pro/i.test(decodedUrl);
         const isManhwaDesu =
 	         sourceId === 'manhwadesu' ||
-	         /manhwadesu\.wiki|cdn\.uqni\.net/i.test(decodedUrl);  
+	        /manhwadesu\.wiki|cdn\.uqni\.net/i.test(decodedUrl);  
 	    const isVoratoon =
 	         sourceId === 'voratoon' ||
-	         /voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
+	        /voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||

@@ -31,7 +31,8 @@ function lightCover(url: string | undefined | null): string {
 	if (!u) return '';
 	if (u.startsWith('//')) u = 'https:' + u;
 
-	const keepQuery = /cvr\.voratoon\.id|voratoon/i.test(u);
+	const keepQuery =
+		/cvr\.voratoon\.id|X-Amz-Signature|X-Amz-Algorithm/i.test(u);
 
 	try {
 		const parsed = new URL(u);
@@ -44,7 +45,8 @@ function lightCover(url: string | undefined | null): string {
 		// ignore
 	}
 
-	return u.length > 300 ? u.slice(0, 300) : u;
+	const max = keepQuery ? 600 : 180;
+	return u.length > max ? u.slice(0, max) : u;
 }
 
 function lightEntry(entry: ReadingEntry): ReadingEntry {
