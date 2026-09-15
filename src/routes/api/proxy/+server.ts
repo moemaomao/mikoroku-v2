@@ -137,6 +137,9 @@ export const GET: RequestHandler = async ({ url }) => {
         const isManhwaDesu =
 	         sourceId === 'manhwadesu' ||
 	         /manhwadesu\.wiki|cdn\.uqni\.net/i.test(decodedUrl);  
+	    const isVoratoon =
+	         sourceId === 'voratoon' ||
+	         /voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -150,9 +153,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			isMangaBats ||
 			isMangaBatsCom ||
 			isDoujinDesu ||
-			isMangaCopy;
-			isIsekaiKomik ||
-	        isIkiru;
+			isMangaCopy ||
+	        isIsekaiKomik ||
+	        isIkiru ||
+			isVoratoon;
 
 		// ============================================================
 		// WESERV
@@ -230,6 +234,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	        referer = 'https://www.manhwaindo.my/';
         } else if (isManhwaDesu) {
 	        referer = 'https://manhwadesu.wiki/';
+        } else if (isVoratoon) {
+	       referer = 'https://v2.voratoon.com/';
         }
 
 		// ============================================================

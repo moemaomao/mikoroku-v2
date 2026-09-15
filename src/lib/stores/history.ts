@@ -29,19 +29,22 @@ function lightCover(url: string | undefined | null): string {
 	if (!url) return '';
 	let u = String(url).trim();
 	if (!u) return '';
-
 	if (u.startsWith('//')) u = 'https:' + u;
+
+	const keepQuery = /cvr\.voratoon\.id|voratoon/i.test(u);
 
 	try {
 		const parsed = new URL(u);
-		parsed.search = '';
-		parsed.hash = '';
+		if (!keepQuery) {
+			parsed.search = '';
+			parsed.hash = '';
+		}
 		u = parsed.toString();
 	} catch {
 		// ignore
 	}
 
-	return u.length > 180 ? u.slice(0, 180) : u;
+	return u.length > 300 ? u.slice(0, 300) : u;
 }
 
 function lightEntry(entry: ReadingEntry): ReadingEntry {
