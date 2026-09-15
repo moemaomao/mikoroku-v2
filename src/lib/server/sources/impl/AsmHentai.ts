@@ -10,14 +10,10 @@ import * as cheerio from 'cheerio';
  * Search      : /?q=  |  /?q=&page=
  * Detail      : /g/{id}/
  * Pages       : https://images.asmhentai.com/{dir}/{id}/{n}.jpg
- *               (dir + page count dari detail: load_dir, t_pages)
  *
- * ID format:
- *   manga   : "/g/{id}"
- *   chapter : "/g/{id}/chapter/1"  (gallery = 1 chapter)
+ * Site ~20 item/halaman → merge page berikutnya sampai 24.
  *
- * Language filter (pola MangaDex / Hentaifox):
- *   opts.lang → en|ja|zh|english|japanese|chinese
+ * ID: manga "/g/{id}" | chapter "/g/{id}/chapter/1"
  */
 export class AsmHentaiSource extends BaseSource {
 	id = 'asmhentai';
@@ -25,9 +21,6 @@ export class AsmHentaiSource extends BaseSource {
 	baseUrl = 'https://asmhentai.com';
 
 	private readonly PER_PAGE = 24;
-	private readonly DEFAULT_LANG = 'all';
-
-	// ── HTTP ─────────────────────────────────────────────────────────────────
 
 	private reqHeaders(): Record<string, string> {
 		return {
@@ -51,7 +44,6 @@ export class AsmHentaiSource extends BaseSource {
 			.trim()
 			.toLowerCase();
 		if (!raw || raw === 'all' || raw === 'any' || raw === '*') return null;
-
 		const aliases: Record<string, string> = {
 			en: 'english',
 			english: 'english',
@@ -77,8 +69,6 @@ export class AsmHentaiSource extends BaseSource {
 		return 'ja';
 	}
 
-	// ── Helpers ──────────────────────────────────────────────────────────────
-
 	private absUrl(href: string): string {
 		if (!href) return '';
 		if (href.startsWith('http')) return href;
@@ -92,7 +82,7 @@ export class AsmHentaiSource extends BaseSource {
 
 	private extractGid(mangaId: string): string {
 		const m = String(mangaId).match(/\/g\/(\d+)/i);
-		if (m) return m[1];
+		if (m) return m[1]!;
 		return String(mangaId).replace(/\D/g, '');
 	}
 
@@ -102,7 +92,7 @@ export class AsmHentaiSource extends BaseSource {
 
 	private extractChapterGid(chapterId: string): string {
 		const m = String(chapterId).match(/\/g\/(\d+)/i);
-		if (m) return m[1];
+		if (m) return m[1]!;
 		return String(chapterId).replace(/\D/g, '');
 	}
 
@@ -113,7 +103,6 @@ export class AsmHentaiSource extends BaseSource {
 
 		$('.preview_item').each((_, el) => {
 			const $el = $(el);
-
 			const href =
 				$el.find('.image a[href*="/g/"]').attr('href') ||
 				$el.find('a[href*="/g/"]').attr('href') ||
@@ -121,13 +110,17 @@ export class AsmHentaiSource extends BaseSource {
 			const idm = href.match(/\/g\/(\d+)/);
 			if (!idm) return;
 
-			const id = this.toMangaId(idm[1]);
+			const id = this.toMangaId(idm[1]!);
 			if (seen.has(id)) return;
 			seen.add(id);
 
 			const title =
-				$el.find('h2.caption, .cpt a, .caption a, .caption').first().text().replace(/\s+/g, ' ').trim() ||
-				`Gallery ${idm[1]}`;
+				$el
+					.find('h2.caption, .cpt a, .caption a, .caption')
+					.first()
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim() || `Gallery ${idm[1]}`;
 
 			const img = $el.find('.image img.lazy, .image img').first();
 			let cover =
@@ -149,8 +142,12 @@ export class AsmHentaiSource extends BaseSource {
 			}
 
 			const type =
-				$el.find('.cl h3 a, a[href*="/category/"]').first().text().replace(/\s+/g, ' ').trim() ||
-				'doujinshi';
+				$el
+					.find('.cl h3 a, a[href*="/category/"]')
+					.first()
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim() || 'doujinshi';
 
 			const langHref =
 				$el.find('a[href*="/language/"]').attr('href') ||
@@ -176,7 +173,57 @@ export class AsmHentaiSource extends BaseSource {
 		return res;
 	}
 
-	// ── Catalog ──────────────────────────────────────────────────────────────
+	private listPaths(page: number, langSlug: string | null): string[] {
+		const p = Math.max(1, page);
+		if (langSlug) {
+			if (p <= 1) return [`/language/${langSlug}/`];
+			return [
+				`/language/${langSlug}/page/${p}/`,
+				`/language/${langSlug}/?page=${p}`
+			];
+		}
+		if (p <= 1) return [`/`];
+		return [`/page/${p}/`, `/?page=${p}`];
+	}
+
+	private async fetchListPage(
+		page: number,
+		langSlug: string | null
+	): Promise<Manga[]> {
+		for (const path of this.listPaths(page, langSlug)) {
+			try {
+				const html = await this.getHtml(path);
+				const list = this.parseList(html, langSlug);
+				if (list.length > 0) return list;
+			} catch (e) {
+				console.error('[asmhentai] path failed', path, e);
+			}
+		}
+		return [];
+	}
+
+	private async fillToPerPage(
+		list: Manga[],
+		page: number,
+		fetchNext: (pg: number) => Promise<Manga[]>
+	): Promise<Manga[]> {
+		if (list.length === 0 || list.length >= this.PER_PAGE) {
+			return list.slice(0, this.PER_PAGE);
+		}
+		try {
+			const extra = await fetchNext(page + 1);
+			const seen = new Set(list.map((m) => m.id));
+			for (const m of extra) {
+				if (seen.has(m.id)) continue;
+				seen.add(m.id);
+				list.push(m);
+				if (list.length >= this.PER_PAGE) break;
+			}
+		} catch (e) {
+			console.error('[asmhentai] fill extra page failed', e);
+		}
+		return list.slice(0, this.PER_PAGE);
+	}
 
 	async getLatestManga(
 		page: number,
@@ -186,37 +233,15 @@ export class AsmHentaiSource extends BaseSource {
 		const langSlug = this.normalizeLang(opts?.lang);
 
 		try {
-		
-			const candidates: string[] = [];
-			if (langSlug) {
-				if (p <= 1) candidates.push(`/language/${langSlug}/`);
-				else {
-					candidates.push(`/language/${langSlug}/page/${p}/`);
-					candidates.push(`/language/${langSlug}/?page=${p}`);
-				}
-			} else {
-				if (p <= 1) candidates.push(`/`);
-				else {
-					candidates.push(`/page/${p}/`);
-					candidates.push(`/?page=${p}`);
-				}
-			}
-
-			let list: Manga[] = [];
-			for (const path of candidates) {
-				try {
-					const html = await this.getHtml(path);
-					list = this.parseList(html, langSlug);
-					if (list.length > 0) break;
-				} catch (e) {
-					console.error('[asmhentai] path failed', path, e);
-				}
-			}
+			let list = await this.fetchListPage(p, langSlug);
+			list = await this.fillToPerPage(list, p, (pg) =>
+				this.fetchListPage(pg, langSlug)
+			);
 
 			console.log(
 				`[asmhentai] latest page=${p} lang=${langSlug ?? 'all'} → ${list.length}`
 			);
-			return list.slice(0, this.PER_PAGE);
+			return list;
 		} catch (e) {
 			console.error('[asmhentai] getLatestManga', e);
 			return [];
@@ -234,33 +259,31 @@ export class AsmHentaiSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			
 			let searchQ = q;
-			if (langSlug) {
-		
-				if (!/\blanguage:/i.test(searchQ)) {
-					searchQ = `${searchQ} language:${langSlug}`;
-				}
+			if (langSlug && !/\blanguage:/i.test(searchQ)) {
+				searchQ = `${searchQ} language:${langSlug}`;
 			}
 
-			const params = new URLSearchParams();
-			params.set('q', searchQ);
-			if (page > 1) params.set('page', String(page));
+			const fetchSearch = async (pg: number) => {
+				const params = new URLSearchParams();
+				params.set('q', searchQ);
+				if (pg > 1) params.set('page', String(pg));
+				const html = await this.getHtml(`/?${params.toString()}`);
+				return this.parseList(html, langSlug);
+			};
 
-			const html = await this.getHtml(`/?${params.toString()}`);
-			const list = this.parseList(html, langSlug);
+			let list = await fetchSearch(page);
+			list = await this.fillToPerPage(list, page, fetchSearch);
 
 			console.log(
 				`[asmhentai] search "${q}" page=${page} lang=${langSlug ?? 'all'} → ${list.length}`
 			);
-			return list.slice(0, this.PER_PAGE);
+			return list;
 		} catch (e) {
 			console.error('[asmhentai] searchManga', e);
 			return [];
 		}
 	}
-
-	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(
 		mangaId: string,
@@ -277,14 +300,18 @@ export class AsmHentaiSource extends BaseSource {
 			$('.book_page h1, .title').first().text().replace(/\s+/g, ' ').trim() ||
 			`Gallery ${gid}`;
 
-		const coverImg = $('.book_page img.lazy, .book_page img, img[data-src*="cover"]').first();
+		const coverImg = $(
+			'.book_page img.lazy, .book_page img, img[data-src*="cover"]'
+		).first();
 		let cover =
 			coverImg.attr('data-src') ||
 			coverImg.attr('data-original') ||
 			coverImg.attr('src') ||
 			'';
 		if (!cover || cover.startsWith('data:')) {
-			const anyCover = $(`img[data-src*="/${gid}/cover"], img[data-src*="/${gid}/thumb"]`)
+			const anyCover = $(
+				`img[data-src*="/${gid}/cover"], img[data-src*="/${gid}/thumb"]`
+			)
 				.first()
 				.attr('data-src');
 			if (anyCover) cover = anyCover;
@@ -303,35 +330,51 @@ export class AsmHentaiSource extends BaseSource {
 		}
 
 		const tPagesRaw =
-			$('#t_pages').attr('value') ||
-			$('input#t_pages').attr('value') ||
-			'';
+			$('#t_pages').attr('value') || $('input#t_pages').attr('value') || '';
 		let pageCount = parseInt(tPagesRaw, 10) || 0;
 		if (!pageCount) {
 			const m = $.root().text().match(/Pages:\s*(\d+)/i);
-			if (m) pageCount = parseInt(m[1], 10);
+			if (m) pageCount = parseInt(m[1]!, 10);
 		}
 		if (!pageCount) {
-			pageCount = $(`.preview_thumb a, a[href*="/gallery/${gid}/"]`).length || 1;
+			pageCount =
+				$(`.preview_thumb a, a[href*="/gallery/${gid}/"]`).length || 1;
 		}
 
 		const authors: string[] = [];
 		$('a[href*="/artists/"], .tags:contains("Artists") a, a[href*="/artist/"]').each(
 			(_, el) => {
-				const t = $(el).clone().children().remove().end().text().replace(/\s+/g, ' ').trim();
+				const t = $(el)
+					.clone()
+					.children()
+					.remove()
+					.end()
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim();
 				if (t && !authors.includes(t)) authors.push(t);
 			}
 		);
 
 		const genres: string[] = [];
 		$('.tag_list a.tag, .tags a.tag, a[href*="/tag/"]').each((_, el) => {
-			const t = $(el).clone().children().remove().end().text().replace(/\s+/g, ' ').trim();
+			const t = $(el)
+				.clone()
+				.children()
+				.remove()
+				.end()
+				.text()
+				.replace(/\s+/g, ' ')
+				.trim();
 			if (t && t.length < 40 && !genres.includes(t)) genres.push(t);
 		});
 
 		const type =
-			$('a[href*="/category/"]').first().text().replace(/\s+/g, ' ').trim() ||
-			'doujinshi';
+			$('a[href*="/category/"]')
+				.first()
+				.text()
+				.replace(/\s+/g, ' ')
+				.trim() || 'doujinshi';
 
 		const langHref =
 			$('a[href*="/language/"]').attr('href') ||
@@ -341,16 +384,11 @@ export class AsmHentaiSource extends BaseSource {
 			langHref.replace(/\/$/, '').split('/').pop() ||
 			this.normalizeLang(opts?.lang) ||
 			'japanese';
-		const lang = this.langCodeFromSlug(langSlug);
-
-		if (!cover && loadDir) {
-			cover = `https://images.asmhentai.com/${loadDir}/${gid}/cover.jpg`;
-		}
 
 		const chapters: Chapter[] = [
 			{
 				id: this.toChapterId(gid),
-				title: `Chapter 1`,
+				title: 'Chapter 1',
 				number: 1,
 				date: ''
 			}
@@ -361,11 +399,8 @@ export class AsmHentaiSource extends BaseSource {
 			`Type: ${type.toLowerCase()}`,
 			authors[0] && `Author: ${authors.join(', ')}`,
 			authors[0] && `Artist: ${authors.join(', ')}`,
-			pageCount > 0 && `Pages: ${pageCount}`,
-			loadDir && `Dir: ${loadDir}`
+			pageCount > 0 && `Pages: ${pageCount}`
 		].filter(Boolean);
-
-		const description = metaLines.filter((l) => !String(l).startsWith('Dir:')).join('\n');
 
 		console.log(`[asmhentai] details ${gid} pages=${pageCount} dir=${loadDir}`);
 
@@ -376,15 +411,13 @@ export class AsmHentaiSource extends BaseSource {
 			cover,
 			type: type.toLowerCase() || 'doujinshi',
 			status: 'Completed',
-			description,
+			description: metaLines.join('\n'),
 			authors,
 			genres,
 			chapters,
 			latestChapter: '1'
 		};
 	}
-
-	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const gid = this.extractChapterGid(chapterId);
@@ -408,23 +441,28 @@ export class AsmHentaiSource extends BaseSource {
 			let pageCount = parseInt(tPagesRaw, 10) || 0;
 			if (!pageCount) {
 				const m = $.root().text().match(/Pages:\s*(\d+)/i);
-				if (m) pageCount = parseInt(m[1], 10);
+				if (m) pageCount = parseInt(m[1]!, 10);
 			}
 
 			if (!loadDir || pageCount < 1) {
-				// Fallback: thumb links → full
 				const urls: string[] = [];
-				$('img[src*="images.asmhentai.com"]').each((_, el) => {
-					const src = $(el).attr('src') || $(el).attr('data-src') || '';
-					const full = src.replace(/(\d+)t\.(jpg|jpeg|png|webp)$/i, '$1.$2');
-					if (
-						full.includes(`/${gid}/`) &&
-						!/cover|thumb/i.test(full) &&
-						/^https?:\/\//i.test(full)
-					) {
-						urls.push(full);
+				$('img[src*="images.asmhentai.com"], img[data-src*="images.asmhentai.com"]').each(
+					(_, el) => {
+						const src =
+							$(el).attr('data-src') || $(el).attr('src') || '';
+						const full = src.replace(
+							/(\d+)t\.(jpg|jpeg|png|webp)$/i,
+							'$1.$2'
+						);
+						if (
+							full.includes(`/${gid}/`) &&
+							!/cover|thumb/i.test(full) &&
+							/^https?:\/\//i.test(full)
+						) {
+							urls.push(full);
+						}
 					}
-				});
+				);
 				const uniq = [...new Set(urls)];
 				console.log(`[asmhentai] pages fallback ${uniq.length} → ${gid}`);
 				return uniq;
@@ -434,7 +472,6 @@ export class AsmHentaiSource extends BaseSource {
 			for (let i = 1; i <= pageCount; i++) {
 				urls.push(`https://images.asmhentai.com/${loadDir}/${gid}/${i}.jpg`);
 			}
-
 			console.log(`[asmhentai] ${urls.length} pages → ${gid}`);
 			return urls;
 		} catch (e) {
