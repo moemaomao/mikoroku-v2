@@ -13,7 +13,8 @@ const ROOT_CHAPTER_PREFIX: Record<string, string> = {
     mangaindo: '/manga',
     komikstation: '/manga',
     isekaikomik: '/manga',
-    maid: '/manga'
+    maid: '/manga',
+    sektedoujin: '/manga'
 };
 
 function parseChapterNum(input: string): number | null {
