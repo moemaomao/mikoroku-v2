@@ -6,8 +6,8 @@ import * as cheerio from 'cheerio';
  * Sektedoujin adapter (sektedoujin.cc)
  *
  * Theme: Themesia / mangareader
- * Latest  : /manga/?order=update  (24/page)
- * Page 2+ : /page/{n}/  atau /manga/?page={n}&order=update
+ * Latest  : /manga/?order=update (~20) + fill homepage → 24
+ * Page 2+ : /manga/?page={n}&order=update
  * Search  : /?s={query}
  * Detail  : /manga/{slug}/
  * Chapter : /{slug}-chapter-{n}/  (flat path)
@@ -200,29 +200,44 @@ export class SektedoujinSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			let path: string;
 
-			if (p === 1) {
-				path = '/manga/?order=update';
-			} else {
-
-				path = `/manga/?page=${p}&order=update`;
-			}
+			const path =
+				p <= 1
+					? '/manga/?order=update'
+					: `/manga/?page=${p}&order=update`;
 
 			const html = await this.fetchHtml(path);
 			let list = this.parseBsxCards(cheerio.load(html));
+			console.log(
+				`[sektedoujin] order=update page=${p} → ${list.length}`
+			);
 
+			if (p === 1 && list.length < this.PER_PAGE) {
+				const homeHtml = await this.fetchHtml('/');
+				const home = this.parseBsxCards(cheerio.load(homeHtml));
+				const seen = new Set(list.map((m) => m.id));
+				for (const m of home) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					list.push(m);
+					if (list.length >= this.PER_PAGE) break;
+				}
+				console.log(
+					`[sektedoujin] page1 +home fill → ${list.length}`
+				);
+			}
 
-			if (p > 1 && list.length > 0) {
+			if (p > 1 && list.length < 8) {
 				const altHtml = await this.fetchHtml(`/page/${p}/`);
 				const alt = this.parseBsxCards(cheerio.load(altHtml));
-				if (alt.length > 0) {
-			
+				if (alt.length > list.length) {
 					list = alt;
+					console.log(
+						`[sektedoujin] fallback /page/${p}/ → ${list.length}`
+					);
 				}
 			}
 
-			console.log(`[sektedoujin] page=${p} → ${list.length}`);
 			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[sektedoujin] getLatestManga', e);
