@@ -2,27 +2,13 @@ import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
-/**
- * v5.luvyaa.co adapter (MangaReader / Themesia-like)
- *
- * List   : /manga/?order=update  |  /manga/?order=update&page={n}
- * Search : /?s=QUERY
- * Detail : /{slug}/
- * Chapter: /{slug}-chapter-{n}/
- * Pages  : img.ts-main-image (cdn-nyaa.link)
- *
- * ID format:
- *   manga   : "/{slug}"
- *   chapter : "/{slug}-chapter-{n}"
- */
 export class LuvyaaSource extends BaseSource {
 	id = 'luvyaa';
 	name = 'Luvyaa';
 	baseUrl = 'https://v5.luvyaa.co';
 
 	private readonly PER_PAGE = 24;
-
-	// ── Helpers ──────────────────────────────────────────────────────────────
+	private readonly LIST_LANG = 'id';
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -70,7 +56,6 @@ export class LuvyaaSource extends BaseSource {
 		return 'manga';
 	}
 
-	/** path valid manga: /slug (bukan /manga /page /genres /user /login) */
 	private isMangaPath(id: string): boolean {
 		if (!id || id === '/') return false;
 		if (
@@ -84,15 +69,12 @@ export class LuvyaaSource extends BaseSource {
 		return /^\/[a-z0-9][a-z0-9-]{1,200}$/i.test(id);
 	}
 
-	/** /slug-chapter-12 → /slug */
 	private seriesIdFromChapter(path: string): string | null {
 		const p = this.cleanId(path);
 		const m = p.match(/^\/(.+?)-chapter-[\d.]+(?:-\d+)?$/i);
 		if (m?.[1]) return `/${m[1]}`;
 		return null;
 	}
-
-	// ── List parser ──────────────────────────────────────────────────────────
 
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const out: Manga[] = [];
@@ -151,7 +133,8 @@ export class LuvyaaSource extends BaseSource {
 				cover,
 				type,
 				status,
-				latestChapter
+				latestChapter,
+				lang: this.LIST_LANG
 			});
 		});
 
@@ -172,9 +155,7 @@ export class LuvyaaSource extends BaseSource {
 		}
 	}
 
-	// ── Catalog ──────────────────────────────────────────────────────────────
-
-		async getLatestManga(
+	async getLatestManga(
 		page: number,
 		_opts?: { lang?: string; type?: string }
 	): Promise<Manga[]> {
@@ -211,8 +192,6 @@ export class LuvyaaSource extends BaseSource {
 		}
 	}
 
-	// ── Details ──────────────────────────────────────────────────────────────
-
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
 
@@ -228,7 +207,6 @@ export class LuvyaaSource extends BaseSource {
 		const html = await this.fetchHtml(path.endsWith('/') ? path : `${path}/`);
 		const $ = cheerio.load(html);
 
-		// Title
 		let title =
 			$('h1.entry-title, h1').first().text().replace(/\s+/g, ' ').trim() ||
 			$('meta[property="og:title"]')
@@ -237,25 +215,21 @@ export class LuvyaaSource extends BaseSource {
 				.trim() ||
 			path.replace(/^\//, '').replace(/-/g, ' ');
 
-		// Alternative title: <span class="alternative">...</span>
 		const alt =
 			$('span.alternative').first().text().replace(/\s+/g, ' ').trim() || '';
 
-		// Cover
 		let cover =
 			this.imgSrc($('.thumb img, img.wp-post-image').first()) ||
 			$('meta[property="og:image"]').attr('content') ||
 			'';
 		cover = this.absUrl((cover || '').split('?')[0]);
 
-		// Rating: .kh-stat-item.rating-score span  ATAU  meta[itemprop="ratingValue"]
 		let rating =
 			$('meta[itemprop="ratingValue"]').attr('content') ||
 			$('.kh-stat-item.rating-score span').first().text().replace(/\s+/g, ' ').trim() ||
 			'';
 		rating = rating.replace(/[^\d.]/g, '');
 
-		// Status: .kh-status .status-text
 		let status = 'Ongoing';
 		const statusText =
 			$('.kh-status .status-text').first().text().replace(/\s+/g, ' ').trim() ||
@@ -265,7 +239,6 @@ export class LuvyaaSource extends BaseSource {
 		else if (/hiatus/i.test(statusText)) status = 'Hiatus';
 		else if (/ongoing|berjalan/i.test(statusText)) status = 'Ongoing';
 
-		// Type dari meta-item
 		let type: 'manga' | 'manhwa' | 'manhua' = 'manga';
 		$('.meta-item').each((_, el) => {
 			const $el = $(el);
@@ -279,7 +252,6 @@ export class LuvyaaSource extends BaseSource {
 			if (label === 'type' && val) type = this.detectType(val);
 		});
 
-		// Author / Artist dari meta-item
 		const authors: string[] = [];
 		$('.meta-item').each((_, el) => {
 			const $el = $(el);
@@ -297,14 +269,12 @@ export class LuvyaaSource extends BaseSource {
 			});
 		});
 
-		// Genres
 		const genres: string[] = [];
 		$('a.meta-pill[href*="/genres/"], .mgen a').each((_, a) => {
 			const g = $(a).text().replace(/\s+/g, ' ').trim();
 			if (g && g.length < 40 && !genres.includes(g)) genres.push(g);
 		});
 
-		// Synopsis
 		const synopsis =
 			$('.entry-content[itemprop="description"]')
 				.first()
@@ -314,7 +284,6 @@ export class LuvyaaSource extends BaseSource {
 			$('meta[name="description"]').attr('content')?.trim() ||
 			'';
 
-		// Chapters + latest update
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
@@ -331,7 +300,6 @@ export class LuvyaaSource extends BaseSource {
 			let number = parseFloat(String($li.attr('data-num') || ''));
 			if (!Number.isFinite(number)) {
 				const fromPath = id.match(/-chapter-(\d+(?:\.\d+)?(?:-\d+)?)/i);
-				// "26-1" → 26.1
 				if (fromPath) {
 					const raw = fromPath[1].replace('-', '.');
 					number = parseFloat(raw);
@@ -346,7 +314,6 @@ export class LuvyaaSource extends BaseSource {
 			const date =
 				a.find('.chapterdate').text().replace(/\s+/g, ' ').trim() || '';
 
-			// Bersihkan emoji lock di chapternum
 			let chTitle =
 				a
 					.find('.chapternum')
@@ -378,10 +345,6 @@ export class LuvyaaSource extends BaseSource {
 			.filter(Boolean)
 			.join('\n\n');
 
-		console.log(
-			`[luvyaa] details ${path} → rating=${rating}, status=${status}, type=${type}, alt=${!!alt}, ch=${chapters.length}, latest=${latestUpdate}`
-		);
-
 		return {
 			id: path,
 			sourceId: this.id,
@@ -397,9 +360,7 @@ export class LuvyaaSource extends BaseSource {
 		};
 	}
 
-	// ── Pages ────────────────────────────────────────────────────────────────
-
-		async getChapterPages(chapterId: string): Promise<string[]> {
+	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);
 		if (!/-chapter-[\d.]+/i.test(path)) {
 			console.error('[luvyaa] not a chapter path:', chapterId);
@@ -416,7 +377,6 @@ export class LuvyaaSource extends BaseSource {
 				if (!src || src.startsWith('data:')) return;
 				src = this.absUrl(src);
 				if (!/^https?:\/\//i.test(src)) return;
-				// buang UI / reaction / logo / tracking
 				if (
 					/logo|icon|avatar|ads|banner|spinner|placeholder|favicon|discord|histats|reaction-|readerarea\.svg|Luvyaa-/i.test(
 						src
@@ -424,14 +384,12 @@ export class LuvyaaSource extends BaseSource {
 				) {
 					return;
 				}
-				// prioritaskan CDN page, tolak wp-content reaction
 				if (/\/wp-content\//i.test(src) && !/cdn-nyaa/i.test(src)) return;
 				if (seen.has(src)) return;
 				seen.add(src);
 				urls.push(src);
 			};
 
-			// 1) Themesia: ts_reader.run({ sources: [{ images: [...] }] })
 			const tsMatch = html.match(/ts_reader\.run\(\s*(\{[\s\S]*?\})\s*\)\s*;/);
 			if (tsMatch?.[1]) {
 				try {
@@ -442,7 +400,7 @@ export class LuvyaaSource extends BaseSource {
 							const images = src?.images;
 							if (!Array.isArray(images)) continue;
 							for (const img of images) push(String(img));
-							if (urls.length) break; // server pertama yang ada gambar
+							if (urls.length) break;
 						}
 					}
 				} catch (e) {
@@ -450,7 +408,6 @@ export class LuvyaaSource extends BaseSource {
 				}
 			}
 
-			// 2) Fallback: isi <noscript> di #readerarea
 			if (urls.length < 3) {
 				const nsMatch = html.match(
 					/id=["']readerarea["'][\s\S]*?<noscript>([\s\S]*?)<\/noscript>/i
@@ -463,7 +420,6 @@ export class LuvyaaSource extends BaseSource {
 				}
 			}
 
-			// 3) Fallback terakhir: selector biasa
 			if (urls.length < 3) {
 				const $ = cheerio.load(html);
 				const selectors = [

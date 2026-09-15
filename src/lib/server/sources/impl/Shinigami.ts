@@ -1,19 +1,6 @@
 import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 
-/**
- * Shinigami adapter (api.shngm.io)
- *
- * List   : GET /v1/manga/list?page=&page_size=&sort=latest
- * Search : GET /v1/manga/list?q=&page=&page_size=
- * Detail : GET /v1/manga/detail/{manga_id}
- * Chapters: GET /v1/chapter/{manga_id}/list?page=&page_size=
- * Pages  : GET /v1/chapter/detail/{chapter_id}  → base_url + path + file
- *
- * ID format:
- *   manga   : "/series/{manga_id}"
- *   chapter : "/chapter/{chapter_id}"
- */
 export class ShinigamiSource extends BaseSource {
 	id = 'shinigami';
 	name = 'Shinigami';
@@ -21,14 +8,19 @@ export class ShinigamiSource extends BaseSource {
 
 	private readonly API = 'https://api.shngm.io';
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'id';
 
-	// ── HTTP ─────────────────────────────────────────────────────────────────
-
-	private async apiGet<T = unknown>(path: string, params?: Record<string, string | number>): Promise<T> {
+	private async apiGet<T = unknown>(
+		path: string,
+		params?: Record<string, string | number>
+	): Promise<T> {
 		const qs = params
 			? '?' +
 				Object.entries(params)
-					.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+					.map(
+						([k, v]) =>
+							`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`
+					)
 					.join('&')
 			: '';
 		const url = path.startsWith('http') ? path + qs : `${this.API}${path}${qs}`;
@@ -102,11 +94,10 @@ export class ShinigamiSource extends BaseSource {
 			cover: item.cover_portrait_url || item.cover_image_url || '',
 			type: this.detectType(item),
 			status: this.statusFromCode(item.status),
-			latestChapter: latest
+			latestChapter: latest,
+			lang: this.LIST_LANG
 		};
 	}
-
-	// ── Public API ───────────────────────────────────────────────────────────
 
 	async getLatestManga(
 		page: number,
@@ -156,7 +147,6 @@ export class ShinigamiSource extends BaseSource {
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
-		// /series/{uuid} atau uuid polos; chapter → ambil dari path lain
 		if (path.startsWith('/chapter/')) {
 			throw new Error('Pass manga id, not chapter id');
 		}
@@ -198,7 +188,6 @@ export class ShinigamiSource extends BaseSource {
 			.replace(/\s+/g, ' ')
 			.trim();
 
-		// Chapters (paginate)
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 		for (let page = 1; page <= 50; page++) {

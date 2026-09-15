@@ -12,9 +12,6 @@ import * as cheerio from 'cheerio';
  * Chapter: /read/{slug}/{lang}/chapter-{n}  |  /read/{slug}/{lang}/{uuid}
  * Pages  : <img src> di halaman chapter (CDN: uploads.mangadex.org / amzim.beer)
  *
- * ID format:
- *   manga   : "/manga/{slug}"
- *   chapter : "/read/{slug}/{lang}/chapter-{n}"
  */
 export class MangaBatsSource extends BaseSource {
 	id = 'mangabats';
@@ -22,6 +19,7 @@ export class MangaBatsSource extends BaseSource {
 	baseUrl = 'https://mangabats.xyz';
 
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'en';
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -49,7 +47,6 @@ export class MangaBatsSource extends BaseSource {
 		const path = this.cleanId(mangaId);
 		const m = path.match(/\/manga\/([^/]+)/);
 		if (m) return m[1];
-		// dari chapter path /read/{slug}/...
 		const r = path.match(/\/read\/([^/]+)/);
 		return r?.[1] || path.replace(/^\/+/, '');
 	}
@@ -69,25 +66,16 @@ export class MangaBatsSource extends BaseSource {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		// updated page: a.cover + .manga-title
-		// homepage: .itemupdate
-		const $cards = $('.itemupdate, a.cover').closest(
-			'.itemupdate, .item, .row, div'
-		);
-		const roots =
-			$('.itemupdate').length > 0
-				? $('.itemupdate')
-				: $('a.cover')
-						.map((_, a) => $(a).parent().parent().get(0) || $(a).parent().get(0))
-						.get();
-
 		const process = ($el: cheerio.Cheerio<any>) => {
 			const a =
 				$el.find('a.cover').first().length
 					? $el.find('a.cover').first()
 					: $el.find('a.manga-title, h3 a[href*="/manga/"]').first();
 
-			const href = a.attr('href') || $el.find('a[href*="/manga/"]').first().attr('href') || '';
+			const href =
+				a.attr('href') ||
+				$el.find('a[href*="/manga/"]').first().attr('href') ||
+				'';
 			if (!href || !/\/manga\//i.test(href)) return;
 
 			const id = this.cleanId(href);
@@ -104,9 +92,7 @@ export class MangaBatsSource extends BaseSource {
 			if (!title) return;
 
 			let cover =
-				$el.find('img').attr('src') ||
-				$el.find('img').attr('data-src') ||
-				'';
+				$el.find('img').attr('src') || $el.find('img').attr('data-src') || '';
 			cover = this.absUrl((cover || '').split('?')[0]);
 			if (/no-cover/i.test(cover)) cover = '';
 
@@ -123,14 +109,14 @@ export class MangaBatsSource extends BaseSource {
 				cover,
 				type: 'manga',
 				status: 'Ongoing',
-				latestChapter
+				latestChapter,
+				lang: this.LIST_LANG
 			});
 		};
 
 		if ($('.itemupdate').length) {
 			$('.itemupdate').each((_, el) => process($(el)));
 		} else {
-			// updated list: each cover card
 			$('a.cover[href*="/manga/"]').each((_, a) => {
 				const $a = $(a);
 				const parent = $a.parent();
@@ -266,7 +252,6 @@ export class MangaBatsSource extends BaseSource {
 			offset = nextOffset;
 		}
 
-		// newest first (site default)
 		return all;
 	}
 
@@ -296,7 +281,6 @@ export class MangaBatsSource extends BaseSource {
 			'';
 		cover = this.absUrl((cover || '').split('?')[0]);
 
-		// Alternative
 		const altParts: string[] = [];
 		$('.alternative span, li:contains("Alternative") span').each((_, el) => {
 			const t = $(el).text().trim();
@@ -307,35 +291,35 @@ export class MangaBatsSource extends BaseSource {
 			$('li').each((_, li) => {
 				const t = $(li).text();
 				if (/alternative/i.test(t)) {
-					alt = t.replace(/alternative\s*:?\s*/i, '').replace(/\s+/g, ' ').trim();
+					alt = t
+						.replace(/alternative\s*:?\s*/i, '')
+						.replace(/\s+/g, ' ')
+						.trim();
 				}
 			});
 		}
 
-		// Status
-let status = 'Ongoing';
-let lastUpdate = '';
-$('li').each((_, li) => {
-	const t = $(li).text();
-	if (/Status\s*:/i.test(t) || /^\s*Status/i.test(t)) {
-		const v = t.toLowerCase();
-		if (/complete|finished|end/.test(v)) status = 'Completed';
-		else if (/ongoing|publishing/.test(v)) status = 'Ongoing';
-	}
-	if (/last updated/i.test(t)) {
-		lastUpdate = t.replace(/last updated\s*:?\s*/i, '').trim();
-		if (lastUpdate === '—' || lastUpdate === '-') lastUpdate = '';
-	}
-});
+		let status = 'Ongoing';
+		let lastUpdate = '';
+		$('li').each((_, li) => {
+			const t = $(li).text();
+			if (/Status\s*:/i.test(t) || /^\s*Status/i.test(t)) {
+				const v = t.toLowerCase();
+				if (/complete|finished|end/.test(v)) status = 'Completed';
+				else if (/ongoing|publishing/.test(v)) status = 'Ongoing';
+			}
+			if (/last updated/i.test(t)) {
+				lastUpdate = t.replace(/last updated\s*:?\s*/i, '').trim();
+				if (lastUpdate === '—' || lastUpdate === '-') lastUpdate = '';
+			}
+		});
 
-		// Authors
 		const authors: string[] = [];
 		$('a[href*="/author/"], .author a, li:contains("Author") a').each((_, a) => {
 			const n = $(a).text().trim();
 			if (n && !authors.includes(n)) authors.push(n);
 		});
 
-		// Genres
 		const genres: string[] = [];
 		$('a[href*="/genre/"], .genres a').each((_, a) => {
 			const g = $(a).text().trim();
@@ -350,7 +334,6 @@ $('li').each((_, li) => {
 			$('meta[name="description"]').attr('content') ||
 			'';
 
-		// Chapters via fragment endpoint (full list)
 		let chapters: Chapter[] = [];
 		try {
 			chapters = await this.fetchAllChapters(slug);
@@ -404,7 +387,10 @@ $('li').each((_, li) => {
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);
 		if (!path.includes('/read/')) {
-			console.error('[mangabats] getChapterPages → not a chapter path:', chapterId);
+			console.error(
+				'[mangabats] getChapterPages → not a chapter path:',
+				chapterId
+			);
 			return [];
 		}
 
@@ -423,7 +409,6 @@ $('li').each((_, li) => {
 				if (!src || src.startsWith('data:')) return;
 				src = this.absUrl(src.split('?')[0]);
 				if (!/^https?:\/\//i.test(src)) return;
-				// skip UI
 				if (
 					/logo|icon|avatar|favicon|no-cover|googletag|fontawesome|sprite/i.test(
 						src
@@ -431,9 +416,10 @@ $('li').each((_, li) => {
 				) {
 					return;
 				}
-				// prefer real page hosts
 				if (
-					!/(mangadex\.org|amzim\.beer|mangabats|mghub|mkklcdnv|sv\d)/i.test(src) &&
+					!/(mangadex\.org|amzim\.beer|mangabats|mghub|mkklcdnv|sv\d)/i.test(
+						src
+					) &&
 					!/\.(jpe?g|png|webp)$/i.test(src)
 				) {
 					return;

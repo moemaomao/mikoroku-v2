@@ -8,7 +8,7 @@ import * as cheerio from 'cheerio';
  * List   : https://api.komiku.org/manga/  |  /manga/page/{n}/
  * Search : https://api.komiku.org/manga/?s=QUERY
  * Detail : https://komiku.org/manga/{slug}/
- * Chapter: /{slug}-chapter-{n}/   (desimal: chapter-1.1 atau chapter-1-1)
+ * Chapter: /{slug}-chapter-{n}/
  */
 export class KomikuSource extends BaseSource {
 	id = 'komiku';
@@ -17,6 +17,7 @@ export class KomikuSource extends BaseSource {
 
 	private readonly apiBase = 'https://api.komiku.org';
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'id';
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -51,10 +52,6 @@ export class KomikuSource extends BaseSource {
 			.trim();
 	}
 
-	/**
-	 * Parse chapter number dari teks ATAU path.
-	 * Support: "Chapter 1.1", "Ch 1-2", path "...-chapter-1.1", "...-chapter-1-2"
-	 */
 	private parseChapterNumber(text: string, path = ''): number {
 		const fromPath = path.match(/-chapter-(\d+)(?:[.-](\d+))?/i);
 		if (fromPath) {
@@ -73,7 +70,6 @@ export class KomikuSource extends BaseSource {
 			return parseInt(m[1], 10);
 		}
 
-		// "1-2" / "1.2" di title
 		const d = String(text).match(/\b(\d+)[.-](\d+)\b/);
 		if (d) return parseFloat(`${d[1]}.${d[2]}`);
 
@@ -131,7 +127,6 @@ export class KomikuSource extends BaseSource {
 				status = 'Completed';
 			}
 
-			// Badge chapter: ambil .new1 terakhir (biasanya "Terbaru"), fallback semua .new1
 			let latestChapter: number | undefined;
 			const newLinks = $el.find('.new1 a[href*="-chapter-"]');
 			if (newLinks.length) {
@@ -159,7 +154,8 @@ export class KomikuSource extends BaseSource {
 				sourceId: this.id,
 				status,
 				type,
-				latestChapter
+				latestChapter,
+				lang: this.LIST_LANG
 			});
 		});
 
@@ -307,7 +303,9 @@ export class KomikuSource extends BaseSource {
 		).each((_, el) => {
 			const $el = $(el);
 			const $a = $el
-				.find('a[href*="-chapter-"], a[href*="chapter"], a[href*="ch-"], a[href*="/ch/"]')
+				.find(
+					'a[href*="-chapter-"], a[href*="chapter"], a[href*="ch-"], a[href*="/ch/"]'
+				)
 				.first();
 			const href = $a.attr('href') || '';
 			if (!href) return;
@@ -326,13 +324,15 @@ export class KomikuSource extends BaseSource {
 				this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
 
 			const date =
-				$el.find('.tanggalseries, .date, td:last-child').text().replace(/\s+/g, ' ').trim() ||
-				'';
+				$el
+					.find('.tanggalseries, .date, td:last-child')
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim() || '';
 
 			chapters.push({ id, title: chapterTitle, number, date });
 		});
 
-		// Fallback: semua link chapter di halaman
 		if (chapters.length === 0) {
 			$('a[href*="-chapter-"]').each((_, a) => {
 				const href = $(a).attr('href') || '';
@@ -343,12 +343,12 @@ export class KomikuSource extends BaseSource {
 					$(a).text().replace(/\s+/g, ' ').trim() ||
 					$(a).attr('title') ||
 					'Chapter';
-				const number = this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
+				const number =
+					this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
 				chapters.push({ id, title: chapterTitle, number, date: '' });
 			});
 		}
 
-		// ascending → next/prev di reader benar
 		chapters.sort((a, b) => a.number - b.number);
 
 		return {
@@ -371,34 +371,36 @@ export class KomikuSource extends BaseSource {
 	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
-		const path = this.cleanId(chapterId.startsWith('/') ? chapterId : `/${chapterId}`);
+		const path = this.cleanId(
+			chapterId.startsWith('/') ? chapterId : `/${chapterId}`
+		);
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
 		const images: string[] = [];
 		const seen = new Set<string>();
 
-		$('#Baca_Komik img, #readerarea img, .reader img, .img-land img, .post-reading img').each(
-			(_, img) => {
-				let src =
-					$(img).attr('data-src') ||
-					$(img).attr('data-lazy-src') ||
-					$(img).attr('src') ||
-					'';
-				src = this.absUrl(src);
+		$(
+			'#Baca_Komik img, #readerarea img, .reader img, .img-land img, .post-reading img'
+		).each((_, img) => {
+			let src =
+				$(img).attr('data-src') ||
+				$(img).attr('data-lazy-src') ||
+				$(img).attr('src') ||
+				'';
+			src = this.absUrl(src);
 
-				if (
-					src &&
-					!seen.has(src) &&
-					!/logo|icon|avatar|spinner|ads|lazy\.jpg|komikuplus|promo|asset\/img|thumb|placeholder/i.test(
-						src
-					)
-				) {
-					seen.add(src);
-					images.push(src);
-				}
+			if (
+				src &&
+				!seen.has(src) &&
+				!/logo|icon|avatar|spinner|ads|lazy\.jpg|komikuplus|promo|asset\/img|thumb|placeholder/i.test(
+					src
+				)
+			) {
+				seen.add(src);
+				images.push(src);
 			}
-		);
+		});
 
 		if (images.length === 0) {
 			$('img').each((_, img) => {

@@ -8,6 +8,7 @@ export class KiryuuSource extends BaseSource {
 	baseUrl = 'https://v7.kiryuu.to';
 
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'id';
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -60,7 +61,7 @@ export class KiryuuSource extends BaseSource {
 		return n ? parseFloat(n[1]) : 0;
 	}
 
-			private parseCards($: cheerio.CheerioAPI): Manga[] {
+	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const mangas: Manga[] = [];
 		const seen = new Set<string>();
 
@@ -117,8 +118,9 @@ export class KiryuuSource extends BaseSource {
 			cover = this.absUrl(cover);
 
 			const typeAlt = (
-				$card.find('img[alt="manhwa"], img[alt="manhua"], img[alt="manga"]').attr('alt') ||
-				''
+				$card
+					.find('img[alt="manhwa"], img[alt="manhua"], img[alt="manga"]')
+					.attr('alt') || ''
 			).toLowerCase();
 			let type: 'manga' | 'manhwa' | 'manhua' = 'manga';
 			if (typeAlt === 'manhwa') type = 'manhwa';
@@ -139,9 +141,6 @@ export class KiryuuSource extends BaseSource {
 				latestChapter = parseFloat(chMatch[1]);
 			}
 
-			const scoreText = $card.find('.numscore').first().text().trim();
-			const score = scoreText ? parseFloat(scoreText) : undefined;
-
 			mangas.push({
 				id,
 				title,
@@ -150,14 +149,14 @@ export class KiryuuSource extends BaseSource {
 				status,
 				type,
 				latestChapter,
-				...(score != null && !Number.isNaN(score) ? { score } : {})
-			} as Manga);
+				lang: this.LIST_LANG
+			});
 		});
 
 		return mangas;
 	}
 
-		async getLatestManga(page: number): Promise<Manga[]> {
+	async getLatestManga(page: number): Promise<Manga[]> {
 		try {
 			const url =
 				page <= 1
@@ -243,29 +242,33 @@ export class KiryuuSource extends BaseSource {
 		const seen = new Set<string>();
 
 		$('a[href*="/chapter-"]').each((_, a) => {
-            const $a = $(a);
-            const href = $a.attr('href') || '';
-            const id = this.cleanId(href);
-            if (seen.has(id) || !id.includes('/chapter-')) return;
-            seen.add(id);
+			const $a = $(a);
+			const href = $a.attr('href') || '';
+			const id = this.cleanId(href);
+			if (seen.has(id) || !id.includes('/chapter-')) return;
+			seen.add(id);
 
-            let rawText = $a.text().replace(/\s+/g, ' ').trim();
-            
-            const chapterTitle = rawText
-                .replace(/\s*\d+\s*(hours?|hrs?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\s*ago.*$/i, '')
-                .replace(/\s*\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '')
-                .trim() || `Chapter ${chapters.length + 1}`;
+			let rawText = $a.text().replace(/\s+/g, ' ').trim();
 
-            const number =
-                this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
+			const chapterTitle =
+				rawText
+					.replace(
+						/\s*\d+\s*(hours?|hrs?|days?|weeks?|months?|years?|jam|hari|minggu|bulan|tahun)\s*ago.*$/i,
+						''
+					)
+					.replace(/\s*\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '')
+					.trim() || `Chapter ${chapters.length + 1}`;
 
-            const date =
-                $a.parent().find('span, time').not($a).last().text().trim() ||
-                $a.closest('li, div').find('span, time').last().text().trim() ||
-                '';
+			const number =
+				this.parseChapterNumber(chapterTitle, id) || chapters.length + 1;
 
-            chapters.push({ id, title: chapterTitle, number, date });
-        });
+			const date =
+				$a.parent().find('span, time').not($a).last().text().trim() ||
+				$a.closest('li, div').find('span, time').last().text().trim() ||
+				'';
+
+			chapters.push({ id, title: chapterTitle, number, date });
+		});
 
 		chapters.sort((a, b) => a.number - b.number);
 
@@ -287,7 +290,9 @@ export class KiryuuSource extends BaseSource {
 	}
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
-		const path = this.cleanId(chapterId.startsWith('/') ? chapterId : `/${chapterId}`);
+		const path = this.cleanId(
+			chapterId.startsWith('/') ? chapterId : `/${chapterId}`
+		);
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
@@ -317,10 +322,7 @@ export class KiryuuSource extends BaseSource {
 
 		if (images.length === 0) {
 			$('img').each((_, img) => {
-				let src =
-					$(img).attr('data-src') ||
-					$(img).attr('src') ||
-					'';
+				let src = $(img).attr('data-src') || $(img).attr('src') || '';
 				src = this.absUrl(src);
 				if (
 					src &&

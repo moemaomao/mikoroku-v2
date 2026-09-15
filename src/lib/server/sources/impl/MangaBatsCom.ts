@@ -18,6 +18,7 @@ export class MangaBatsComSource extends BaseSource {
 	baseUrl = 'https://www.mangabats.com';
 
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'en';
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -88,11 +89,11 @@ export class MangaBatsComSource extends BaseSource {
 				cover: this.absUrl((cover || '').split('?')[0]),
 				type: 'manga',
 				status: 'Ongoing',
-				latestChapter: this.parseChapterNumber(chText) || undefined
+				latestChapter: this.parseChapterNumber(chText) || undefined,
+				lang: this.LIST_LANG
 			});
 		};
 
-		// Primary: list / search cards
 		$('.list-comic-item-wrap').each((_, el) => {
 			const $el = $(el);
 			const a = $el.find('a.list-story-item, a.cover, a[href*="/manga/"]').first();
@@ -115,7 +116,6 @@ export class MangaBatsComSource extends BaseSource {
 			push(href, title, cover, chText);
 		});
 
-		// Homepage daily
 		if (!out.length) {
 			$('.itemupdate').each((_, el) => {
 				const $el = $(el);
@@ -127,25 +127,24 @@ export class MangaBatsComSource extends BaseSource {
 					a.find('img').attr('alt') ||
 					'';
 				const cover =
-					a.find('img').attr('data-src') ||
-					a.find('img').attr('src') ||
-					'';
+					a.find('img').attr('data-src') || a.find('img').attr('src') || '';
 				const chText = $el.find('a[href*="/chapter"]').first().text() || '';
 				push(href, title, cover, chText);
 			});
 		}
 
-		// Fallback anchors
 		if (!out.length) {
-			$('a.list-story-item[href*="/manga/"], a.cover[href*="/manga/"]').each((_, el) => {
-				const $a = $(el);
-				const href = $a.attr('href') || '';
-				if (/\/chapter/i.test(href)) return;
-				const title = $a.attr('title') || $a.find('img').attr('alt') || '';
-				const cover =
-					$a.find('img').attr('data-src') || $a.find('img').attr('src') || '';
-				push(href, title, cover);
-			});
+			$('a.list-story-item[href*="/manga/"], a.cover[href*="/manga/"]').each(
+				(_, el) => {
+					const $a = $(el);
+					const href = $a.attr('href') || '';
+					if (/\/chapter/i.test(href)) return;
+					const title = $a.attr('title') || $a.find('img').attr('alt') || '';
+					const cover =
+						$a.find('img').attr('data-src') || $a.find('img').attr('src') || '';
+					push(href, title, cover);
+				}
+			);
 		}
 
 		return out;
@@ -266,7 +265,6 @@ export class MangaBatsComSource extends BaseSource {
 		const html = await this.fetchHtml(`/manga/${slug}`);
 		const $ = cheerio.load(html);
 
-		// Title
 		let title =
 			$('h1').first().text().trim() ||
 			$('meta[property="og:title"]').attr('content') ||
@@ -277,7 +275,6 @@ export class MangaBatsComSource extends BaseSource {
 			.replace(/\s*[-|].*Mangabat.*$/i, '')
 			.trim();
 
-		// Cover
 		let cover =
 			$('meta[property="og:image"]').attr('content') ||
 			$('.story-info-left img, .info-image img').attr('src') ||
@@ -285,7 +282,6 @@ export class MangaBatsComSource extends BaseSource {
 			'';
 		cover = this.absUrl((cover || '').split('?')[0]);
 
-		// Alternative names
 		let alt = '';
 		$('h2').each((_, el) => {
 			const t = $(el).text().trim();
@@ -300,7 +296,6 @@ export class MangaBatsComSource extends BaseSource {
 			}
 		});
 
-		// Status + last update
 		let status = 'Ongoing';
 		let lastUpdate = '';
 		$('li').each((_, el) => {
@@ -314,11 +309,12 @@ export class MangaBatsComSource extends BaseSource {
 			}
 		});
 
-		// Authors / Artist — dari teks <li>, bukan hanya link
 		const authors: string[] = [];
 		$('li').each((_, el) => {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
-			const m = t.match(/^(?:author\(s\)|authors?|artist\(s\)|artists?)\s*:\s*(.+)$/i);
+			const m = t.match(
+				/^(?:author\(s\)|authors?|artist\(s\)|artists?)\s*:\s*(.+)$/i
+			);
 			if (!m) return;
 			m[1]
 				.split(/,|\/|;/)
@@ -335,7 +331,6 @@ export class MangaBatsComSource extends BaseSource {
 			});
 		}
 
-		// Rating
 		let rating = '';
 		const dataRate = $('.rating.star-rating').first().attr('data-default');
 		if (dataRate && /\d/.test(dataRate)) rating = dataRate.trim();
@@ -353,7 +348,6 @@ export class MangaBatsComSource extends BaseSource {
 			});
 		}
 
-		// Genres — HANYA dari blok info manga (bukan navbar)
 		const genres: string[] = [];
 		const skipGenre = /^(all|completed|ongoing)$/i;
 		$('li.genres a, .genre-list a').each((_, a) => {
@@ -362,7 +356,6 @@ export class MangaBatsComSource extends BaseSource {
 			if (!genres.includes(g)) genres.push(g);
 		});
 
-		// Synopsis
 		const synopsis =
 			$('#panel-story-info-description, .panel-story-info-description')
 				.text()
@@ -370,7 +363,6 @@ export class MangaBatsComSource extends BaseSource {
 				.replace(/^Description\s*:?\s*/i, '')
 				.trim() || '';
 
-		// Chapters API + sort ascending (next/prev)
 		let chapters: Chapter[] = [];
 		try {
 			chapters = await this.fetchChaptersApi(slug);

@@ -2,26 +2,13 @@ import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
-/**
- * love4u.net adapter (HTML scrape)
- *
- * List   : /manga-list.html?listType=pagination&page={n}&sort=last_update&sort_type=DESC
- * Search : /app/manga/controllers/search.single.php?term=QUERY
- * Detail : /manga-{id}/
- * Chapter: /manga-{id}/{slug}-chapter-{n}.{cid}.html
- *
- * ID format:
- *   manga   : "/manga-{numericId}"
- *   chapter : full path "/manga-8288/....html"
- */
 export class Love4uSource extends BaseSource {
 	id = 'love4u';
 	name = 'Love4u';
 	baseUrl = 'https://love4u.net';
 
 	private readonly PER_PAGE = 24;
-
-	// ── Helpers ──────────────────────────────────────────────────────────────
+	private readonly LIST_LANG = 'ja';
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -72,13 +59,10 @@ export class Love4uSource extends BaseSource {
 		return n ? parseFloat(n[1]) : 0;
 	}
 
-	// ── List parser ──────────────────────────────────────────────────────────
-
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		// HANYA list utama — jangan ambil .popular-thumb-item (bikin kelebihan item)
 		const $cards = $(
 			'.row-last-update .thumb-item-flow, #history .thumb-item-flow, .card-body .thumb-item-flow'
 		);
@@ -87,7 +71,6 @@ export class Love4uSource extends BaseSource {
 		$scope.each((_, el) => {
 			const $el = $(el);
 
-			// skip "see more" / empty cards
 			if ($el.hasClass('see-more') || $el.find('.thumb-see-more').length) return;
 
 			const seriesA = $el.find('.series-title a, .thumb_attr.series-title a').first();
@@ -138,123 +121,120 @@ export class Love4uSource extends BaseSource {
 				cover,
 				type: 'manga',
 				status: 'Ongoing',
-				latestChapter
+				latestChapter,
+				lang: this.LIST_LANG
 			});
 		});
 
 		return out;
 	}
 
-	// ── Catalog ──────────────────────────────────────────────────────────────
-
 	async getLatestManga(
-	page: number,
-	_opts?: { lang?: string; type?: string }
-): Promise<Manga[]> {
-	try {
-		const p = Math.max(1, Number(page) || 1);
-		// Situs cuma ~20 item/halaman → ambil 2 halaman site lalu slice 24
-		const sitePageStart = (p - 1) * 2 + 1; // homepage app page1 → site 1+2, page2 → site 3+4
-		const pagesToFetch = [sitePageStart, sitePageStart + 1];
+		page: number,
+		_opts?: { lang?: string; type?: string }
+	): Promise<Manga[]> {
+		try {
+			const p = Math.max(1, Number(page) || 1);
+			const sitePageStart = (p - 1) * 2 + 1;
+			const pagesToFetch = [sitePageStart, sitePageStart + 1];
 
-		const seen = new Set<string>();
-		const merged: Manga[] = [];
+			const seen = new Set<string>();
+			const merged: Manga[] = [];
 
-		for (const sp of pagesToFetch) {
-			const path =
-				`/manga-list.html?listType=pagination&page=${sp}` +
-				`&artist=&author=&group=&m_status=&name=&genre=&ungenre=` +
-				`&sort=last_update&sort_type=DESC`;
+			for (const sp of pagesToFetch) {
+				const path =
+					`/manga-list.html?listType=pagination&page=${sp}` +
+					`&artist=&author=&group=&m_status=&name=&genre=&ungenre=` +
+					`&sort=last_update&sort_type=DESC`;
 
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			for (const m of this.parseCards($)) {
-				if (seen.has(m.id)) continue;
-				seen.add(m.id);
-				merged.push(m);
+				const html = await this.fetchHtml(path);
+				const $ = cheerio.load(html);
+				for (const m of this.parseCards($)) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					merged.push(m);
+				}
+				if (merged.length >= this.PER_PAGE) break;
 			}
-			if (merged.length >= this.PER_PAGE) break;
-		}
 
-		const list = merged.slice(0, this.PER_PAGE);
-		console.log(`[love4u] latest page=${p} → ${list.length} items`);
-		return list;
-	} catch (e) {
-		console.error('[love4u] getLatestManga', e);
-		return [];
+			const list = merged.slice(0, this.PER_PAGE);
+			console.log(`[love4u] latest page=${p} → ${list.length} items`);
+			return list;
+		} catch (e) {
+			console.error('[love4u] getLatestManga', e);
+			return [];
+		}
 	}
-}
 
 	async searchManga(
-	query: string,
-	opts?: { page?: number; lang?: string; type?: string }
-): Promise<Manga[]> {
-	const q = (query || '').trim();
-	const page = Math.max(1, opts?.page || 1);
-	if (!q) return this.getLatestManga(page, opts);
+		query: string,
+		opts?: { page?: number; lang?: string; type?: string }
+	): Promise<Manga[]> {
+		const q = (query || '').trim();
+		const page = Math.max(1, opts?.page || 1);
+		if (!q) return this.getLatestManga(page, opts);
 
-	try {
-		const sitePageStart = (page - 1) * 2 + 1;
-		const seen = new Set<string>();
-		const merged: Manga[] = [];
+		try {
+			const sitePageStart = (page - 1) * 2 + 1;
+			const seen = new Set<string>();
+			const merged: Manga[] = [];
 
-		for (const sp of [sitePageStart, sitePageStart + 1]) {
-			const path =
-				`/manga-list.html?listType=pagination&page=${sp}` +
-				`&name=${encodeURIComponent(q)}&sort=views&sort_type=DESC`;
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			for (const m of this.parseCards($)) {
-				if (seen.has(m.id)) continue;
-				seen.add(m.id);
-				merged.push(m);
-			}
-			if (merged.length >= this.PER_PAGE) break;
-		}
-
-		// fallback smart suggest kalau list kosong
-		if (!merged.length) {
-			try {
-				const suggest = await this.fetchHtml(
-					`/app/manga/controllers/search.single.php?term=${encodeURIComponent(q)}`
-				);
-				const arr = JSON.parse(suggest);
-				if (Array.isArray(arr)) {
-					for (const item of arr) {
-						const onclick = String(item.onclick || '');
-						const url = onclick
-							.replace(/^window\.location=['"]/, '')
-							.replace(/['"]$/, '');
-						const idMatch = url.match(/\/manga-(\d+)/) || url.match(/\/(\d+)\/?$/);
-						if (!idMatch) continue;
-						const id = `/manga-${idMatch[1]}`;
-						if (seen.has(id)) continue;
-						seen.add(id);
-						merged.push({
-							id,
-							sourceId: this.id,
-							title: String(item.primary || item.secondary || idMatch[1]),
-							cover: this.absUrl(String(item.image || '').replace(/\\\//g, '/')),
-							type: 'manga',
-							status: 'Ongoing'
-						});
-					}
+			for (const sp of [sitePageStart, sitePageStart + 1]) {
+				const path =
+					`/manga-list.html?listType=pagination&page=${sp}` +
+					`&name=${encodeURIComponent(q)}&sort=views&sort_type=DESC`;
+				const html = await this.fetchHtml(path);
+				const $ = cheerio.load(html);
+				for (const m of this.parseCards($)) {
+					if (seen.has(m.id)) continue;
+					seen.add(m.id);
+					merged.push(m);
 				}
-			} catch {
-				/* ignore */
+				if (merged.length >= this.PER_PAGE) break;
 			}
+
+			if (!merged.length) {
+				try {
+					const suggest = await this.fetchHtml(
+						`/app/manga/controllers/search.single.php?term=${encodeURIComponent(q)}`
+					);
+					const arr = JSON.parse(suggest);
+					if (Array.isArray(arr)) {
+						for (const item of arr) {
+							const onclick = String(item.onclick || '');
+							const url = onclick
+								.replace(/^window\.location=['"]/, '')
+								.replace(/['"]$/, '');
+							const idMatch =
+								url.match(/\/manga-(\d+)/) || url.match(/\/(\d+)\/?$/);
+							if (!idMatch) continue;
+							const id = `/manga-${idMatch[1]}`;
+							if (seen.has(id)) continue;
+							seen.add(id);
+							merged.push({
+								id,
+								sourceId: this.id,
+								title: String(item.primary || item.secondary || idMatch[1]),
+								cover: this.absUrl(String(item.image || '').replace(/\\\//g, '/')),
+								type: 'manga',
+								status: 'Ongoing',
+								lang: this.LIST_LANG
+							});
+						}
+					}
+				} catch {
+					/* ignore */
+				}
+			}
+
+			const list = merged.slice(0, this.PER_PAGE);
+			console.log(`[love4u] search "${q}" → ${list.length} items`);
+			return list;
+		} catch (e) {
+			console.error('[love4u] searchManga', e);
+			return [];
 		}
-
-		const list = merged.slice(0, this.PER_PAGE);
-		console.log(`[love4u] search "${q}" → ${list.length} items`);
-		return list;
-	} catch (e) {
-		console.error('[love4u] searchManga', e);
-		return [];
 	}
-}
-
-	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		const path = this.cleanId(mangaId);
@@ -377,8 +357,6 @@ export class Love4uSource extends BaseSource {
 			latestChapter
 		};
 	}
-
-	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);

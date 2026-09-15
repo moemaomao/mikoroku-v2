@@ -8,17 +8,15 @@ import type { Chapter, Manga, MangaDetails } from '../types';
  * Detail      : GET https://api.omegascans.org/series/{slug}
  * Chapters    : GET https://api.omegascans.org/chapter/query?series_id=&perPage=&page=
  * Pages       : scrape /series/{slug}/{chapter_slug}  → media.omegascans.org image URLs
- *
- * ID format:
- *   manga   : "/{series_slug}"
- *   chapter : "/{series_slug}/{chapter_slug}"
  */
+
 export class OmegaScansSource extends BaseSource {
 	id = 'omegascans';
 	name = 'Omega Scans';
 	baseUrl = 'https://omegascans.org';
 	private readonly apiBase = 'https://api.omegascans.org';
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'en';
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
 
@@ -85,7 +83,6 @@ export class OmegaScansSource extends BaseSource {
 		return m ? parseFloat(m[1]) : 0;
 	}
 
-	/** Chapter 58 → Ch.58 | Chapter 48.5 → Ch.48.5 */
 	private toShortChapter(name?: string | null, index?: string | number): string {
 		if (index != null && index !== '') {
 			const n = parseFloat(String(index));
@@ -120,7 +117,8 @@ export class OmegaScansSource extends BaseSource {
 					? 'novel'
 					: 'manhwa',
 			status: item.status || 'Ongoing',
-			latestChapter: latestChapter || undefined
+			latestChapter: latestChapter || undefined,
+			lang: this.LIST_LANG
 		};
 	}
 
@@ -132,7 +130,6 @@ export class OmegaScansSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			// API hard-limit 12/page → 2 request = 24 item
 			const apiPage1 = (p - 1) * 2 + 1;
 			const apiPage2 = apiPage1 + 1;
 
@@ -228,7 +225,6 @@ export class OmegaScansSource extends BaseSource {
 		if (data.studio) authors.push(String(data.studio).trim());
 		const uniqueAuthors = [...new Set(authors)];
 
-		// Omega rating 0–5 → UI (+page.svelte) pakai skala 0–10
 		const rating5 = data.rating != null ? Number(data.rating) : null;
 		const rating10 =
 			rating5 != null && !Number.isNaN(rating5)
@@ -279,7 +275,6 @@ export class OmegaScansSource extends BaseSource {
 			? String(data.description).replace(/\s+/g, ' ').trim()
 			: '';
 
-		// Hanya key yang di-parse +page.svelte (META_KEYS)
 		const metaLines = [
 			altTitles.length && `Alternative: ${altTitles.join(' · ')}`,
 			rating10 && `Rating: ${rating10}`,

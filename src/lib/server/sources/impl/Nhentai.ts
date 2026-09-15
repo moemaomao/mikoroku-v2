@@ -9,6 +9,13 @@ import type { Manga, MangaDetails } from '../types';
  * Config        : /api/v2/config  (image / thumb servers)
  *
  * ID format: "/{numericId}"
+ *
+ * Homepage badge:
+ *   - latestChapter → num_pages (Ch. N)
+ *   - lang → ISO code (en/ja/zh/…) untuk flag di samping badge chapter
+ *
+ * List response hanya punya tag_ids (bukan tags penuh),
+ * jadi bahasa di-resolve lewat LANG_TAG_ID_MAP + fallback judul.
  */
 export class NhentaiSource extends BaseSource {
 	id = 'nhentai';
@@ -16,8 +23,32 @@ export class NhentaiSource extends BaseSource {
 	baseUrl = 'https://nhentai.net';
 
 	private readonly api = 'https://nhentai.net/api/v2';
+	private readonly LANG_TAG_ID_MAP: Record<number, string> = {
+		12227: 'en',
+		6346: 'ja',
+		29963: 'zh',
+		17249: 'zh', 
+		35236: 'ko',
+		35237: 'es',
+		35238: 'fr',
+		35239: 'ru',
+		35240: 'id',
+		35241: 'pt',
+		35242: 'th',
+		35243: 'vi'
+	};
 
-	// Fallback servers (akan di-update dari /config)
+	private readonly CATEGORY_TAG_ID_MAP: Record<number, string> = {
+		33172: 'doujinshi',
+		33173: 'manga',
+		33170: 'artistcg',
+		33171: 'gamecg',
+		34168: 'imageset',
+		33174: 'cosplay',
+		33175: 'western',
+		33176: 'non-h'
+	};
+
 	private imgServers = [
 		'https://i1.nhentai.net',
 		'https://i2.nhentai.net',
@@ -54,7 +85,6 @@ export class NhentaiSource extends BaseSource {
 		return res.json() as Promise<T>;
 	}
 
-	/** Load image/thumb server list dari /api/v2/config (sekali saja) */
 	private async ensureConfig() {
 		if (this.configLoaded) return;
 		try {
@@ -91,16 +121,10 @@ export class NhentaiSource extends BaseSource {
 		return String(mangaId).replace(/\D/g, '');
 	}
 
-	/**
-	 * Bangun full URL dari path yang dikasih API.
-	 * Path contoh: "galleries/4172679/1.webp" atau "galleries/4172679/cover.webp.webp"
-	 */
 	private fullUrl(path: string, mediaId: string | number, isThumb = false): string {
 		if (!path) return '';
 
 		let clean = path.trim();
-
-		// Buang double extension aneh (cover.webp.webp → cover.webp)
 		clean = clean.replace(/(\.(?:jpg|jpeg|png|gif|webp))\.\w+$/i, '$1');
 
 		const base = isThumb
@@ -108,6 +132,181 @@ export class NhentaiSource extends BaseSource {
 			: this.pickImgServer(mediaId);
 
 		return `${base}/${clean}`;
+	}
+
+	private normalizeLangCode(raw?: string): string | undefined {
+		if (!raw) return undefined;
+		const s = String(raw).trim().toLowerCase();
+		if (
+			!s ||
+			s === 'n/a' ||
+			s === 'all' ||
+			s === 'any' ||
+			s === '*' ||
+			s === 'translated'
+		) {
+			return undefined;
+		}
+
+		const map: Record<string, string> = {
+			japanese: 'ja',
+			english: 'en',
+			korean: 'ko',
+			chinese: 'zh',
+			spanish: 'es',
+			french: 'fr',
+			russian: 'ru',
+			indonesian: 'id',
+			indonesia: 'id',
+			bahasa: 'id',
+			portuguese: 'pt',
+			'brazilian portuguese': 'pt-br',
+			thai: 'th',
+			vietnamese: 'vi',
+			german: 'de',
+			italian: 'it',
+			polish: 'pl',
+			dutch: 'nl',
+			arabic: 'ar',
+			turkish: 'tr',
+			ja: 'ja',
+			en: 'en',
+			'en-us': 'en',
+			ko: 'ko',
+			zh: 'zh',
+			'zh-cn': 'zh',
+			'zh-hk': 'zh-hk',
+			es: 'es',
+			'es-la': 'es-la',
+			fr: 'fr',
+			ru: 'ru',
+			id: 'id',
+			pt: 'pt',
+			'pt-br': 'pt-br',
+			th: 'th',
+			vi: 'vi',
+			de: 'de',
+			it: 'it',
+			pl: 'pl',
+			nl: 'nl',
+			ar: 'ar',
+			tr: 'tr'
+		};
+
+		if (map[s]) return map[s];
+		if (/^[a-z]{2}(-[a-z]{2})?$/.test(s)) return s;
+		return undefined;
+	}
+
+	private normalizeLangForSearch(lang?: string): string | null {
+		const raw = String(lang || '')
+			.trim()
+			.toLowerCase();
+		if (!raw || raw === 'all' || raw === 'any' || raw === '*') return null;
+
+		const map: Record<string, string> = {
+			english: 'english',
+			en: 'english',
+			'en-us': 'english',
+			japanese: 'japanese',
+			ja: 'japanese',
+			japan: 'japanese',
+			chinese: 'chinese',
+			zh: 'chinese',
+			'zh-cn': 'chinese',
+			'zh-hk': 'chinese',
+			korean: 'korean',
+			ko: 'korean',
+			korea: 'korean',
+			indonesian: 'indonesian',
+			indonesia: 'indonesian',
+			bahasa: 'indonesian',
+			id: 'indonesian',
+			spanish: 'spanish',
+			es: 'spanish',
+			'es-la': 'spanish',
+			french: 'french',
+			fr: 'french',
+			russian: 'russian',
+			ru: 'russian',
+			portuguese: 'portuguese',
+			pt: 'portuguese',
+			'pt-br': 'portuguese',
+			thai: 'thai',
+			th: 'thai',
+			vietnamese: 'vietnamese',
+			vi: 'vietnamese',
+			german: 'german',
+			de: 'german',
+			italian: 'italian',
+			it: 'italian',
+			polish: 'polish',
+			pl: 'polish',
+			dutch: 'dutch',
+			nl: 'dutch',
+			arabic: 'arabic',
+			ar: 'arabic',
+			turkish: 'turkish',
+			tr: 'turkish'
+		};
+
+		return map[raw] || raw;
+	}
+
+	private langFromTagIds(tagIds: unknown): string | undefined {
+		if (!Array.isArray(tagIds)) return undefined;
+
+		const priority = ['en', 'zh', 'ja', 'ko', 'es', 'fr', 'ru', 'id', 'pt', 'th', 'vi'];
+		const found = new Set<string>();
+
+		for (const raw of tagIds) {
+			const id = Number(raw);
+			const code = this.LANG_TAG_ID_MAP[id];
+			if (code) found.add(code);
+		}
+
+		for (const p of priority) {
+			if (found.has(p)) return p;
+		}
+		return found.size ? [...found][0] : undefined;
+	}
+
+	private langFromTitle(...titles: (string | undefined | null)[]): string | undefined {
+		const text = titles.filter(Boolean).join(' ').toLowerCase();
+		if (!text) return undefined;
+
+		if (
+			/\[english\]|\beng\b|\[eng\]/.test(text) ||
+			text.includes('[english]')
+		) {
+			return 'en';
+		}
+		if (
+			/\[chinese\]|中国翻訳|中國翻譯|汉化|漢化|\[cn\]/.test(text)
+		) {
+			return 'zh';
+		}
+		if (/\[korean\]|한국어|\[kr\]/.test(text)) return 'ko';
+		if (/\[spanish\]|\[es\]/.test(text)) return 'es';
+		if (/\[french\]|\[fr\]/.test(text)) return 'fr';
+		if (/\[russian\]|\[ru\]/.test(text)) return 'ru';
+		if (/\[indonesian\]|bahasa|\[id\]/.test(text)) return 'id';
+		if (/\[portuguese\]|\[pt\]|\[pt-br\]/.test(text)) return 'pt';
+		if (/\[thai\]|\[th\]/.test(text)) return 'th';
+		if (/\[vietnamese\]|\[vi\]/.test(text)) return 'vi';
+		if (/\[japanese\]|日本語|\[jp\]|\[ja\]/.test(text)) return 'ja';
+
+		return undefined;
+	}
+
+	private categoryFromTagIds(tagIds: unknown): string {
+		if (!Array.isArray(tagIds)) return 'doujinshi';
+		for (const raw of tagIds) {
+			const id = Number(raw);
+			const cat = this.CATEGORY_TAG_ID_MAP[id];
+			if (cat) return cat;
+		}
+		return 'doujinshi';
 	}
 
 	private mapTags(tags: any[] = []): string[] {
@@ -134,7 +333,9 @@ export class NhentaiSource extends BaseSource {
 
 	private pickLanguage(tags: any[] = []): string {
 		const lang = tags.find(
-			(t) => t?.type === 'language' && t.name !== 'translated'
+			(t) =>
+				t?.type === 'language' &&
+				String(t.name || '').toLowerCase() !== 'translated'
 		);
 		return lang?.name || '';
 	}
@@ -158,7 +359,6 @@ export class NhentaiSource extends BaseSource {
 			.filter(Boolean);
 	}
 
-	/** Untuk list / search response (struktur ringkas) */
 	private toMangaFromList(g: any): Manga | null {
 		if (!g?.id) return null;
 
@@ -177,13 +377,46 @@ export class NhentaiSource extends BaseSource {
 		const cover =
 			mediaId && thumbPath ? this.fullUrl(thumbPath, mediaId, true) : '';
 
+		const pageCount =
+			Number(g.num_pages) ||
+			(Array.isArray(g.pages) ? g.pages.length : 0) ||
+			(Array.isArray(g.images?.pages) ? g.images.pages.length : 0) ||
+			0;
+
+		let lang: string | undefined;
+		if (Array.isArray(g.tags) && g.tags.length) {
+			lang = this.normalizeLangCode(this.pickLanguage(g.tags));
+		}
+		if (!lang) {
+			lang = this.langFromTagIds(g.tag_ids);
+		}
+		if (!lang) {
+			lang = this.langFromTitle(
+				g.english_title,
+				g.japanese_title,
+				g.title?.english,
+				g.title?.japanese,
+				g.title?.pretty,
+				title
+			);
+		}
+
+		let type = 'doujinshi';
+		if (Array.isArray(g.tags) && g.tags.length) {
+			type = this.pickCategory(g.tags) || type;
+		} else {
+			type = this.categoryFromTagIds(g.tag_ids);
+		}
+
 		return {
 			id: this.toId(g.id),
 			sourceId: this.id,
 			title,
 			cover,
-			type: 'doujinshi',
-			status: 'Completed'
+			type,
+			status: 'Completed',
+			lang,
+			latestChapter: pageCount > 0 ? pageCount : 1
 		};
 	}
 
@@ -197,11 +430,11 @@ export class NhentaiSource extends BaseSource {
 			await this.ensureConfig();
 
 			const p = Math.max(1, Number(page) || 1);
-			const lang = (opts?.lang || 'all').toLowerCase();
+			const langTag = this.normalizeLangForSearch(opts?.lang);
 			const type = (opts?.type || 'all').toLowerCase();
 
 			const parts: string[] = [];
-			if (lang && lang !== 'all') parts.push(`language:${lang}`);
+			if (langTag) parts.push(`language:${langTag}`);
 			if (type && type !== 'all') parts.push(`category:${type}`);
 
 			let data: any;
@@ -213,10 +446,10 @@ export class NhentaiSource extends BaseSource {
 			}
 
 			const list = data?.result || data?.galleries || [];
-return list
-    .map((g: any) => this.toMangaFromList(g))
-    .filter(Boolean)
-    .slice(0, 24) as Manga[];
+			return list
+				.map((g: any) => this.toMangaFromList(g))
+				.filter(Boolean)
+				.slice(0, 24) as Manga[];
 		} catch (e) {
 			console.error('[nhentai] getLatestManga', e);
 			return [];
@@ -229,16 +462,16 @@ return list
 	): Promise<Manga[]> {
 		const q = (query || '').trim();
 		const page = Math.max(1, opts?.page || 1);
-		const lang = (opts?.lang || 'all').toLowerCase();
+		const langTag = this.normalizeLangForSearch(opts?.lang);
 		const type = (opts?.type || 'all').toLowerCase();
 
-		if (!q) return this.getLatestManga(page, { lang, type });
+		if (!q) return this.getLatestManga(page, { lang: opts?.lang, type });
 
 		try {
 			await this.ensureConfig();
 
 			const parts = [q];
-			if (lang && lang !== 'all') parts.push(`language:${lang}`);
+			if (langTag) parts.push(`language:${langTag}`);
 			if (type && type !== 'all') parts.push(`category:${type}`);
 
 			const searchQ = encodeURIComponent(parts.join(' '));
@@ -246,10 +479,10 @@ return list
 				`${this.api}/search?query=${searchQ}&page=${page}`
 			);
 			const list = data?.result || data?.galleries || [];
-return list
-    .map((g: any) => this.toMangaFromList(g))
-    .filter(Boolean)
-    .slice(0, 24) as Manga[];
+			return list
+				.map((g: any) => this.toMangaFromList(g))
+				.filter(Boolean)
+				.slice(0, 24) as Manga[];
 		} catch (e) {
 			console.error('[nhentai] searchManga', e);
 			return [];
@@ -273,7 +506,14 @@ return list
 
 		const artists = this.pickArtists(g.tags);
 		const groups = this.pickGroups(g.tags);
-		const language = this.pickLanguage(g.tags);
+		const languageRaw = this.pickLanguage(g.tags);
+		const language =
+			this.normalizeLangCode(languageRaw) ||
+			this.langFromTitle(
+				g.title?.english,
+				g.title?.japanese,
+				g.title?.pretty
+			);
 		const category = this.pickCategory(g.tags);
 		const tags = this.mapTags(g.tags);
 		const pageCount = g.num_pages || g.pages?.length || 0;
@@ -295,13 +535,15 @@ return list
 			cover,
 			type: category,
 			status: 'Completed',
+			lang: language,
+			latestChapter: pageCount > 0 ? pageCount : 1,
 			description: [
 				g.title?.english &&
 					g.title.english !== title &&
 					`AltTitle: ${g.title.english}`,
 				g.title?.japanese && `AltTitle: ${g.title.japanese}`,
 				category && `Type: ${category}`,
-				language && `Language: ${language}`,
+				languageRaw && `Language: ${languageRaw}`,
 				artists.length && `Artists: ${artists.join(', ')}`,
 				groups.length && `Groups: ${groups.join(', ')}`,
 				pageCount && `Pages: ${pageCount}`
@@ -317,7 +559,8 @@ return list
 								id: this.toId(id),
 								title: 'Read',
 								number: 1,
-								date: uploadDate
+								date: uploadDate,
+								lang: language
 							}
 					  ]
 					: []
@@ -343,7 +586,6 @@ return list
 				return [];
 			}
 
-			// API v2: g.pages[] (bukan g.images.pages)
 			const pages = g.pages || g.images?.pages || [];
 			if (!pages.length) {
 				console.error('[nhentai] getChapterPages → 0 pages for', id);
@@ -355,7 +597,6 @@ return list
 					return this.fullUrl(p.path, g.media_id, false);
 				}
 
-				// Fallback format lama
 				const t = p.t || 'j';
 				const ext =
 					t === 'p' ? 'png' : t === 'g' ? 'gif' : t === 'w' ? 'webp' : 'jpg';

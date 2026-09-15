@@ -2,27 +2,13 @@ import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
-/**
- * crotpedia.net adapter (HTML scrape)
- *
- * List   : /  |  /page/{n}/   → .flexbox4-item (Update Terbaru)
- * Search : /?s=QUERY
- * Detail : /baca/series/{slug}/
- * Chapter: /baca/{slug}-chapter-{n}-bahasa-indonesia/
- * Pages  : .entry-content img (reader.eromanga.cfd)
- *
- * ID format:
- *   manga   : "/baca/series/{slug}"
- *   chapter : "/baca/{slug}-chapter-{n}-bahasa-indonesia"
- */
 export class CrotpediaSource extends BaseSource {
 	id = 'crotpedia';
 	name = 'CrotPedia';
 	baseUrl = 'https://crotpedia.net';
 
 	private readonly PER_PAGE = 24;
-
-	// ── Helpers ──────────────────────────────────────────────────────────────
+	private readonly LIST_LANG = 'id';
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -67,8 +53,6 @@ export class CrotpediaSource extends BaseSource {
 		return 'manga';
 	}
 
-	// ── List ─────────────────────────────────────────────────────────────────
-
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
@@ -95,7 +79,8 @@ export class CrotpediaSource extends BaseSource {
 				cover: this.absUrl((cover || '').split('?')[0]),
 				type: this.detectType(typeText),
 				status: 'Ongoing',
-				latestChapter: this.parseChapterNumber(chText) || undefined
+				latestChapter: this.parseChapterNumber(chText) || undefined,
+				lang: this.LIST_LANG
 			});
 		};
 
@@ -118,7 +103,6 @@ export class CrotpediaSource extends BaseSource {
 			const chText = $el.find('ul.chapter a').first().text() || '';
 			push(href, title, cover, typeText, chText);
 		});
-
 
 		if (!out.length) {
 			$('a[href*="/baca/series/"]').each((_, el) => {
@@ -189,7 +173,6 @@ export class CrotpediaSource extends BaseSource {
 			}
 
 			const list = merged.slice(0, this.PER_PAGE);
-
 			console.log(`[crotpedia] latest page=${p} → ${list.length} items`);
 			return list;
 		} catch (e) {
@@ -220,8 +203,6 @@ export class CrotpediaSource extends BaseSource {
 		}
 	}
 
-	// ── Details ──────────────────────────────────────────────────────────────
-
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
 
@@ -237,7 +218,6 @@ export class CrotpediaSource extends BaseSource {
 		const html = await this.fetchHtml(path + '/');
 		const $ = cheerio.load(html);
 
-		// Title
 		let title =
 			$('.series-title, .entry-title, h1.title, h1').first().text().trim() ||
 			$('meta[property="og:title"]').attr('content') ||
@@ -247,7 +227,6 @@ export class CrotpediaSource extends BaseSource {
 			.replace(/\s+/g, ' ')
 			.trim();
 
-		// Cover
 		let cover =
 			$('.series-thumb img, .flexbox4-thumb img, .thumb img').first().attr('src') ||
 			$('meta[property="og:image"]').attr('content') ||
@@ -289,7 +268,6 @@ export class CrotpediaSource extends BaseSource {
 				if (!authors.includes(n)) authors.push(n);
 			});
 
-		// Status
 		let status = 'Ongoing';
 		const statusHint =
 			$('.series-infoz, .status, .type').text() +
@@ -324,7 +302,6 @@ export class CrotpediaSource extends BaseSource {
 			}
 		});
 
-		// Synopsis
 		let synopsis = '';
 		$('p').each((_, el) => {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
@@ -337,7 +314,6 @@ export class CrotpediaSource extends BaseSource {
 			}
 		});
 
-		// Chapters
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 		$('a[href*="/baca/"]').each((_, a) => {
@@ -389,10 +365,6 @@ export class CrotpediaSource extends BaseSource {
 			.filter(Boolean)
 			.join('\n\n');
 
-		console.log(
-			`[crotpedia] details ${path} → authors=${authors.join(',')}, rating=${rating}, ch=${chapters.length}, genres=${genres.join(',')}`
-		);
-
 		return {
 			id: path,
 			sourceId: this.id,
@@ -407,8 +379,6 @@ export class CrotpediaSource extends BaseSource {
 			latestChapter
 		};
 	}
-
-	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);

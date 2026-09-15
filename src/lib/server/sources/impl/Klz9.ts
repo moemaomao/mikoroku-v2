@@ -11,7 +11,8 @@ import type { Chapter, Manga, MangaDetails } from '../types';
  *
  * ID format:
  *   manga   : "/{slug}"
- *   chapter : "/{slug}/c/{numericChapterId}"   ← penting buat next/prev
+ *   chapter : "/{slug}/c/{numericChapterId}"
+ *
  */
 export class Klz9Source extends BaseSource {
 	id = 'klz9';
@@ -20,6 +21,7 @@ export class Klz9Source extends BaseSource {
 
 	private readonly PER_PAGE = 24;
 	private readonly SECRET = 'KL9K40zaSyC9K40vOMLLbEcepIFBhUKXwELqxlwTEF';
+	private readonly DEFAULT_LANG = 'ja';
 
 	// ── Signed API ───────────────────────────────────────────────────────────
 
@@ -67,14 +69,13 @@ export class Klz9Source extends BaseSource {
 			.replace(/\.html$/i, '')
 			.split('/')
 			.filter(Boolean);
-		// /{slug}/c/123 → slug
+	
 		if (parts.length >= 3 && parts[1] === 'c') return parts[0];
-		// /c/123 → kosong (legacy)
+	
 		if (parts[0] === 'c') return '';
 		return parts[0] || '';
 	}
 
-	/** Chapter id HARUS berisi slug supaya reader bisa resolve manga + next/prev */
 	private toChapterId(slug: string, numericId: string | number): string {
 		const s = String(slug).replace(/^\/+|\/+$/g, '');
 		return `/${s}/c/${numericId}`;
@@ -82,7 +83,6 @@ export class Klz9Source extends BaseSource {
 
 	private extractChapterNumericId(chapterId: string): string {
 		const s = String(chapterId).replace(/^\/+/, '');
-		// /{slug}/c/425847  |  /c/425847  |  425847
 		const m = s.match(/(?:(?:^|\/)c\/)(\d+)(?:\/)?$/) || s.match(/^(\d+)$/);
 		return m?.[1] || '';
 	}
@@ -112,7 +112,8 @@ export class Klz9Source extends BaseSource {
 			cover: item.cover || '',
 			type: 'manga',
 			status: this.mapStatus(item.m_status),
-			latestChapter: item.last_chapter ?? undefined
+			latestChapter: item.last_chapter ?? undefined,
+			lang: this.DEFAULT_LANG // flag Jepang di homepage
 		};
 	}
 
@@ -217,11 +218,11 @@ export class Klz9Source extends BaseSource {
 				id: this.toChapterId(finalSlug, cid),
 				title: ch.name ? String(ch.name) : `Chapter ${num || cid}`,
 				number: num || chapters.length + 1,
-				date: this.formatDate(ch.last_update)
+				date: this.formatDate(ch.last_update),
+				lang: this.DEFAULT_LANG
 			});
 		}
 
-		// oldest → newest (reader juga sort ascending; konsisten)
 		chapters.sort((a, b) => (a.number || 0) - (b.number || 0));
 
 		const description = [
@@ -244,6 +245,7 @@ export class Klz9Source extends BaseSource {
 			authors: uniqueAuthors,
 			genres,
 			chapters,
+			lang: this.DEFAULT_LANG,
 			latestChapter: lastChapter ?? chapters[chapters.length - 1]?.number
 		};
 	}

@@ -2,24 +2,13 @@ import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
-/**
- * v2.voratoon.com adapter (Next.js)
- *
- * List   : /updates  |  /updates?page={n}
- * Search : /browse?search=QUERY
- * Detail : /series/{slug}
- * Chapter: /series/{slug}/chapter/{n}
- *
- * ID format:
- *   manga   : "/series/{slug}"
- *   chapter : "/series/{slug}/chapter/{n}"
- */
 export class VoratoonSource extends BaseSource {
 	id = 'voratoon';
 	name = 'Voratoon';
 	baseUrl = 'https://v2.voratoon.com';
 
 	private readonly PER_PAGE = 24;
+	private readonly LIST_LANG = 'id';
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -41,7 +30,6 @@ export class VoratoonSource extends BaseSource {
 		return id.replace(/\/+$/, '').split('?')[0] || '/';
 	}
 
-	/** Keep S3 signed query string */
 	private cleanUrl(url: string): string {
 		if (!url) return '';
 		return url
@@ -81,8 +69,6 @@ export class VoratoonSource extends BaseSource {
 		const n = String(text).match(/\b(\d+(?:\.\d+)?)\b/);
 		return n ? parseFloat(n[1]) : NaN;
 	}
-
-	// ── List ─────────────────────────────────────────────────────────────────
 
 	private parseUpdateCards(html: string): Manga[] {
 		const $ = cheerio.load(html);
@@ -130,28 +116,18 @@ export class VoratoonSource extends BaseSource {
 			const type = this.flagToType(flagSrc);
 
 			let latestChapter: number | undefined;
-			let latestUpdate = '';
 
 			$art.find('a[href*="/chapter/"]').each((_, a) => {
 				const chHref = $(a).attr('href') || '';
-				const n = this.parseChapterNumber($(a).attr('aria-label') || $(a).text(), chHref);
+				const n = this.parseChapterNumber(
+					$(a).attr('aria-label') || $(a).text(),
+					chHref
+				);
 				if (!Number.isFinite(n)) return;
 				if (latestChapter == null || n > latestChapter) {
 					latestChapter = n;
-					latestUpdate =
-						$(a).find('[class*="time"]').text().replace(/\s+/g, ' ').trim() ||
-						latestUpdate;
 				}
 			});
-
-			if (!latestUpdate) {
-				latestUpdate = $art
-					.find('[class*="time"]')
-					.first()
-					.text()
-					.replace(/\s+/g, ' ')
-					.trim();
-			}
 
 			out.push({
 				id,
@@ -160,11 +136,11 @@ export class VoratoonSource extends BaseSource {
 				cover,
 				type,
 				status: 'Ongoing',
-				latestChapter
+				latestChapter,
+				lang: this.LIST_LANG
 			});
 		});
 
-		// Fallback covers via regex if some cards missed
 		if (out.some((m) => !m.cover)) {
 			const coverRe =
 				/https:\/\/cvr\.voratoon\.id\/prod\/series\/([a-z0-9\-]+)\/cover\/[^\"\s<>]+/gi;
@@ -222,8 +198,6 @@ export class VoratoonSource extends BaseSource {
 		}
 	}
 
-	// ── Embedded series JSON ─────────────────────────────────────────────────
-
 	private extractSeriesData(html: string, slug: string): Record<string, any> | null {
 		const marker = `"slug":"${slug}"`;
 		let idx = html.indexOf(marker);
@@ -274,8 +248,6 @@ export class VoratoonSource extends BaseSource {
 			genres
 		};
 	}
-
-	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		let path = this.cleanId(mangaId);
@@ -402,8 +374,6 @@ export class VoratoonSource extends BaseSource {
 		};
 	}
 
-	// ── Pages ────────────────────────────────────────────────────────────────
-
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);
 		if (!/\/chapter\//i.test(path)) {
@@ -436,6 +406,4 @@ export class VoratoonSource extends BaseSource {
 			return [];
 		}
 	}
-
 }
-

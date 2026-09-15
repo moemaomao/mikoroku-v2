@@ -1,14 +1,53 @@
 import { BaseSource } from '../BaseSource';
 import type { Manga, MangaDetails } from '../types';
 
+/**
+ * HentaiEra adapter
+ *
+ * List   : /  |  /?page={n}
+ * Lang   : /language/{name}/  |  /language/{name}/?page={n}
+ * Type   : /category/{name}/  |  /category/{name}/?page={n}
+ * Search : /search/?key=...&page=
+ * Detail : /gallery/{id}/
+ * Pages  : m{server}.hentaiera.com/{dir}/{id}/{n}.{ext}
+ */
 export class HentaieraSource extends BaseSource {
 	id = 'hentaiera';
 	name = 'HentaiEra';
 	baseUrl = 'https://hentaiera.com';
 
 	private readonly pageSize = 24;
+	private readonly FLAG_TO_ISO: Record<string, string> = {
+		us: 'en',
+		gb: 'en',
+		en: 'en',
+		jp: 'ja',
+		ja: 'ja',
+		cn: 'zh',
+		zh: 'zh',
+		hk: 'zh-hk',
+		kr: 'ko',
+		ko: 'ko',
+		es: 'es',
+		mx: 'es-la',
+		fr: 'fr',
+		de: 'de',
+		ru: 'ru',
+		id: 'id',
+		br: 'pt-br',
+		pt: 'pt',
+		th: 'th',
+		vn: 'vi',
+		vi: 'vi',
+		it: 'it',
+		pl: 'pl',
+		nl: 'nl',
+		ar: 'ar',
+		tr: 'tr'
+	};
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
+
 	private h(extra?: Record<string, string>): Record<string, string> {
 		return {
 			'User-Agent':
@@ -92,6 +131,177 @@ export class HentaieraSource extends BaseSource {
 		}
 	}
 
+	private normalizeLangCode(raw?: string): string | undefined {
+		if (!raw) return undefined;
+		const s = String(raw).trim().toLowerCase();
+		if (
+			!s ||
+			s === 'n/a' ||
+			s === 'all' ||
+			s === 'any' ||
+			s === '*' ||
+			s === 'translated'
+		) {
+			return undefined;
+		}
+
+		const map: Record<string, string> = {
+			japanese: 'ja',
+			english: 'en',
+			korean: 'ko',
+			chinese: 'zh',
+			spanish: 'es',
+			french: 'fr',
+			russian: 'ru',
+			indonesian: 'id',
+			indonesia: 'id',
+			bahasa: 'id',
+			portuguese: 'pt',
+			'brazilian portuguese': 'pt-br',
+			thai: 'th',
+			vietnamese: 'vi',
+			german: 'de',
+			italian: 'it',
+			polish: 'pl',
+			dutch: 'nl',
+			arabic: 'ar',
+			turkish: 'tr',
+			ja: 'ja',
+			jp: 'ja',
+			en: 'en',
+			'en-us': 'en',
+			us: 'en',
+			gb: 'en',
+			ko: 'ko',
+			kr: 'ko',
+			zh: 'zh',
+			cn: 'zh',
+			'zh-cn': 'zh',
+			'zh-hk': 'zh-hk',
+			es: 'es',
+			'es-la': 'es-la',
+			fr: 'fr',
+			ru: 'ru',
+			id: 'id',
+			pt: 'pt',
+			'pt-br': 'pt-br',
+			th: 'th',
+			vi: 'vi',
+			vn: 'vi',
+			de: 'de',
+			it: 'it',
+			pl: 'pl',
+			nl: 'nl',
+			ar: 'ar',
+			tr: 'tr'
+		};
+
+		if (map[s]) return map[s];
+		if (/^[a-z]{2}(-[a-z]{2})?$/.test(s)) return s;
+		return undefined;
+	}
+
+	private normalizeLangForSearch(lang?: string): string | null {
+		const raw = String(lang || '')
+			.trim()
+			.toLowerCase();
+		if (!raw || raw === 'all' || raw === 'any' || raw === '*') return null;
+
+		const map: Record<string, string> = {
+			english: 'english',
+			en: 'english',
+			'en-us': 'english',
+			us: 'english',
+			gb: 'english',
+			japanese: 'japanese',
+			ja: 'japanese',
+			jp: 'japanese',
+			japan: 'japanese',
+			chinese: 'chinese',
+			zh: 'chinese',
+			cn: 'chinese',
+			'zh-cn': 'chinese',
+			'zh-hk': 'chinese',
+			korean: 'korean',
+			ko: 'korean',
+			kr: 'korean',
+			korea: 'korean',
+			spanish: 'spanish',
+			es: 'spanish',
+			'es-la': 'spanish',
+			french: 'french',
+			fr: 'french',
+			russian: 'russian',
+			ru: 'russian',
+			german: 'german',
+			de: 'german',
+			indonesian: 'indonesian',
+			indonesia: 'indonesian',
+			bahasa: 'indonesian',
+			id: 'indonesian',
+			portuguese: 'portuguese',
+			pt: 'portuguese',
+			'pt-br': 'portuguese',
+			thai: 'thai',
+			th: 'thai',
+			vietnamese: 'vietnamese',
+			vi: 'vietnamese',
+			vn: 'vietnamese',
+			italian: 'italian',
+			it: 'italian',
+			polish: 'polish',
+			pl: 'polish',
+			dutch: 'dutch',
+			nl: 'dutch',
+			arabic: 'arabic',
+			ar: 'arabic',
+			turkish: 'turkish',
+			tr: 'turkish'
+		};
+
+		return map[raw] || raw;
+	}
+
+	private normalizeTypeForPath(type?: string): string | null {
+		const raw = String(type || '')
+			.trim()
+			.toLowerCase();
+		if (!raw || raw === 'all' || raw === 'any' || raw === '*') return null;
+
+		const map: Record<string, string> = {
+			doujinshi: 'doujinshi',
+			dj: 'doujinshi',
+			manga: 'manga',
+			mg: 'manga',
+			artistcg: 'artistcg',
+			'artist cg': 'artistcg',
+			acg: 'artistcg',
+			gamecg: 'gamecg',
+			'game cg': 'gamecg',
+			gcg: 'gamecg',
+			imageset: 'imageset',
+			'image set': 'imageset',
+			is: 'imageset',
+			western: 'western',
+			ws: 'western',
+			cosplay: 'cosplay',
+			'non-h': 'non-h',
+			nonh: 'non-h',
+			misc: 'misc'
+		};
+
+		return map[raw] || raw.replace(/\s+/g, '-');
+	}
+
+	private isoFromFlagClass(flagClass?: string): string | undefined {
+		if (!flagClass) return undefined;
+		const key = String(flagClass)
+			.replace(/^flag-/i, '')
+			.trim()
+			.toLowerCase();
+		return this.FLAG_TO_ISO[key] || this.normalizeLangCode(key);
+	}
+
 	private pickInfoTags(html: string, label: string): string[] {
 		const sec =
 			html.match(
@@ -125,21 +335,84 @@ export class HentaieraSource extends BaseSource {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		const re =
-			/<div class="inner_thumb">[\s\S]*?<a href="\/gallery\/(\d+)\/">[\s\S]*?data-src="([^"]+)"[^>]*alt="([^"]*)"[\s\S]*?<h2 class="gallery_title"><a[^>]*>([^<]*)<\/a>/gi;
+		const thumbRe =
+			/<div class="thumb"[^>]*>([\s\S]*?)<div class="clear"><\/div>\s*<\/div>\s*<\/div>/gi;
 
-		let m: RegExpExecArray | null;
-		while ((m = re.exec(html)) !== null) {
-			const id = m[1];
+		let block: RegExpExecArray | null;
+		const blocks: string[] = [];
+		while ((block = thumbRe.exec(html)) !== null) {
+			blocks.push(block[0]);
+		}
+
+		if (!blocks.length) {
+			const loose =
+				/<div class="inner_thumb">[\s\S]*?<a href="\/gallery\/(\d+)\/">[\s\S]*?(?:data-src|src)="([^"]+)"[^>]*(?:alt="([^"]*)")?[\s\S]*?<h2 class="gallery_title"><a[^>]*>([^<]*)<\/a>[\s\S]*?(?:lang_pages|g_pages)[\s\S]{0,800}/gi;
+			let m: RegExpExecArray | null;
+			while ((m = loose.exec(html)) !== null) {
+				const id = m[1];
+				if (!id || seen.has(id)) continue;
+				seen.add(id);
+
+				const chunk = m[0];
+				const cover = (m[2] || '').trim();
+				const title = this.decodeHtml(m[4] || m[3] || `Gallery ${id}`);
+
+				const flagM = chunk.match(/g_flag\s+flag-([a-z]+)/i);
+				const lang = this.isoFromFlagClass(flagM?.[1]);
+
+				const pagesM = chunk.match(/inside_p">\s*(\d+)/i);
+				const pages = pagesM ? parseInt(pagesM[1], 10) : 0;
+
+				const catM = chunk.match(/gallery_cat[^>]*>([^<]+)</i);
+				const type = catM
+					? this.decodeHtml(catM[1]).toLowerCase()
+					: 'doujinshi';
+
+				out.push({
+					id: this.toId(id),
+					sourceId: this.id,
+					title,
+					cover,
+					type,
+					status: 'Completed',
+					lang,
+					latestChapter: pages > 0 ? pages : 1
+				});
+
+				if (limit && out.length >= limit) break;
+			}
+			return out;
+		}
+
+		for (const chunk of blocks) {
+			const idM = chunk.match(/href="\/gallery\/(\d+)\/"/i);
+			const id = idM?.[1];
 			if (!id || seen.has(id)) continue;
 			seen.add(id);
 
-			const cover = (m[2] || '').trim();
-			const title = this.decodeHtml(m[4] || m[3] || `Gallery ${id}`);
+			const coverM =
+				chunk.match(/data-src="([^"]+)"/i) ||
+				chunk.match(/<img[^>]+src="(https?:\/\/[^"]+)"/i);
+			const cover = (coverM?.[1] || '').trim();
 
-			const head = html.slice(Math.max(0, m.index - 300), m.index);
-			const catM = head.match(/gallery_cat[^>]*>([^<]+)</i);
-			const type = catM ? this.decodeHtml(catM[1]).toLowerCase() : 'doujinshi';
+			const titleM =
+				chunk.match(
+					/<h2 class="gallery_title"><a[^>]*>([^<]*)<\/a>/i
+				) || chunk.match(/alt="([^"]*)"/i);
+			const title = this.decodeHtml(titleM?.[1] || `Gallery ${id}`);
+
+			const catM = chunk.match(/gallery_cat[^>]*>([^<]+)</i);
+			const type = catM
+				? this.decodeHtml(catM[1]).toLowerCase()
+				: 'doujinshi';
+
+			const flagM =
+				chunk.match(/g_flag\s+flag-([a-z]+)/i) ||
+				chunk.match(/flag-([a-z]+)/i);
+			const lang = this.isoFromFlagClass(flagM?.[1]);
+
+			const pagesM = chunk.match(/inside_p">\s*(\d+)/i);
+			const pages = pagesM ? parseInt(pagesM[1], 10) : 0;
 
 			out.push({
 				id: this.toId(id),
@@ -147,7 +420,9 @@ export class HentaieraSource extends BaseSource {
 				title,
 				cover,
 				type,
-				status: 'Completed'
+				status: 'Completed',
+				lang,
+				latestChapter: pages > 0 ? pages : 1
 			});
 
 			if (limit && out.length >= limit) break;
@@ -156,19 +431,39 @@ export class HentaieraSource extends BaseSource {
 		return out;
 	}
 
+	private buildListUrl(
+		page: number,
+		opts?: { lang?: string; type?: string }
+	): string {
+		const p = Math.max(1, Number(page) || 1);
+		const langSlug = this.normalizeLangForSearch(opts?.lang);
+		const typeSlug = this.normalizeTypeForPath(opts?.type);
+
+		if (langSlug) {
+			const base = `${this.baseUrl}/language/${langSlug}/`;
+			return p <= 1 ? base : `${base}?page=${p}`;
+		}
+		if (typeSlug) {
+			const base = `${this.baseUrl}/category/${typeSlug}/`;
+			return p <= 1 ? base : `${base}?page=${p}`;
+		}
+		return p <= 1 ? `${this.baseUrl}/` : `${this.baseUrl}/?page=${p}`;
+	}
+
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
 	async getLatestManga(
 		page: number,
-		_opts?: { lang?: string; type?: string }
+		opts?: { lang?: string; type?: string }
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			const url =
-				p === 1 ? `${this.baseUrl}/` : `${this.baseUrl}/?page=${p}`;
+			const url = this.buildListUrl(p, opts);
 			const html = await this.getHtml(url);
 			const list = this.parseList(html, this.pageSize);
-			console.log(`[hentaiera] latest page=${p} → ${list.length} items`);
+			console.log(
+				`[hentaiera] latest page=${p} lang=${opts?.lang || 'all'} → ${list.length} items`
+			);
 			return list;
 		} catch (e) {
 			console.error('[hentaiera] getLatestManga', e);
@@ -185,9 +480,25 @@ export class HentaieraSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			const url = `${this.baseUrl}/search/?key=${encodeURIComponent(q)}&page=${page}`;
+			
+			const langSlug = this.normalizeLangForSearch(opts?.lang);
+			let url: string;
+			if (langSlug) {
+	
+				url = `${this.baseUrl}/search/?key=${encodeURIComponent(q)}&page=${page}`;
+			} else {
+				url = `${this.baseUrl}/search/?key=${encodeURIComponent(q)}&page=${page}`;
+			}
+
 			const html = await this.getHtml(url);
-			const list = this.parseList(html, this.pageSize);
+			let list = this.parseList(html, this.pageSize);
+
+			const want = this.normalizeLangCode(opts?.lang);
+			if (want && list.length) {
+				const filtered = list.filter((m) => m.lang === want);
+				if (filtered.length) list = filtered;
+			}
+
 			console.log(`[hentaiera] search "${q}" → ${list.length} items`);
 			return list;
 		} catch (e) {
@@ -229,10 +540,11 @@ export class HentaieraSource extends BaseSource {
 		const characters = this.pickInfoTags(html, 'Characters');
 
 		const category = categories[0] || 'doujinshi';
-		const language =
+		const languageRaw =
 			languages.find((l) => l.toLowerCase() !== 'translated') ||
 			languages[0] ||
 			'';
+		const language = this.normalizeLangCode(languageRaw);
 
 		const genres = [
 			...tags,
@@ -250,8 +562,10 @@ export class HentaieraSource extends BaseSource {
 			cover,
 			type: category,
 			status: 'Completed',
+			lang: language,
+			latestChapter: pageCount > 0 ? pageCount : 1,
 			description: [
-				language && `Language: ${language}`,
+				languageRaw && `Language: ${languageRaw}`,
 				category && `Type: ${category}`,
 				artists.length && `Artists: ${artists.join(', ')}`,
 				groups.length && `Groups: ${groups.join(', ')}`,
@@ -269,7 +583,8 @@ export class HentaieraSource extends BaseSource {
 								id: this.toId(id),
 								title: 'Read',
 								number: 1,
-								date: updated
+								date: updated,
+								lang: language
 							}
 					  ]
 					: []

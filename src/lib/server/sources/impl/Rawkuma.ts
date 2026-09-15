@@ -2,27 +2,13 @@ import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
-/**
- * rawkuma.net adapter (HTML + admin-ajax chapter_list)
- *
- * List    : /manga/?orderby=update  |  /manga/page/{n}/?orderby=update
- * Search  : /?s=QUERY (site library redirect sering 404 → fallback filter title)
- * Detail  : /manga/{slug}/
- * Chapters: POST/GET wp-admin/admin-ajax.php?action=chapter_list&manga_id=&page=1
- * Pages   : /manga/{slug}/chapter-{n}.{id}/  → <img src='...'>
- *
- * ID format:
- *   manga   : "/manga/{slug}"
- *   chapter : "/manga/{slug}/chapter-{n}.{id}"
- */
 export class RawkumaSource extends BaseSource {
 	id = 'rawkuma';
 	name = 'Rawkuma';
 	baseUrl = 'https://rawkuma.net';
 
 	private readonly PER_PAGE = 24;
-
-	// ── Helpers ──────────────────────────────────────────────────────────────
+	private readonly LIST_LANG = 'ja';
 
 	private absUrl(url: string): string {
 		if (!url) return '';
@@ -41,7 +27,6 @@ export class RawkumaSource extends BaseSource {
 			}
 		}
 		if (!id.startsWith('/')) id = `/${id}`;
-		// drop trailing slash except root
 		id = id.replace(/\/+$/, '') || '/';
 		return id;
 	}
@@ -50,6 +35,21 @@ export class RawkumaSource extends BaseSource {
 		const path = this.cleanId(mangaId);
 		const m = path.match(/\/manga\/([^/]+)/);
 		return m?.[1] || path.replace(/^\/+/, '');
+	}
+
+	private parseChapterFromPath(href: string): { slug: string; number: number } | null {
+		const path = this.cleanId(href);
+		const m = path.match(
+			/^\/manga\/([^/]+)\/chapter-(\d+(?:\.\d+)?)\.(\d+)\/?$/i
+		);
+		if (m) {
+			return { slug: m[1], number: parseFloat(m[2]) };
+		}
+		const m2 = path.match(/^\/manga\/([^/]+)\/chapter-(\d+(?:\.\d+)?)\/?$/i);
+		if (m2) {
+			return { slug: m2[1], number: parseFloat(m2[2]) };
+		}
+		return null;
 	}
 
 	private parseChapterNumber(text: string): number {
@@ -74,13 +74,28 @@ export class RawkumaSource extends BaseSource {
 			.trim();
 	}
 
-	// ── List parser ──────────────────────────────────────────────────────────
-
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
+		const chMap = new Map<string, number>();
+		$('a[href*="/chapter-"]').each((_, a) => {
+			const href = $(a).attr('href') || '';
+			const parsed = this.parseChapterFromPath(href);
+			if (!parsed) {
+				const text = $(a).text().replace(/\s+/g, ' ').trim();
+				const n = this.parseChapterNumber(text);
+				const slugM = this.cleanId(href).match(/^\/manga\/([^/]+)/);
+				if (slugM && n > 0) {
+					const prev = chMap.get(slugM[1]) || 0;
+					if (n > prev) chMap.set(slugM[1], n);
+				}
+				return;
+			}
+			const prev = chMap.get(parsed.slug) || 0;
+			if (parsed.number > prev) chMap.set(parsed.slug, parsed.number);
+		});
+
 		const out: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Prefer cards that link to /manga/{slug}/ (not chapter)
 		$('a[href*="/manga/"]').each((_, a) => {
 			const $a = $(a);
 			const href = $a.attr('href') || '';
@@ -95,7 +110,6 @@ export class RawkumaSource extends BaseSource {
 			const id = `/manga/${slug}`;
 			if (seen.has(id)) return;
 
-			// title
 			let title =
 				$a.attr('title') ||
 				$a.find('img').attr('alt') ||
@@ -103,26 +117,24 @@ export class RawkumaSource extends BaseSource {
 				'';
 			title = this.decodeHtml(title).replace(/\s+/g, ' ').trim();
 			if (!title || title.length < 2) return;
-			// skip pure chapter labels
 			if (/^chapter\s+\d/i.test(title)) return;
 
-			seen.add(id);
-
-			// cover: img inside link or sibling card
 			let cover =
 				$a.find('img').attr('src') ||
 				$a.find('img').attr('data-src') ||
-				$a.closest('div, article, li').find('img').first().attr('src') ||
 				'';
+			if (!cover) {
+				cover =
+					$a.closest('div, article, li').find('img').first().attr('src') ||
+					'';
+			}
+			if (!cover && seen.size > 0) {
+			}
+
+			seen.add(id);
 			cover = this.absUrl((cover || '').split('?')[0]);
 
-			// latest chapter nearby
-			const parent = $a.closest('div, article, li');
-			const chText =
-				parent.find('a[href*="/chapter-"]').first().text() ||
-				parent.text().match(/Chapter\s+\d+(?:\.\d+)?/i)?.[0] ||
-				'';
-			const latestChapter = this.parseChapterNumber(chText) || undefined;
+			const latestChapter = chMap.get(slug);
 
 			out.push({
 				id,
@@ -131,14 +143,16 @@ export class RawkumaSource extends BaseSource {
 				cover,
 				type: 'manga',
 				status: 'Ongoing',
-				latestChapter
+				latestChapter,
+				lang: this.LIST_LANG
 			});
 		});
 
+		console.log(
+			`[rawkuma] parseCards → ${out.length} series, chapter map=${chMap.size}`
+		);
 		return out;
 	}
-
-	// ── Catalog ──────────────────────────────────────────────────────────────
 
 	async getLatestManga(
 		page: number,
@@ -154,8 +168,24 @@ export class RawkumaSource extends BaseSource {
 			const html = await this.fetchHtml(path);
 			const $ = cheerio.load(html);
 			const list = this.parseCards($);
-			console.log(`[rawkuma] latest page=${p} → ${list.length} items`);
-			return list.slice(0, this.PER_PAGE);
+			// dedupe prefer entry dengan cover
+			const byId = new Map<string, Manga>();
+			for (const m of list) {
+				const prev = byId.get(m.id);
+				if (!prev) {
+					byId.set(m.id, m);
+					continue;
+				}
+
+				const score = (x: Manga) =>
+					(x.cover ? 2 : 0) + (x.latestChapter != null ? 1 : 0);
+				if (score(m) > score(prev)) byId.set(m.id, m);
+			}
+			const merged = [...byId.values()].slice(0, this.PER_PAGE);
+			console.log(
+				`[rawkuma] latest page=${p} → ${merged.length} (with ch=${merged.filter((x) => x.latestChapter != null).length})`
+			);
+			return merged;
 		} catch (e) {
 			console.error('[rawkuma] getLatestManga', e);
 			return [];
@@ -171,7 +201,6 @@ export class RawkumaSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			// Site search often 404 → ambil beberapa halaman latest & filter judul
 			const pagesToScan = Math.min(page + 2, 5);
 			const all: Manga[] = [];
 			const seen = new Set<string>();
@@ -185,7 +214,10 @@ export class RawkumaSource extends BaseSource {
 				const $ = cheerio.load(html);
 				for (const m of this.parseCards($)) {
 					if (seen.has(m.id)) continue;
-					if (!m.title.toLowerCase().includes(q) && !m.id.includes(q.replace(/\s+/g, '-'))) {
+					if (
+						!m.title.toLowerCase().includes(q) &&
+						!m.id.includes(q.replace(/\s+/g, '-'))
+					) {
 						continue;
 					}
 					seen.add(m.id);
@@ -201,8 +233,6 @@ export class RawkumaSource extends BaseSource {
 		}
 	}
 
-	// ── Details ──────────────────────────────────────────────────────────────
-
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		const slug = this.extractSlug(mangaId);
 		if (!slug) throw new Error(`Invalid rawkuma id: ${mangaId}`);
@@ -211,7 +241,6 @@ export class RawkumaSource extends BaseSource {
 		const html = await this.fetchHtml(detailPath);
 		const $ = cheerio.load(html);
 
-		// JSON-LD (paling akurat)
 		let ld: any = null;
 		$('script[type="application/ld+json"]').each((_, el) => {
 			try {
@@ -220,9 +249,8 @@ export class RawkumaSource extends BaseSource {
 					? data['@type']
 					: [data['@type']];
 				if (
-					types.some(
-						(t: string) =>
-							/ComicSeries|Book|ComicStory/i.test(String(t || ''))
+					types.some((t: string) =>
+						/ComicSeries|Book|ComicStory/i.test(String(t || ''))
 					)
 				) {
 					ld = data;
@@ -263,7 +291,10 @@ export class RawkumaSource extends BaseSource {
 			: [];
 
 		let status = 'Ongoing';
-		if (ld?.isCompleted === true || /complete/i.test(String(ld?.creativeWorkStatus || ''))) {
+		if (
+			ld?.isCompleted === true ||
+			/complete/i.test(String(ld?.creativeWorkStatus || ''))
+		) {
 			status = 'Completed';
 		} else if (ld?.creativeWorkStatus) {
 			status = String(ld.creativeWorkStatus);
@@ -274,10 +305,11 @@ export class RawkumaSource extends BaseSource {
 			: '';
 
 		const synopsis = this.decodeHtml(
-			String(ld?.description || $('meta[name="description"]').attr('content') || '')
+			String(
+				ld?.description || $('meta[name="description"]').attr('content') || ''
+			)
 		);
 
-		// manga_id untuk ajax chapter list
 		const mangaIdNum =
 			html.match(/manga_id=(\d+)/)?.[1] ||
 			html.match(/manga_id['"]?\s*[:=]\s*['"]?(\d+)/)?.[1] ||
@@ -344,17 +376,19 @@ export class RawkumaSource extends BaseSource {
 					if (seen.has(id)) return;
 					seen.add(id);
 
+					const fromPath = this.parseChapterFromPath(href);
 					const numAttr = $(a)
 						.closest('[data-chapter-number]')
 						.attr('data-chapter-number');
 					const title =
 						$(a).find('span').first().text().trim() ||
 						$(a).text().replace(/\s+/g, ' ').trim() ||
-						`Chapter ${numAttr || ''}`;
+						`Chapter ${numAttr || fromPath?.number || ''}`;
 					const number =
-						numAttr && !isNaN(parseFloat(numAttr))
+						fromPath?.number ||
+						(numAttr && !isNaN(parseFloat(numAttr))
 							? parseFloat(numAttr)
-							: this.parseChapterNumber(title || id);
+							: this.parseChapterNumber(title || id));
 					const date =
 						$(a).find('time').attr('datetime')?.slice(0, 10) ||
 						$(a).find('time').text().trim() ||
@@ -372,18 +406,9 @@ export class RawkumaSource extends BaseSource {
 			}
 		}
 
-		// Fallback: parse dari halaman detail jika ajax gagal
-		if (!chapters.length) {
-			// re-fetch not needed — caller already has detail html only if we pass $
-			// leave empty; caller can still open chapter if known
-		}
-
-		// newest first
 		chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
 		return chapters;
 	}
-
-	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const path = this.cleanId(chapterId);
@@ -398,7 +423,6 @@ export class RawkumaSource extends BaseSource {
 			const urls: string[] = [];
 			const seen = new Set<string>();
 
-			// gallery-dl style: <img src='...'>
 			$('img').each((_, img) => {
 				let src =
 					$(img).attr('src') ||
@@ -408,7 +432,6 @@ export class RawkumaSource extends BaseSource {
 				if (!src || src.startsWith('data:')) return;
 				src = this.absUrl(src.split('?')[0]);
 				if (!/^https?:\/\//i.test(src)) return;
-				// skip UI assets
 				if (
 					/logo|icon|avatar|emoji|gravatar|svg|spinner|banner|ads|wp-content\/themes/i.test(
 						src
@@ -416,7 +439,6 @@ export class RawkumaSource extends BaseSource {
 				) {
 					return;
 				}
-				// prefer chapter CDN / uploads pages
 				if (
 					!/kuma\.kyut\.dev|\/scr\/|wp-content\/uploads|\/chapter/i.test(src) &&
 					!/\.(jpe?g|png|webp)$/i.test(src)
