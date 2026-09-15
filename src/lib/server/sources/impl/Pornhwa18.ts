@@ -40,7 +40,6 @@ export class Pornhwa18Source extends BaseSource {
 			try {
 				id = new URL(id).pathname;
 			} catch {
-				/* ignore */
 			}
 		}
 		if (!id.startsWith('/')) id = `/${id}`;
@@ -114,10 +113,6 @@ export class Pornhwa18Source extends BaseSource {
 		return (raw || '').trim().split(/\s+/)[0];
 	}
 
-	/**
-	 * Parse kartu comic dari HTML (homepage / list / search).
-	 * Link: /comic/{slug}/  (bukan chapter)
-	 */
 	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const mangas: Manga[] = [];
 		const seen = new Set<string>();
@@ -129,7 +124,7 @@ export class Pornhwa18Source extends BaseSource {
 			if (!/\/comic\/[^/]+\/?$/.test(href)) return;
 
 			const id = this.cleanId(href);
-			// skip invalid
+
 			if (
 				!/^\/comic\/[^/]+$/i.test(id) ||
 				id === '/comic' ||
@@ -138,7 +133,7 @@ export class Pornhwa18Source extends BaseSource {
 			) {
 				return;
 			}
-			// skip weird empty slugs
+	
 			const slug = id.split('/').pop() || '';
 			if (!slug || slug === '-' || /^\d+$/.test(slug)) return;
 			seen.add(id);
@@ -180,7 +175,6 @@ export class Pornhwa18Source extends BaseSource {
 			let cover = this.imgSrc($img);
 			cover = this.absUrl(cover);
 
-			// type badge text near card
 			let type = 'manhwa';
 			const $card = $a.closest('div').parent().parent();
 			const cardText = $card.text().toLowerCase();
@@ -188,7 +182,6 @@ export class Pornhwa18Source extends BaseSource {
 			else if (/\bmanga\b/.test(cardText) && !cardText.includes('manhwa'))
 				type = 'manga';
 
-			// latest chapter dari link chapter di kartu
 			let latestChapter: string | undefined;
 			let best = NaN;
 			$card.find('a[href*="/chapter-"]').each((__, a) => {
@@ -222,7 +215,6 @@ export class Pornhwa18Source extends BaseSource {
 		try {
 			const p = Math.max(1, Number(page) || 1);
 
-			// Page 1 = homepage Project Update → pastikan 24 judul
 			if (p === 1) {
 				const homeHtml = await this.fetchHtml('/');
 				let list = this.parseCards(cheerio.load(homeHtml));
@@ -244,13 +236,10 @@ export class Pornhwa18Source extends BaseSource {
 				return list.slice(0, this.PER_PAGE);
 			}
 
-			// Page 2+: comic-list (kumulatif) → ambil batch halaman
 			const html = await this.fetchHtml(`/comic-list/?page=${p}`);
 			const all = this.parseCards(cheerio.load(html));
-			// list kumulatif: ambil slice untuk page ini
 			const start = (p - 1) * this.PER_PAGE;
 			const batch = all.slice(start, start + this.PER_PAGE);
-			// fallback: jika slice kosong (batch di ujung), ambil 24 terakhir
 			const list =
 				batch.length > 0 ? batch : all.slice(-this.PER_PAGE);
 			console.log(
@@ -277,7 +266,6 @@ export class Pornhwa18Source extends BaseSource {
 			const html = await this.fetchHtml(`/search/${slug}/`);
 			const list = this.parseCards(cheerio.load(html));
 			console.log(`[pornhwa18] search "${q}" → ${list.length}`);
-			// site search biasanya 1 halaman
 			const start = (page - 1) * this.PER_PAGE;
 			return list.slice(start, start + this.PER_PAGE);
 		} catch (e) {
@@ -324,14 +312,12 @@ export class Pornhwa18Source extends BaseSource {
 			'';
 		description = description.replace(/\s+/g, ' ').trim();
 
-		// type dari link /type/
 		let type = 'manhwa';
 		$('a[href*="/type/"]').each((_, el) => {
 			const t = this.mapType($(el).text() || $(el).attr('href') || '');
 			if (t) type = t;
 		});
 
-		// genre dari /tax/genre/ saja (bukan menu umum)
 		const genres: string[] = [];
 		$('a[href*="/tax/genre/"]').each((_, el) => {
 			const g = $(el).text().trim();
@@ -347,7 +333,6 @@ export class Pornhwa18Source extends BaseSource {
 		});
 
 		const authors: string[] = [];
-		// Author field sering "-" di site ini
 
 		const status = this.mapStatus(
 			$('body').text().match(/\b(Ongoing|Completed|Hiatus)\b/i)?.[1]
@@ -363,11 +348,11 @@ export class Pornhwa18Source extends BaseSource {
 
 			const id = this.cleanId(href);
 			if (seen.has(id)) return;
-			// harus chapter milik manga ini
+	
 			if (!id.startsWith(path + '/chapter') && !id.includes('/chapter-')) {
 				return;
 			}
-			// filter: path chapter mengandung slug manga
+	
 			const mangaSlug = path.split('/').pop() || '';
 			if (mangaSlug && !id.includes(mangaSlug)) return;
 
@@ -458,7 +443,6 @@ export class Pornhwa18Source extends BaseSource {
 
 				const $ = cheerio.load(html);
 
-				// Prefer images under chapter path on CDN
 				$('img').each((_, img) => {
 					const src = this.imgSrc($(img));
 					if (
@@ -466,12 +450,10 @@ export class Pornhwa18Source extends BaseSource {
 						/\/manga\/chapters\//i.test(src) ||
 						/manhwature\.com/i.test(src)
 					) {
-						// skip covers
 						if (!/\/covers\//i.test(src)) push(src);
 					}
 				});
 
-				// Regex fallback
 				if (images.length === 0) {
 					const re =
 						/https?:\/\/[^"'\\\s]*manhwature\.com\/[^"'\\\s]+\/chapters\/[^"'\\\s]+\.(?:jpg|jpeg|png|webp)/gi;
@@ -481,7 +463,6 @@ export class Pornhwa18Source extends BaseSource {
 					}
 				}
 
-				// Last resort: all non-cover large images
 				if (images.length === 0) {
 					$('img').each((_, img) => {
 						const src = this.imgSrc($(img));

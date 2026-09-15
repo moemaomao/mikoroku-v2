@@ -68,6 +68,9 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	natsu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	ngomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	noromax: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	ryukomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	sasangeyou: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	sektedoujin: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {

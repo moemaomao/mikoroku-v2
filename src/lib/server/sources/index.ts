@@ -65,6 +65,9 @@ import { NatsuSource } from './impl/Natsu';
 import { NgomikSource } from './impl/Ngomik';
 import { NoromaxSource } from './impl/Noromax';
 import { Pornhwa18Source } from './impl/Pornhwa18';
+import { RyukomikSource } from './impl/Ryukomik';
+import { SasangeyouSource } from './impl/Sasangeyou';
+import { SektedoujinSource } from './impl/Sektedoujin';
 import type { IMangaSource } from './types';
 
 
@@ -128,6 +131,9 @@ const sources: Record<string, IMangaSource> = {
     ngomik: new NgomikSource(),
     noromax: new NoromaxSource(),
     pornhwa18: new Pornhwa18Source(),
+    ryukomik: new RyukomikSource(),
+    sasangeyou: new SasangeyouSource(),
+    sektedoujin: new SektedoujinSource(),
 };
 
 /**
