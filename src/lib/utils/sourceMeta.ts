@@ -6,6 +6,10 @@ export type SourceMeta = {
 };
 
 export const SOURCE_META: Record<string, SourceMeta> = {
+	athreascans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	cucumbermanga: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-emerald-500' },
+	weebcentral: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	kaynscans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	asura: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	manhuarmtl: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	onemanga: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },

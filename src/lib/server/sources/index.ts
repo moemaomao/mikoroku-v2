@@ -75,11 +75,19 @@ import { FlameComicsSource } from './impl/FlameComics';
 import { MangaFireSource } from './impl/MangaFire';
 import { AsmHentaiSource } from './impl/AsmHentai';
 import { OneMangaSource } from './impl/OneManga';
+import { KaynScansSource } from './impl/KaynScans';
+import { AthreaScansSource } from './impl/AthreaScans';
+import { WeebCentralSource } from './impl/WeebCentral';
+import { CucumberMangaSource } from './impl/CucumberManga';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    cucumbermanga: new CucumberMangaSource(),
+    weebcentral: new WeebCentralSource(),
+    athreascans: new AthreaScansSource(),
     onemanga: new OneMangaSource(),
+    kaynscans: new KaynScansSource(),
     asmhentai: new AsmHentaiSource(),
     mangafire: new MangaFireSource(),
     westmanga: new WestMangaSource(),
