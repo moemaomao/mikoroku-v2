@@ -7,6 +7,7 @@ export interface Manga {
 	status?: string;
 	latestChapter?: string | number;
 	lang?: string;
+	updatedAt?: number;
 }
 
 export interface Chapter {
