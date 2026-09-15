@@ -20,7 +20,7 @@ export interface BookmarkEntry {
 }
 
 const STORAGE_KEY = 'mikoroku_bookmarks';
-const MAX = 100;
+const MAX = 60;
 
 let bookmarks = $state<BookmarkEntry[]>([]);
 
@@ -31,11 +31,43 @@ if (browser) {
 	});
 }
 
+function lightCover(url: string | undefined | null): string {
+	if (!url) return '';
+	let u = String(url).trim();
+	if (!u) return '';
+
+	if (u.startsWith('//')) u = 'https:' + u;
+
+	try {
+		const parsed = new URL(u);
+		parsed.search = '';
+		parsed.hash = '';
+		u = parsed.toString();
+	} catch {
+		// ignore
+	}
+
+	return u.length > 180 ? u.slice(0, 180) : u;
+}
+
+function lightEntry(entry: BookmarkEntry): BookmarkEntry {
+	return {
+		mangaId: entry.mangaId,
+		mangaSlug: entry.mangaSlug || '',
+		mangaTitle: (entry.mangaTitle || '').slice(0, 120),
+		cover: lightCover(entry.cover),
+		sourceId: entry.sourceId,
+		timestamp: entry.timestamp
+	};
+}
+
 function loadLocal(): BookmarkEntry[] {
 	if (!browser) return [];
 	try {
 		const data = localStorage.getItem(STORAGE_KEY);
-		return data ? JSON.parse(data) : [];
+		if (!data) return [];
+		const parsed = JSON.parse(data) as BookmarkEntry[];
+		return parsed.map(lightEntry);
 	} catch {
 		return [];
 	}
@@ -43,7 +75,8 @@ function loadLocal(): BookmarkEntry[] {
 
 function saveLocal(list: BookmarkEntry[]) {
 	if (!browser) return;
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX)));
+	const light = list.slice(0, MAX).map(lightEntry);
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(light));
 	window.dispatchEvent(new CustomEvent('bookmarks-changed'));
 }
 
@@ -60,7 +93,11 @@ export function isBookmarked(mangaId: string, sourceId?: string): boolean {
 export async function addBookmark(entry: Omit<BookmarkEntry, 'timestamp'>) {
 	if (!browser) return;
 
-	const full: BookmarkEntry = { ...entry, timestamp: Date.now() };
+	const full: BookmarkEntry = lightEntry({
+		...entry,
+		timestamp: Date.now()
+	});
+
 	const list = loadLocal().filter((b) => b.mangaId !== entry.mangaId);
 	list.unshift(full);
 	saveLocal(list);
@@ -122,9 +159,10 @@ export async function syncBookmarksOnLogin() {
 
 		const map = new Map<string, BookmarkEntry>();
 		[...cloud, ...local].forEach((b) => {
-			const existing = map.get(b.mangaId);
-			if (!existing || b.timestamp > existing.timestamp) {
-				map.set(b.mangaId, b);
+			const light = lightEntry(b);
+			const existing = map.get(light.mangaId);
+			if (!existing || light.timestamp > existing.timestamp) {
+				map.set(light.mangaId, light);
 			}
 		});
 

@@ -23,13 +23,48 @@ export interface ReadingEntry {
 }
 
 const STORAGE_KEY = 'mikoroku_history';
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 30;
+
+function lightCover(url: string | undefined | null): string {
+	if (!url) return '';
+	let u = String(url).trim();
+	if (!u) return '';
+
+	if (u.startsWith('//')) u = 'https:' + u;
+
+	try {
+		const parsed = new URL(u);
+		parsed.search = '';
+		parsed.hash = '';
+		u = parsed.toString();
+	} catch {
+		// ignore
+	}
+
+	return u.length > 180 ? u.slice(0, 180) : u;
+}
+
+function lightEntry(entry: ReadingEntry): ReadingEntry {
+	return {
+		mangaId: entry.mangaId,
+		mangaSlug: entry.mangaSlug || '',
+		mangaTitle: (entry.mangaTitle || '').slice(0, 120),
+		cover: lightCover(entry.cover),
+		chapterId: entry.chapterId,
+		chapterTitle: (entry.chapterTitle || '').slice(0, 80),
+		chapterNumber: entry.chapterNumber,
+		sourceId: entry.sourceId,
+		timestamp: entry.timestamp
+	};
+}
 
 function loadLocal(): ReadingEntry[] {
 	if (!browser) return [];
 	try {
 		const data = localStorage.getItem(STORAGE_KEY);
-		return data ? JSON.parse(data) : [];
+		if (!data) return [];
+		const parsed = JSON.parse(data) as ReadingEntry[];
+		return parsed.map(lightEntry);
 	} catch {
 		return [];
 	}
@@ -37,7 +72,8 @@ function loadLocal(): ReadingEntry[] {
 
 function saveLocal(list: ReadingEntry[]) {
 	if (!browser) return;
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX_HISTORY)));
+	const light = list.slice(0, MAX_HISTORY).map(lightEntry);
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(light));
 	window.dispatchEvent(new CustomEvent('history-changed'));
 }
 
@@ -48,7 +84,11 @@ export function getHistory(): ReadingEntry[] {
 export async function saveReading(entry: Omit<ReadingEntry, 'timestamp'>) {
 	if (!browser) return;
 
-	const full: ReadingEntry = { ...entry, timestamp: Date.now() };
+	const full: ReadingEntry = lightEntry({
+		...entry,
+		timestamp: Date.now()
+	});
+
 	const history = loadLocal().filter((h) => h.mangaId !== entry.mangaId);
 	history.unshift(full);
 	saveLocal(history);
@@ -105,9 +145,10 @@ export async function syncHistoryOnLogin() {
 
 		const map = new Map<string, ReadingEntry>();
 		[...cloud, ...local].forEach((h) => {
-			const existing = map.get(h.mangaId);
-			if (!existing || h.timestamp > existing.timestamp) {
-				map.set(h.mangaId, h);
+			const light = lightEntry(h);
+			const existing = map.get(light.mangaId);
+			if (!existing || light.timestamp > existing.timestamp) {
+				map.set(light.mangaId, light);
 			}
 		});
 
