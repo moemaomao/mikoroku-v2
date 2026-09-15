@@ -69,10 +69,14 @@ import { RyukomikSource } from './impl/Ryukomik';
 import { SasangeyouSource } from './impl/Sasangeyou';
 import { SektedoujinSource } from './impl/Sektedoujin';
 import { SiikomikSource } from './impl/Siikomik';
+import { SoulScansSource } from './impl/SoulScans';
+import { WestMangaSource } from './impl/WestManga';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    westmanga: new WestMangaSource(),
+    soulscans: new SoulScansSource(),
     asura: new AsuraSource(),
     weloma: new WelomaSource(),
     hitomi: new HitomiSource(),
