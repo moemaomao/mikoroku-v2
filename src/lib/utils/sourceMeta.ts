@@ -58,6 +58,9 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	isekaikomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	maid: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	mangakuri: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
+	lumos: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	lunarx: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	mangasusu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {

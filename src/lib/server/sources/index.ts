@@ -55,6 +55,9 @@ import { IkiruSource } from './impl/Ikiru';
 import { IsekaiKomikSource } from './impl/IsekaiKomik';
 import { MaidSource } from './impl/Maid';
 import { MangakuriSource } from './impl/Mangakuri';
+import { LumosSource } from './impl/Lumos';
+import { LunarxSource } from './impl/Lunarx';
+import { MangasusuSource } from './impl/Mangasusu';
 import type { IMangaSource } from './types';
 
 
@@ -108,6 +111,9 @@ const sources: Record<string, IMangaSource> = {
     isekaikomik: new IsekaiKomikSource(),
     maid: new MaidSource(),
     mangakuri: new MangakuriSource(),
+    lumos: new LumosSource(),
+    lunarx: new LunarxSource(),
+    mangasusu: new MangasusuSource(),
 };
 
 /**
