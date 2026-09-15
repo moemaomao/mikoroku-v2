@@ -131,6 +131,9 @@ export const GET: RequestHandler = async ({ url }) => {
 	    const isMangakuri =
 	        sourceId === 'mangakuri' ||
 	        /mangakuri\.online|cdnmangakuri|lonedev\.my\.id/i.test(decodedUrl);
+	    const isManhwaIndo =
+	         sourceId === 'manhwaindo' ||
+	        /manhwaindo\.my|upload\.gmbr\.pro|kacu\.gmbr\.pro/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -220,6 +223,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	        referer = 'https://08.ikiru.wtf/';
         } else if (isMangakuri) {
 	        referer = 'https://lc2.mangakuri.online/';
+        } else if (isManhwaIndo) {
+	        referer = 'https://www.manhwaindo.my/';
         }
 
 		// ============================================================

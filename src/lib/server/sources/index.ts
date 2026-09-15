@@ -58,6 +58,8 @@ import { MangakuriSource } from './impl/Mangakuri';
 import { LumosSource } from './impl/Lumos';
 import { LunarxSource } from './impl/Lunarx';
 import { MangasusuSource } from './impl/Mangasusu';
+import { ManhuarmtlSource } from './impl/Manhuarmtl';
+import { ManhwaIndoSource } from './impl/ManhwaIndo';
 import type { IMangaSource } from './types';
 
 
@@ -114,6 +116,8 @@ const sources: Record<string, IMangaSource> = {
     lumos: new LumosSource(),
     lunarx: new LunarxSource(),
     mangasusu: new MangasusuSource(),
+    manhuarmtl: new ManhuarmtlSource(),
+    manhwaindo: new ManhwaIndoSource(),
 };
 
 /**
