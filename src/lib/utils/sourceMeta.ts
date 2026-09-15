@@ -15,6 +15,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	flamecomics: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	weloma: { flag: 'jp', lang: 'JP', isR18: false, color: 'bg-blue-500' },
 	hitomi: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
+	asmhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
 	hitomila: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
 	nhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-rose-600' },
 	nhentainet: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-rose-600' },
@@ -100,7 +101,9 @@ export const LANG_FILTER_SOURCES = [
 	'imhentai',
 	'ehentai',
 	'hentaiera',
-	'mangadex'
+	'mangadex',
+	'mangafire',
+	'asmhentai'
 ];
 
 export function getSourceMeta(id: string): SourceMeta {

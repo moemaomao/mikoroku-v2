@@ -73,10 +73,12 @@ import { SoulScansSource } from './impl/SoulScans';
 import { WestMangaSource } from './impl/WestManga';
 import { FlameComicsSource } from './impl/FlameComics';
 import { MangaFireSource } from './impl/MangaFire';
+import { AsmHentaiSource } from './impl/AsmHentai';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    asmhentai: new AsmHentaiSource(),
     mangafire: new MangaFireSource(),
     westmanga: new WestMangaSource(),
     flamecomics: new FlameComicsSource(),
