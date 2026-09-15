@@ -383,7 +383,6 @@ export class ComicasoSource extends BaseSource {
 			return [];
 		}
 
-		// Token dari detail (field chapter_token / token)
 		let token = '';
 		try {
 			const detail = await this.apiGet<any>('/manga.php', {

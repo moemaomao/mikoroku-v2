@@ -47,14 +47,12 @@ export class PixHentaiSource extends BaseSource {
 		return id.replace(/\/+$/, '') || '/';
 	}
 
-	/** Path valid: /slug  (bukan /page /genre /category /tag /feed) */
 	private isMangaPath(id: string): boolean {
 		if (!id || id === '/') return false;
 		if (
 			/^\/(page|genre|category|tag|feed|wp-|author|comments)\b/i.test(id)
 		)
 			return false;
-		// satu segmen saja
 		return /^\/[a-z0-9][a-z0-9-]{1,200}$/i.test(id);
 	}
 
@@ -126,7 +124,6 @@ export class PixHentaiSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			// ~8 item/page situs → butuh 3 page situs untuk 24 item
 			const pagesNeeded = Math.ceil(this.PER_PAGE / this.SITE_PER_PAGE);
 			const startSite = (p - 1) * pagesNeeded + 1;
 
@@ -203,8 +200,6 @@ export class PixHentaiSource extends BaseSource {
 			'';
 		cover = this.absUrl((cover || '').split('?')[0]);
 
-		// Genres / categories
-		// Genres / categories — HANYA dari meta post, jangan ambil menu nav
 const genres: string[] = [];
 $('li.meta-cat a[rel="category tag"], .meta-cat a[rel="category tag"]').each(
 	(_, a) => {
@@ -238,14 +233,12 @@ if (!genres.length) {
 	});
 }
 
-		// Synopsis — paragraf pertama yang cukup panjang
 		let synopsis = '';
 		$('.entry-content p, .single-content p').each((_, el) => {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
 			if (t.length > 40 && !synopsis) synopsis = t;
 		});
 
-		// Satu chapter sintetis (semua halaman di post yang sama)
 		const chapters: Chapter[] = [
 			{
 				id: path,
@@ -305,13 +298,12 @@ if (!genres.length) {
 					)
 				)
 					return;
-				// skip tiny thumbs if ada full size di attr lain — sudah di-handle caller
+				
 				if (seen.has(src)) return;
 				seen.add(src);
 				urls.push(src);
 			};
 
-			// Konten utama
 			$(
 				'.entry-content img, .single-content img, article .entry img'
 			).each((_, img) => {
@@ -322,16 +314,15 @@ if (!genres.length) {
 					$img.attr('data-src') ||
 					$img.attr('src') ||
 					'';
-				// Skip featured/cover yang sama dengan logo path
+			
 				if ($img.hasClass('wp-post-image') && urls.length > 0) return;
 				pick(src);
 			});
 
-			// Prefer openhentai CDN
+		
 			const cdn = urls.filter((u) => /openhentai\.net|img\./i.test(u));
 			const finalUrls = cdn.length >= Math.min(3, urls.length) ? cdn : urls;
 
-			// Buang featured cover di awal jika duplikat path wp-content uploads -01
 			console.log(`[pixhentai] ${finalUrls.length} pages → ${path}`);
 			return finalUrls;
 		} catch (e) {

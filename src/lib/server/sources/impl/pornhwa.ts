@@ -205,8 +205,6 @@ export class PornhwaSource extends BaseSource {
 			status = 'Completed';
 		}
 
-		// ===== RATING (otomatis dari source) =====
-		// Format di situs: "5.0 out of 5"
 		let rating = '0.0';
 		const bodyRaw = $('body').text();
 		const m1 = bodyRaw.match(/(\d+(?:\.\d+)?)\s*out\s*of\s*5/i);
@@ -214,7 +212,7 @@ export class PornhwaSource extends BaseSource {
 			const val = parseFloat(m1[1]);
 			if (val >= 0 && val <= 5) rating = val.toFixed(1);
 		} else {
-			// fallback: angka besar di dekat area rating
+
 			const m2 = $('.text-4xl, .text-5xl, [class*="tabular-nums"]')
 				.first()
 				.text()
@@ -241,8 +239,6 @@ export class PornhwaSource extends BaseSource {
 			}
 		});
 
-		// Susun description ala source lain (Nhentai dll)
-		// UI baca meta lewat parseMeta → butuh baris "Rating: x.x"
 		const metaLines: string[] = [];
 		if (rating !== '0.0') metaLines.push(`Rating: ${rating}`);
 		if (status) metaLines.push(`Status: ${status}`);

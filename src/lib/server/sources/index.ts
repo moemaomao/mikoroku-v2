@@ -61,6 +61,10 @@ import { MangasusuSource } from './impl/Mangasusu';
 import { ManhuarmtlSource } from './impl/Manhuarmtl';
 import { ManhwaIndoSource } from './impl/ManhwaIndo';
 import { ManhwaDesuSource } from './impl/ManhwaDesu';
+import { NatsuSource } from './impl/Natsu';
+import { NgomikSource } from './impl/Ngomik';
+import { NoromaxSource } from './impl/Noromax';
+import { Pornhwa18Source } from './impl/Pornhwa18';
 import type { IMangaSource } from './types';
 
 
@@ -120,6 +124,10 @@ const sources: Record<string, IMangaSource> = {
     manhuarmtl: new ManhuarmtlSource(),
     manhwaindo: new ManhwaIndoSource(),
     manhwadesu: new ManhwaDesuSource(),
+    natsu: new NatsuSource(),
+    ngomik: new NgomikSource(),
+    noromax: new NoromaxSource(),
+    pornhwa18: new Pornhwa18Source(),
 };
 
 /**

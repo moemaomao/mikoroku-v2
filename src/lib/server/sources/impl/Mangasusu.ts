@@ -23,7 +23,6 @@ export class MangasusuSource extends BaseSource {
 	baseUrl = 'https://mangasusuku.com';
 
 	private readonly PER_PAGE = 24;
-	/** Site Themesia default ~20 item/halaman */
 	private readonly SITE_PER_PAGE = 20;
 	private readonly DEFAULT_LANG = 'id';
 
@@ -178,10 +177,6 @@ export class MangasusuSource extends BaseSource {
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
-	/**
-	 * Themesia pagination pakai query `?page=N`, BUKAN `/page/N/`.
-	 * Site hanya ~20 item/halaman → fetch 2 halaman situs lalu slice 24.
-	 */
 	private async fetchCatalogPages(
 		buildPath: (sitePage: number) => string,
 		appPage: number
@@ -194,7 +189,6 @@ export class MangasusuSource extends BaseSource {
 		const merged: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Ambil cukup halaman situs sampai kepotong 24 item
 		for (let sp = siteStart; sp <= siteStart + 2 && merged.length < offsetInFirst + this.PER_PAGE; sp++) {
 			try {
 				const html = await this.fetchHtml(buildPath(sp));
@@ -304,7 +298,6 @@ export class MangasusuSource extends BaseSource {
 			$('meta[name="description"]').attr('content') ||
 			'';
 
-		// table.infotable: Status / Type / Released / Author / Artist
 		const info: Record<string, string> = {};
 		$('.infotable tr, table tr').each((_, tr) => {
 			const $tds = $(tr).find('td');

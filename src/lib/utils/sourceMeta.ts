@@ -38,6 +38,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	pixhentai: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 	imhentai: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
 	hentai2read: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
+	pornhwa18: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
 	hentairead: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
 	hentaiera: { flag: 'un', lang: 'Multi', isR18: true, color: 'bg-pink-600' },
 	simplyhentai: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
@@ -64,6 +65,9 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	mangasusu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 	manhwaindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	manhwadesu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	natsu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	ngomik: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	noromax: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {
