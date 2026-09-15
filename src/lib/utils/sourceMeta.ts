@@ -63,6 +63,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	lunarx: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 	mangasusu: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },
 	manhwaindo: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
+	manhwadesu: { flag: 'id', lang: 'ID', isR18: false, color: 'bg-green-500' },
 };
 
 export const DEFAULT_META: SourceMeta = {

@@ -134,6 +134,9 @@ export const GET: RequestHandler = async ({ url }) => {
 	    const isManhwaIndo =
 	         sourceId === 'manhwaindo' ||
 	        /manhwaindo\.my|upload\.gmbr\.pro|kacu\.gmbr\.pro/i.test(decodedUrl);
+        const isManhwaDesu =
+	         sourceId === 'manhwadesu' ||
+	         /manhwadesu\.wiki|cdn\.uqni\.net/i.test(decodedUrl);  
 
 		const skipWeserv =
 			isHitomi ||
@@ -225,6 +228,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	        referer = 'https://lc2.mangakuri.online/';
         } else if (isManhwaIndo) {
 	        referer = 'https://www.manhwaindo.my/';
+        } else if (isManhwaDesu) {
+	        referer = 'https://manhwadesu.wiki/';
         }
 
 		// ============================================================
