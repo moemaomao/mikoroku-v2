@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
  * Cucumber Manga adapter (WordPress Madara / wp-manga)
  *
  * Domain  : https://cucumbermanga.com
- * Latest  : /?s=&post_type=wp-manga&m_orderby=latest&page=N
+ * Latest  : /?s=&post_type=wp-manga&m_orderby=latest&paged=N
  * Search  : /?s={q}&post_type=wp-manga
  * Detail  : /manga/{slug}/
  * Chapters: POST /manga/{slug}/ajax/chapters/
@@ -64,7 +64,7 @@ export class CucumberMangaSource extends BaseSource {
 	}
 
 	private parseChapterNumber(text: string, path = ''): number {
-		const fromPath = path.match(/chapter[_-]?(\d+)(?:[.-](\d+))?/i);
+		const fromPath = path.match(/\/chapter[_-]?(\d+)(?:[.-](\d+))?/i);
 		if (fromPath) {
 			const major = parseInt(fromPath[1], 10);
 			if (fromPath[2] != null && fromPath[2].length <= 2) {
@@ -79,16 +79,23 @@ export class CucumberMangaSource extends BaseSource {
 			if (m[2] != null) return parseFloat(`${m[1]}.${m[2]}`);
 			return parseInt(m[1], 10);
 		}
-		const n = String(text).match(/\b(\d+(?:\.\d+)?)\b/);
-		return n ? parseFloat(n[1]) : 0;
+		return 0;
+	}
+
+	private isValidChapterPath(path: string, seriesSlug: string): boolean {
+		const p = path.toLowerCase();
+		if (!p.includes(`/manga/${seriesSlug.toLowerCase()}/`)) return false;
+		if (/\/n-a(_\d+)?\/?$/.test(p)) return false;
+		if (p.endsWith('/feed') || p.endsWith('/feed/')) return false;
+		const seg = p.split('/').filter(Boolean).pop() || '';
+		return /chapter|ch[_-]?\d|\d/.test(seg);
 	}
 
 	private parseListCards($: cheerio.CheerioAPI): Manga[] {
 		const res: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Madara latest/search cards
-		$('.c-tabs-item__content, .page-item-detail, .manga').each((_, el) => {
+		$('.c-tabs-item__content').each((_, el) => {
 			const $el = $(el);
 			const a = $el
 				.find('a[href*="/manga/"]')
@@ -102,16 +109,14 @@ export class CucumberMangaSource extends BaseSource {
 			if (!href) return;
 
 			const id = this.cleanId(href);
-			if (!id.includes('/manga/') || seen.has(id)) return;
-			// skip non-series paths
 			const slug = id.split('/').filter(Boolean).pop() || '';
 			if (!slug || slug === 'feed' || slug === 'manga') return;
+			if (seen.has(id)) return;
 			seen.add(id);
 
 			const title = (
 				a.attr('title') ||
-				$el.find('h3 a, h5 a, .post-title a, .manga-title').first().text() ||
-				a.text() ||
+				$el.find('h3 a, h5 a, .post-title a').first().text() ||
 				''
 			)
 				.replace(/\s+/g, ' ')
@@ -127,15 +132,9 @@ export class CucumberMangaSource extends BaseSource {
 			cover = this.preferFullCover(this.absUrl(cover));
 
 			const chText =
-				$el.find('.chapter a, .list-chapter a, .chapter').first().text() ||
-				$el.text().match(/Chapter\s*[\d.]+/i)?.[0] ||
-				'';
-			const latestChapter = chText
-				? String(
-						this.parseChapterNumber(chText) ||
-							chText.replace(/\s+/g, ' ').trim()
-					)
-				: undefined;
+				$el.find('.chapter a, .list-chapter a').first().text() || '';
+			const n = this.parseChapterNumber(chText);
+			const latestChapter = n ? String(n) : undefined;
 
 			res.push({
 				id,
@@ -160,15 +159,34 @@ export class CucumberMangaSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			const path =
-				p > 1
-					? `/?s=&post_type=wp-manga&m_orderby=latest&paged=${p}`
-					: `/?s=&post_type=wp-manga&m_orderby=latest`;
-			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
-			const list = this.parseListCards($).slice(0, this.PER_PAGE);
-			console.log(`[cucumbermanga] latest page=${p} → ${list.length} items`);
-			return list;
+			const apiPage1 = (p - 1) * 2 + 1;
+			const apiPage2 = apiPage1 + 1;
+
+			const paths = [
+				apiPage1 === 1
+					? `/?s=&post_type=wp-manga&m_orderby=latest`
+					: `/?s=&post_type=wp-manga&m_orderby=latest&paged=${apiPage1}`,
+				`/?s=&post_type=wp-manga&m_orderby=latest&paged=${apiPage2}`
+			];
+
+			const [html1, html2] = await Promise.all(
+				paths.map((path) => this.fetchHtml(path))
+			);
+
+			const seen = new Set<string>();
+			const list: Manga[] = [];
+			for (const html of [html1, html2]) {
+				const $ = cheerio.load(html);
+				for (const item of this.parseListCards($)) {
+					if (seen.has(item.id)) continue;
+					seen.add(item.id);
+					list.push(item);
+				}
+			}
+
+			const out = list.slice(0, this.PER_PAGE);
+			console.log(`[cucumbermanga] latest page=${p} → ${out.length} items`);
+			return out;
 		} catch (e) {
 			console.error('[cucumbermanga] getLatestManga', e);
 			return [];
@@ -237,18 +255,24 @@ export class CucumberMangaSource extends BaseSource {
 			.trim();
 
 		const genres: string[] = [];
-		$('.genres-content a, a[href*="/manga-genre/"]').each((_, el) => {
-			const t = $(el).text().replace(/\s+/g, ' ').trim();
-			if (t && !genres.includes(t)) genres.push(t);
+		$('.post-content_item').each((_, el) => {
+			const $el = $(el);
+			const heading = $el.find('.summary-heading, h5, h4').first().text().trim();
+			if (!/tag|genre/i.test(heading)) return;
+			$el.find('.summary-content a, a').each((__, a) => {
+				const t = $(a).text().replace(/\s+/g, ' ').trim();
+				if (t && t.length < 40 && !genres.includes(t)) genres.push(t);
+			});
 		});
 
 		let status = 'Ongoing';
-		$('.post-status .summary-content, .post-content_item').each((_, el) => {
+		$('.post-content_item, .post-status').each((_, el) => {
 			const text = $(el).text().replace(/\s+/g, ' ').trim();
 			if (/status/i.test(text)) {
 				if (/complet/i.test(text)) status = 'Completed';
 				else if (/hiatus/i.test(text)) status = 'Hiatus';
 				else if (/drop|cancel/i.test(text)) status = 'Dropped';
+				else if (/ongoing|on-?going/i.test(text)) status = 'Ongoing';
 			}
 		});
 
@@ -258,7 +282,6 @@ export class CucumberMangaSource extends BaseSource {
 			if (t) authors.push(t);
 		});
 
-		// Chapters via Madara AJAX
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 		try {
@@ -276,34 +299,43 @@ export class CucumberMangaSource extends BaseSource {
 			const chHtml = await res.text();
 			const $ch = cheerio.load(chHtml);
 
-			$ch('li.wp-manga-chapter a, .wp-manga-chapter a, li a[href*="/manga/"]').each(
-				(_, a) => {
-					const href = $ch(a).attr('href') || '';
-					if (!href || !href.includes('/manga/')) return;
-					const chId = this.cleanId(href);
-					if (seen.has(chId)) return;
-					// must be deeper than series path
-					if (chId === id || chId === `/manga/${slug}`) return;
-					seen.add(chId);
+			$ch('li.wp-manga-chapter').each((_, li) => {
+				const $li = $ch(li);
+				const a = $li.find('a').first();
+				const href = a.attr('href') || '';
+				if (!href) return;
 
-					const text = $ch(a).text().replace(/\s+/g, ' ').trim();
-					const number = this.parseChapterNumber(text, chId);
-					const date = $ch(a)
-						.parent()
-						.find('.chapter-release-date, i, span')
-						.last()
-						.text()
-						.replace(/\s+/g, ' ')
-						.trim();
+				const chId = this.cleanId(href);
+				if (seen.has(chId)) return;
+				if (!this.isValidChapterPath(chId, slug)) return;
 
-					chapters.push({
-						id: chId,
-						title: text || `Chapter ${number}`,
-						number: number || chapters.length + 1,
-						date: date || undefined
-					});
-				}
-			);
+				const text = a
+					.clone()
+					.children()
+					.remove()
+					.end()
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim();
+				const number = this.parseChapterNumber(text, chId);
+				if (!number) return;
+
+				seen.add(chId);
+
+				const date = $li
+					.find('.chapter-release-date i, .chapter-release-date')
+					.first()
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim();
+
+				chapters.push({
+					id: chId,
+					title: text || `Chapter ${number}`,
+					number,
+					date: date || undefined
+				});
+			});
 		} catch (e) {
 			console.error('[cucumbermanga] chapter list', e);
 		}
@@ -359,7 +391,6 @@ export class CucumberMangaSource extends BaseSource {
 				}
 			);
 
-			// Fallback: WP-manga data paths in HTML
 			if (pages.length === 0) {
 				const re =
 					/(https?:\/\/[^"'\\\s]+\/wp-content\/uploads\/WP-manga\/[^"'\\\s]+\.(?:jpg|jpeg|png|webp|avif))/gi;

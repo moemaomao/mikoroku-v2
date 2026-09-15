@@ -79,10 +79,12 @@ import { KaynScansSource } from './impl/KaynScans';
 import { AthreaScansSource } from './impl/AthreaScans';
 import { WeebCentralSource } from './impl/WeebCentral';
 import { CucumberMangaSource } from './impl/CucumberManga';
+import { DoujinsSource } from './impl/Doujins';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    doujins: new DoujinsSource(),
     cucumbermanga: new CucumberMangaSource(),
     weebcentral: new WeebCentralSource(),
     athreascans: new AthreaScansSource(),
