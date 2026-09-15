@@ -71,11 +71,15 @@ import { SektedoujinSource } from './impl/Sektedoujin';
 import { SiikomikSource } from './impl/Siikomik';
 import { SoulScansSource } from './impl/SoulScans';
 import { WestMangaSource } from './impl/WestManga';
+import { FlameComicsSource } from './impl/FlameComics';
+import { MangaFireSource } from './impl/MangaFire';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    mangafire: new MangaFireSource(),
     westmanga: new WestMangaSource(),
+    flamecomics: new FlameComicsSource(),
     soulscans: new SoulScansSource(),
     asura: new AsuraSource(),
     weloma: new WelomaSource(),
