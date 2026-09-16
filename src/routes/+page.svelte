@@ -8,18 +8,20 @@
 
 	const { data }: { data: PageData } = $props();
 
-const pageData = $derived(data as PageData & {
-	isMulti?: boolean;
-	preferredSources?: string[];
-});
+	const pageData = $derived(
+		data as PageData & {
+			isMulti?: boolean;
+			preferredSources?: string[];
+		}
+	);
 
-let mangas = $derived(pageData.mangas);
-let sources = $derived(pageData.sources);
-let currentSource = $derived(pageData.currentSource);
-let currentPage = $derived(pageData.currentPage);
-let searchQuery = $derived(pageData.searchQuery);
-let isMulti = $derived(pageData.isMulti ?? false);
-let preferredSources = $derived(pageData.preferredSources ?? []);
+	let mangas = $derived(pageData.mangas);
+	let sources = $derived(pageData.sources);
+	let currentSource = $derived(pageData.currentSource);
+	let currentPage = $derived(pageData.currentPage);
+	let searchQuery = $derived(pageData.searchQuery);
+	let isMulti = $derived(pageData.isMulti ?? false);
+	let preferredSources = $derived(pageData.preferredSources ?? []);
 
 	let loading = $state(false);
 	let isDarkMode = $state(true);
@@ -49,12 +51,12 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 	});
 
 	function proxyImage(url: string, sourceId?: string): string {
-	   const src = sourceId || currentSource;
-	   if (!url || !src) return '';
-	   let u = String(url).trim();
-	   if (u.startsWith('//')) u = 'https:' + u;
-	   return `/api/proxy?url=${encodeURIComponent(u)}&source=${src}`;
-    }
+		const src = sourceId || currentSource;
+		if (!url || !src) return '';
+		let u = String(url).trim();
+		if (u.startsWith('//')) u = 'https:' + u;
+		return `/api/proxy?url=${encodeURIComponent(u)}&source=${src}`;
+	}
 
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;
@@ -145,7 +147,9 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 	}
 
 	function listChapterFlag(lang?: string): string {
-		const l = String(lang || '').trim().toLowerCase();
+		const l = String(lang || '')
+			.trim()
+			.toLowerCase();
 		const map: Record<string, string> = {
 			en: 'gb',
 			'en-us': 'us',
@@ -181,16 +185,41 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 	function sourceName(id: string) {
 		return sources.find((s) => s.id === id)?.name || id;
 	}
+
+	// ── SEO / share card ─────────────────────────────────────────────────────
+	let siteUrl = $derived($page.url.origin);
+	let pageTitle = $derived(
+		isMulti
+			? 'Latest Manga (Multi Source) — RokuYomu'
+			: currentSource
+				? `${sourceName(currentSource)} — Latest — RokuYomu`
+				: 'RokuYomu — Baca Manga, Manhwa & Manhua'
+	);
+	let pageDesc = $derived(
+		searchQuery
+			? `Hasil pencarian "${searchQuery}" di RokuYomu`
+			: 'Baca manga, manhwa, dan manhua gratis dari banyak sumber di RokuYomu.'
+	);
+	let pageImage = $derived(`${siteUrl}/rokuyomu.png`);
 </script>
 
 <svelte:head>
-	<title>
-		{isMulti
-			? 'Latest Manga (Multi Source)'
-			: currentSource
-				? `${sourceName(currentSource)} — Latest`
-				: 'Rokuyomu'} — Rokuyomu
-	</title>
+	<title>{pageTitle}</title>
+	<meta name="description" content={pageDesc} />
+
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="RokuYomu" />
+	<meta property="og:title" content={pageTitle} />
+	<meta property="og:description" content={pageDesc} />
+	<meta property="og:url" content={$page.url.href} />
+	<meta property="og:image" content={pageImage} />
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={pageTitle} />
+	<meta name="twitter:description" content={pageDesc} />
+	<meta name="twitter:image" content={pageImage} />
+
+	<link rel="canonical" href={$page.url.href} />
 </svelte:head>
 
 <div class="mx-auto w-full max-w-none px-2 py-3 sm:px-3 sm:py-4 lg:px-4">
