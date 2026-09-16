@@ -85,10 +85,12 @@ import { MangaReadSource } from './impl/MangaRead';
 import { MangaSushiSource } from './impl/MangaSushi';
 import { MangaTaroSource } from './impl/MangaTaro';
 import { KumopoiSource } from './impl/Kumopoi';
+import { MadaraScansSource } from './impl/MadaraScans';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    madarascans: new MadaraScansSource(),
     kumopoi: new KumopoiSource(),
     doujins: new DoujinsSource(),
     mangataro: new MangaTaroSource(),

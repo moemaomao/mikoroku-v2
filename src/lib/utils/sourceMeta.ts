@@ -8,6 +8,7 @@ export type SourceMeta = {
 export const SOURCE_META: Record<string, SourceMeta> = {
 	athreascans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangaread: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
+	madarascans: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangataro: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangasushi: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
 	mangakakalot: { flag: 'gb', lang: 'EN', isR18: false, color: 'bg-emerald-500' },
