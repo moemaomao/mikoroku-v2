@@ -28,7 +28,6 @@ export class KumopoiSource extends BaseSource {
 	private readonly cdnBase = 'https://kumo.gorae.my.id';
 	private readonly PER_PAGE = 24;
 
-	/** Secret dari frontend Kumopoi (ClientSignature) */
 	private readonly appSecret = 'vtm6RLiSyKmWd1YpZtkt5ue4oPdYdmzW0ZgxDgyBNEM=';
 
 	private apiHeaders(): Record<string, string> {
@@ -73,7 +72,6 @@ export class KumopoiSource extends BaseSource {
 			}
 		}
 
-		// Path yang di-sign = pathname saja (tanpa origin & query)
 		const sigHeaders = this.signRequest('GET', url.pathname);
 
 		const res = await fetch(url.toString(), {
@@ -107,11 +105,6 @@ export class KumopoiSource extends BaseSource {
 		return m?.[1] || '';
 	}
 
-	/**
-	 * Path relatif CDN → URL absolut.
-	 * JANGAN menambah suffix -small/-medium: API jarang punya file variant itu
-	 * dan path yang diubah jadi 404 di kumo.gorae.my.id.
-	 */
 	private coverUrl(path?: string | null): string {
 		if (!path) return '';
 		let p = String(path).trim();
@@ -120,7 +113,6 @@ export class KumopoiSource extends BaseSource {
 		if (p.startsWith('http')) return p;
 		if (p.startsWith('//')) return `https:${p}`;
 
-		// Encode tiap segment path (spasi di nama folder cover, dll)
 		const encoded = p
 			.replace(/^\/+/, '')
 			.split('/')
@@ -157,7 +149,6 @@ export class KumopoiSource extends BaseSource {
 				? String(latest.number).trim()
 				: undefined;
 
-		// Prioritas: coverSmall → coverMedium → cover (tanpa rewrite nama file)
 		const cover = this.coverUrl(
 			item.coverSmall || item.coverMedium || item.cover || null
 		);
@@ -169,7 +160,8 @@ export class KumopoiSource extends BaseSource {
 			cover,
 			type: this.mapType(item.type),
 			status: this.mapStatus(item.status),
-			latestChapter: chNum
+			latestChapter: chNum,
+			lang: 'id'
 		};
 	}
 
@@ -260,7 +252,6 @@ export class KumopoiSource extends BaseSource {
 			authors.push(String(item.artist));
 		}
 
-		// chapters dari detail (sudah include) atau fallback endpoint chapters
 		let rawChapters: any[] = Array.isArray(item.chapters) ? item.chapters : [];
 
 		if (!rawChapters.length) {
@@ -325,7 +316,8 @@ export class KumopoiSource extends BaseSource {
 			authors,
 			genres,
 			chapters,
-			latestChapter
+			latestChapter,
+			lang: 'id'
 		};
 	}
 
@@ -373,7 +365,6 @@ export class KumopoiSource extends BaseSource {
 				const token = String(p.token || '').trim();
 				if (!token) continue;
 
-				// Skip honeypot (jika signature gagal / bot terdeteksi)
 				if (
 					token.includes('honeypot') ||
 					token.startsWith('eyJzIjoiZHVtbXk') // {"s":"dummy...
