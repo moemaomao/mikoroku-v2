@@ -1,19 +1,13 @@
-/**
- * Cloudflare KV Cache helper (SvelteKit compatible)
- */
-
 const DEFAULT_TTL = 60 * 15; // 15 menit
 
 export async function getCached<T>(
 	key: string,
 	fetcher: () => Promise<T>,
 	ttlSeconds = DEFAULT_TTL,
-	platform?: App.Platform
+	kv?: KVNamespace | null
 ): Promise<T> {
-	const kv = platform?.env?.MIKOROKU_CACHE as KVNamespace | undefined;
-
-	// Fallback untuk local development
 	if (!kv) {
+		// Kalau KV nggak ada (misalnya di local dev tanpa binding), langsung fetch
 		return await fetcher();
 	}
 
@@ -28,6 +22,7 @@ export async function getCached<T>(
 
 	const data = await fetcher();
 
+	// Put secara background, jangan biarkan error put mengganggu response
 	kv.put(key, JSON.stringify(data), {
 		expirationTtl: ttlSeconds
 	}).catch((err) => {
@@ -37,9 +32,11 @@ export async function getCached<T>(
 	return data;
 }
 
-export async function deleteCache(key: string, platform?: App.Platform): Promise<void> {
-	const kv = platform?.env?.MIKOROKU_CACHE as KVNamespace | undefined;
-	if (kv) {
+export async function deleteCache(key: string, kv?: KVNamespace | null): Promise<void> {
+	if (!kv) return;
+	try {
 		await kv.delete(key);
+	} catch (err) {
+		console.error('[KV] delete failed:', key, err);
 	}
 }

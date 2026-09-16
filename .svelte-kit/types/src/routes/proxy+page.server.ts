@@ -9,8 +9,8 @@ import type { Manga } from '$lib/server/sources/types';
 const LOAD_TIMEOUT_MS = 4000;
 const MAX_MANGAS = 40;
 const PER_SOURCE_LIMIT = 8;
-const MAX_PREFERRED = 3; 
-const LIST_CACHE_TTL = 60 * 15;
+const MAX_PREFERRED = 3;
+const LIST_CACHE_TTL = 60 * 15; // 15 menit
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -82,7 +82,7 @@ async function fetchSourceList(
 	}
 }
 
-export const load = async ({ url, request, setHeaders, depends }: Parameters<PageServerLoad>[0]) => {
+export const load = async ({ url, request, setHeaders, depends, locals }: Parameters<PageServerLoad>[0]) => {
 	const sourceParam = url.searchParams.get('source');
 	const pageNum = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
 	const query = (url.searchParams.get('q') || '').trim();
@@ -109,7 +109,6 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 		if (preferredSources.length === 0) {
 			mangas = [];
 		} else {
-			// Cache key yang unik per kombinasi
 			const cacheKey = `browse:multi:${preferredSources.join(',')}:p=${pageNum}:q=${query}:lang=${lang}:type=${type}`;
 
 			mangas = await getCached(
@@ -117,7 +116,7 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 				async () => {
 					const lists: Manga[][] = [];
 
-					// Sequential (bukan concurrent) → jauh lebih aman terhadap CPU limit
+					// Sequential → lebih aman terhadap CPU limit
 					for (const id of preferredSources) {
 						const list = await fetchSourceList(id, pageNum, query, lang, type);
 						lists.push(list);
@@ -125,7 +124,8 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 
 					return mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
 				},
-				LIST_CACHE_TTL
+				LIST_CACHE_TTL,
+				locals.kv // ← penting
 			);
 		}
 	}
@@ -159,7 +159,8 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 					return [];
 				}
 			},
-			LIST_CACHE_TTL
+			LIST_CACHE_TTL,
+			locals.kv // ← penting
 		);
 	}
 
