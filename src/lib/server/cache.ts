@@ -7,7 +7,6 @@ export async function getCached<T>(
 	kv?: KVNamespace | null
 ): Promise<T> {
 	if (!kv) {
-		// Kalau KV nggak ada (misalnya di local dev tanpa binding), langsung fetch
 		return await fetcher();
 	}
 
@@ -22,12 +21,13 @@ export async function getCached<T>(
 
 	const data = await fetcher();
 
-	// Put secara background, jangan biarkan error put mengganggu response
-	kv.put(key, JSON.stringify(data), {
-		expirationTtl: ttlSeconds
-	}).catch((err) => {
+	try {
+		await kv.put(key, JSON.stringify(data), {
+			expirationTtl: ttlSeconds
+		});
+	} catch (err) {
 		console.error('[KV] put failed:', key, err);
-	});
+	}
 
 	return data;
 }

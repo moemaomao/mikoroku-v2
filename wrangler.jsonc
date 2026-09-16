@@ -27,8 +27,7 @@
 	"kv_namespaces": [
 		{
 			"binding": "MIKOROKU_CACHE",
-			"id": "bed9746f9fc74d819eaa01aa31b9cf94",
-			"remote": true
+			"id": "bed9746f9fc74d819eaa01aa31b9cf94"
 		}
 	]
 }
