@@ -1,12 +1,11 @@
 import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
-import https from 'node:https';
 
 /**
  * MangaKakalot.gg adapter (HTML + chapters JSON API)
  *
- * Domain   : https://www.mangakakalot.gg
+ * Domain   : https://www.mangakakalove.com (mirror; .gg blocked by CF WAF)
  * Latest   : GET /manga-list/latest-manga?page=N  (fallback: /)
  * Search   : GET /search/story/{query}
  * Detail   : GET /manga/{slug}
@@ -16,19 +15,16 @@ import https from 'node:https';
  * ID format:
  *   manga   : "/manga/{slug}"
  *   chapter : "/manga/{slug}/{chapter-slug}"
+ *
+ * Uses global fetch (works on Node + Cloudflare Workers).
  */
 export class MangaKakalotSource extends BaseSource {
 	id = 'mangakakalot';
 	name = 'MangaKakalot';
-	baseUrl = 'https://www.mangakakalot.gg';
+	baseUrl = 'https://www.mangakakalove.com';
 
 	private readonly PER_PAGE = 24;
 	private readonly DEFAULT_LANG = 'en';
-
-	private readonly insecureAgent = new https.Agent({
-		rejectUnauthorized: false,
-		keepAlive: true
-	});
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
 
@@ -37,9 +33,8 @@ export class MangaKakalotSource extends BaseSource {
 			'User-Agent':
 				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
 			Accept:
-				'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+				'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
 			'Accept-Language': 'en-US,en;q=0.9',
-			'Accept-Encoding': 'gzip, deflate, br',
 			'Cache-Control': 'no-cache',
 			Pragma: 'no-cache',
 			'Upgrade-Insecure-Requests': '1',
@@ -47,73 +42,36 @@ export class MangaKakalotSource extends BaseSource {
 			'Sec-Fetch-Mode': 'navigate',
 			'Sec-Fetch-Site': referer ? 'same-origin' : 'none',
 			'Sec-Fetch-User': '?1',
-			'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-			'Sec-Ch-Ua-Mobile': '?0',
-			'Sec-Ch-Ua-Platform': '"Windows"',
-			Referer: referer || `${this.baseUrl}/`,
-			Origin: this.baseUrl
+			Referer: referer || `${this.baseUrl}/`
 		};
 	}
 
 	protected async fetchHtml(path: string): Promise<string> {
 		const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
-		return this.httpsGet(url, this.browserHeaders(`${this.baseUrl}/`));
+		const res = await fetch(url, {
+			headers: this.browserHeaders(`${this.baseUrl}/`),
+			redirect: 'follow'
+		});
+		if (!res.ok) {
+			throw new Error(`MangaKakalot HTTP ${res.status} → ${url}`);
+		}
+		return await res.text();
 	}
 
 	private async fetchApiJson<T = any>(path: string): Promise<T> {
 		const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
-		const headers = {
-			...this.browserHeaders(`${this.baseUrl}/`),
-			Accept: 'application/json, text/plain, */*',
-			'Sec-Fetch-Dest': 'empty',
-			'Sec-Fetch-Mode': 'cors',
-			'X-Requested-With': 'XMLHttpRequest'
-		};
-		const text = await this.httpsGet(url, headers);
-		return JSON.parse(text) as T;
-	}
-
-	private httpsGet(url: string, headers: Record<string, string>): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const req = https.get(url, { headers, agent: this.insecureAgent }, (res) => {
-				// Follow redirects
-				if (
-					res.statusCode &&
-					res.statusCode >= 300 &&
-					res.statusCode < 400 &&
-					res.headers.location
-				) {
-					const next = res.headers.location.startsWith('http')
-						? res.headers.location
-						: `${this.baseUrl}${res.headers.location}`;
-					this.httpsGet(next, headers).then(resolve).catch(reject);
-					return;
-				}
-				if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
-					reject(new Error(`HTTP ${res.statusCode} → ${url}`));
-					return;
-				}
-				const encoding = (res.headers['content-encoding'] || '').toLowerCase();
-				const chunks: Buffer[] = [];
-				res.on('data', (c) => chunks.push(c));
-				res.on('end', () => {
-					const buf = Buffer.concat(chunks);
-					// Node https may auto-decompress; if not, still utf8
-					try {
-						resolve(buf.toString('utf8'));
-					} catch {
-						resolve(buf.toString());
-					}
-				});
-				res.on('error', reject);
-				void encoding;
-			});
-			req.on('error', reject);
-			req.setTimeout(25000, () => {
-				req.destroy();
-				reject(new Error(`Timeout → ${url}`));
-			});
+		const res = await fetch(url, {
+			headers: {
+				...this.browserHeaders(`${this.baseUrl}/`),
+				Accept: 'application/json, text/plain, */*',
+				'X-Requested-With': 'XMLHttpRequest'
+			},
+			redirect: 'follow'
 		});
+		if (!res.ok) {
+			throw new Error(`MangaKakalot API ${res.status} → ${url}`);
+		}
+		return (await res.json()) as T;
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -139,11 +97,15 @@ export class MangaKakalotSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
+		// /manga/non-human  or  manga/non-human  or  non-human
 		if (parts[0] === 'manga' && parts[1]) return parts[1];
 		return parts[0] || '';
 	}
 
-	private extractChapterPath(chapterId: string): { slug: string; chapterSlug: string } {
+	private extractChapterPath(chapterId: string): {
+		slug: string;
+		chapterSlug: string;
+	} {
 		const parts = String(chapterId)
 			.replace(/^\/+/, '')
 			.split('/')
@@ -154,7 +116,10 @@ export class MangaKakalotSource extends BaseSource {
 		if (parts[0] && parts[1]) {
 			return { slug: parts[0], chapterSlug: parts[1] };
 		}
-		return { slug: parts[0] || '', chapterSlug: parts[parts.length - 1] || '' };
+		return {
+			slug: parts[0] || '',
+			chapterSlug: parts[parts.length - 1] || ''
+		};
 	}
 
 	private toChapterId(slug: string, chapterSlug: string): string {
@@ -215,10 +180,14 @@ export class MangaKakalotSource extends BaseSource {
 			if (seen.has(slug)) return;
 			seen.add(slug);
 
-			const title =
-				(a.attr('title') || a.text() || $el.find('img').attr('alt') || slug)
-					.replace(/\s+/g, ' ')
-					.trim();
+			const title = (
+				a.attr('title') ||
+				a.text() ||
+				$el.find('img').attr('alt') ||
+				slug
+			)
+				.replace(/\s+/g, ' ')
+				.trim();
 			const cover = this.absUrl(
 				$el.find('img').attr('src') || $el.find('img').attr('data-src') || ''
 			);
@@ -251,11 +220,11 @@ export class MangaKakalotSource extends BaseSource {
 
 		$('div.story_item').each((_, el) => {
 			const $el = $(el);
-			const a = $el
-				.find('h3.story_name a[href*="/manga/"], a[href*="/manga/"]')
-				.first();
+			const a = $el.find('h3.story_name a[href*="/manga/"]').first();
 			const href =
-				a.attr('href') || $el.find('a[href*="/manga/"]').first().attr('href') || '';
+				a.attr('href') ||
+				$el.find('a[href*="/manga/"]').first().attr('href') ||
+				'';
 			const m = href.match(/\/manga\/([^/?#]+)/i);
 			if (!m) return;
 			const slug = m[1];
@@ -287,28 +256,6 @@ export class MangaKakalotSource extends BaseSource {
 			});
 		});
 
-		if (list.length === 0) {
-			$('a[href*="/manga/"]').each((_, el) => {
-				const href = $(el).attr('href') || '';
-				const m = href.match(/\/manga\/([^/?#]+)/i);
-				if (!m || href.includes('/chapter')) return;
-				const slug = m[1];
-				if (seen.has(slug)) return;
-				seen.add(slug);
-				const title = ($(el).text() || slug).replace(/\s+/g, ' ').trim();
-				if (title.length < 2) return;
-				list.push({
-					id: this.toMangaId(slug),
-					title: this.decodeHtml(title),
-					cover: '',
-					sourceId: this.id,
-					type: 'manga',
-					status: 'Ongoing',
-					lang: this.DEFAULT_LANG
-				});
-			});
-		}
-
 		return list;
 	}
 
@@ -323,7 +270,7 @@ export class MangaKakalotSource extends BaseSource {
 			const paths =
 				p === 1
 					? ['/manga-list/latest-manga', '/']
-					: [`/manga-list/latest-manga?page=${p}`, `/?page=${p}`];
+					: [`/manga-list/latest-manga?page=${p}`];
 
 			let list: Manga[] = [];
 			let lastErr: unknown;
@@ -376,30 +323,43 @@ export class MangaKakalotSource extends BaseSource {
 		_opts?: { lang?: string }
 	): Promise<MangaDetails> {
 		const slug = this.extractSlug(mangaId);
-		if (!slug) throw new Error(`MangaKakalot: invalid mangaId ${mangaId}`);
+		if (!slug) {
+			throw new Error(`MangaKakalot: invalid mangaId ${mangaId}`);
+		}
+
+		console.log(`[mangakakalot] getMangaDetails slug=${slug} id=${mangaId}`);
 
 		const html = await this.fetchHtml(`/manga/${slug}`);
 		const $ = cheerio.load(html);
 
-		const pageTitle = $('title').first().text() || '';
-		let title = pageTitle
-			.replace(/\s*\|\s*MangaKakalot.*$/i, '')
-			.replace(/^Read\s+/i, '')
-			.replace(/\s+Latest Chapter.*$/i, '')
-			.replace(/\s+Manga Online Free.*$/i, '')
-			.replace(/\s+/g, ' ')
-			.trim();
-		if (!title || title.length < 2) {
-			title =
-				$('h1').first().text().replace(/\s+/g, ' ').trim() ||
-				slug;
+		// Title: prefer h1, then og:title, then <title>
+		let title =
+			$('h1').first().text().replace(/\s+/g, ' ').trim() ||
+			($('meta[property="og:title"]').attr('content') || '')
+				.replace(/\s+/g, ' ')
+				.trim() ||
+			'';
+
+		if (!title) {
+			const pageTitle = $('title').first().text() || '';
+			title = pageTitle
+				.replace(/\s*\|\s*MangaKakalot.*$/i, '')
+				.replace(/^Read\s+/i, '')
+				.replace(/\s+Latest Chapter.*$/i, '')
+				.replace(/\s+Manga Online Free.*$/i, '')
+				.replace(/\s+/g, ' ')
+				.trim();
 		}
+
+		if (!title) title = slug.replace(/[-_]+/g, ' ');
 
 		const cover = this.absUrl(
 			$('meta[property="og:image"]').attr('content') ||
-				$('.manga-info-pic img, .info-image img').first().attr('src') ||
+				$('.manga-info-pic img, .info-image img, .manga-info img')
+					.first()
+					.attr('src') ||
 				$(`img[src*="${slug}"]`).first().attr('src') ||
-				''
+				`https://img-r1.2xstorage.com/thumb/${slug}.webp`
 		);
 
 		let status = 'Ongoing';
@@ -413,7 +373,7 @@ export class MangaKakalotSource extends BaseSource {
 				const body = text.replace(/^Author\(s\)\s*:\s*/i, '').trim();
 				body.split(/,/).forEach((s) => {
 					const t = s.trim();
-					if (t) authors.push(t);
+					if (t && t.toLowerCase() !== 'updating') authors.push(t);
 				});
 				$(li)
 					.find('a')
@@ -444,11 +404,13 @@ export class MangaKakalotSource extends BaseSource {
 				.text()
 				.replace(/\s+/g, ' ')
 				.trim() ||
-			$('meta[name="description"]').attr('content') ||
+			($('meta[name="description"]').attr('content') || '').trim() ||
 			'';
 
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
+
+		// 1) JSON API
 		try {
 			let offset = 0;
 			const limit = 100;
@@ -474,12 +436,17 @@ export class MangaKakalotSource extends BaseSource {
 						date: this.formatDate(row.updated_at) || undefined
 					});
 				}
-				hasMore = Boolean(json?.data?.pagination?.has_more) && rows.length > 0;
+				hasMore =
+					Boolean(json?.data?.pagination?.has_more) && rows.length > 0;
 				offset += limit;
 				if (offset > 5000) break;
 			}
 		} catch (e) {
 			console.error('[mangakakalot] chapters API', e);
+		}
+
+		// 2) DOM fallback
+		if (chapters.length === 0) {
 			$('a[href*="/chapter"]').each((_, a) => {
 				const href = $(a).attr('href') || '';
 				const cm = href.match(/\/manga\/[^/]+\/(chapter-[^/?#]+)/i);
@@ -502,6 +469,10 @@ export class MangaKakalotSource extends BaseSource {
 
 		const latestChapter =
 			chapters.length > 0 ? String(chapters[0].number) : undefined;
+
+		console.log(
+			`[mangakakalot] detail "${title}" chapters=${chapters.length}`
+		);
 
 		return {
 			id: this.toMangaId(slug),
@@ -538,7 +509,10 @@ export class MangaKakalotSource extends BaseSource {
 					$(img).attr('data-url') ||
 					'';
 				if (!src) return;
-				if (!/2xstorage\.com\//i.test(src) && !/\/\d+\.(webp|jpg|png)/i.test(src))
+				if (
+					!/2xstorage\.com\//i.test(src) &&
+					!/\/\d+\.(webp|jpg|png)/i.test(src)
+				)
 					return;
 				if (/thumb\//i.test(src) || /404-avatar/i.test(src)) return;
 				const url = this.absUrl(src);
@@ -563,8 +537,14 @@ export class MangaKakalotSource extends BaseSource {
 			}
 
 			pages.sort((a, b) => {
-				const na = parseInt(a.match(/\/(\d+)\.(?:webp|jpg|png)/i)?.[1] || '0', 10);
-				const nb = parseInt(b.match(/\/(\d+)\.(?:webp|jpg|png)/i)?.[1] || '0', 10);
+				const na = parseInt(
+					a.match(/\/(\d+)\.(?:webp|jpg|png)/i)?.[1] || '0',
+					10
+				);
+				const nb = parseInt(
+					b.match(/\/(\d+)\.(?:webp|jpg|png)/i)?.[1] || '0',
+					10
+				);
 				return na - nb;
 			});
 
