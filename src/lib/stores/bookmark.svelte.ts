@@ -9,32 +9,58 @@ import {
 } from 'firebase/firestore';
 import { db } from '$lib/firebase';
 import { getUser } from '$lib/stores/auth.svelte';
+import {
+	idbGetBookmarks,
+	idbDeleteBookmark,
+	idbSetAllBookmarks,
+	idbClearBookmarks,
+	type BookmarkEntry
+} from '$lib/db';
 
-export interface BookmarkEntry {
-	mangaId: string;
-	mangaSlug: string;
-	mangaTitle: string;
-	cover: string;
-	sourceId: string;
-	timestamp: number;
-}
+export type { BookmarkEntry };
 
-const STORAGE_KEY = 'mikoroku_bookmarks';
 const MAX = 60;
 
 let bookmarks = $state<BookmarkEntry[]>([]);
+let ready = $state(false);
 
 if (browser) {
-	bookmarks = loadLocal();
-	window.addEventListener('bookmarks-changed', () => {
-		bookmarks = loadLocal();
-	});
+	(async () => {
+		try {
+			// Migrasi dari localStorage lama
+			const old = localStorage.getItem('mikoroku_bookmarks');
+			if (old) {
+				try {
+					const parsed = JSON.parse(old) as BookmarkEntry[];
+					if (Array.isArray(parsed) && parsed.length > 0) {
+						const cleaned = parsed.map(lightEntry).slice(0, MAX);
+						await idbSetAllBookmarks(cleaned);
+					}
+				} catch {
+					// ignore
+				}
+				localStorage.removeItem('mikoroku_bookmarks');
+			}
+
+			bookmarks = await idbGetBookmarks();
+		} catch (e) {
+			console.error('[bookmarks] failed to load from IndexedDB', e);
+			bookmarks = [];
+		} finally {
+			ready = true;
+		}
+
+		window.addEventListener('bookmarks-changed', async () => {
+			bookmarks = await idbGetBookmarks();
+		});
+	})();
 }
 
 function lightCover(url: string | undefined | null): string {
 	if (!url) return '';
 	let u = String(url).trim();
 	if (!u) return '';
+
 	if (u.startsWith('//')) u = 'https:' + u;
 
 	const keepQuery =
@@ -66,27 +92,12 @@ function lightEntry(entry: BookmarkEntry): BookmarkEntry {
 	};
 }
 
-function loadLocal(): BookmarkEntry[] {
-	if (!browser) return [];
-	try {
-		const data = localStorage.getItem(STORAGE_KEY);
-		if (!data) return [];
-		const parsed = JSON.parse(data) as BookmarkEntry[];
-		return parsed.map(lightEntry);
-	} catch {
-		return [];
-	}
-}
-
-function saveLocal(list: BookmarkEntry[]) {
-	if (!browser) return;
-	const light = list.slice(0, MAX).map(lightEntry);
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(light));
-	window.dispatchEvent(new CustomEvent('bookmarks-changed'));
-}
-
 export function getBookmarks(): BookmarkEntry[] {
 	return bookmarks;
+}
+
+export function isBookmarksReady(): boolean {
+	return ready;
 }
 
 export function isBookmarked(mangaId: string, sourceId?: string): boolean {
@@ -98,14 +109,18 @@ export function isBookmarked(mangaId: string, sourceId?: string): boolean {
 export async function addBookmark(entry: Omit<BookmarkEntry, 'timestamp'>) {
 	if (!browser) return;
 
-	const full: BookmarkEntry = lightEntry({
+	const full = lightEntry({
 		...entry,
 		timestamp: Date.now()
 	});
 
-	const list = loadLocal().filter((b) => b.mangaId !== entry.mangaId);
+	const list = (await idbGetBookmarks()).filter((b) => b.mangaId !== entry.mangaId);
 	list.unshift(full);
-	saveLocal(list);
+	const trimmed = list.slice(0, MAX);
+	await idbSetAllBookmarks(trimmed);
+
+	bookmarks = trimmed;
+	window.dispatchEvent(new CustomEvent('bookmarks-changed'));
 
 	const user = getUser();
 	if (user && db) {
@@ -120,8 +135,10 @@ export async function addBookmark(entry: Omit<BookmarkEntry, 'timestamp'>) {
 export async function removeBookmark(mangaId: string) {
 	if (!browser) return;
 
-	const list = loadLocal().filter((b) => b.mangaId !== mangaId);
-	saveLocal(list);
+	await idbDeleteBookmark(mangaId);
+
+	bookmarks = await idbGetBookmarks();
+	window.dispatchEvent(new CustomEvent('bookmarks-changed'));
 
 	const user = getUser();
 	if (user && db) {
@@ -142,9 +159,11 @@ export async function toggleBookmark(entry: Omit<BookmarkEntry, 'timestamp'>): P
 	return true;
 }
 
-export function clearBookmarks() {
+export async function clearBookmarks() {
 	if (!browser) return;
-	localStorage.removeItem(STORAGE_KEY);
+
+	await idbClearBookmarks();
+	bookmarks = [];
 	window.dispatchEvent(new CustomEvent('bookmarks-changed'));
 }
 
@@ -157,7 +176,7 @@ export async function syncBookmarksOnLogin() {
 	const firestore = db;
 
 	try {
-		const local = loadLocal();
+		const local = await idbGetBookmarks();
 		const snap = await getDocs(collection(firestore, 'users', user.uid, 'bookmarks'));
 		const cloud: BookmarkEntry[] = [];
 		snap.forEach((d) => cloud.push(d.data() as BookmarkEntry));
@@ -175,7 +194,9 @@ export async function syncBookmarksOnLogin() {
 			.sort((a, b) => b.timestamp - a.timestamp)
 			.slice(0, MAX);
 
-		saveLocal(merged);
+		await idbSetAllBookmarks(merged);
+		bookmarks = merged;
+		window.dispatchEvent(new CustomEvent('bookmarks-changed'));
 
 		const batch = writeBatch(firestore);
 		merged.forEach((b) => {

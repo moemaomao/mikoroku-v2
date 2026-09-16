@@ -9,21 +9,52 @@ import {
 } from 'firebase/firestore';
 import { db } from '$lib/firebase';
 import { getUser } from '$lib/stores/auth.svelte';
+import {
+	idbGetHistory,
+	idbDeleteHistory,
+	idbSetAllHistory,
+	idbClearHistory,
+	type ReadingEntry
+} from '$lib/db';
 
-export interface ReadingEntry {
-	mangaId: string;
-	mangaSlug: string;
-	mangaTitle: string;
-	cover: string;
-	chapterId: string;
-	chapterTitle: string;
-	chapterNumber: number;
-	sourceId: string;
-	timestamp: number;
-}
+export type { ReadingEntry };
 
-const STORAGE_KEY = 'mikoroku_history';
 const MAX_HISTORY = 30;
+
+let historyCache: ReadingEntry[] = [];
+let ready = false;
+
+if (browser) {
+	(async () => {
+		try {
+			// Migrasi dari localStorage lama
+			const old = localStorage.getItem('mikoroku_history');
+			if (old) {
+				try {
+					const parsed = JSON.parse(old) as ReadingEntry[];
+					if (Array.isArray(parsed) && parsed.length > 0) {
+						const cleaned = parsed.map(lightEntry).slice(0, MAX_HISTORY);
+						await idbSetAllHistory(cleaned);
+					}
+				} catch {
+					// ignore
+				}
+				localStorage.removeItem('mikoroku_history');
+			}
+
+			historyCache = await idbGetHistory();
+		} catch (e) {
+			console.error('[history] failed to load from IndexedDB', e);
+			historyCache = [];
+		} finally {
+			ready = true;
+		}
+
+		window.addEventListener('history-changed', async () => {
+			historyCache = await idbGetHistory();
+		});
+	})();
+}
 
 function lightCover(url: string | undefined | null): string {
 	if (!url) return '';
@@ -63,40 +94,29 @@ function lightEntry(entry: ReadingEntry): ReadingEntry {
 	};
 }
 
-function loadLocal(): ReadingEntry[] {
-	if (!browser) return [];
-	try {
-		const data = localStorage.getItem(STORAGE_KEY);
-		if (!data) return [];
-		const parsed = JSON.parse(data) as ReadingEntry[];
-		return parsed.map(lightEntry);
-	} catch {
-		return [];
-	}
-}
-
-function saveLocal(list: ReadingEntry[]) {
-	if (!browser) return;
-	const light = list.slice(0, MAX_HISTORY).map(lightEntry);
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(light));
-	window.dispatchEvent(new CustomEvent('history-changed'));
-}
-
 export function getHistory(): ReadingEntry[] {
-	return loadLocal();
+	return historyCache;
+}
+
+export function isHistoryReady(): boolean {
+	return ready;
 }
 
 export async function saveReading(entry: Omit<ReadingEntry, 'timestamp'>) {
 	if (!browser) return;
 
-	const full: ReadingEntry = lightEntry({
+	const full = lightEntry({
 		...entry,
 		timestamp: Date.now()
 	});
 
-	const history = loadLocal().filter((h) => h.mangaId !== entry.mangaId);
-	history.unshift(full);
-	saveLocal(history);
+	const list = (await idbGetHistory()).filter((h) => h.mangaId !== entry.mangaId);
+	list.unshift(full);
+	const trimmed = list.slice(0, MAX_HISTORY);
+	await idbSetAllHistory(trimmed);
+
+	historyCache = trimmed;
+	window.dispatchEvent(new CustomEvent('history-changed'));
 
 	const user = getUser();
 	if (user && db) {
@@ -109,14 +129,16 @@ export async function saveReading(entry: Omit<ReadingEntry, 'timestamp'>) {
 }
 
 export function getLastRead(mangaId: string): ReadingEntry | null {
-	return loadLocal().find((h) => h.mangaId === mangaId) || null;
+	return historyCache.find((h) => h.mangaId === mangaId) || null;
 }
 
 export async function removeFromHistory(mangaId: string) {
 	if (!browser) return;
 
-	const filtered = loadLocal().filter((h) => h.mangaId !== mangaId);
-	saveLocal(filtered);
+	await idbDeleteHistory(mangaId);
+
+	historyCache = await idbGetHistory();
+	window.dispatchEvent(new CustomEvent('history-changed'));
 
 	const user = getUser();
 	if (user && db) {
@@ -128,9 +150,11 @@ export async function removeFromHistory(mangaId: string) {
 	}
 }
 
-export function clearHistory() {
+export async function clearHistory() {
 	if (!browser) return;
-	localStorage.removeItem(STORAGE_KEY);
+
+	await idbClearHistory();
+	historyCache = [];
 	window.dispatchEvent(new CustomEvent('history-changed'));
 }
 
@@ -143,7 +167,7 @@ export async function syncHistoryOnLogin() {
 	const firestore = db;
 
 	try {
-		const local = loadLocal();
+		const local = await idbGetHistory();
 		const snap = await getDocs(collection(firestore, 'users', user.uid, 'history'));
 		const cloud: ReadingEntry[] = [];
 		snap.forEach((d) => cloud.push(d.data() as ReadingEntry));
@@ -161,7 +185,9 @@ export async function syncHistoryOnLogin() {
 			.sort((a, b) => b.timestamp - a.timestamp)
 			.slice(0, MAX_HISTORY);
 
-		saveLocal(merged);
+		await idbSetAllHistory(merged);
+		historyCache = merged;
+		window.dispatchEvent(new CustomEvent('history-changed'));
 
 		const batch = writeBatch(firestore);
 		merged.forEach((h) => {
