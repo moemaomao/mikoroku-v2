@@ -82,11 +82,13 @@ import { CucumberMangaSource } from './impl/CucumberManga';
 import { DoujinsSource } from './impl/Doujins';
 import { MangaKakalotSource } from './impl/MangaKakalot';
 import { NeloMangaSource } from './impl/NeloManga';
+import { MangaPandaSource } from './impl/MangaPanda';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
     doujins: new DoujinsSource(),
+    mangapanda: new MangaPandaSource(),
     nelomanga: new NeloMangaSource(),
     mangakakalot: new MangaKakalotSource(),
     cucumbermanga: new CucumberMangaSource(),
