@@ -97,7 +97,7 @@ export class MangaKakalotSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
-
+	
 		if (parts[0] === 'manga' && parts[1]) return parts[1];
 		return parts[0] || '';
 	}
@@ -267,41 +267,21 @@ export class MangaKakalotSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
+			const path =
+				p <= 1
+					? '/manga-list/latest-manga'
+					: `/manga-list/latest-manga?page=${p}`;
 
-			const fetchPage = async (n: number): Promise<Manga[]> => {
-				const path =
-					n <= 1
-						? '/manga-list/latest-manga'
-						: `/manga-list/latest-manga?page=${n}`;
-				try {
-					const html = await this.fetchHtml(path);
-					return this.parseItemList(html);
-				} catch (e) {
-					if (n <= 1) {
-						const html = await this.fetchHtml('/');
-						return this.parseItemList(html);
-					}
+			let list: Manga[] = [];
+			try {
+				const html = await this.fetchHtml(path);
+				list = this.parseItemList(html);
+			} catch (e) {
+				if (p <= 1) {
+					const html = await this.fetchHtml('/');
+					list = this.parseItemList(html);
+				} else {
 					throw e;
-				}
-			};
-
-			const list = await fetchPage(p);
-
-			if (p > 1 && list.length > 0) {
-				try {
-					const first = await fetchPage(1);
-					const ids1 = new Set(first.map((m) => m.id));
-					const same =
-						list.length === first.length &&
-						list.every((m) => ids1.has(m.id));
-					if (same) {
-						console.log(
-							`[mangakakalot] latest page=${p} → 0 (site pagination broken / CF cache)`
-						);
-						return [];
-					}
-				} catch {
-					
 				}
 			}
 
@@ -386,7 +366,7 @@ export class MangaKakalotSource extends BaseSource {
 		const genres: string[] = [];
 		let description = '';
 
-		// Prefer JSON-LD (accurate genres for this title only)
+		// Prefer JSON-LD
 		$('script[type="application/ld+json"]').each((_, el) => {
 			try {
 				const raw = $(el).html() || '';
@@ -425,7 +405,7 @@ export class MangaKakalotSource extends BaseSource {
 			}
 		});
 
-		// DOM fallback — only inside manga info list items labeled Genres
+	
 		$('li').each((_, li) => {
 			const text = $(li).text().replace(/\s+/g, ' ').trim();
 			if (/^Author/i.test(text)) {
@@ -482,14 +462,14 @@ export class MangaKakalotSource extends BaseSource {
 					if (!chapterSlug || seen.has(chapterSlug)) continue;
 					seen.add(chapterSlug);
 					const name = String(row.chapter_name || chapterSlug);
-					// Skip bogus chapter-0 nav entries
+				
 					if (/^chapter-0$/i.test(chapterSlug) || chapterSlug === '0') continue;
 					let num =
 						typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
 							? row.chapter_num
 							: this.parseChapterNumber(name);
 					if (!num && num !== 0) num = chapters.length + 1;
-					// real chapter 0 is rare; treat API 0 without name as junk
+				
 					if (num === 0 && !/chapter\s*0\b/i.test(name)) continue;
 					chapters.push({
 						id: this.toChapterId(slug, chapterSlug),
@@ -534,7 +514,7 @@ export class MangaKakalotSource extends BaseSource {
 		chapters.sort((a, b) => {
 			const na = typeof a.number === 'number' ? a.number : -1;
 			const nb = typeof b.number === 'number' ? b.number : -1;
-			return nb - na; // highest chapter first
+			return nb - na;
 		});
 
 		const latestChapter =
@@ -567,52 +547,81 @@ export class MangaKakalotSource extends BaseSource {
 
 			const path = `/manga/${slug}/${chapterSlug}`;
 			const html = await this.fetchHtml(path);
-			const $ = cheerio.load(html);
 
 			const pages: string[] = [];
 			const seen = new Set<string>();
 
-			$('img').each((_, img) => {
-				const src =
-					$(img).attr('src') ||
-					$(img).attr('data-src') ||
-					$(img).attr('data-url') ||
-					'';
-				if (!src) return;
-				if (
-					!/2xstorage\.com\//i.test(src) &&
-					!/\/\d+\.(webp|jpg|png)/i.test(src)
-				)
+			const push = (url: string) => {
+				if (!url) return;
+				const u = this.absUrl(url.split('?')[0]);
+				if (!u || seen.has(u)) return;
+				if (/thumb\//i.test(u) || /404-avatar|loadingimg|og-image|logo/i.test(u))
 					return;
-				if (/thumb\//i.test(src) || /404-avatar/i.test(src)) return;
-				const url = this.absUrl(src);
-				const key = url.split('?')[0];
-				if (seen.has(key)) return;
-				seen.add(key);
-				pages.push(url);
-			});
+				seen.add(u);
+				pages.push(u);
+			};
 
-			if (pages.length === 0) {
-				const re =
-					/(https?:\/\/(?:img-r\d+|imgs-\d+)\.2xstorage\.com\/[^"'\\\s]+\.(?:webp|jpg|png))/gi;
-				let m: RegExpExecArray | null;
-				while ((m = re.exec(html)) !== null) {
-					const url = m[1];
-					if (/thumb\//i.test(url)) continue;
-					const key = url.split('?')[0];
-					if (seen.has(key)) continue;
-					seen.add(key);
-					pages.push(url);
+		
+			const cdnMatch = html.match(/var\s+cdns\s*=\s*(\[[^\]]+\])/i);
+			const imgMatch = html.match(
+				/var\s+chapterImages\s*=\s*(\[[^\]]+\])/i
+			);
+			if (cdnMatch && imgMatch) {
+				try {
+					const cdns: string[] = JSON.parse(
+						cdnMatch[1].replace(/\\'/g, "'")
+					);
+					const rels: string[] = JSON.parse(
+						imgMatch[1].replace(/\\'/g, "'")
+					);
+					const base = (cdns[0] || '').replace(/\\+/g, '');
+					for (const rel of rels) {
+						const r = String(rel).replace(/\\+/g, '');
+						if (!r) continue;
+						if (r.startsWith('http')) push(r);
+						else push(base.replace(/\/?$/, '/') + r.replace(/^\//, ''));
+					}
+				} catch (e) {
+					console.error('[mangakakalot] parse cdns/chapterImages', e);
 				}
 			}
 
+		
+			if (pages.length === 0) {
+				const $ = cheerio.load(html);
+				$('img').each((_, img) => {
+					const src =
+						$(img).attr('src') ||
+						$(img).attr('data-src') ||
+						$(img).attr('data-url') ||
+						'';
+					if (!src || src === '#') return;
+					if (
+						!/(2xstorage|waitst|mghubcdn|chapter)/i.test(src) &&
+						!/\/\d+\.(webp|jpg|png)/i.test(src)
+					)
+						return;
+					push(src);
+				});
+			}
+
+			if (pages.length === 0) {
+				const re =
+					/(https?:\/\/(?:storage\d*\.waitst\.com|(?:img-r\d+|imgs-\d+)\.2xstorage\.com)\/[^"'\\\s]+\.(?:webp|jpg|png))/gi;
+				let m: RegExpExecArray | null;
+				while ((m = re.exec(html)) !== null) {
+					push(m[1]);
+				}
+			}
+
+			
 			pages.sort((a, b) => {
 				const na = parseInt(
-					a.match(/\/(\d+)\.(?:webp|jpg|png)/i)?.[1] || '0',
+					a.match(/\/(\d+)\.(?:webp|jpg|png)(?:\?|$)/i)?.[1] || '-1',
 					10
 				);
 				const nb = parseInt(
-					b.match(/\/(\d+)\.(?:webp|jpg|png)/i)?.[1] || '0',
+					b.match(/\/(\d+)\.(?:webp|jpg|png)(?:\?|$)/i)?.[1] || '-1',
 					10
 				);
 				return na - nb;
@@ -628,3 +637,4 @@ export class MangaKakalotSource extends BaseSource {
 		}
 	}
 }
+
