@@ -1,12 +1,13 @@
 import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
+import https from 'node:https';
 
 /**
  * Doujins.com adapter (gallery-style English doujin site)
  *
  * Domain  : https://doujins.com
- * Latest  : /  (homepage grid)
+ * Latest  : /folders?start=&end= (JSON by day window)
  * Search  : /searches?q={query}
  * Detail  : /{series-slug}/{title-slug}-{id}
  * Pages   : images on gallery page (static.doujins.com/n-*.jpg signed URLs)
@@ -16,6 +17,8 @@ import * as cheerio from 'cheerio';
  * ID format:
  *   manga   : "/{series-slug}/{title-slug}-{id}"
  *   chapter : "/{series-slug}/{title-slug}-{id}/full"
+ *
+ * Note: site SSL sometimes fails Node strict check → insecure https.Agent
  */
 export class DoujinsSource extends BaseSource {
 	id = 'doujins';
@@ -24,6 +27,60 @@ export class DoujinsSource extends BaseSource {
 
 	private readonly PER_PAGE = 24;
 	private readonly DEFAULT_LANG = 'en';
+
+	private readonly insecureAgent = new https.Agent({
+		rejectUnauthorized: false
+	});
+
+	// ── HTTP ─────────────────────────────────────────────────────────────────
+
+	private h(): Record<string, string> {
+		return {
+			'User-Agent':
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+			Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+			'Accept-Language': 'en-US,en;q=0.9',
+			Referer: `${this.baseUrl}/`,
+			Origin: this.baseUrl
+		};
+	}
+
+	protected async fetchHtml(path: string): Promise<string> {
+		const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
+		return new Promise((resolve, reject) => {
+			const req = https.get(
+				url,
+				{ headers: this.h(), agent: this.insecureAgent },
+				(res) => {
+					if (
+						res.statusCode &&
+						res.statusCode >= 300 &&
+						res.statusCode < 400 &&
+						res.headers.location
+					) {
+						const next = res.headers.location.startsWith('http')
+							? res.headers.location
+							: `${this.baseUrl}${res.headers.location}`;
+						this.fetchHtml(next).then(resolve).catch(reject);
+						return;
+					}
+					if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+						reject(new Error(`HTTP ${res.statusCode} → ${url}`));
+						return;
+					}
+					const chunks: Buffer[] = [];
+					res.on('data', (c) => chunks.push(c));
+					res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+					res.on('error', reject);
+				}
+			);
+			req.on('error', reject);
+			req.setTimeout(30000, () => {
+				req.destroy();
+				reject(new Error(`Timeout → ${url}`));
+			});
+		});
+	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -73,7 +130,7 @@ export class DoujinsSource extends BaseSource {
 
 		$('a[href]').each((_, el) => {
 			const href = $(el).attr('href') || '';
-	
+
 			if (!/^\/[^/]+\/[^/]+-\d+\/?$/.test(href.split('?')[0])) return;
 
 			const id = this.cleanId(href);
@@ -119,6 +176,59 @@ export class DoujinsSource extends BaseSource {
 		const res: Manga[] = [];
 		const seen = new Set<string>();
 
+		try {
+			const json = JSON.parse(html);
+			const rows: any[] = Array.isArray(json?.data)
+				? json.data
+				: Array.isArray(json?.premium)
+					? json.premium
+					: [];
+			for (const row of rows) {
+				const link =
+					row.link ||
+					row.url ||
+					(row.token && row.name
+						? `/${String(row.name)
+								.toLowerCase()
+								.replace(/[^a-z0-9]+/g, '-')
+								.replace(/-+/g, '-')
+								.replace(/^-|-$/g, '')}-${row.id}`
+						: '');
+				if (!link && !row.id) continue;
+				const id = this.cleanId(String(link || `/${row.id}`));
+				if (seen.has(id)) continue;
+				seen.add(id);
+
+				const title =
+					row.name ||
+					row.title ||
+					this.slugToTitle(id);
+				const cover = this.absUrl(
+					row.thumbnail2 || row.thumbnail || row.thumb || ''
+				);
+				let updatedAt: number | undefined;
+				if (row.date) {
+					const parsed = Date.parse(String(row.date));
+					if (!Number.isNaN(parsed)) updatedAt = parsed;
+				}
+
+				res.push({
+					id,
+					title: String(title),
+					cover,
+					sourceId: this.id,
+					type: 'doujinshi',
+					status: 'Completed',
+					latestChapter: '1',
+					lang: this.DEFAULT_LANG,
+					updatedAt
+				});
+			}
+			if (res.length) return res;
+		} catch {
+	
+		}
+
 		const linkRe = /"link":"([^"]+)"/g;
 		const thumbRe = /"thumbnail2":"([^"]+)"/g;
 		const dateRe = /"date":"([^"]+)"/g;
@@ -132,9 +242,7 @@ export class DoujinsSource extends BaseSource {
 			links.push(m[1].replace(/\\/g, ''));
 		}
 		while ((m = thumbRe.exec(html)) !== null) {
-			thumbs.push(
-				m[1].replace(/\\/g, '').replace(/\s+2x$/i, '').trim()
-			);
+			thumbs.push(m[1].replace(/\\/g, '').replace(/\s+2x$/i, '').trim());
 		}
 		while ((m = dateRe.exec(html)) !== null) {
 			dates.push(m[1]);
@@ -262,7 +370,6 @@ export class DoujinsSource extends BaseSource {
 				$('img[data-src*="static.doujins.com/n-"]').first().attr('data-src') ||
 				'';
 			if (firstN) {
-	
 				cover = firstN.replace(
 					/static\.doujins\.com\/n-/,
 					'static.doujins.com/f2-'
@@ -271,7 +378,11 @@ export class DoujinsSource extends BaseSource {
 		}
 		cover = this.absUrl(cover);
 
-		const folderMsg = $('.folder-message, .folder-display').first().text().replace(/\s+/g, ' ').trim();
+		const folderMsg = $('.folder-message, .folder-display')
+			.first()
+			.text()
+			.replace(/\s+/g, ' ')
+			.trim();
 		let updatedAt: number | undefined;
 		let pageCountFromMsg: number | undefined;
 		if (folderMsg) {
@@ -319,12 +430,11 @@ export class DoujinsSource extends BaseSource {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
 			if (t && !authors.includes(t)) authors.push(t);
 		});
-	
+
 		const byMatch = pageTitle.match(/\sby\s+([^|<]+)/i);
 		if (byMatch && !authors.length) {
 			authors.push(byMatch[1].trim());
 		}
-
 
 		const pageImgs = new Set<string>();
 		$('img[src*="static.doujins.com/n-"]').each((_, img) => {
@@ -365,7 +475,6 @@ export class DoujinsSource extends BaseSource {
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		try {
-	
 			const path = this.cleanId(chapterId).replace(/\/full$/, '');
 			const html = await this.fetchHtml(path.endsWith('/') ? path : `${path}/`);
 			const $ = cheerio.load(html);
@@ -373,20 +482,17 @@ export class DoujinsSource extends BaseSource {
 			const pages: string[] = [];
 			const seen = new Set<string>();
 
-			$('img[src*="static.doujins.com/n-"], img[data-src*="static.doujins.com/n-"]').each(
-				(_, img) => {
-					const src =
-						$(img).attr('src') ||
-						$(img).attr('data-src') ||
-						'';
-					const url = this.absUrl(src);
-					if (!url) return;
-					const key = url.split('?')[0];
-					if (seen.has(key)) return;
-					seen.add(key);
-					pages.push(url);
-				}
-			);
+			$(
+				'img[src*="static.doujins.com/n-"], img[data-src*="static.doujins.com/n-"]'
+			).each((_, img) => {
+				const src = $(img).attr('src') || $(img).attr('data-src') || '';
+				const url = this.absUrl(src);
+				if (!url) return;
+				const key = url.split('?')[0];
+				if (seen.has(key)) return;
+				seen.add(key);
+				pages.push(url);
+			});
 
 			if (pages.length === 0) {
 				const re =
@@ -401,9 +507,7 @@ export class DoujinsSource extends BaseSource {
 				}
 			}
 
-			console.log(
-				`[doujins] getChapterPages ${path} → ${pages.length} pages`
-			);
+			console.log(`[doujins] getChapterPages ${path} → ${pages.length} pages`);
 			return pages;
 		} catch (e) {
 			console.error('[doujins] getChapterPages', e);
