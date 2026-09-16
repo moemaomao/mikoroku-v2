@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'crypto';
 import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 
@@ -7,12 +8,17 @@ import type { Chapter, Manga, MangaDetails } from '../types';
  * List/Search : GET https://api.kumopoi.com/api/v1/comics
  * Detail      : GET /api/v1/comics/{slug}
  * Chapters    : embedded in detail + GET /api/v1/comics/{slug}/chapters
- * Pages       : GET /api/v1/chapters/{chapterId}/pages
- * Cover CDN   : https://kumo.gorae.my.id/{path}  (butuh Referer)
+ * Pages       : GET /api/v1/chapters/{chapterId}/pages  (butuh HMAC signature)
+ * Cover CDN   : https://kumo.gorae.my.id/{path}  (butuh Referer: beta.kumopoi.com)
  *
  * ID format:
  *   manga   : "/{slug}"
  *   chapter : "/{slug}/c/{chapterId}"
+ *
+ * Auth:
+ *   Header wajib: x-app-timestamp, x-app-nonce, x-app-signature
+ *   message = `${METHOD}:${pathname}:${timestamp}:${nonce}`
+ *   signature = HMAC-SHA256(secret, message).hex()
  */
 export class KumopoiSource extends BaseSource {
 	id = 'kumopoi';
@@ -22,10 +28,13 @@ export class KumopoiSource extends BaseSource {
 	private readonly cdnBase = 'https://kumo.gorae.my.id';
 	private readonly PER_PAGE = 24;
 
+	/** Secret dari frontend Kumopoi (ClientSignature) */
+	private readonly appSecret = 'vtm6RLiSyKmWd1YpZtkt5ue4oPdYdmzW0ZgxDgyBNEM=';
+
 	private apiHeaders(): Record<string, string> {
 		return {
 			'User-Agent':
-				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 			Accept: 'application/json, text/plain, */*',
 			'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
 			Origin: this.baseUrl,
@@ -33,13 +42,29 @@ export class KumopoiSource extends BaseSource {
 		};
 	}
 
+	/**
+	 * HMAC-SHA256 signature — mirror frontend:
+	 * message = METHOD:pathname:timestamp:nonce
+	 */
+	private signRequest(method: string, pathname: string): Record<string, string> {
+		const timestamp = Math.floor(Date.now() / 1000).toString();
+		const nonce = randomBytes(8).toString('hex');
+		const pathOnly = pathname.split('?')[0];
+		const message = `${method.toUpperCase()}:${pathOnly}:${timestamp}:${nonce}`;
+		const signature = createHmac('sha256', this.appSecret).update(message).digest('hex');
+
+		return {
+			'x-app-timestamp': timestamp,
+			'x-app-nonce': nonce,
+			'x-app-signature': signature
+		};
+	}
+
 	private async apiGet<T = any>(
 		path: string,
 		params?: Record<string, string | number | boolean | undefined | null>
 	): Promise<T> {
-		const url = new URL(
-			path.startsWith('http') ? path : `${this.apiBase}${path}`
-		);
+		const url = new URL(path.startsWith('http') ? path : `${this.apiBase}${path}`);
 
 		if (params) {
 			for (const [k, v] of Object.entries(params)) {
@@ -48,7 +73,16 @@ export class KumopoiSource extends BaseSource {
 			}
 		}
 
-		const res = await fetch(url.toString(), { headers: this.apiHeaders() });
+		// Path yang di-sign = pathname saja (tanpa origin & query)
+		const sigHeaders = this.signRequest('GET', url.pathname);
+
+		const res = await fetch(url.toString(), {
+			headers: {
+				...this.apiHeaders(),
+				...sigHeaders
+			}
+		});
+
 		if (!res.ok) {
 			throw new Error(`Kumopoi HTTP ${res.status} ${url.pathname}`);
 		}
@@ -73,22 +107,27 @@ export class KumopoiSource extends BaseSource {
 		return m?.[1] || '';
 	}
 
-	/** path relatif CDN → URL absolut */
-	private coverUrl(path?: string | null, prefer: 'small' | 'medium' | 'full' = 'small'): string {
+	/**
+	 * Path relatif CDN → URL absolut.
+	 * JANGAN menambah suffix -small/-medium: API jarang punya file variant itu
+	 * dan path yang diubah jadi 404 di kumo.gorae.my.id.
+	 */
+	private coverUrl(path?: string | null): string {
 		if (!path) return '';
 		let p = String(path).trim();
 		if (!p) return '';
 
-		// API kadang sudah kasih small/medium field
-		if (prefer === 'small' && !p.includes('-small.') && p.includes('/covers/')) {
-			p = p.replace(/(\.[a-z0-9]+)$/i, '-small$1');
-		} else if (prefer === 'medium' && !p.includes('-medium.') && p.includes('/covers/')) {
-			p = p.replace(/(\.[a-z0-9]+)$/i, '-medium$1');
-		}
-
 		if (p.startsWith('http')) return p;
 		if (p.startsWith('//')) return `https:${p}`;
-		return `${this.cdnBase}/${p.replace(/^\/+/, '')}`;
+
+		// Encode tiap segment path (spasi di nama folder cover, dll)
+		const encoded = p
+			.replace(/^\/+/, '')
+			.split('/')
+			.map((seg) => encodeURIComponent(seg))
+			.join('/');
+
+		return `${this.cdnBase}/${encoded}`;
 	}
 
 	private mapStatus(status?: string): string {
@@ -118,9 +157,10 @@ export class KumopoiSource extends BaseSource {
 				? String(latest.number).trim()
 				: undefined;
 
-		const cover =
-			this.coverUrl(item.coverSmall || item.coverMedium || item.cover, 'small') ||
-			this.coverUrl(item.cover, 'full');
+		// Prioritas: coverSmall → coverMedium → cover (tanpa rewrite nama file)
+		const cover = this.coverUrl(
+			item.coverSmall || item.coverMedium || item.cover || null
+		);
 
 		return {
 			id: this.toMangaId(slug),
@@ -206,9 +246,9 @@ export class KumopoiSource extends BaseSource {
 		const item = res?.data;
 		if (!item?.slug) throw new Error(`Manga not found: ${slug}`);
 
-		const cover =
-			this.coverUrl(item.coverMedium || item.cover, 'medium') ||
-			this.coverUrl(item.cover, 'full');
+		const cover = this.coverUrl(
+			item.coverMedium || item.coverSmall || item.cover || null
+		);
 
 		const genres = (item.genres || [])
 			.map((g: any) => g?.name)
@@ -256,9 +296,7 @@ export class KumopoiSource extends BaseSource {
 				id: this.toChapterId(slug, cid),
 				title,
 				number,
-				date: ch.publishedAt
-					? String(ch.publishedAt).slice(0, 10)
-					: undefined
+				date: ch.publishedAt ? String(ch.publishedAt).slice(0, 10) : undefined
 			});
 		}
 
@@ -293,68 +331,66 @@ export class KumopoiSource extends BaseSource {
 
 	// ── Pages ────────────────────────────────────────────────────────────────
 
-	// ── Pages ────────────────────────────────────────────────────────────────
-
-async getChapterPages(chapterId: string): Promise<string[]> {
-	const chapterUuid = this.extractChapterUuid(chapterId);
-	if (!chapterUuid) {
-		console.error('[kumopoi] getChapterPages bad id:', chapterId);
-		return [];
-	}
-
-	try {
-		const res = await this.apiGet<{
-			success?: boolean;
-			data?: {
-				locked?: boolean;
-				pages?: Array<{
-					id?: string;
-					order?: number;
-					mode?: string;
-					token?: string;
-					url?: string;
-				}>;
-			};
-		}>(`/chapters/${chapterUuid}/pages`);
-
-		if (res?.data?.locked) {
-			console.warn('[kumopoi] chapter locked:', chapterUuid);
+	async getChapterPages(chapterId: string): Promise<string[]> {
+		const chapterUuid = this.extractChapterUuid(chapterId);
+		if (!chapterUuid) {
+			console.error('[kumopoi] getChapterPages bad id:', chapterId);
 			return [];
 		}
 
-		const pages = [...(res?.data?.pages || [])].sort(
-			(a, b) => (a.order ?? 0) - (b.order ?? 0)
-		);
+		try {
+			const res = await this.apiGet<{
+				success?: boolean;
+				data?: {
+					locked?: boolean;
+					pages?: Array<{
+						id?: string;
+						order?: number;
+						mode?: string;
+						token?: string;
+						url?: string;
+					}>;
+				};
+			}>(`/chapters/${chapterUuid}/pages`);
 
-		const urls: string[] = [];
-
-		for (const p of pages) {
-			if (p.url && /^https?:\/\//i.test(p.url)) {
-				urls.push(p.url);
-				continue;
+			if (res?.data?.locked) {
+				console.warn('[kumopoi] chapter locked:', chapterUuid);
+				return [];
 			}
 
-			const token = String(p.token || '').trim();
-			if (!token) continue;
-
-			// Skip honeypot (server/bot sering dapat ini)
-			if (
-				token.includes('honeypot') ||
-				token.startsWith('eyJzIjoiZHVtbXk') // {"s":"dummy...
-			) {
-				continue;
-			}
-
-			urls.push(
-				`${this.apiBase}/media/chapter/deliver?token=${encodeURIComponent(token)}`
+			const pages = [...(res?.data?.pages || [])].sort(
+				(a, b) => (a.order ?? 0) - (b.order ?? 0)
 			);
-		}
 
-		console.log(`[kumopoi] ${urls.length}/${pages.length} pages → ${chapterUuid}`);
-		return urls;
-	} catch (e) {
-		console.error('[kumopoi] getChapterPages failed', chapterUuid, e);
-		return [];
+			const urls: string[] = [];
+
+			for (const p of pages) {
+				if (p.url && /^https?:\/\//i.test(p.url)) {
+					urls.push(p.url);
+					continue;
+				}
+
+				const token = String(p.token || '').trim();
+				if (!token) continue;
+
+				// Skip honeypot (jika signature gagal / bot terdeteksi)
+				if (
+					token.includes('honeypot') ||
+					token.startsWith('eyJzIjoiZHVtbXk') // {"s":"dummy...
+				) {
+					continue;
+				}
+
+				urls.push(
+					`${this.apiBase}/media/chapter/deliver?token=${encodeURIComponent(token)}`
+				);
+			}
+
+			console.log(`[kumopoi] ${urls.length}/${pages.length} pages → ${chapterUuid}`);
+			return urls;
+		} catch (e) {
+			console.error('[kumopoi] getChapterPages failed', chapterUuid, e);
+			return [];
+		}
 	}
-  }
 }
