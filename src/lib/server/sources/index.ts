@@ -81,11 +81,13 @@ import { WeebCentralSource } from './impl/WeebCentral';
 import { CucumberMangaSource } from './impl/CucumberManga';
 import { DoujinsSource } from './impl/Doujins';
 import { MangaKakalotSource } from './impl/MangaKakalot';
+import { NeloMangaSource } from './impl/NeloManga';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
     doujins: new DoujinsSource(),
+    nelomanga: new NeloMangaSource(),
     mangakakalot: new MangaKakalotSource(),
     cucumbermanga: new CucumberMangaSource(),
     weebcentral: new WeebCentralSource(),
