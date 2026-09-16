@@ -1,55 +1,58 @@
 /**
- * Simple cache helper pakai Cloudflare Cache API
- * Cocok untuk caching hasil scraping / API response
+ * Cloudflare KV Cache helper
+ * Lebih stabil & durable dibanding Cache API
  */
 
-const DEFAULT_TTL = 300; // 5 menit (detik)
+const DEFAULT_TTL = 60 * 15; // 15 menit
+
+type Env = {
+	MIKOROKU_CACHE: KVNamespace;
+};
+
+function getKV(): KVNamespace | null {
+	
+	const env = (globalThis as any).env || (globalThis as any).__env;
+	return env?.MIKOROKU_CACHE ?? null;
+}
 
 export async function getCached<T>(
-    key: string,
-    fetcher: () => Promise<T>,
-    ttlSeconds = DEFAULT_TTL
+	key: string,
+	fetcher: () => Promise<T>,
+	ttlSeconds = DEFAULT_TTL
 ): Promise<T> {
-    // @ts-expect-error caches is available in CF Workers
-    const cache = typeof caches !== 'undefined' ? caches.default : null;
+	const kv = getKV();
 
-    if (!cache) {
-        // Fallback saat local dev (vite dev)
-        return await fetcher();
-    }
+	// Fallback untuk local development
+	if (!kv) {
+		return await fetcher();
+	}
 
-    const cacheKey = new Request(`https://cache.internal/${encodeURIComponent(key)}`, {
-        method: 'GET'
-    });
+	try {
+		const cached = await kv.get(key, 'json');
+		if (cached !== null) {
+			return cached as T;
+		}
+	} catch (err) {
+		console.error('[KV] get failed:', key, err);
+	}
 
-    try {
-        const cached = await cache.match(cacheKey);
-        if (cached) {
-            const data = (await cached.json()) as T;
-            return data;
-        }
-    } catch {
-        // Kalau corrupt, lanjut fetch baru
-    }
+	// Cache miss → fetch data
+	const data = await fetcher();
 
-    // Cache miss → ambil data asli
-    const data = await fetcher();
+	// Simpan ke KV (jangan await supaya tidak memperlambat response)
+	kv.put(key, JSON.stringify(data), {
+		expirationTtl: ttlSeconds
+	}).catch((err) => {
+		console.error('[KV] put failed:', key, err);
+	});
 
-    try {
-        const response = new Response(JSON.stringify(data), {
-            headers: {
-                'Content-Type': 'application/json',
-                'Cache-Control': `public, max-age=${ttlSeconds}`
-            }
-        });
-        
-        // Jangan await supaya tidak memperlambat response
-        cache.put(cacheKey, response).catch((err: unknown) => {
-            console.error('[cache] put failed:', key, err);
-        });
-    } catch (err: unknown) {
-        console.error('[cache] serialize failed:', key, err);
-    }
+	return data;
+}
 
-    return data;
+/** Paksa hapus cache (berguna saat debugging) */
+export async function deleteCache(key: string): Promise<void> {
+	const kv = getKV();
+	if (kv) {
+		await kv.delete(key);
+	}
 }
