@@ -5,9 +5,11 @@ import { parseUpdatedAt, syntheticUpdatedAt } from '$lib/server/parseUpdatedAt';
 import type { PageServerLoad } from './$types';
 import type { Manga } from '$lib/server/sources/types';
 
-const LOAD_TIMEOUT_MS = 10000;
-const MAX_MANGAS = 48;
-const PER_SOURCE_LIMIT = 12;
+const LOAD_TIMEOUT_MS = 6000;
+const MAX_MANGAS = 40;
+const PER_SOURCE_LIMIT = 8;
+const MAX_PREFERRED = 6;
+const CONCURRENCY = 3; 
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -54,6 +56,31 @@ function mergeByTime(lists: Manga[][], preferredOrder: string[]): Manga[] {
 	return flat;
 }
 
+async function fetchSourceList(
+	id: string,
+	pageNum: number,
+	query: string,
+	lang: string,
+	type: string
+): Promise<Manga[]> {
+	try {
+		const adapter = getSource(id);
+		const result = await withTimeout(
+			query
+				? adapter.searchManga(query, { page: pageNum, lang, type })
+				: adapter.getLatestManga(pageNum, { lang, type }),
+			LOAD_TIMEOUT_MS
+		);
+		const list = Array.isArray(result) ? result : [];
+		return list.slice(0, PER_SOURCE_LIMIT).map((m, index) =>
+			ensureUpdatedAt({ ...m, sourceId: m.sourceId || id }, pageNum, index)
+		);
+	} catch (e) {
+		console.error(`[Browse multi] ${id} failed:`, e);
+		return [];
+	}
+}
+
 export const load = async ({ url, request, setHeaders, depends }: Parameters<PageServerLoad>[0]) => {
 	const sourceParam = url.searchParams.get('source');
 	const pageNum = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
@@ -67,10 +94,13 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 	let isMulti = false;
 	let preferredSources: string[] = [];
 
+	// ── Multi mode ───────────────────────────────────────────────────────────
 	if (!sourceParam) {
 		preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
 		const validIds = new Set(sources.map((s) => s.id));
-		preferredSources = preferredSources.filter((id) => validIds.has(id));
+		preferredSources = preferredSources
+			.filter((id) => validIds.has(id))
+			.slice(0, MAX_PREFERRED);
 
 		isMulti = true;
 		depends('browse:multi');
@@ -79,37 +109,24 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 			mangas = [];
 		} else {
 			try {
-				const fetchPromises = preferredSources.map(async (id) => {
-					try {
-						const adapter = getSource(id);
-						const result = await withTimeout(
-							query
-								? adapter.searchManga(query, { page: pageNum, lang, type })
-								: adapter.getLatestManga(pageNum, { lang, type }),
-							LOAD_TIMEOUT_MS
-						);
-						const list = Array.isArray(result) ? result : [];
-						return list.slice(0, PER_SOURCE_LIMIT).map((m, index) =>
-							ensureUpdatedAt(
-								{ ...m, sourceId: m.sourceId || id },
-								pageNum,
-								index
-							)
-						);
-					} catch (e) {
-						console.error(`[Browse multi] ${id} failed:`, e);
-						return [] as Manga[];
-					}
-				});
-
-				const lists = await Promise.all(fetchPromises);
+				
+				const lists: Manga[][] = [];
+				for (let i = 0; i < preferredSources.length; i += CONCURRENCY) {
+					const batch = preferredSources.slice(i, i + CONCURRENCY);
+					const batchResults = await Promise.all(
+						batch.map((id) => fetchSourceList(id, pageNum, query, lang, type))
+					);
+					lists.push(...batchResults);
+				}
 				mangas = mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
 			} catch (e) {
 				console.error('[Browse multi] load failed:', e);
 				mangas = [];
 			}
 		}
-	} else {
+	}
+	// ── Single source mode ───────────────────────────────────────────────────
+	else {
 		depends(`browse:${sourceParam}`);
 		try {
 			const adapter = getSource(sourceParam);
@@ -134,7 +151,7 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 	}
 
 	setHeaders({
-		'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60'
+		'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
 	});
 
 	return {

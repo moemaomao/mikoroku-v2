@@ -1,37 +1,61 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Check, Settings } from 'lucide-svelte';
+	import { Check, Settings, AlertTriangle } from 'lucide-svelte';
 	import { getPreferredSources, setPreferredSources } from '$lib/stores/preferredSources';
 	import { getSourceMeta, groupSourcesByLang, LANG_LABELS } from '$lib/utils/sourceMeta';
 	import type { PageData } from './$types';
 
 	const { data }: { data: PageData } = $props();
 
+	const MAX_PREFERRED = 6;
+
 	let preferred = $state<string[]>([]);
 	let isDarkMode = $state(true);
 	let saved = $state(false);
+	let showLimitToast = $state(false);
+	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 	let grouped = $derived(groupSourcesByLang(data.sources));
+	let atLimit = $derived(preferred.length >= MAX_PREFERRED);
 
 	onMount(() => {
-		preferred = getPreferredSources();
+		const savedPrefs = getPreferredSources().slice(0, MAX_PREFERRED);
+		preferred = savedPrefs;
 		isDarkMode = document.documentElement.classList.contains('dark');
 		const obs = new MutationObserver(() => {
 			isDarkMode = document.documentElement.classList.contains('dark');
 		});
 		obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-		return () => obs.disconnect();
+		return () => {
+			obs.disconnect();
+			if (toastTimer) clearTimeout(toastTimer);
+		};
 	});
 
+	function flashLimitToast() {
+		showLimitToast = true;
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => {
+			showLimitToast = false;
+		}, 2500);
+	}
+
 	function toggle(id: string) {
-		preferred = preferred.includes(id)
-			? preferred.filter((s) => s !== id)
-			: [...preferred, id];
+		if (preferred.includes(id)) {
+			preferred = preferred.filter((s) => s !== id);
+			saved = false;
+			return;
+		}
+		if (preferred.length >= MAX_PREFERRED) {
+			flashLimitToast();
+			return;
+		}
+		preferred = [...preferred, id];
 		saved = false;
 	}
 
 	function save() {
-		setPreferredSources(preferred);
+		setPreferredSources(preferred.slice(0, MAX_PREFERRED));
 		saved = true;
 		setTimeout(() => {
 			window.location.href = '/';
@@ -39,8 +63,16 @@
 	}
 
 	function selectAll() {
-		preferred = data.sources.map((s) => s.id);
+		// Only fill up to max
+		const ids = data.sources.map((s) => s.id);
+		const next = [...preferred];
+		for (const id of ids) {
+			if (next.length >= MAX_PREFERRED) break;
+			if (!next.includes(id)) next.push(id);
+		}
+		preferred = next;
 		saved = false;
+		if (data.sources.length > MAX_PREFERRED) flashLimitToast();
 	}
 
 	function selectNone() {
@@ -53,7 +85,7 @@
 	<title>Settings - Source Preferences | Rokuyomu</title>
 </svelte:head>
 
-<div class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+<div class="relative mx-auto max-w-3xl px-4 py-6 sm:px-6">
 	<div class="mb-6 flex items-center gap-3">
 		<div class="rounded-xl bg-red-600/20 p-2.5">
 			<Settings class="h-6 w-6 text-red-500" />
@@ -61,8 +93,8 @@
 		<div>
 			<h1 class="text-xl font-bold sm:text-2xl">Source Preferences</h1>
 			<p class="mt-0.5 text-sm {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
-				Choose which sources appear on the homepage. Manga will be merged and sorted from the latest updates.
-				Leave empty to disable multi-source and use the source dropdown instead.
+				Choose which sources appear on the homepage (max {MAX_PREFERRED}). Manga will be merged
+				and sorted from the latest updates. Leave empty to use the source dropdown instead.
 			</p>
 		</div>
 	</div>
@@ -83,8 +115,15 @@
 		>
 			Clear All
 		</button>
-		<span class="ml-auto text-xs {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
-			{preferred.length} source{preferred.length === 1 ? '' : 's'} selected
+		<span
+			class="ml-auto text-xs font-medium
+				{atLimit
+				? 'text-amber-500'
+				: isDarkMode
+					? 'text-zinc-500'
+					: 'text-zinc-400'}"
+		>
+			{preferred.length}/{MAX_PREFERRED} selected
 		</span>
 	</div>
 
@@ -103,10 +142,12 @@
 					{#each items as src (src.id)}
 						{@const meta = getSourceMeta(src.id)}
 						{@const active = preferred.includes(src.id)}
+						{@const disabled = atLimit && !active}
 						<button
 							type="button"
 							onclick={() => toggle(src.id)}
 							class="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition
+								{disabled ? 'cursor-not-allowed opacity-40' : ''}
 								{active
 									? isDarkMode
 										? 'border-red-600/60 bg-red-600/10'
@@ -130,7 +171,9 @@
 							<span class="fi fi-{meta.flag} text-sm"></span>
 							<span class="min-w-0 flex-1 truncate text-sm font-medium">{src.name}</span>
 							{#if meta.isR18}
-								<span class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">R18</span>
+								<span class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white"
+									>R18</span
+								>
 							{/if}
 						</button>
 					{/each}
@@ -148,7 +191,8 @@
 	>
 		<p class="max-w-[70%] text-xs {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}">
 			{#if preferred.length === 0}
-				No sources selected — multi-source homepage will be empty. Use the source dropdown to browse a single source.
+				No sources selected — multi-source homepage will be empty. Use the source dropdown to
+				browse a single source.
 			{:else}
 				{preferred.length} source{preferred.length === 1 ? '' : 's'} will be shown on the homepage.
 			{/if}
@@ -161,4 +205,28 @@
 			{saved ? 'Saved ✓' : 'Save'}
 		</button>
 	</div>
+
+	<!-- Limit toast overlay -->
+	{#if showLimitToast}
+		<div class="pointer-events-none fixed inset-0 z-[200] flex items-end justify-center p-6 sm:items-center">
+			<div
+				class="pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-2xl
+					{isDarkMode
+					? 'border-amber-500/40 bg-zinc-900 text-amber-100'
+					: 'border-amber-300 bg-white text-amber-900'}"
+				role="status"
+			>
+				<div class="rounded-lg bg-amber-500/20 p-2">
+					<AlertTriangle class="h-5 w-5 text-amber-500" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-semibold">Limit reached</p>
+					<p class="mt-0.5 text-xs opacity-80">
+						You can only select up to {MAX_PREFERRED} sources for the homepage. Uncheck one to
+						add another.
+					</p>
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>
