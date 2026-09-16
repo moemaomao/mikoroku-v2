@@ -97,7 +97,6 @@ export class MangaKakalotSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
-		// /manga/non-human  or  manga/non-human  or  non-human
 		if (parts[0] === 'manga' && parts[1]) return parts[1];
 		return parts[0] || '';
 	}
@@ -267,23 +266,40 @@ export class MangaKakalotSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			const paths =
+			const path =
 				p === 1
-					? ['/manga-list/latest-manga', '/']
-					: [`/manga-list/latest-manga?page=${p}`];
+					? '/manga-list/latest-manga'
+					: `/manga-list/latest-manga?page=${p}`;
 
 			let list: Manga[] = [];
-			let lastErr: unknown;
-			for (const path of paths) {
-				try {
-					const html = await this.fetchHtml(path);
+			try {
+				const html = await this.fetchHtml(path);
+				list = this.parseItemList(html);
+			} catch (e) {
+				if (p === 1) {
+					const html = await this.fetchHtml('/');
 					list = this.parseItemList(html);
-					if (list.length > 0) break;
-				} catch (e) {
-					lastErr = e;
+				} else {
+					throw e;
 				}
 			}
-			if (list.length === 0 && lastErr) throw lastErr;
+
+			if (list.length < this.PER_PAGE) {
+				try {
+					const html2 = await this.fetchHtml(
+						`/manga-list/latest-manga?page=${p + 1}`
+					);
+					const more = this.parseItemList(html2);
+					const seen = new Set(list.map((m) => m.id));
+					for (const m of more) {
+						if (seen.has(m.id)) continue;
+						list.push(m);
+						if (list.length >= this.PER_PAGE) break;
+					}
+				} catch {
+					/* ignore */
+				}
+			}
 
 			const out = list.slice(0, this.PER_PAGE);
 			console.log(`[mangakakalot] latest page=${p} → ${out.length} items`);
@@ -332,7 +348,6 @@ export class MangaKakalotSource extends BaseSource {
 		const html = await this.fetchHtml(`/manga/${slug}`);
 		const $ = cheerio.load(html);
 
-		// Title: prefer h1, then og:title, then <title>
 		let title =
 			$('h1').first().text().replace(/\s+/g, ' ').trim() ||
 			($('meta[property="og:title"]').attr('content') || '')
@@ -367,13 +382,52 @@ export class MangaKakalotSource extends BaseSource {
 		const genres: string[] = [];
 		let description = '';
 
+		$('script[type="application/ld+json"]').each((_, el) => {
+			try {
+				const raw = $(el).html() || '';
+				const data = JSON.parse(raw);
+				const nodes = Array.isArray(data) ? data : [data];
+				for (const node of nodes) {
+					if (!node || typeof node !== 'object') continue;
+					if (Array.isArray(node.genre)) {
+						for (const g of node.genre) {
+							const t = String(g).trim();
+							if (t && !genres.includes(t)) genres.push(t);
+						}
+					}
+					if (node.description && !description) {
+						description = String(node.description)
+							.replace(/<[^>]+>/g, '')
+							.replace(/\s+/g, ' ')
+							.trim();
+					}
+					if (node.author) {
+						const auths = Array.isArray(node.author)
+							? node.author
+							: [node.author];
+						for (const a of auths) {
+							const n =
+								typeof a === 'string'
+									? a
+									: a?.name || '';
+							const t = String(n).trim();
+							if (t && !authors.includes(t)) authors.push(t);
+						}
+					}
+				}
+			} catch {
+		
+			}
+		});
+
 		$('li').each((_, li) => {
 			const text = $(li).text().replace(/\s+/g, ' ').trim();
 			if (/^Author/i.test(text)) {
 				const body = text.replace(/^Author\(s\)\s*:\s*/i, '').trim();
 				body.split(/,/).forEach((s) => {
 					const t = s.trim();
-					if (t && t.toLowerCase() !== 'updating') authors.push(t);
+					if (t && t.toLowerCase() !== 'updating' && !authors.includes(t))
+						authors.push(t);
 				});
 				$(li)
 					.find('a')
@@ -383,29 +437,26 @@ export class MangaKakalotSource extends BaseSource {
 					});
 			} else if (/^Status/i.test(text)) {
 				status = this.mapStatus(text.replace(/^Status\s*:\s*/i, ''));
-			} else if (/^Genres/i.test(text)) {
+			} else if (/^Genres/i.test(text) && genres.length === 0) {
 				$(li)
-					.find('a')
+					.find('a[href*="/genre/"]')
 					.each((__, a) => {
 						const t = $(a).text().replace(/\s+/g, ' ').trim();
-						if (t) genres.push(t);
+						if (t && !genres.includes(t)) genres.push(t);
 					});
 			}
 		});
 
-		$('.genre-list a, a[href*="/genre/"]').each((_, a) => {
-			const t = $(a).text().replace(/\s+/g, ' ').trim();
-			if (t && !genres.includes(t)) genres.push(t);
-		});
-
-		description =
-			$('#noidungm, .manga-info-summary, .panel-story-info-description')
-				.first()
-				.text()
-				.replace(/\s+/g, ' ')
-				.trim() ||
-			($('meta[name="description"]').attr('content') || '').trim() ||
-			'';
+		if (!description) {
+			description =
+				$('#noidungm, .manga-info-summary, .panel-story-info-description')
+					.first()
+					.text()
+					.replace(/\s+/g, ' ')
+					.trim() ||
+				($('meta[name="description"]').attr('content') || '').trim() ||
+				'';
+		}
 
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
