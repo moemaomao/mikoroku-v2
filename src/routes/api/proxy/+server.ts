@@ -146,6 +146,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		const isKumopoi =
 	         sourceId === 'kumopoi' ||
 	        /kumo\.gorae\.my\.id|kumopoi\.com/i.test(decodedUrl);
+			const isAsmHentai =
+	        sourceId === 'asmhentai' ||
+	        /asmhentai\.com|images\.asmhentai\.com/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -164,6 +167,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	        isIkiru ||
 			isMangaDex ||
 			isKumopoi ||
+			isAsmHentai ||
 			isVoratoon;
 
 		// ============================================================
@@ -248,6 +252,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	       referer = 'https://mangadex.org/';
         } else if (isKumopoi) {
 	       referer = 'https://beta.kumopoi.com/';
+        } else if (isAsmHentai) {
+	       referer = 'https://asmhentai.com/';
         }
 
 		// ============================================================
