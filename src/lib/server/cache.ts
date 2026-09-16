@@ -1,17 +1,18 @@
-const DEFAULT_TTL = 60 * 15;
+/**
+ * Cloudflare KV Cache helper (SvelteKit compatible)
+ */
 
-function getKV(): KVNamespace | null {
-	const env = (globalThis as any).env ?? (globalThis as any).__env;
-	return env?.MIKOROKU_CACHE ?? null;
-}
+const DEFAULT_TTL = 60 * 15; // 15 menit
 
 export async function getCached<T>(
 	key: string,
 	fetcher: () => Promise<T>,
-	ttlSeconds = DEFAULT_TTL
+	ttlSeconds = DEFAULT_TTL,
+	platform?: App.Platform
 ): Promise<T> {
-	const kv = getKV();
+	const kv = platform?.env?.MIKOROKU_CACHE as KVNamespace | undefined;
 
+	// Fallback untuk local development
 	if (!kv) {
 		return await fetcher();
 	}
@@ -36,8 +37,8 @@ export async function getCached<T>(
 	return data;
 }
 
-export async function deleteCache(key: string): Promise<void> {
-	const kv = getKV();
+export async function deleteCache(key: string, platform?: App.Platform): Promise<void> {
+	const kv = platform?.env?.MIKOROKU_CACHE as KVNamespace | undefined;
 	if (kv) {
 		await kv.delete(key);
 	}
