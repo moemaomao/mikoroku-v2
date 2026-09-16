@@ -80,11 +80,13 @@ import { AthreaScansSource } from './impl/AthreaScans';
 import { WeebCentralSource } from './impl/WeebCentral';
 import { CucumberMangaSource } from './impl/CucumberManga';
 import { DoujinsSource } from './impl/Doujins';
+import { MangaKakalotSource } from './impl/MangaKakalot';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
     doujins: new DoujinsSource(),
+    mangakakalot: new MangaKakalotSource(),
     cucumbermanga: new CucumberMangaSource(),
     weebcentral: new WeebCentralSource(),
     athreascans: new AthreaScansSource(),
