@@ -7,7 +7,7 @@
 
 	const { data }: { data: PageData } = $props();
 
-	const MAX_PREFERRED = 6;
+	const MAX_PREFERRED = 4;
 
 	let preferred = $state<string[]>([]);
 	let isDarkMode = $state(true);

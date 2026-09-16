@@ -223,7 +223,7 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 				</span>
 			{/each}
 			<a href="/settings" class="ml-1 font-medium text-red-500 hover:underline">
-				Ubah
+				Edit
 			</a>
 		</div>
 	{/if}

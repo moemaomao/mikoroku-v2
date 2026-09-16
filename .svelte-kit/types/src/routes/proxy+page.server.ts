@@ -6,10 +6,10 @@ import type { PageServerLoad } from './$types';
 import type { Manga } from '$lib/server/sources/types';
 
 const LOAD_TIMEOUT_MS = 6000;
-const MAX_MANGAS = 40;
-const PER_SOURCE_LIMIT = 8;
-const MAX_PREFERRED = 6;
-const CONCURRENCY = 3; 
+const MAX_MANGAS = 24;
+const PER_SOURCE_LIMIT = 6;
+const MAX_PREFERRED = 4;
+const CONCURRENCY = 2; 
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -151,7 +151,7 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 	}
 
 	setHeaders({
-		'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+		'Cache-Control': 'public, s-maxage=180, stale-while-revalidate=900'
 	});
 
 	return {
