@@ -450,14 +450,14 @@
 		<!-- Left column -->
 		<div class="flex min-h-screen min-w-0 flex-1 flex-col">
 			<!-- Header -->
-			<header
-				class="sticky top-0 z-30 w-full border-b backdrop-blur-xl
-					transition-transform duration-300 ease-in-out
-					{isHeaderHidden ? '-translate-y-full' : 'translate-y-0'}
-					{isDarkMode
-					? 'border-zinc-800/50 bg-gradient-to-b from-violet-950/70 via-[#0c0910]/90 to-[#0c0910]/90'
-					: 'border-zinc-200/80 bg-white/90'}"
-			>
+<header
+	class="sticky top-0 z-40 w-full border-b backdrop-blur-xl
+		transition-transform duration-300 ease-in-out
+		{isHeaderHidden ? '-translate-y-full' : 'translate-y-0'}
+		{isDarkMode
+		? 'border-zinc-800/50 bg-gradient-to-b from-violet-950/70 via-[#0c0910]/90 to-[#0c0910]/90'
+		: 'border-zinc-200/80 bg-white/90'}"
+>
 				<div class="flex h-14 w-full items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-5">
 					<div class="flex shrink-0 items-center gap-2">
 						{#if !isSidebarOpen}
