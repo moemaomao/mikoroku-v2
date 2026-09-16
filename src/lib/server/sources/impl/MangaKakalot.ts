@@ -97,6 +97,7 @@ export class MangaKakalotSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
+	
 		if (parts[0] === 'manga' && parts[1]) return parts[1];
 		return parts[0] || '';
 	}
@@ -266,19 +267,15 @@ export class MangaKakalotSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-
-			const offset = (p - 1) * this.PER_PAGE;
-			const target = offset + this.PER_PAGE;
-
 			const SITE_PER = 20;
-			const firstSite = Math.max(1, Math.floor(offset / SITE_PER) + 1);
-			const lastSite = Math.floor((target - 1) / SITE_PER) + 2;
+			const offset = (p - 1) * this.PER_PAGE;
+			const firstSite = Math.floor(offset / SITE_PER) + 1;
+			const localStart = offset % SITE_PER;
 
 			const seen = new Set<string>();
-			let skipped = (firstSite - 1) * SITE_PER;
 			const bucket: Manga[] = [];
 
-			for (let sp = firstSite; sp <= lastSite; sp++) {
+			for (let sp = firstSite; sp <= firstSite + 2; sp++) {
 				const path =
 					sp === 1
 						? '/manga-list/latest-manga'
@@ -288,9 +285,13 @@ export class MangaKakalotSource extends BaseSource {
 					const html = await this.fetchHtml(path);
 					batch = this.parseItemList(html);
 				} catch (e) {
-					if (sp === 1 && p === 1) {
-						const html = await this.fetchHtml('/');
-						batch = this.parseItemList(html);
+					if (sp === 1) {
+						try {
+							const html = await this.fetchHtml('/');
+							batch = this.parseItemList(html);
+						} catch {
+							throw e;
+						}
 					} else {
 						console.error('[mangakakalot] site page', sp, e);
 						break;
@@ -304,14 +305,12 @@ export class MangaKakalotSource extends BaseSource {
 					bucket.push(m);
 				}
 
-				if (skipped + bucket.length >= target) break;
+				if (bucket.length >= localStart + this.PER_PAGE) break;
 			}
 
-			const localStart = Math.max(0, offset - skipped);
 			const out = bucket.slice(localStart, localStart + this.PER_PAGE);
-
 			console.log(
-				`[mangakakalot] latest page=${p} offset=${offset} → ${out.length} items`
+				`[mangakakalot] latest page=${p} site=${firstSite}+ offset=${offset} → ${out.length}`
 			);
 			return out;
 		} catch (e) {
@@ -426,7 +425,7 @@ export class MangaKakalotSource extends BaseSource {
 					}
 				}
 			} catch {
-			
+				/* ignore bad json-ld */
 			}
 		});
 
@@ -471,6 +470,7 @@ export class MangaKakalotSource extends BaseSource {
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
+		// 1) JSON API
 		try {
 			let offset = 0;
 			const limit = 100;
@@ -485,14 +485,19 @@ export class MangaKakalotSource extends BaseSource {
 					if (!chapterSlug || seen.has(chapterSlug)) continue;
 					seen.add(chapterSlug);
 					const name = String(row.chapter_name || chapterSlug);
-					const num =
-						typeof row.chapter_num === 'number'
+				
+					if (/^chapter-0$/i.test(chapterSlug) || chapterSlug === '0') continue;
+					let num =
+						typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
 							? row.chapter_num
 							: this.parseChapterNumber(name);
+					if (!num && num !== 0) num = chapters.length + 1;
+					
+					if (num === 0 && !/chapter\s*0\b/i.test(name)) continue;
 					chapters.push({
 						id: this.toChapterId(slug, chapterSlug),
 						title: name,
-						number: num || chapters.length + 1,
+						number: num,
 						date: this.formatDate(row.updated_at) || undefined
 					});
 				}
@@ -511,20 +516,28 @@ export class MangaKakalotSource extends BaseSource {
 				const cm = href.match(/\/manga\/[^/]+\/(chapter-[^/?#]+)/i);
 				if (!cm) return;
 				const chapterSlug = cm[1];
+				if (/^chapter-0$/i.test(chapterSlug)) return;
 				if (seen.has(chapterSlug)) return;
 				seen.add(chapterSlug);
 				const name = ($(a).attr('title') || $(a).text() || chapterSlug)
 					.replace(/\s+/g, ' ')
 					.trim();
+				let num = this.parseChapterNumber(name);
+				if (!num && num !== 0) num = chapters.length + 1;
+				if (num === 0 && !/chapter\s*0\b/i.test(name)) return;
 				chapters.push({
 					id: this.toChapterId(slug, chapterSlug),
 					title: name,
-					number: this.parseChapterNumber(name) || chapters.length + 1
+					number: num
 				});
 			});
 		}
 
-		chapters.sort((a, b) => (b.number || 0) - (a.number || 0));
+		chapters.sort((a, b) => {
+			const na = typeof a.number === 'number' ? a.number : -1;
+			const nb = typeof b.number === 'number' ? b.number : -1;
+			return nb - na;
+		});
 
 		const latestChapter =
 			chapters.length > 0 ? String(chapters[0].number) : undefined;
