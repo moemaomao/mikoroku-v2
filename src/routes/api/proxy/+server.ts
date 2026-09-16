@@ -140,6 +140,9 @@ export const GET: RequestHandler = async ({ url }) => {
 	    const isVoratoon =
 	         sourceId === 'voratoon' ||
 	        /voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
+	    const isMangaDex =
+	         sourceId === 'mangadex' ||
+	         /mangadex\.org|uploads\.mangadex\.org/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -156,6 +159,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			isMangaCopy ||
 	        isIsekaiKomik ||
 	        isIkiru ||
+			isMangaDex ||
 			isVoratoon;
 
 		// ============================================================
@@ -236,6 +240,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	        referer = 'https://manhwadesu.wiki/';
         } else if (isVoratoon) {
 	       referer = 'https://v2.voratoon.com/';
+        } else if (isMangaDex) {
+	       referer = 'https://mangadex.org/';
         }
 
 		// ============================================================

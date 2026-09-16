@@ -8,7 +8,7 @@ import type { Chapter, Manga, MangaDetails } from '../types';
  * Detail      : GET /manga/{uuid}?includes[]=cover_art,author,artist
  * Chapters    : GET /manga/{uuid}/feed
  * Pages       : GET /at-home/server/{chapterUuid}
- * Cover       : https://uploads.mangadex.org/covers/{mangaId}/{fileName}[.256.jpg]
+ * Cover       : https://uploads.mangadex.org/covers/{mangaId}/{fileName}[.256.jpg | .512.jpg]
  *
  * ID format:
  *   manga   : "/{mangaUuid}"
@@ -25,7 +25,7 @@ export class MangaDexSource extends BaseSource {
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
 
-		private async apiGet<T = any>(
+	private async apiGet<T = any>(
 		path: string,
 		params?: Record<string, string | string[] | number | boolean | undefined | null>
 	): Promise<T> {
@@ -66,7 +66,6 @@ export class MangaDexSource extends BaseSource {
 				const text = await res.text();
 				const trimmed = text.trim();
 
-				// Cloudflare / challenge page
 				if (
 					trimmed.startsWith('<') ||
 					trimmed.toLowerCase().includes('<!doctype')
@@ -77,7 +76,6 @@ export class MangaDexSource extends BaseSource {
 						trimmed.slice(0, 120)
 					);
 					lastErr = new Error('MangaDex blocked: response is HTML, not JSON');
-					// tunggu sebentar lalu retry
 					await new Promise((r) => setTimeout(r, 400 * attempt));
 					continue;
 				}
@@ -87,7 +85,6 @@ export class MangaDexSource extends BaseSource {
 						`[mangadex] HTTP ${res.status} ${url.pathname}`,
 						trimmed.slice(0, 400)
 					);
-					// 429 / 503 → retry
 					if (res.status === 429 || res.status === 503) {
 						lastErr = new Error(`MangaDex HTTP ${res.status}`);
 						await new Promise((r) => setTimeout(r, 600 * attempt));
@@ -118,7 +115,6 @@ export class MangaDexSource extends BaseSource {
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
-	/** english/indonesian → en/id; all → null */
 	private normalizeLang(lang?: string): string | null {
 		const raw = String(lang || '')
 			.trim()
@@ -236,21 +232,25 @@ export class MangaDexSource extends BaseSource {
 	}
 
 	/**
-	 * @param thumb true → .256.jpg (list/homepage), false → full (detail)
+	 * @param size '256' | '512' | 'full'
 	 */
 	private coverUrl(
 		mangaUuid: string,
 		relationships: any[],
-		thumb = false
+		size: '256' | '512' | 'full' = '256'
 	): string {
 		const cover = (relationships || []).find((r: any) => r?.type === 'cover_art');
 		const fileName = cover?.attributes?.fileName;
 		if (!fileName) return '';
 		const base = `${this.uploadsBase}/covers/${mangaUuid}/${fileName}`;
-		return thumb ? `${base}.256.jpg` : base;
+		if (size === 'full') return base;
+		return `${base}.${size}.jpg`;
 	}
 
-	private async fetchCoverUrl(mangaUuid: string, thumb = false): Promise<string> {
+	private async fetchCoverUrl(
+		mangaUuid: string,
+		size: '256' | '512' | 'full' = '256'
+	): Promise<string> {
 		try {
 			const data = await this.apiGet<{ data?: any[] }>('/cover', {
 				'manga[]': [mangaUuid],
@@ -260,7 +260,8 @@ export class MangaDexSource extends BaseSource {
 			const fileName = data?.data?.[0]?.attributes?.fileName;
 			if (!fileName) return '';
 			const base = `${this.uploadsBase}/covers/${mangaUuid}/${fileName}`;
-			return thumb ? `${base}.256.jpg` : base;
+			if (size === 'full') return base;
+			return `${base}.${size}.jpg`;
 		} catch {
 			return '';
 		}
@@ -291,7 +292,7 @@ export class MangaDexSource extends BaseSource {
 			id: this.toMangaId(uuid),
 			sourceId: this.id,
 			title: title.trim(),
-			cover: this.coverUrl(uuid, item.relationships || [], true),
+			cover: this.coverUrl(uuid, item.relationships || [], '256'),
 			type: 'manga',
 			status: this.mapStatus(attrs.status),
 			latestChapter: lastCh
@@ -312,7 +313,6 @@ export class MangaDexSource extends BaseSource {
 		return params;
 	}
 
-	/** Batch cover untuk banyak manga uuid */
 	private async batchCovers(ids: string[]): Promise<Map<string, string>> {
 		const covers = new Map<string, string>();
 		if (!ids.length) return covers;
@@ -326,7 +326,7 @@ export class MangaDexSource extends BaseSource {
 			for (const it of mangaData?.data || []) {
 				const id = String(it?.id || '');
 				if (!id) continue;
-				const u = this.coverUrl(id, it.relationships || [], true);
+				const u = this.coverUrl(id, it.relationships || [], '256');
 				if (u) covers.set(id, u);
 			}
 		} catch (e) {
@@ -363,10 +363,6 @@ export class MangaDexSource extends BaseSource {
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
-	/**
-	 * Latest = chapter upload terbaru (per bahasa jika filter aktif).
-	 * Badge homepage: lang + nomor chapter akurat.
-	 */
 	async getLatestManga(
 		page: number,
 		opts?: { lang?: string; type?: string }
@@ -551,9 +547,10 @@ export class MangaDexSource extends BaseSource {
 			/* ignore */
 		}
 
-		let cover = this.coverUrl(uuid, item.relationships || [], false);
+		// Detail pakai 512 (cukup tajam, tidak terlalu besar)
+		let cover = this.coverUrl(uuid, item.relationships || [], '512');
 		if (!cover) {
-			cover = await this.fetchCoverUrl(uuid, false);
+			cover = await this.fetchCoverUrl(uuid, '512');
 		}
 
 		const chapters: Chapter[] = [];
