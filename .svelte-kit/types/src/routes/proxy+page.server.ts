@@ -2,14 +2,15 @@
 import { getAllSources, getSource } from '$lib/server/sources';
 import { parsePreferredFromCookie } from '$lib/stores/preferredSources';
 import { parseUpdatedAt, syntheticUpdatedAt } from '$lib/server/parseUpdatedAt';
+import { getCached } from '$lib/server/cache';
 import type { PageServerLoad } from './$types';
 import type { Manga } from '$lib/server/sources/types';
 
-const LOAD_TIMEOUT_MS = 6000;
+const LOAD_TIMEOUT_MS = 4500;
 const MAX_MANGAS = 24;
 const PER_SOURCE_LIMIT = 6;
 const MAX_PREFERRED = 4;
-const CONCURRENCY = 2; 
+const CONCURRENCY = 2;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -63,17 +64,25 @@ async function fetchSourceList(
 	lang: string,
 	type: string
 ): Promise<Manga[]> {
+	const cacheKey = `browse:${id}:p${pageNum}:q${query}:l${lang}:t${type}`;
+
 	try {
-		const adapter = getSource(id);
-		const result = await withTimeout(
-			query
-				? adapter.searchManga(query, { page: pageNum, lang, type })
-				: adapter.getLatestManga(pageNum, { lang, type }),
-			LOAD_TIMEOUT_MS
-		);
-		const list = Array.isArray(result) ? result : [];
-		return list.slice(0, PER_SOURCE_LIMIT).map((m, index) =>
-			ensureUpdatedAt({ ...m, sourceId: m.sourceId || id }, pageNum, index)
+		return await getCached(
+			cacheKey,
+			async () => {
+				const adapter = getSource(id);
+				const result = await withTimeout(
+					query
+						? adapter.searchManga(query, { page: pageNum, lang, type })
+						: adapter.getLatestManga(pageNum, { lang, type }),
+					LOAD_TIMEOUT_MS
+				);
+				const list = Array.isArray(result) ? result : [];
+				return list.slice(0, PER_SOURCE_LIMIT).map((m, index) =>
+					ensureUpdatedAt({ ...m, sourceId: m.sourceId || id }, pageNum, index)
+				);
+			},
+			180 // 3 minutes per source+page
 		);
 	} catch (e) {
 		console.error(`[Browse multi] ${id} failed:`, e);
@@ -109,10 +118,11 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 			mangas = [];
 		} else {
 			try {
-				
 				const lists: Manga[][] = [];
-				for (let i = 0; i < preferredSources.length; i += CONCURRENCY) {
-					const batch = preferredSources.slice(i, i + CONCURRENCY);
+				const conc = pageNum <= 1 ? CONCURRENCY : 1;
+
+				for (let i = 0; i < preferredSources.length; i += conc) {
+					const batch = preferredSources.slice(i, i + conc);
 					const batchResults = await Promise.all(
 						batch.map((id) => fetchSourceList(id, pageNum, query, lang, type))
 					);
@@ -129,20 +139,27 @@ export const load = async ({ url, request, setHeaders, depends }: Parameters<Pag
 	else {
 		depends(`browse:${sourceParam}`);
 		try {
-			const adapter = getSource(sourceParam);
-			const result = await withTimeout(
-				query
-					? adapter.searchManga(query, { page: pageNum, lang, type })
-					: adapter.getLatestManga(pageNum, { lang, type }),
-				LOAD_TIMEOUT_MS
-			);
-			const list = Array.isArray(result) ? result : [];
-			mangas = list.slice(0, MAX_MANGAS).map((m, index) =>
-				ensureUpdatedAt(
-					{ ...m, sourceId: m.sourceId || sourceParam },
-					pageNum,
-					index
-				)
+			const cacheKey = `browse:${sourceParam}:p${pageNum}:q${query}:l${lang}:t${type}`;
+			mangas = await getCached(
+				cacheKey,
+				async () => {
+					const adapter = getSource(sourceParam);
+					const result = await withTimeout(
+						query
+							? adapter.searchManga(query, { page: pageNum, lang, type })
+							: adapter.getLatestManga(pageNum, { lang, type }),
+						LOAD_TIMEOUT_MS
+					);
+					const list = Array.isArray(result) ? result : [];
+					return list.slice(0, MAX_MANGAS).map((m, index) =>
+						ensureUpdatedAt(
+							{ ...m, sourceId: m.sourceId || sourceParam },
+							pageNum,
+							index
+						)
+					);
+				},
+				180
 			);
 		} catch (e) {
 			console.error('[Browse] load failed:', e);
