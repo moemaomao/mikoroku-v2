@@ -4,6 +4,9 @@
 		"src/routes/+layout.server.ts",
 		"src/routes/+layout.server.ts"
 	],
+	"/about": [
+		"src/routes/+layout.server.ts"
+	],
 	"/api/pages": [
 		"src/routes/api/pages/+server.ts"
 	],
@@ -21,8 +24,14 @@
 		"src/routes/manga/[source]/[...id]/+page.server.ts",
 		"src/routes/+layout.server.ts"
 	],
+	"/privacy": [
+		"src/routes/+layout.server.ts"
+	],
 	"/reader/[source]/[...id]": [
 		"src/routes/reader/[source]/[...id]/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/report": [
 		"src/routes/+layout.server.ts"
 	],
 	"/settings": [

@@ -399,6 +399,13 @@
 				<History class="h-5 w-5 shrink-0" /> History
 			</a>
 			<a
+	           href="/report"
+	           onclick={(e) => handleNavigate(e, '/report')}
+	           class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
+            >
+	           <MessageSquare class="h-5 w-5 shrink-0" /> Report
+            </a>
+			<a
 				href="/settings"
 				onclick={(e) => handleNavigate(e, '/settings')}
 				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"

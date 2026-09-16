@@ -27,7 +27,7 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/api" | "/api/pages" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]" | "/settings";
+		RouteId(): "/" | "/about" | "/api" | "/api/pages" | "/api/proxy" | "/bookmark" | "/history" | "/manga" | "/manga/[source]" | "/manga/[source]/[...id]" | "/privacy" | "/reader" | "/reader/[source]" | "/reader/[source]/[...id]" | "/report" | "/settings";
 		RouteParams(): {
 			"/manga/[source]": { source: string };
 			"/manga/[source]/[...id]": { source: string; id: string };
@@ -36,6 +36,7 @@ declare module "$app/types" {
 		};
 		LayoutParams(): {
 			"/": { source?: string; id?: string };
+			"/about": Record<string, never>;
 			"/api": Record<string, never>;
 			"/api/pages": Record<string, never>;
 			"/api/proxy": Record<string, never>;
@@ -44,12 +45,14 @@ declare module "$app/types" {
 			"/manga": { source?: string; id?: string };
 			"/manga/[source]": { source: string; id?: string };
 			"/manga/[source]/[...id]": { source: string; id: string };
+			"/privacy": Record<string, never>;
 			"/reader": { source?: string; id?: string };
 			"/reader/[source]": { source: string; id?: string };
 			"/reader/[source]/[...id]": { source: string; id: string };
+			"/report": Record<string, never>;
 			"/settings": Record<string, never>
 		};
-		Pathname(): "/" | "/api" | "/api/" | "/api/pages" | "/api/pages/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/settings" | "/settings/";
+		Pathname(): "/" | "/about" | "/about/" | "/api" | "/api/" | "/api/pages" | "/api/pages/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/privacy" | "/privacy/" | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/report" | "/report/" | "/settings" | "/settings/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/assetsignore.txt" | "/robots.txt" | string & {};
 	}

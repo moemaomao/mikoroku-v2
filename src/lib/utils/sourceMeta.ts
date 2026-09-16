@@ -124,13 +124,18 @@ export function getSourceMeta(id: string): SourceMeta {
 	return key ? SOURCE_META[key] : DEFAULT_META;
 }
 
-export function groupSourcesByLang<T extends { id: string }>(sources: T[]): Record<string, T[]> {
+export function groupSourcesByLang<T extends { id: string; name?: string }>(sources: T[]): Record<string, T[]> {
 	const groups: Record<string, T[]> = {};
 	for (const src of sources) {
 		const key = getSourceMeta(src.id).lang || 'Other';
 		if (!groups[key]) groups[key] = [];
 		groups[key].push(src);
 	}
+
+	for (const key of Object.keys(groups)) {
+		groups[key].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+	}
+
 	const order = ['Multi', 'JP', 'EN', 'ID', 'ES', 'CN'];
 	const sorted: Record<string, T[]> = {};
 	for (const k of order) if (groups[k]) sorted[k] = groups[k];
