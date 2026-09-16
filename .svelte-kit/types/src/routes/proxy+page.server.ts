@@ -10,7 +10,7 @@ const LOAD_TIMEOUT_MS = 4000;
 const MAX_MANGAS = 40;
 const PER_SOURCE_LIMIT = 8;
 const MAX_PREFERRED = 3;
-const LIST_CACHE_TTL = 60 * 15; // 15 menit
+const LIST_CACHE_TTL = 60 * 15;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -116,7 +116,6 @@ export const load = async ({ url, request, setHeaders, depends, locals }: Parame
 				async () => {
 					const lists: Manga[][] = [];
 
-					// Sequential → lebih aman terhadap CPU limit
 					for (const id of preferredSources) {
 						const list = await fetchSourceList(id, pageNum, query, lang, type);
 						lists.push(list);
@@ -125,7 +124,7 @@ export const load = async ({ url, request, setHeaders, depends, locals }: Parame
 					return mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
 				},
 				LIST_CACHE_TTL,
-				locals.kv // ← penting
+				locals.kv
 			);
 		}
 	}
@@ -160,7 +159,7 @@ export const load = async ({ url, request, setHeaders, depends, locals }: Parame
 				}
 			},
 			LIST_CACHE_TTL,
-			locals.kv // ← penting
+			locals.kv
 		);
 	}
 
