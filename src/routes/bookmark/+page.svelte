@@ -19,13 +19,13 @@
 		return `/manga/${sourceId}${cleanMangaId}`;
 	}
 
-	function proxyCover(url: string, sourceId: string, w = 200, h = 300): string {
-		if (!url) return '';
-		let u = String(url).trim();
-		if (u.startsWith('//')) u = 'https:' + u;
-		if (!/^https?:\/\//i.test(u)) return '';
-		return `/api/proxy?url=${encodeURIComponent(u)}&source=${sourceId}&w=${w}&h=${h}`;
-	}
+	function proxyCover(url: string, sourceId: string, _w = 200, _h = 300): string {
+	   if (!url) return '';
+	   let u = String(url).trim();
+	   if (u.startsWith('//')) u = 'https:' + u;
+	   if (!/^https?:\/\//i.test(u)) return '';
+	   return `/api/proxy?url=${encodeURIComponent(u)}&source=${sourceId}`;
+    }
 
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;

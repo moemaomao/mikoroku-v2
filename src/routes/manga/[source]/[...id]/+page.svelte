@@ -80,16 +80,13 @@
 		return { normal, female, male };
 	});
 
-	function proxyImage(url: string, w = 200, h = 300): string {
-		if (!url) return '';
-		let u = String(url).trim();
-		if (!u || u === '-') return '';
-		if (u.startsWith('//')) u = 'https:' + u;
-		if (/ihlv1\.xyz/i.test(u)) {
-			return `/api/proxy?url=${encodeURIComponent(u)}&source=${source}`;
-		}
-		return `/api/proxy?url=${encodeURIComponent(u)}&source=${source}&w=${w}&h=${h}`;
-	}
+	function proxyImage(url: string, _w?: number, _h?: number): string {
+	   if (!url) return '';
+	   let u = String(url).trim();
+	   if (!u || u === '-') return '';
+	   if (u.startsWith('//')) u = 'https:' + u;
+	   return `/api/proxy?url=${encodeURIComponent(u)}&source=${source}`;
+    }
 
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;

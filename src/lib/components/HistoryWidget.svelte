@@ -64,15 +64,15 @@
 	}
 
 	function proxyCover(entry: ReadingEntry): string {
-		if (!entry.cover) return '';
-		let u = String(entry.cover).trim();
-		if (!u) return '';
-		if (u.startsWith('//')) u = 'https:' + u;
-		if (/^https?:\/\//i.test(u)) {
-			return `/api/proxy?url=${encodeURIComponent(u)}&source=${entry.sourceId}&w=80&h=120`;
-		}
-		return '';
-	}
+	   if (!entry.cover) return '';
+	   let u = String(entry.cover).trim();
+	   if (!u) return '';
+	   if (u.startsWith('//')) u = 'https:' + u;
+	   if (/^https?:\/\//i.test(u)) {
+		return `/api/proxy?url=${encodeURIComponent(u)}&source=${entry.sourceId}`;
+	    }
+	   return '';
+    }
 
 	onMount(() => {
 		loadHistory();

@@ -49,12 +49,12 @@ let preferredSources = $derived(pageData.preferredSources ?? []);
 	});
 
 	function proxyImage(url: string, sourceId?: string): string {
-		const src = sourceId || currentSource;
-		if (!url || !src) return '';
-		let u = String(url).trim();
-		if (u.startsWith('//')) u = 'https:' + u;
-		return `/api/proxy?url=${encodeURIComponent(u)}&source=${src}&w=120&h=180`;
-	}
+	   const src = sourceId || currentSource;
+	   if (!url || !src) return '';
+	   let u = String(url).trim();
+	   if (u.startsWith('//')) u = 'https:' + u;
+	   return `/api/proxy?url=${encodeURIComponent(u)}&source=${src}`;
+    }
 
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;
