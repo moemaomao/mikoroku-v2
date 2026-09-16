@@ -142,7 +142,10 @@ export const GET: RequestHandler = async ({ url }) => {
 	        /voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
 	    const isMangaDex =
 	         sourceId === 'mangadex' ||
-	         /mangadex\.org|uploads\.mangadex\.org/i.test(decodedUrl);
+	        /mangadex\.org|uploads\.mangadex\.org/i.test(decodedUrl);
+		const isKumopoi =
+	         sourceId === 'kumopoi' ||
+	        /kumo\.gorae\.my\.id|kumopoi\.com/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -160,6 +163,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	        isIsekaiKomik ||
 	        isIkiru ||
 			isMangaDex ||
+			isKumopoi ||
 			isVoratoon;
 
 		// ============================================================
@@ -242,6 +246,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	       referer = 'https://v2.voratoon.com/';
         } else if (isMangaDex) {
 	       referer = 'https://mangadex.org/';
+        } else if (isKumopoi) {
+	       referer = 'https://beta.kumopoi.com/';
         }
 
 		// ============================================================

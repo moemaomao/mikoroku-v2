@@ -84,10 +84,12 @@ import { MangaKakalotSource } from './impl/MangaKakalot';
 import { MangaReadSource } from './impl/MangaRead';
 import { MangaSushiSource } from './impl/MangaSushi';
 import { MangaTaroSource } from './impl/MangaTaro';
+import { KumopoiSource } from './impl/Kumopoi';
 import type { IMangaSource } from './types';
 
 
 const sources: Record<string, IMangaSource> = {
+    kumopoi: new KumopoiSource(),
     doujins: new DoujinsSource(),
     mangataro: new MangaTaroSource(),
     mangasushi: new MangaSushiSource(),
