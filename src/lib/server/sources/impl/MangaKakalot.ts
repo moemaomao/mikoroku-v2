@@ -23,7 +23,7 @@ export class MangaKakalotSource extends BaseSource {
 	name = 'MangaKakalot';
 	baseUrl = 'https://www.mangakakalove.com';
 
-	private readonly PER_PAGE = 24;
+	private readonly PER_PAGE = 20;
 	private readonly DEFAULT_LANG = 'en';
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ export class MangaKakalotSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
-	
+
 		if (parts[0] === 'manga' && parts[1]) return parts[1];
 		return parts[0] || '';
 	}
@@ -267,51 +267,46 @@ export class MangaKakalotSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			const SITE_PER = 20;
-			const offset = (p - 1) * this.PER_PAGE;
-			const firstSite = Math.floor(offset / SITE_PER) + 1;
-			const localStart = offset % SITE_PER;
 
-			const seen = new Set<string>();
-			const bucket: Manga[] = [];
-
-			for (let sp = firstSite; sp <= firstSite + 2; sp++) {
+			const fetchPage = async (n: number): Promise<Manga[]> => {
 				const path =
-					sp === 1
+					n <= 1
 						? '/manga-list/latest-manga'
-						: `/manga-list/latest-manga?page=${sp}`;
-				let batch: Manga[] = [];
+						: `/manga-list/latest-manga?page=${n}`;
 				try {
 					const html = await this.fetchHtml(path);
-					batch = this.parseItemList(html);
+					return this.parseItemList(html);
 				} catch (e) {
-					if (sp === 1) {
-						try {
-							const html = await this.fetchHtml('/');
-							batch = this.parseItemList(html);
-						} catch {
-							throw e;
-						}
-					} else {
-						console.error('[mangakakalot] site page', sp, e);
-						break;
+					if (n <= 1) {
+						const html = await this.fetchHtml('/');
+						return this.parseItemList(html);
 					}
+					throw e;
 				}
-				if (batch.length === 0) break;
+			};
 
-				for (const m of batch) {
-					if (seen.has(m.id)) continue;
-					seen.add(m.id);
-					bucket.push(m);
+			const list = await fetchPage(p);
+
+			if (p > 1 && list.length > 0) {
+				try {
+					const first = await fetchPage(1);
+					const ids1 = new Set(first.map((m) => m.id));
+					const same =
+						list.length === first.length &&
+						list.every((m) => ids1.has(m.id));
+					if (same) {
+						console.log(
+							`[mangakakalot] latest page=${p} → 0 (site pagination broken / CF cache)`
+						);
+						return [];
+					}
+				} catch {
+					
 				}
-
-				if (bucket.length >= localStart + this.PER_PAGE) break;
 			}
 
-			const out = bucket.slice(localStart, localStart + this.PER_PAGE);
-			console.log(
-				`[mangakakalot] latest page=${p} site=${firstSite}+ offset=${offset} → ${out.length}`
-			);
+			const out = list.slice(0, this.PER_PAGE);
+			console.log(`[mangakakalot] latest page=${p} → ${out.length} items`);
 			return out;
 		} catch (e) {
 			console.error('[mangakakalot] getLatestManga', e);
@@ -391,6 +386,7 @@ export class MangaKakalotSource extends BaseSource {
 		const genres: string[] = [];
 		let description = '';
 
+		// Prefer JSON-LD (accurate genres for this title only)
 		$('script[type="application/ld+json"]').each((_, el) => {
 			try {
 				const raw = $(el).html() || '';
@@ -429,6 +425,7 @@ export class MangaKakalotSource extends BaseSource {
 			}
 		});
 
+		// DOM fallback — only inside manga info list items labeled Genres
 		$('li').each((_, li) => {
 			const text = $(li).text().replace(/\s+/g, ' ').trim();
 			if (/^Author/i.test(text)) {
@@ -485,14 +482,14 @@ export class MangaKakalotSource extends BaseSource {
 					if (!chapterSlug || seen.has(chapterSlug)) continue;
 					seen.add(chapterSlug);
 					const name = String(row.chapter_name || chapterSlug);
-				
+					// Skip bogus chapter-0 nav entries
 					if (/^chapter-0$/i.test(chapterSlug) || chapterSlug === '0') continue;
 					let num =
 						typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
 							? row.chapter_num
 							: this.parseChapterNumber(name);
 					if (!num && num !== 0) num = chapters.length + 1;
-					
+					// real chapter 0 is rare; treat API 0 without name as junk
 					if (num === 0 && !/chapter\s*0\b/i.test(name)) continue;
 					chapters.push({
 						id: this.toChapterId(slug, chapterSlug),
@@ -510,6 +507,7 @@ export class MangaKakalotSource extends BaseSource {
 			console.error('[mangakakalot] chapters API', e);
 		}
 
+		// 2) DOM fallback
 		if (chapters.length === 0) {
 			$('a[href*="/chapter"]').each((_, a) => {
 				const href = $(a).attr('href') || '';
@@ -536,7 +534,7 @@ export class MangaKakalotSource extends BaseSource {
 		chapters.sort((a, b) => {
 			const na = typeof a.number === 'number' ? a.number : -1;
 			const nb = typeof b.number === 'number' ? b.number : -1;
-			return nb - na;
+			return nb - na; // highest chapter first
 		});
 
 		const latestChapter =
