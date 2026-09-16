@@ -97,7 +97,7 @@ export class NeloMangaSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
-	
+
 		if (parts[0] === 'manga' && parts[1]) return parts[1];
 		return parts[0] || '';
 	}
@@ -329,124 +329,108 @@ export class NeloMangaSource extends BaseSource {
 
 		console.log(`[nelomanga] getMangaDetails slug=${slug} id=${mangaId}`);
 
-		const html = await this.fetchHtml(`/manga/${slug}`);
-		const $ = cheerio.load(html);
-
-		let title =
-			$('h1').first().text().replace(/\s+/g, ' ').trim() ||
-			($('meta[property="og:title"]').attr('content') || '')
-				.replace(/\s+/g, ' ')
-				.trim() ||
-			'';
-
-		if (!title) {
-			const pageTitle = $('title').first().text() || '';
-			title = pageTitle
-				.replace(/\s*\|\s*(NeloManga|MangaNelo|MangaKakalot).*$/i, '')
-				.replace(/^Read\s+/i, '')
-				.replace(/\s+Latest Chapter.*$/i, '')
-				.replace(/\s+Manga Online Free.*$/i, '')
-				.replace(/\s+/g, ' ')
-				.trim();
-		}
-
-		if (!title) title = slug.replace(/[-_]+/g, ' ');
-
-		const cover = this.absUrl(
-			$('meta[property="og:image"]').attr('content') ||
-				$('.manga-info-pic img, .info-image img, .manga-info img')
-					.first()
-					.attr('src') ||
-				$(`img[src*="${slug}"]`).first().attr('src') ||
-				`https://img-r1.2xstorage.com/thumb/${slug}.webp`
-		);
-
+		let title = slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+		let cover = `https://img-r1.2xstorage.com/thumb/${slug}.webp`;
 		let status = 'Ongoing';
 		const authors: string[] = [];
 		const genres: string[] = [];
 		let description = '';
 
-		$('script[type="application/ld+json"]').each((_, el) => {
-			try {
-				const raw = $(el).html() || '';
-				const data = JSON.parse(raw);
-				const nodes = Array.isArray(data) ? data : [data];
-				for (const node of nodes) {
-					if (!node || typeof node !== 'object') continue;
-					if (Array.isArray(node.genre)) {
-						for (const g of node.genre) {
-							const t = String(g).trim();
-							if (t && !genres.includes(t)) genres.push(t);
-						}
-					}
-					if (node.description && !description) {
-						description = String(node.description)
-							.replace(/<[^>]+>/g, '')
-							.replace(/\s+/g, ' ')
-							.trim();
-					}
-					if (node.author) {
-						const auths = Array.isArray(node.author)
-							? node.author
-							: [node.author];
-						for (const a of auths) {
-							const n =
-								typeof a === 'string'
-									? a
-									: a?.name || '';
-							const t = String(n).trim();
-							if (t && !authors.includes(t)) authors.push(t);
-						}
-					}
-				}
-			} catch {
-				
-			}
-		});
+		try {
+			const html = await this.fetchHtml(`/manga/${slug}`);
+			const $ = cheerio.load(html);
 
-	
-		$('li').each((_, li) => {
-			const text = $(li).text().replace(/\s+/g, ' ').trim();
-			if (/^Author/i.test(text)) {
-				const body = text.replace(/^Author\(s\)\s*:\s*/i, '').trim();
-				body.split(/,/).forEach((s) => {
-					const t = s.trim();
-					if (t && t.toLowerCase() !== 'updating' && !authors.includes(t))
-						authors.push(t);
-				});
-				$(li)
-					.find('a')
-					.each((__, a) => {
-						const t = $(a).text().replace(/\s+/g, ' ').trim();
-						if (t && !authors.includes(t)) authors.push(t);
-					});
-			} else if (/^Status/i.test(text)) {
-				status = this.mapStatus(text.replace(/^Status\s*:\s*/i, ''));
-			} else if (/^Genres/i.test(text) && genres.length === 0) {
-				$(li)
-					.find('a[href*="/genre/"]')
-					.each((__, a) => {
-						const t = $(a).text().replace(/\s+/g, ' ').trim();
-						if (t && !genres.includes(t)) genres.push(t);
-					});
-			}
-		});
-
-		if (!description) {
-			description =
-				$('#noidungm, .manga-info-summary, .panel-story-info-description')
-					.first()
-					.text()
+			const h1 = $('h1').first().text().replace(/\s+/g, ' ').trim();
+			if (h1) title = h1;
+			else {
+				const pageTitle = $('title').first().text() || '';
+				const cleaned = pageTitle
+					.replace(/\s*\|\s*(NeloManga|MangaNelo|MangaKakalot).*$/i, '')
+					.replace(/^Read\s+/i, '')
+					.replace(/\s+Latest Chapter.*$/i, '')
+					.replace(/\s+Manga Online Free.*$/i, '')
 					.replace(/\s+/g, ' ')
-					.trim() ||
-				($('meta[name="description"]').attr('content') || '').trim() ||
+					.trim();
+				if (cleaned) title = cleaned;
+			}
+
+			const og =
+				$('meta[property="og:image"]').attr('content') ||
+				$('.manga-info-pic img, .info-image img').first().attr('src') ||
 				'';
+			if (og) cover = this.absUrl(og);
+
+			$('script[type="application/ld+json"]').each((_, el) => {
+				try {
+					const data = JSON.parse($(el).html() || '');
+					const nodes = Array.isArray(data) ? data : [data];
+					for (const node of nodes) {
+						if (!node || typeof node !== 'object') continue;
+						if (Array.isArray(node.genre)) {
+							for (const g of node.genre) {
+								const t = String(g).trim();
+								if (t && !genres.includes(t)) genres.push(t);
+							}
+						}
+						if (node.description && !description) {
+							description = String(node.description)
+								.replace(/<[^>]+>/g, '')
+								.replace(/\s+/g, ' ')
+								.trim();
+						}
+						if (node.author) {
+							const auths = Array.isArray(node.author)
+								? node.author
+								: [node.author];
+							for (const a of auths) {
+								const n = typeof a === 'string' ? a : a?.name || '';
+								const t = String(n).trim();
+								if (t && !authors.includes(t)) authors.push(t);
+							}
+						}
+					}
+				} catch {
+					/* ignore */
+				}
+			});
+
+			$('li').each((_, li) => {
+				const text = $(li).text().replace(/\s+/g, ' ').trim();
+				if (/^Author/i.test(text)) {
+					const body = text.replace(/^Author\(s\)\s*:\s*/i, '').trim();
+					body.split(/,/).forEach((s) => {
+						const t = s.trim();
+						if (t && t.toLowerCase() !== 'updating' && !authors.includes(t))
+							authors.push(t);
+					});
+				} else if (/^Status/i.test(text)) {
+					status = this.mapStatus(text.replace(/^Status\s*:\s*/i, ''));
+				} else if (/^Genres/i.test(text) && genres.length === 0) {
+					$(li)
+						.find('a[href*="/genre/"]')
+						.each((__, a) => {
+							const t = $(a).text().replace(/\s+/g, ' ').trim();
+							if (t && !genres.includes(t)) genres.push(t);
+						});
+				}
+			});
+
+			if (!description) {
+				description =
+					$('#noidungm, .manga-info-summary, .panel-story-info-description')
+						.first()
+						.text()
+						.replace(/\s+/g, ' ')
+						.trim() ||
+					($('meta[name="description"]').attr('content') || '').trim() ||
+					'';
+			}
+		} catch (e) {
+			console.warn('[nelomanga] detail HTML failed, using API-only fallback', e);
 		}
 
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
-
-		// 1) JSON API
 		try {
 			let offset = 0;
 			const limit = 100;
@@ -459,16 +443,14 @@ export class NeloMangaSource extends BaseSource {
 				for (const row of rows) {
 					const chapterSlug = String(row.chapter_slug || '').trim();
 					if (!chapterSlug || seen.has(chapterSlug)) continue;
+					if (/^chapter-0$/i.test(chapterSlug)) continue;
 					seen.add(chapterSlug);
 					const name = String(row.chapter_name || chapterSlug);
-				
-					if (/^chapter-0$/i.test(chapterSlug) || chapterSlug === '0') continue;
 					let num =
 						typeof row.chapter_num === 'number' && !Number.isNaN(row.chapter_num)
 							? row.chapter_num
 							: this.parseChapterNumber(name);
 					if (!num && num !== 0) num = chapters.length + 1;
-		
 					if (num === 0 && !/chapter\s*0\b/i.test(name)) continue;
 					chapters.push({
 						id: this.toChapterId(slug, chapterSlug),
@@ -486,30 +468,6 @@ export class NeloMangaSource extends BaseSource {
 			console.error('[nelomanga] chapters API', e);
 		}
 
-		// 2) DOM fallback
-		if (chapters.length === 0) {
-			$('a[href*="/chapter"]').each((_, a) => {
-				const href = $(a).attr('href') || '';
-				const cm = href.match(/\/manga\/[^/]+\/(chapter-[^/?#]+)/i);
-				if (!cm) return;
-				const chapterSlug = cm[1];
-				if (/^chapter-0$/i.test(chapterSlug)) return;
-				if (seen.has(chapterSlug)) return;
-				seen.add(chapterSlug);
-				const name = ($(a).attr('title') || $(a).text() || chapterSlug)
-					.replace(/\s+/g, ' ')
-					.trim();
-				let num = this.parseChapterNumber(name);
-				if (!num && num !== 0) num = chapters.length + 1;
-				if (num === 0 && !/chapter\s*0\b/i.test(name)) return;
-				chapters.push({
-					id: this.toChapterId(slug, chapterSlug),
-					title: name,
-					number: num
-				});
-			});
-		}
-
 		chapters.sort((a, b) => {
 			const na = typeof a.number === 'number' ? a.number : -1;
 			const nb = typeof b.number === 'number' ? b.number : -1;
@@ -518,6 +476,8 @@ export class NeloMangaSource extends BaseSource {
 
 		const latestChapter =
 			chapters.length > 0 ? String(chapters[0].number) : undefined;
+
+		if (!title) title = slug;
 
 		console.log(
 			`[nelomanga] detail "${title}" chapters=${chapters.length}`
@@ -560,7 +520,6 @@ export class NeloMangaSource extends BaseSource {
 				pages.push(u);
 			};
 
-	
 			const cdnMatch = html.match(/var\s+cdns\s*=\s*(\[[^\]]+\])/i);
 			const imgMatch = html.match(
 				/var\s+chapterImages\s*=\s*(\[[^\]]+\])/i
@@ -585,7 +544,7 @@ export class NeloMangaSource extends BaseSource {
 				}
 			}
 
-
+			
 			if (pages.length === 0) {
 				const $ = cheerio.load(html);
 				$('img').each((_, img) => {
@@ -604,7 +563,6 @@ export class NeloMangaSource extends BaseSource {
 				});
 			}
 
-		
 			if (pages.length === 0) {
 				const re =
 					/(https?:\/\/(?:storage\d*\.waitst\.com|(?:img-r\d+|imgs-\d+)\.2xstorage\.com)\/[^"'\\\s]+\.(?:webp|jpg|png))/gi;
