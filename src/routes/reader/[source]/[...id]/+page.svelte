@@ -6,7 +6,6 @@
 	import {
 		ChevronsUp,
 		Download,
-		Flag,
 		Settings,
 		CloudDownload
 	} from 'lucide-svelte';
@@ -31,7 +30,6 @@
 	let lastScrollY = $state(0);
 
 	let isMenuOpen = $state(false);
-	let isReportOpen = $state(false);
 	let showChapterList = $state(false);
 	let dataSaver = $state(false);
 	let imageQuality = $state(600);
@@ -53,24 +51,9 @@
 	// ── Download ─────────────────────────────────────────────────────────────
 	let isDownloading = $state(false);
 	let downloadBannerActive = $state(false);
-	let downloadText = $state('Menyiapkan unduhan...');
+	let downloadText = $state('Preparing download...');
 	let downloadCount = $state('0/0');
 	let downloadPercent = $state(0);
-
-	// ── Report ───────────────────────────────────────────────────────────────
-	let selectedReportType = $state('');
-	let reportReason = $state('');
-	const reportTags = [
-		'Chapter Tidak Muncul',
-		'Chapter Acak',
-		'Chapter Double',
-		'Typo',
-		'Gambar Rusak',
-		'Gambar Tidak Lengkap',
-		'Urutan Salah',
-		'Terjemahan Salah',
-		'Lainnya'
-	];
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function proxyImage(url: string, forDownload = false): string {
@@ -130,7 +113,6 @@
 		if (e.key === 'Escape') {
 			isMenuOpen = false;
 			showChapterList = false;
-			isReportOpen = false;
 		}
 		if (currentMode === 'page') {
 			if (e.key === 'ArrowLeft') prevPage();
@@ -183,17 +165,6 @@
 		window.scrollTo(0, 0);
 	}
 
-	function submitReport() {
-		if (!selectedReportType) {
-			alert('Pilih jenis laporan terlebih dahulu');
-			return;
-		}
-		alert(`Laporan terkirim: ${selectedReportType}`);
-		isReportOpen = false;
-		selectedReportType = '';
-		reportReason = '';
-	}
-
 	// ── Download ZIP ─────────────────────────────────────────────────────────
 	let jszipReady: Promise<any> | null = null;
 
@@ -204,7 +175,7 @@
 			const s = document.createElement('script');
 			s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
 			s.onload = () => resolve((window as any).JSZip);
-			s.onerror = () => reject(new Error('Gagal memuat JSZip'));
+			s.onerror = () => reject(new Error('Failed to load JSZip'));
 			document.head.appendChild(s);
 		});
 		return jszipReady;
@@ -216,7 +187,7 @@
 		downloadBannerActive = true;
 		downloadPercent = 0;
 		downloadCount = `0/${pages.length}`;
-		downloadText = 'Memuat JSZip...';
+		downloadText = 'Loading JSZip...';
 
 		try {
 			const JSZip = await loadJSZip();
@@ -228,7 +199,7 @@
 				.replace(/\s+/g, '_')
 				.slice(0, 80);
 
-			downloadText = 'Mengunduh gambar...';
+			downloadText = 'Downloading images...';
 			for (let i = 0; i < pages.length; i++) {
 				try {
 					const res = await fetch(proxyImage(pages[i], true));
@@ -237,14 +208,14 @@
 					const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
 					zip.file(`${folderName}/${String(i + 1).padStart(3, '0')}.${ext}`, blob);
 				} catch (err) {
-					console.warn('Gagal unduh page', i + 1, err);
+					console.warn('Failed to download page', i + 1, err);
 				}
 				downloadPercent = Math.round(((i + 1) / pages.length) * 100);
 				downloadCount = `${i + 1}/${pages.length}`;
-				downloadText = `Mengunduh gambar ${i + 1} dari ${pages.length}...`;
+				downloadText = `Downloading image ${i + 1} of ${pages.length}...`;
 			}
 
-			downloadText = 'Membuat file ZIP...';
+			downloadText = 'Creating ZIP file...';
 			const content = await zip.generateAsync({ type: 'blob' });
 			const a = document.createElement('a');
 			a.href = URL.createObjectURL(content);
@@ -253,10 +224,10 @@
 			a.click();
 			a.remove();
 			URL.revokeObjectURL(a.href);
-			downloadText = 'Selesai!';
+			downloadText = 'Done!';
 			downloadPercent = 100;
 		} catch (err: any) {
-			downloadText = 'Gagal: ' + (err?.message || 'unknown');
+			downloadText = 'Failed: ' + (err?.message || 'unknown');
 		}
 
 		setTimeout(() => {
@@ -300,7 +271,7 @@
 
 <svelte:head>
 	<title
-		>{mangaInfo?.title || 'Reader'} - {currentChapter?.title || 'Chapter'} | Mikoroku</title
+		>{mangaInfo?.title || 'Reader'} - {currentChapter?.title || 'Chapter'} | Rokuyomu</title
 	>
 </svelte:head>
 
@@ -371,7 +342,7 @@
 				class="py-16 text-center
 					{isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}"
 			>
-				Gambar tidak tersedia
+				Images not available
 			</div>
 		{:else if currentMode === 'webtoon'}
 			{#each pages as pageUrl, i (imgEpoch + '-' + i)}
@@ -417,15 +388,14 @@
 	</main>
 
 	<div
-		class="fixed right-0 bottom-0 left-0 z-[100] flex justify-center gap-[18px] border-t px-5 py-3 transition-opacity duration-300
-			{isDarkMode ? 'border-white/5' : 'border-zinc-300/60 bg-white/70 backdrop-blur-md'}
-			{showControls ? 'opacity-100' : 'pointer-events-none opacity-0'}"
+		class="fixed right-0 bottom-0 left-0 z-[100] flex justify-center gap-[18px] border-t px-5 py-3
+			{isDarkMode ? 'border-white/5' : 'border-zinc-300/60 bg-white/70 backdrop-blur-md'}"
 	>
 		<button
 			onclick={() => prevChapter && goToChapter(prevChapter)}
 			disabled={!prevChapter}
-			aria-label="Chapter sebelumnya"
-			title="Chapter sebelumnya"
+			aria-label="Previous chapter"
+			title="Previous chapter"
 			class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border px-[15px] py-[5px] text-[0.92em] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-30
 				{isDarkMode
 					? 'border-white/15 bg-red-600/50 text-white/85 hover:bg-red-600/70'
@@ -448,8 +418,8 @@
 		<button
 			onclick={() => nextChapter && goToChapter(nextChapter)}
 			disabled={!nextChapter}
-			aria-label="Chapter selanjutnya"
-			title="Chapter selanjutnya"
+			aria-label="Next chapter"
+			title="Next chapter"
 			class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border px-[15px] py-[5px] text-[0.92em] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-30
 				{isDarkMode
 					? 'border-white/15 bg-red-600/50 text-white/85 hover:bg-red-600/70'
@@ -474,7 +444,7 @@
 		<button
 			onclick={scrollToTop}
 			class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(0,150,255,0.15)] text-[18px] text-[#4da6ff] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(0,150,255,0.25)]"
-			title="Ke atas"
+			title="Scroll to top"
 		>
 			<ChevronsUp class="h-5 w-5" />
 		</button>
@@ -486,14 +456,6 @@
 			title="Download ZIP"
 		>
 			<Download class="h-5 w-5" />
-		</button>
-
-		<button
-			onclick={() => (isReportOpen = true)}
-			class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(255,0,0,0.15)] text-[18px] text-[#ff4444] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(255,0,0,0.25)]"
-			title="Lapor"
-		>
-			<Flag class="h-5 w-5" />
 		</button>
 
 		<div class="relative">
@@ -563,7 +525,7 @@
 									class="px-3 py-2 text-center text-[0.84em]
 										{isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}"
 								>
-									Kosong
+									Empty
 								</p>
 							{/if}
 						</div>
@@ -607,72 +569,4 @@
 			{/if}
 		</div>
 	</div>
-
-	<!-- Report modal -->
-	{#if isReportOpen}
-		<div
-			class="fixed inset-0 z-[9999] flex items-center justify-center p-5 backdrop-blur-md
-				{isDarkMode ? 'bg-black/75' : 'bg-zinc-900/40'}"
-		>
-			<div
-				class="w-full max-w-[450px] rounded-3xl border p-[22px] shadow-2xl
-					{isDarkMode
-						? 'border-white/10 bg-[rgba(20,20,20,0.95)]'
-						: 'border-zinc-200 bg-white'}"
-			>
-				<h3
-					class="m-0 text-[1.15rem]
-						{isDarkMode ? 'text-white' : 'text-zinc-900'}"
-				>
-					Laporkan Chapter
-				</h3>
-				<p
-					class="mt-1.5 mb-4 text-[0.9rem]
-						{isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
-				>
-					Bantu kami memperbaiki masalah chapter ini.
-				</p>
-				<div class="mb-4 flex flex-wrap gap-2">
-					{#each reportTags as tag}
-						<button
-							onclick={() => (selectedReportType = tag)}
-							class="cursor-pointer rounded-full border-0 px-3.5 py-2 text-[0.82rem] transition
-								{selectedReportType === tag
-									? 'bg-red-600 text-white'
-									: isDarkMode
-										? 'bg-white/5 text-zinc-300 hover:bg-white/10'
-										: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}"
-						>
-							{tag}
-						</button>
-					{/each}
-				</div>
-				<textarea
-					bind:value={reportReason}
-					placeholder="Detail (opsional)..."
-					class="box-border h-[110px] w-full resize-none rounded-2xl border-0 p-3.5 font-inherit outline-none
-						{isDarkMode
-							? 'bg-white/5 text-white placeholder:text-zinc-500'
-							: 'bg-zinc-100 text-zinc-900 placeholder:text-zinc-400'}"
-				></textarea>
-				<div class="mt-4 flex gap-2.5">
-					<button
-						onclick={() => (isReportOpen = false)}
-						class="h-[46px] flex-1 cursor-pointer rounded-[14px] border-0 font-semibold
-							{isDarkMode
-								? 'bg-white/5 text-zinc-300'
-								: 'bg-zinc-100 text-zinc-600'}"
-					>
-						Batal
-					</button>
-					<button
-						onclick={submitReport}
-						class="h-[46px] flex-1 cursor-pointer rounded-[14px] border-0 bg-gradient-to-br from-red-600 to-red-900 font-semibold text-white"
-					>
-						Kirim
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 </div>
