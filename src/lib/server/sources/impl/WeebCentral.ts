@@ -6,22 +6,18 @@ import * as cheerio from 'cheerio';
  * Weeb Central adapter (HTMX + SSR)
  *
  * Domain   : https://weebcentral.com
- * Latest   : GET /hot-updates
+ * Latest   : GET /latest-updates/{page}  (HX-Request)  — paginated
  * Search   : GET /search/data?text=...  (HX-Request)
  * Detail   : GET /series/{seriesId}/...
  * Chapters : GET /series/{seriesId}/full-chapter-list  (HX-Request)
  * Pages    : GET /chapters/{chapterId}/images?reading_style=long_strip  (HX-Request)
- *
- * ID format (hierarchical — required for reader next/prev):
- *   manga   : "/series/{seriesId}"
- *   chapter : "/series/{seriesId}/chapters/{chapterId}"
  */
 export class WeebCentralSource extends BaseSource {
 	id = 'weebcentral';
 	name = 'Weeb Central';
 	baseUrl = 'https://weebcentral.com';
 
-	private readonly PER_PAGE = 24;
+	private readonly PER_PAGE = 32;
 	private readonly DEFAULT_LANG = 'en';
 	private readonly COVER_CDN = 'https://temp.compsci88.com/cover';
 
@@ -63,11 +59,11 @@ export class WeebCentralSource extends BaseSource {
 			.replace(/^\/+/, '')
 			.split('/')
 			.filter(Boolean);
-	
+
 		if (parts[0] === 'series' && parts[2] === 'chapters' && parts[3]) {
 			return parts[3];
 		}
-	
+
 		if (parts[0] === 'chapters' && parts[1]) return parts[1];
 		return parts[parts.length - 1] || '';
 	}
@@ -92,15 +88,23 @@ export class WeebCentralSource extends BaseSource {
 	}
 
 	private parseChapterNumber(text: string): number {
-		const m = String(text || '').match(
-			/(?:chapter|chap|ch\.?)\s*(\d+)(?:[.,](\d+))?/i
+		const t = String(text || '');
+		const m = t.match(
+			/(?:chapter|chap|ch\.?|episode|ep\.?)\s*(\d+)(?:[.,](\d+))?/i
 		);
 		if (m) {
 			if (m[2] != null) return parseFloat(`${m[1]}.${m[2]}`);
 			return parseInt(m[1], 10);
 		}
-		const n = String(text).match(/\b(\d+(?:\.\d+)?)\b/);
-		return n ? parseFloat(n[1]) : 0;
+		return 0;
+	}
+
+	private extractChapterLabel($art: cheerio.Cheerio<any>): string {
+		const full = $art.text().replace(/\s+/g, ' ').trim();
+		const m = full.match(
+			/(?:Chapter|Ch\.?|Chap|Episode|Ep\.?)\s*\d+(?:\.\d+)?/i
+		);
+		return m ? m[0].trim() : '';
 	}
 
 	private formatDate(iso?: string | null): string {
@@ -120,6 +124,11 @@ export class WeebCentralSource extends BaseSource {
 		return 'manga';
 	}
 
+	private inferTypeFromLabel(label: string): string {
+		if (/episode|ep\.?\s*\d/i.test(label)) return 'manhwa';
+		return 'manga';
+	}
+
 	private mapStatus(raw?: string): string {
 		const s = String(raw || '').toLowerCase();
 		if (s.includes('complete')) return 'Completed';
@@ -135,9 +144,11 @@ export class WeebCentralSource extends BaseSource {
 		_opts?: { lang?: string; type?: string }
 	): Promise<Manga[]> {
 		try {
-			if (page > 1) return [];
-
-			const html = await this.fetchHtml('/hot-updates');
+			const p = Math.max(1, page || 1);
+			const html = await this.fetchHx(
+				`/latest-updates/${p}`,
+				`${this.baseUrl}/`
+			);
 			const $ = cheerio.load(html);
 			const seen = new Set<string>();
 			const list: Manga[] = [];
@@ -148,7 +159,7 @@ export class WeebCentralSource extends BaseSource {
 					.find('a[href*="/series/"]')
 					.filter((_, a) => {
 						const h = ($(a).attr('href') || '').toLowerCase();
-						return /\/series\/[a-z0-9]+\//i.test(h) && !h.includes('/random');
+						return /\/series\/[a-z0-9]+/i.test(h) && !h.includes('/random');
 					})
 					.first();
 				const href = seriesA.attr('href') || '';
@@ -163,38 +174,31 @@ export class WeebCentralSource extends BaseSource {
 				const slugTitle = this.slugToTitle(m[2] || '');
 				let title =
 					tip ||
-					$art.find('div.truncate, .font-semibold').first().text() ||
+					$art.find('div.truncate, .font-semibold, .flex-1').first().text() ||
 					seriesA.attr('title') ||
 					slugTitle;
 				title = title.replace(/\s+/g, ' ').trim();
 				if (!title || title.length < 2) title = slugTitle || seriesId;
 
-				let latestChapter: string | undefined;
-				const chSpan = $art
-					.find('span')
-					.filter((_, s) => /chapter\s*\d/i.test($(s).text()))
-					.first()
-					.text()
-					.replace(/\s+/g, ' ')
-					.trim();
-				const chNum = this.parseChapterNumber(chSpan);
-				if (chNum) latestChapter = String(chNum);
+				const chLabel = this.extractChapterLabel($art);
+				const chNum = this.parseChapterNumber(chLabel);
+				const latestChapter = chNum ? String(chNum) : undefined;
+				const type = this.inferTypeFromLabel(chLabel);
 
 				list.push({
 					id: this.toMangaId(seriesId),
 					title,
 					cover: this.coverUrl(seriesId),
 					sourceId: this.id,
-					type: 'manga',
+					type,
 					status: 'Ongoing',
 					latestChapter,
 					lang: this.DEFAULT_LANG
 				});
 			});
 
-			const out = list.slice(0, this.PER_PAGE);
-			console.log(`[weebcentral] latest page=${page} → ${out.length} items`);
-			return out;
+			console.log(`[weebcentral] latest page=${p} → ${list.length} items`);
+			return list;
 		} catch (e) {
 			console.error('[weebcentral] getLatestManga', e);
 			return [];
@@ -303,9 +307,11 @@ export class WeebCentralSource extends BaseSource {
 					if (t) genres.push(t);
 				});
 			} else if (/^Type/i.test(strong)) {
-				type = this.mapType(body);
+				const linkText = $li.find('a').first().text().replace(/\s+/g, ' ').trim();
+				type = this.mapType(linkText || body);
 			} else if (/^Status/i.test(strong)) {
-				status = this.mapStatus(body);
+				const linkText = $li.find('a').first().text().replace(/\s+/g, ' ').trim();
+				status = this.mapStatus(linkText || body);
 			} else if (/^Description/i.test(strong)) {
 				description = body;
 			}
@@ -331,7 +337,7 @@ export class WeebCentralSource extends BaseSource {
 
 				const htmlInner = $a.html() || '';
 				const labelMatch = htmlInner.match(
-					/>\s*((?:Chapter|Ch\.?|Chap)\s*\d+(?:\.\d+)?)\s*</i
+					/>\s*((?:Chapter|Ch\.?|Chap|Episode|Ep\.?)\s*\d+(?:\.\d+)?)\s*</i
 				);
 				const text = labelMatch
 					? labelMatch[1].replace(/\s+/g, ' ').trim()

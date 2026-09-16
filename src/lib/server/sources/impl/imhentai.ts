@@ -1,15 +1,17 @@
 import { BaseSource } from '../BaseSource';
 import type { Manga, MangaDetails } from '../types';
+import https from 'node:https';
 
 /**
  * imhentai.to adapter (HTML scrape)
  *
- * List / Search : /  +  /?page=N  +  /search/?q=...&page=N
+ * List / Search : /?page=N  +  /search/?q=...&page=N
  * Detail        : /g/{id}/
  * Pages         : https://zrocdn.xyz/galleries/{mediaId}/{n}.webp
  *
  * ID format: "/{numericId}"
- * Homepage: 24 items per page
+ *
+ * Note: site SSL sometimes fails Node's strict cert check → insecure https.Agent.
  */
 export class ImhentaiSource extends BaseSource {
 	id = 'imhentai';
@@ -17,6 +19,11 @@ export class ImhentaiSource extends BaseSource {
 	baseUrl = 'https://imhentai.to';
 
 	private readonly cdn = 'https://zrocdn.xyz';
+
+	/** Agent that skips expired/mis-chained certs (imhentai.to intermittent) */
+	private readonly insecureAgent = new https.Agent({
+		rejectUnauthorized: false
+	});
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
 
@@ -31,12 +38,42 @@ export class ImhentaiSource extends BaseSource {
 		};
 	}
 
-	private async getHtml(url: string): Promise<string> {
-		const res = await fetch(url, { headers: this.h() });
-		if (!res.ok) {
-			throw new Error(`HTTP ${res.status} → ${url}`);
-		}
-		return res.text();
+	/** Fetch HTML with TLS verification disabled (no undici dependency) */
+	private getHtml(url: string): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const req = https.get(
+				url,
+				{ headers: this.h(), agent: this.insecureAgent },
+				(res) => {
+					// Follow one redirect if needed
+					if (
+						res.statusCode &&
+						res.statusCode >= 300 &&
+						res.statusCode < 400 &&
+						res.headers.location
+					) {
+						const next = res.headers.location.startsWith('http')
+							? res.headers.location
+							: `${this.baseUrl}${res.headers.location}`;
+						this.getHtml(next).then(resolve).catch(reject);
+						return;
+					}
+					if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+						reject(new Error(`HTTP ${res.statusCode} → ${url}`));
+						return;
+					}
+					const chunks: Buffer[] = [];
+					res.on('data', (c) => chunks.push(c));
+					res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+					res.on('error', reject);
+				}
+			);
+			req.on('error', reject);
+			req.setTimeout(30000, () => {
+				req.destroy();
+				reject(new Error(`Timeout → ${url}`));
+			});
+		});
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -50,7 +87,9 @@ export class ImhentaiSource extends BaseSource {
 	}
 
 	private extractMediaId(html: string): string {
-		const m = html.match(/zrocdn\.xyz\/galleries\/(\d+)\//);
+		const m =
+			html.match(/zrocdn\.xyz\/galleries\/(\d+)\//) ||
+			html.match(/\/galleries\/(\d+)\//);
 		return m?.[1] || '';
 	}
 
@@ -68,6 +107,7 @@ export class ImhentaiSource extends BaseSource {
 	private parseList(html: string): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
+
 		const re =
 			/<div class="thumb"[^>]*>[\s\S]*?<a href="\/g\/(\d+)\/">[\s\S]*?<img[^>]+data-src="([^"]+)"[^>]*>[\s\S]*?<h2 class="gallery_title"><a[^>]*>([^<]+)<\/a>/gi;
 
@@ -80,7 +120,6 @@ export class ImhentaiSource extends BaseSource {
 			const cover = (m[2] || '').trim();
 			const title = this.decodeHtml(m[3] || `Gallery ${id}`);
 
-			// Coba ambil category dari block (opsional)
 			const blockStart = m.index;
 			const blockEnd = html.indexOf('</div>', blockStart + 200);
 			const block = html.slice(blockStart, blockEnd > 0 ? blockEnd : blockStart + 800);
@@ -97,18 +136,33 @@ export class ImhentaiSource extends BaseSource {
 			});
 		}
 
+		if (out.length === 0) {
+			const simpleRe =
+				/href="\/g\/(\d+)\/"[^>]*>[\s\S]*?data-src="(https?:\/\/[^"]+)"[\s\S]*?gallery_title[^>]*>[\s\S]*?<a[^>]*>([^<]+)</gi;
+			while ((m = simpleRe.exec(html)) !== null) {
+				const id = m[1];
+				if (seen.has(id)) continue;
+				seen.add(id);
+				out.push({
+					id: this.toId(id),
+					sourceId: this.id,
+					title: this.decodeHtml(m[3] || `Gallery ${id}`),
+					cover: (m[2] || '').trim(),
+					type: 'doujinshi',
+					status: 'Completed'
+				});
+			}
+		}
+
 		return out;
 	}
 
 	private pickFromInfo(html: string, label: string): string[] {
-		// Contoh: Parodies: <a ...>original</a>  atau Tags: ...
-		const re = new RegExp(
-			`${label}:[\\s\\S]*?</(?:div|ul|li)>`,
-			'i'
-		);
+		const re = new RegExp(`${label}:[\\s\\S]*?</(?:div|ul|li)>`, 'i');
 		const section = html.match(re)?.[0] || '';
 		const names: string[] = [];
-		const tagRe = /href="\/(?:tag|artist|group|parody|character|language|category)\/[^"]+\/"[^>]*>([^<]+)</gi;
+		const tagRe =
+			/href="\/(?:tag|artist|group|parody|character|language|category)\/[^"]+\/"[^>]*>([^<]+)</gi;
 		let tm: RegExpExecArray | null;
 		while ((tm = tagRe.exec(section)) !== null) {
 			const name = this.decodeHtml(tm[1]);
@@ -125,7 +179,8 @@ export class ImhentaiSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			let url = p === 1 ? `${this.baseUrl}/` : `${this.baseUrl}/?page=${p}`;
+			// Always use ?page= — root / is age-gate / landing without gallery grid
+			let url = `${this.baseUrl}/?page=${p}`;
 
 			const type = (opts?.type || 'all').toLowerCase();
 			if (type && type !== 'all') {
@@ -136,7 +191,9 @@ export class ImhentaiSource extends BaseSource {
 			}
 
 			const html = await this.getHtml(url);
-			return this.parseList(html);
+			const list = this.parseList(html);
+			console.log(`[imhentai] latest page=${p} → ${list.length} items`);
+			return list;
 		} catch (e) {
 			console.error('[imhentai] getLatestManga', e);
 			return [];
@@ -171,16 +228,14 @@ export class ImhentaiSource extends BaseSource {
 		const html = await this.getHtml(`${this.baseUrl}/g/${id}/`);
 
 		const titleM = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-		const title = titleM
-			? this.decodeHtml(titleM[1])
-			: `Gallery ${id}`;
+		const title = titleM ? this.decodeHtml(titleM[1]) : `Gallery ${id}`;
 
 		const mediaId = this.extractMediaId(html);
-		const cover = mediaId
-			? `${this.cdn}/galleries/${mediaId}/cover.webp`
-			: '';
+		const cover = mediaId ? `${this.cdn}/galleries/${mediaId}/cover.webp` : '';
 
-		const pagesM = html.match(/pages_num">(\d+)/i) || html.match(/Pages:\s*<\/span>\s*<span[^>]*>(\d+)/i);
+		const pagesM =
+			html.match(/pages_num">(\d+)/i) ||
+			html.match(/Pages:\s*<\/span>\s*<span[^>]*>(\d+)/i);
 		const pageCount = pagesM ? parseInt(pagesM[1], 10) : 0;
 
 		const artists = this.pickFromInfo(html, 'Artists');
@@ -192,7 +247,8 @@ export class ImhentaiSource extends BaseSource {
 		const characters = this.pickFromInfo(html, 'Characters');
 
 		const category = categories[0] || 'doujinshi';
-		const language = languages.find((l) => l.toLowerCase() !== 'translated') || languages[0] || '';
+		const language =
+			languages.find((l) => l.toLowerCase() !== 'translated') || languages[0] || '';
 
 		const genres = [
 			...tags,
@@ -251,7 +307,7 @@ export class ImhentaiSource extends BaseSource {
 			}
 
 			const thumbRe = new RegExp(
-				`zrocdn\\.xyz/galleries/${mediaId}/(\\d+)t\\.webp`,
+				`zrocdn\\.xyz/galleries/${mediaId}/(\\d+)t\\.(?:webp|jpg|png)`,
 				'gi'
 			);
 			const nums = new Set<number>();
@@ -277,7 +333,9 @@ export class ImhentaiSource extends BaseSource {
 				urls.push(`${this.cdn}/galleries/${mediaId}/${i}.webp`);
 			}
 
-			console.log(`[imhentai] loaded ${urls.length} pages for gallery ${id} (media ${mediaId})`);
+			console.log(
+				`[imhentai] loaded ${urls.length} pages for gallery ${id} (media ${mediaId})`
+			);
 			return urls;
 		} catch (e) {
 			console.error('[imhentai] getChapterPages failed for', id, e);

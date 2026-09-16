@@ -16,8 +16,6 @@ import * as cheerio from 'cheerio';
  * ID format:
  *   manga   : "/{series-slug}/{title-slug}-{id}"
  *   chapter : "/{series-slug}/{title-slug}-{id}/full"
- *
- * Bahasa default: English
  */
 export class DoujinsSource extends BaseSource {
 	id = 'doujins';
@@ -50,7 +48,6 @@ export class DoujinsSource extends BaseSource {
 		return id.replace(/\/+$/, '').split('?')[0] || '/';
 	}
 
-	/** /series/title-12345 → numeric id */
 	private extractNumericId(path: string): string {
 		const m = String(path).match(/-(\d+)(?:\/|$)/);
 		return m?.[1] || '';
@@ -76,7 +73,7 @@ export class DoujinsSource extends BaseSource {
 
 		$('a[href]').each((_, el) => {
 			const href = $(el).attr('href') || '';
-			// /something/title-slug-12345
+	
 			if (!/^\/[^/]+\/[^/]+-\d+\/?$/.test(href.split('?')[0])) return;
 
 			const id = this.cleanId(href);
@@ -90,7 +87,6 @@ export class DoujinsSource extends BaseSource {
 				img.attr('srcset')?.split(/\s+/)[0] ||
 				'';
 			cover = this.absUrl(cover);
-			// prefer larger thumb if f2 → try leave as is (signed)
 
 			const title =
 				(img.attr('alt') || '').trim() ||
@@ -110,7 +106,6 @@ export class DoujinsSource extends BaseSource {
 				status: 'Completed',
 				latestChapter: numId ? '1' : undefined,
 				lang: this.DEFAULT_LANG,
-				// higher gallery id ≈ newer; used for sort + relative time
 				updatedAt: idNum > 0 ? 1_700_000_000_000 + idNum * 60_000 : undefined
 			});
 		});
@@ -120,13 +115,10 @@ export class DoujinsSource extends BaseSource {
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
-
-	/** Parse embedded JSON gallery objects from /folders?start=&end= */
 	private parseFoldersJson(html: string): Manga[] {
 		const res: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Embedded JSON: "link":"\/path\/slug-123"
 		const linkRe = /"link":"([^"]+)"/g;
 		const thumbRe = /"thumbnail2":"([^"]+)"/g;
 		const dateRe = /"date":"([^"]+)"/g;
@@ -137,7 +129,6 @@ export class DoujinsSource extends BaseSource {
 
 		let m: RegExpExecArray | null;
 		while ((m = linkRe.exec(html)) !== null) {
-			// strip JSON escape backslashes: \/ → /
 			links.push(m[1].replace(/\\/g, ''));
 		}
 		while ((m = thumbRe.exec(html)) !== null) {
@@ -195,10 +186,8 @@ export class DoujinsSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			// Site paginates by calendar day: /folders?start=UNIX&end=UNIX
 			const daySec = 86400;
 			const todayStart = Math.floor(Date.now() / 1000 / daySec) * daySec;
-			// page 1 = previous UTC day (site lags / posts by day buckets)
 			const end = todayStart - (p - 1) * daySec;
 			const start = end - daySec;
 
@@ -259,14 +248,13 @@ export class DoujinsSource extends BaseSource {
 			.replace(/\s*\|\s*Doujins\.com.*$/i, '')
 			.replace(/\s+/g, ' ')
 			.trim();
-		// "Series - Title by Artist" → keep title part if possible
+
 		if (title.includes(' - ')) {
 			const parts = title.split(' - ');
 			if (parts.length >= 2) title = parts.slice(1).join(' - ').trim();
 		}
 		title = title.replace(/\s+by\s+.+$/i, '').trim() || this.slugToTitle(id);
 
-		// Cover: prefer f2 thumb derived from first page hash, else first n- page
 		let cover = $('meta[property="og:image"]').attr('content') || '';
 		if (!cover) {
 			const firstN =
@@ -274,7 +262,7 @@ export class DoujinsSource extends BaseSource {
 				$('img[data-src*="static.doujins.com/n-"]').first().attr('data-src') ||
 				'';
 			if (firstN) {
-				// n-{hash}.jpg → f2-{hash}.jpg (thumbnail used on homepage)
+	
 				cover = firstN.replace(
 					/static\.doujins\.com\/n-/,
 					'static.doujins.com/f2-'
@@ -283,7 +271,6 @@ export class DoujinsSource extends BaseSource {
 		}
 		cover = this.absUrl(cover);
 
-		// Date + page count from ".folder-message" e.g. "June 30th, 2024 • 54 images"
 		const folderMsg = $('.folder-message, .folder-display').first().text().replace(/\s+/g, ' ').trim();
 		let updatedAt: number | undefined;
 		let pageCountFromMsg: number | undefined;
@@ -299,7 +286,6 @@ export class DoujinsSource extends BaseSource {
 			if (pm) pageCountFromMsg = parseInt(pm[1], 10);
 		}
 
-		// Site puts tags in meta description ("Tags: A, B, and C") — not a real synopsis
 		const metaDesc = ($('meta[name="description"]').attr('content') || '')
 			.replace(/\s+/g, ' ')
 			.trim();
@@ -320,7 +306,6 @@ export class DoujinsSource extends BaseSource {
 			if (t && t.length < 40 && !genres.includes(t)) genres.push(t);
 		});
 
-		// Real synopsis is usually empty on this site; use folder info only
 		const description = (
 			$('.description, .folder-description').first().text() ||
 			folderMsg ||
@@ -334,13 +319,13 @@ export class DoujinsSource extends BaseSource {
 			const t = $(el).text().replace(/\s+/g, ' ').trim();
 			if (t && !authors.includes(t)) authors.push(t);
 		});
-		// fallback from title "by X"
+	
 		const byMatch = pageTitle.match(/\sby\s+([^|<]+)/i);
 		if (byMatch && !authors.length) {
 			authors.push(byMatch[1].trim());
 		}
 
-		// Count pages for badge
+
 		const pageImgs = new Set<string>();
 		$('img[src*="static.doujins.com/n-"]').each((_, img) => {
 			const src = $(img).attr('src');
@@ -380,7 +365,7 @@ export class DoujinsSource extends BaseSource {
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		try {
-			// /series/title-id/full → /series/title-id
+	
 			const path = this.cleanId(chapterId).replace(/\/full$/, '');
 			const html = await this.fetchHtml(path.endsWith('/') ? path : `${path}/`);
 			const $ = cheerio.load(html);
@@ -388,7 +373,6 @@ export class DoujinsSource extends BaseSource {
 			const pages: string[] = [];
 			const seen = new Set<string>();
 
-			// Full-size pages use static.doujins.com/n-*
 			$('img[src*="static.doujins.com/n-"], img[data-src*="static.doujins.com/n-"]').each(
 				(_, img) => {
 					const src =
@@ -404,7 +388,6 @@ export class DoujinsSource extends BaseSource {
 				}
 			);
 
-			// Regex fallback
 			if (pages.length === 0) {
 				const re =
 					/(https?:\/\/static\.doujins\.com\/n-[a-z0-9]+\.jpg[^"'\\\s]*)/gi;
