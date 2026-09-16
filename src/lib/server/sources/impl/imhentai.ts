@@ -5,14 +5,12 @@ import https from 'node:https';
 /**
  * imhentai.to adapter (HTML scrape)
  *
- * List / Search : /?page=N  +  /search/?q=...&page=N
+ * List / Search : /?page=N | /language/{lang}/?page=N | /search/?q=...&page=N
  * Detail        : /g/{id}/
  * Pages         : https://zrocdn.xyz/galleries/{mediaId}/{n}.webp
- *
  * ID format: "/{numericId}"
- *
- * Note: site SSL sometimes fails Node's strict cert check → insecure https.Agent.
  */
+
 export class ImhentaiSource extends BaseSource {
 	id = 'imhentai';
 	name = 'ImHentai';
@@ -20,7 +18,6 @@ export class ImhentaiSource extends BaseSource {
 
 	private readonly cdn = 'https://zrocdn.xyz';
 
-	/** Agent that skips expired/mis-chained certs (imhentai.to intermittent) */
 	private readonly insecureAgent = new https.Agent({
 		rejectUnauthorized: false
 	});
@@ -38,14 +35,12 @@ export class ImhentaiSource extends BaseSource {
 		};
 	}
 
-	/** Fetch HTML with TLS verification disabled (no undici dependency) */
 	private getHtml(url: string): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const req = https.get(
 				url,
 				{ headers: this.h(), agent: this.insecureAgent },
 				(res) => {
-					// Follow one redirect if needed
 					if (
 						res.statusCode &&
 						res.statusCode >= 300 &&
@@ -104,27 +99,118 @@ export class ImhentaiSource extends BaseSource {
 			.trim();
 	}
 
+	private normalizeLangForSearch(lang?: string): string | null {
+		const raw = String(lang || '')
+			.trim()
+			.toLowerCase();
+		if (!raw || raw === 'all' || raw === 'any' || raw === '*') return null;
+
+		const map: Record<string, string> = {
+			english: 'english',
+			en: 'english',
+			'en-us': 'english',
+			japanese: 'japanese',
+			ja: 'japanese',
+			japan: 'japanese',
+			chinese: 'chinese',
+			zh: 'chinese',
+			'zh-cn': 'chinese',
+			'zh-hk': 'chinese',
+			'zh-tw': 'chinese',
+			korean: 'korean',
+			ko: 'korean',
+			korea: 'korean',
+			spanish: 'spanish',
+			es: 'spanish',
+			french: 'french',
+			fr: 'french',
+			russian: 'russian',
+			ru: 'russian',
+			german: 'german',
+			de: 'german',
+			portuguese: 'portuguese',
+			pt: 'portuguese',
+			'pt-br': 'portuguese',
+			italian: 'italian',
+			it: 'italian',
+			thai: 'thai',
+			th: 'thai',
+			vietnamese: 'vietnamese',
+			vi: 'vietnamese',
+			indonesian: 'indonesian',
+			id: 'indonesian',
+			translated: 'translated'
+		};
+		return map[raw] || (/^[a-z]{2,12}$/.test(raw) ? raw : null);
+	}
+
+	private toIsoLang(name?: string): string | undefined {
+		const s = String(name || '')
+			.trim()
+			.toLowerCase();
+		if (!s) return undefined;
+		const map: Record<string, string> = {
+			english: 'en',
+			en: 'en',
+			japanese: 'ja',
+			ja: 'ja',
+			chinese: 'zh',
+			zh: 'zh',
+			korean: 'ko',
+			ko: 'ko',
+			spanish: 'es',
+			es: 'es',
+			french: 'fr',
+			fr: 'fr',
+			russian: 'ru',
+			ru: 'ru',
+			german: 'de',
+			de: 'de',
+			portuguese: 'pt',
+			pt: 'pt',
+			italian: 'it',
+			it: 'it',
+			thai: 'th',
+			th: 'th',
+			vietnamese: 'vi',
+			vi: 'vi',
+			indonesian: 'id',
+			id: 'id',
+			translated: 'en'
+		};
+		return map[s] || (s.length <= 3 ? s : undefined);
+	}
+
 	private parseList(html: string): Manga[] {
 		const out: Manga[] = [];
 		const seen = new Set<string>();
+		const blocks = html.split(/<div class="thumb"[^>]*>/i).slice(1);
 
-		const re =
-			/<div class="thumb"[^>]*>[\s\S]*?<a href="\/g\/(\d+)\/">[\s\S]*?<img[^>]+data-src="([^"]+)"[^>]*>[\s\S]*?<h2 class="gallery_title"><a[^>]*>([^<]+)<\/a>/gi;
-
-		let m: RegExpExecArray | null;
-		while ((m = re.exec(html)) !== null) {
-			const id = m[1];
+		for (const block of blocks) {
+			const idM = block.match(/href="\/g\/(\d+)\/"/);
+			if (!idM) continue;
+			const id = idM[1];
 			if (seen.has(id)) continue;
 			seen.add(id);
 
-			const cover = (m[2] || '').trim();
-			const title = this.decodeHtml(m[3] || `Gallery ${id}`);
+			const coverM = block.match(/data-src="(https?:\/\/[^"]+)"/);
+			const cover = (coverM?.[1] || '').trim();
 
-			const blockStart = m.index;
-			const blockEnd = html.indexOf('</div>', blockStart + 200);
-			const block = html.slice(blockStart, blockEnd > 0 ? blockEnd : blockStart + 800);
+			const titleM =
+				block.match(/gallery_title"><a[^>]*>([^<]+)<\/a>/i) ||
+				block.match(/<h2 class="gallery_title"[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i);
+			const title = this.decodeHtml(titleM?.[1] || `Gallery ${id}`);
+
 			const catM = block.match(/class="thumb_cat"[^>]*>([^<]+)</i);
 			const type = catM ? this.decodeHtml(catM[1]).toLowerCase() : 'doujinshi';
+
+			const flagAlt = block.match(
+				/thumb_flag"[^>]*alt="([^"]+)"|alt="([^"]+)"[^>]*class="[^"]*thumb_flag/i
+			);
+			const langPath = block.match(/\/language\/([a-z]+)\//i);
+			const langRaw =
+				(flagAlt?.[1] || flagAlt?.[2] || langPath?.[1] || '').trim();
+			const lang = this.toIsoLang(langRaw);
 
 			out.push({
 				id: this.toId(id),
@@ -132,14 +218,17 @@ export class ImhentaiSource extends BaseSource {
 				title,
 				cover,
 				type,
-				status: 'Completed'
+				status: 'Completed',
+				latestChapter: 1,
+				lang
 			});
 		}
 
 		if (out.length === 0) {
-			const simpleRe =
-				/href="\/g\/(\d+)\/"[^>]*>[\s\S]*?data-src="(https?:\/\/[^"]+)"[\s\S]*?gallery_title[^>]*>[\s\S]*?<a[^>]*>([^<]+)</gi;
-			while ((m = simpleRe.exec(html)) !== null) {
+			const re =
+				/<div class="thumb"[^>]*>[\s\S]*?<a href="\/g\/(\d+)\/">[\s\S]*?<img[^>]+data-src="([^"]+)"[^>]*>[\s\S]*?<h2 class="gallery_title"><a[^>]*>([^<]+)<\/a>/gi;
+			let m: RegExpExecArray | null;
+			while ((m = re.exec(html)) !== null) {
 				const id = m[1];
 				if (seen.has(id)) continue;
 				seen.add(id);
@@ -149,7 +238,8 @@ export class ImhentaiSource extends BaseSource {
 					title: this.decodeHtml(m[3] || `Gallery ${id}`),
 					cover: (m[2] || '').trim(),
 					type: 'doujinshi',
-					status: 'Completed'
+					status: 'Completed',
+					latestChapter: 1
 				});
 			}
 		}
@@ -179,20 +269,29 @@ export class ImhentaiSource extends BaseSource {
 	): Promise<Manga[]> {
 		try {
 			const p = Math.max(1, Number(page) || 1);
-			// Always use ?page= — root / is age-gate / landing without gallery grid
-			let url = `${this.baseUrl}/?page=${p}`;
-
+			const langSlug = this.normalizeLangForSearch(opts?.lang);
 			const type = (opts?.type || 'all').toLowerCase();
-			if (type && type !== 'all') {
+
+			let url: string;
+			if (langSlug) {
+				url =
+					p === 1
+						? `${this.baseUrl}/language/${langSlug}/`
+						: `${this.baseUrl}/language/${langSlug}/?page=${p}`;
+			} else if (type && type !== 'all') {
 				url =
 					p === 1
 						? `${this.baseUrl}/category/${encodeURIComponent(type)}/`
 						: `${this.baseUrl}/category/${encodeURIComponent(type)}/?page=${p}`;
+			} else {
+				url = `${this.baseUrl}/?page=${p}`;
 			}
 
 			const html = await this.getHtml(url);
 			const list = this.parseList(html);
-			console.log(`[imhentai] latest page=${p} → ${list.length} items`);
+			console.log(
+				`[imhentai] latest page=${p} lang=${langSlug ?? 'all'} → ${list.length} items`
+			);
 			return list;
 		} catch (e) {
 			console.error('[imhentai] getLatestManga', e);
@@ -206,13 +305,23 @@ export class ImhentaiSource extends BaseSource {
 	): Promise<Manga[]> {
 		const q = (query || '').trim();
 		const page = Math.max(1, opts?.page || 1);
+		const langSlug = this.normalizeLangForSearch(opts?.lang);
 
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-			const url = `${this.baseUrl}/search/?q=${encodeURIComponent(q)}&page=${page}`;
+			// imhentai search: q= + optional language via query text
+			const qParts = [q];
+			if (langSlug && langSlug !== 'translated') {
+				qParts.push(`language:${langSlug}`);
+			}
+			const url = `${this.baseUrl}/search/?q=${encodeURIComponent(qParts.join(' '))}&page=${page}`;
 			const html = await this.getHtml(url);
-			return this.parseList(html);
+			const list = this.parseList(html);
+			console.log(
+				`[imhentai] search "${q}" page=${page} lang=${langSlug ?? 'all'} → ${list.length}`
+			);
+			return list;
 		} catch (e) {
 			console.error('[imhentai] searchManga', e);
 			return [];
@@ -247,14 +356,23 @@ export class ImhentaiSource extends BaseSource {
 		const characters = this.pickFromInfo(html, 'Characters');
 
 		const category = categories[0] || 'doujinshi';
-		const language =
-			languages.find((l) => l.toLowerCase() !== 'translated') || languages[0] || '';
+		const languageName =
+			languages.find((l) => {
+				const x = l.toLowerCase();
+				return x !== 'translated' && x !== 'rewrite';
+			}) ||
+			languages[0] ||
+			'';
+		const lang = this.toIsoLang(languageName);
 
 		const genres = [
 			...tags,
 			...parodies.map((p) => `parody:${p}`),
 			...characters.map((c) => `character:${c}`)
 		];
+
+		// Badge chapter = page count (Ch. 42), sama seperti nhentai
+		const latestChapter = pageCount > 0 ? pageCount : 1;
 
 		return {
 			id: this.toId(id),
@@ -263,8 +381,10 @@ export class ImhentaiSource extends BaseSource {
 			cover,
 			type: category,
 			status: 'Completed',
+			lang,
+			latestChapter,
 			description: [
-				language && `Language: ${language}`,
+				languageName && `Language: ${languageName}`,
 				category && `Type: ${category}`,
 				artists.length && `Artists: ${artists.join(', ')}`,
 				groups.length && `Groups: ${groups.join(', ')}`,
@@ -281,7 +401,8 @@ export class ImhentaiSource extends BaseSource {
 								id: this.toId(id),
 								title: 'Read',
 								number: 1,
-								date: ''
+								date: '',
+								lang
 							}
 					  ]
 					: []
