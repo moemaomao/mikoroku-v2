@@ -7,6 +7,7 @@
 
 	let manga = $derived((data as any).manga);
 	let source = $derived((data as any).source as string);
+	let canonicalUrl = $derived((data as any).canonicalUrl as string | undefined);
 
 	const VIEW_KEY = 'mikoroku-chapter-view';
 	const SORT_KEY = 'mikoroku-chapter-sort';
@@ -33,11 +34,16 @@
 		return out;
 	}
 
-	const META_KEYS = /^\s*(alttitle|alt title|alternative(?: title)?|type|language|artists?|groups?|pages|author|publication|published|serialization|demographic|latest(?: update)?|updated|rating|volume|vol)\s*:/i;
+	const META_KEYS =
+		/^\s*(alttitle|alt title|alternative(?: title)?|type|language|artists?|groups?|pages|author|publication|published|serialization|demographic|latest(?: update)?|updated|rating|volume|vol)\s*:/i;
 
 	let meta = $derived(parseMeta(manga?.description));
 	let altTitle = $derived(
-		meta['alttitle'] || meta['alt title'] || meta['alternative'] || meta['alternative title'] || ''
+		meta['alttitle'] ||
+			meta['alt title'] ||
+			meta['alternative'] ||
+			meta['alternative title'] ||
+			''
 	);
 	let type = $derived(meta['type'] || manga?.type || 'Manga');
 	let language = $derived(meta['language'] || '');
@@ -64,6 +70,23 @@
 			.trim()
 	);
 
+	// ── SEO / share card ─────────────────────────────────────────────────────
+	let pageTitle = $derived(
+		manga?.title ? `${manga.title} - RokuYomu` : 'RokuYomu'
+	);
+	let pageDesc = $derived(
+		(synopsis || manga?.title || 'Baca manga di RokuYomu')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.slice(0, 160)
+	);
+	// og:image harus URL absolut publik; cover sumber biasanya sudah https
+	let pageImage = $derived(
+		manga?.cover && /^https?:\/\//i.test(String(manga.cover).trim())
+			? String(manga.cover).trim()
+			: ''
+	);
+
 	let genreTags = $derived.by(() => {
 		const all = manga?.genres || [];
 		const normal: string[] = [];
@@ -81,12 +104,12 @@
 	});
 
 	function proxyImage(url: string, _w?: number, _h?: number): string {
-	   if (!url) return '';
-	   let u = String(url).trim();
-	   if (!u || u === '-') return '';
-	   if (u.startsWith('//')) u = 'https:' + u;
-	   return `/api/proxy?url=${encodeURIComponent(u)}&source=${source}`;
-    }
+		if (!url) return '';
+		let u = String(url).trim();
+		if (!u || u === '-') return '';
+		if (u.startsWith('//')) u = 'https:' + u;
+		return `/api/proxy?url=${encodeURIComponent(u)}&source=${source}`;
+	}
 
 	function onCoverError(e: Event) {
 		const img = e.currentTarget as HTMLImageElement;
@@ -127,15 +150,15 @@
 	}
 
 	async function handleBookmark() {
-         if (!manga) return;
-          bookmarked = await toggleBookmark({
-          mangaId: manga.id,
-          mangaSlug: manga.id,
-          mangaTitle: manga.title,
-          cover: manga.cover || '',
-          sourceId: source
-      });
-    }
+		if (!manga) return;
+		bookmarked = await toggleBookmark({
+			mangaId: manga.id,
+			mangaSlug: manga.id,
+			mangaTitle: manga.title,
+			cover: manga.cover || '',
+			sourceId: source
+		});
+	}
 
 	function setViewMode(mode: 'grid-thumb' | 'grid-text' | 'list-thumb') {
 		viewMode = mode;
@@ -218,8 +241,27 @@
 </script>
 
 <svelte:head>
-	<title>{manga?.title || 'Manga'} | Mikoroku</title>
-	<meta name="description" content={synopsis?.slice(0, 160) || manga?.title || ''} />
+	<title>{pageTitle}</title>
+	<meta name="description" content={pageDesc} />
+
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="RokuYomu" />
+	<meta property="og:title" content={pageTitle} />
+	<meta property="og:description" content={pageDesc} />
+	{#if pageImage}
+		<meta property="og:image" content={pageImage} />
+	{/if}
+	{#if canonicalUrl}
+		<meta property="og:url" content={canonicalUrl} />
+		<link rel="canonical" href={canonicalUrl} />
+	{/if}
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={pageTitle} />
+	<meta name="twitter:description" content={pageDesc} />
+	{#if pageImage}
+		<meta name="twitter:image" content={pageImage} />
+	{/if}
 </svelte:head>
 
 {#if !manga}

@@ -56,10 +56,12 @@ export const load: PageServerLoad = async ({ params, url, setHeaders, locals }) 
 		});
 
 		return {
-			manga,
-			source: sourceId,
-			selectedLang: lang
-		};
+	     manga,
+	     source: sourceId,
+	     selectedLang: lang,
+	     canonicalUrl: url.href
+        };
+		
 	} catch (e: any) {
 		console.error('[Manga Detail] load failed:', e);
 		if (e?.status) throw e;
