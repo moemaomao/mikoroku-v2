@@ -265,14 +265,45 @@
 
 		return () => obs.disconnect();
 	});
+	
+	// ── SEO / share card ─────────────────────────────────────────────────────
+	let pageTitle = $derived(
+		mangaInfo?.title
+			? `${mangaInfo.title} - ${currentChapter?.title || 'Chapter'} | RokuYomu`
+			: 'Reader | RokuYomu'
+	);
+	let pageDesc = $derived(
+		mangaInfo?.title
+			? `Baca ${mangaInfo.title}${currentChapter?.title ? ` — ${currentChapter.title}` : ''} di RokuYomu`
+			: 'Baca chapter manga di RokuYomu'
+	);
+	let pageImage = $derived(
+		mangaInfo?.cover && /^https?:\/\//i.test(String(mangaInfo.cover).trim())
+			? String(mangaInfo.cover).trim()
+			: ''
+	);
 </script>
 
 <svelte:window onkeydown={handleKeydown} onscroll={handleScroll} />
 
 <svelte:head>
-	<title
-		>{mangaInfo?.title || 'Reader'} - {currentChapter?.title || 'Chapter'} | Rokuyomu</title
-	>
+	<title>{pageTitle}</title>
+	<meta name="description" content={pageDesc} />
+
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="RokuYomu" />
+	<meta property="og:title" content={pageTitle} />
+	<meta property="og:description" content={pageDesc} />
+	{#if pageImage}
+		<meta property="og:image" content={pageImage} />
+	{/if}
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={pageTitle} />
+	<meta name="twitter:description" content={pageDesc} />
+	{#if pageImage}
+		<meta name="twitter:image" content={pageImage} />
+	{/if}
 </svelte:head>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
