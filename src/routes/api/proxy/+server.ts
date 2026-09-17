@@ -289,13 +289,16 @@ export const GET: RequestHandler = async ({ url }) => {
 			const contentType =
 				imageResponse.headers.get('content-type') || 'image/jpeg';
 
-			const filename = getFilename(decodedUrl, contentType);
+			const filenameParam = url.searchParams.get('filename');
+            const filename = filenameParam
+	        ? filenameParam.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
+	        : getFilename(decodedUrl, contentType);
 
 			return new Response(imageResponse.body, {
 				headers: {
 					'Content-Type': contentType,
 
-					'Content-Disposition': `inline; filename="${filename}"`,
+					'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
 
 					'Cache-Control':
 						'public, max-age=31536000, immutable',

@@ -57,19 +57,30 @@
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function proxyImage(url: string, forDownload = false): string {
-		if (!url) return '';
-		let u = url.trim();
-		if (u.startsWith('//')) u = `https:${u}`;
-		else if (u.startsWith('/')) u = `https://weloma.net${u}`;
+	if (!url) return '';
+	let u = url.trim();
+	if (u.startsWith('//')) u = `https:${u}`;
+	else if (u.startsWith('/')) u = `https://weloma.net${u}`;
 
-		let proxy = `/api/proxy?url=${encodeURIComponent(u)}&source=${source}`;
-		if (forDownload) return proxy;
+	let filename = 'image.jpg';
+	try {
+		const path = new URL(u).pathname;
+		const last = path.split('/').pop() || '';
+		if (last) filename = decodeURIComponent(last);
+	} catch {}
 
-		if (dataSaver && !/ihlv1\.xyz/i.test(u)) {
-			proxy += `&w=${imageQuality}`;
-		}
-		return proxy;
+	filename = filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim() || 'image.jpg';
+	if (!/\.[a-zA-Z0-9]{2,5}$/.test(filename)) filename += '.jpg';
+
+	let proxy = `/api/proxy?url=${encodeURIComponent(u)}&source=${source}&filename=${encodeURIComponent(filename)}`;
+
+	if (forDownload) return proxy;
+
+	if (dataSaver && !/ihlv1\.xyz/i.test(u)) {
+		proxy += `&w=${imageQuality}`;
 	}
+	return proxy;
+}
 
 	function handleScroll() {
 		const y = window.scrollY;
