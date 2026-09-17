@@ -190,7 +190,7 @@
 	let siteUrl = $derived($page.url.origin);
 	let pageTitle = $derived(
 		isMulti
-			? 'Multi Source — RokuYomu'
+			? 'RokuYomu - Manga Source Base'
 			: currentSource
 				? `${sourceName(currentSource)} — RokuYomu`
 				: 'RokuYomu — Baca Manga, Manhwa & Manhua'
