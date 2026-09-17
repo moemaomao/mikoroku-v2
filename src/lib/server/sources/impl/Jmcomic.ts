@@ -9,15 +9,16 @@ import { createHash, createDecipheriv } from 'crypto';
  * API  : mobile API (token + AES-ECB decrypt)
  *
  * ID format:
- *   manga   : album numeric id  e.g. "1450456"
- *   chapter : photo numeric id  e.g. "1450456" (series item id)
+ *   manga   : /{numericId}
+ *   chapter : /{photoId}
  *
  * Cover  : https://cdn-msp.jmapiproxy1.cc/media/albums/{id}.jpg
  * Pages  : https://cdn-msp.jmapiproxy1.cc/media/photos/{photoId}/{filename}
  *
- * Gambar chapter di-scramble (strip vertikal). Frontend/proxy perlu unscramble
- * pakai getScrambleNum(photoId, filename). Sementara URL mentah di-return;
- * pastikan proxy set Referer + source=jmcomic.
+ * Catatan production:
+ * - Jangan enrichLatestChapter di list (timeout serverless)
+ * - Retry multi-domain bila 1 domain gagal/blocked
+ * - Pastikan runtime Node.js (bukan Edge) — butuh crypto + Buffer
  */
 export class JmcomicSource extends BaseSource {
 	id = 'jmcomic';
@@ -27,12 +28,10 @@ export class JmcomicSource extends BaseSource {
 	private readonly PER_PAGE = 30;
 	private readonly DEFAULT_LANG = 'zh';
 
-	/** Mobile API secrets (public, dari client resmi) */
 	private readonly APP_TOKEN_SECRET = '185Hcomic3PAPP7R';
 	private readonly APP_DATA_SECRET = '185Hcomic3PAPP7R';
 	private readonly APP_VERSION = '1.7.0';
 
-	/** API domains — di-shuffle tiap request */
 	private readonly API_DOMAINS = [
 		'www.cdnhjk.net',
 		'www.cdngwc.cc',
@@ -40,7 +39,6 @@ export class JmcomicSource extends BaseSource {
 		'www.cdngwc.club'
 	];
 
-	/** Image CDN */
 	private readonly IMG_CDN = [
 		'cdn-msp.jmapiproxy1.cc',
 		'cdn-msp.jmapiproxy2.cc',
@@ -48,10 +46,11 @@ export class JmcomicSource extends BaseSource {
 		'cdn-msp3.jmapiproxy2.cc'
 	];
 
-	/** Scramble thresholds */
 	private readonly SCRAMBLE_220980 = 220980;
 	private readonly SCRAMBLE_268850 = 268850;
 	private readonly SCRAMBLE_421926 = 421926;
+
+	private readonly FETCH_TIMEOUT_MS = 12000;
 
 	// ── Crypto ───────────────────────────────────────────────────────────────
 
@@ -80,9 +79,13 @@ export class JmcomicSource extends BaseSource {
 
 	// ── API request ──────────────────────────────────────────────────────────
 
-	private pickDomain(): string {
-		const list = this.API_DOMAINS;
-		return list[Math.floor(Math.random() * list.length)];
+	private shuffle<T>(arr: T[]): T[] {
+		const a = [...arr];
+		for (let i = a.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[a[i], a[j]] = [a[j], a[i]];
+		}
+		return a;
 	}
 
 	private pickImgCdn(): string {
@@ -93,31 +96,53 @@ export class JmcomicSource extends BaseSource {
 	private async apiGet(path: string): Promise<any> {
 		const ts = String(Math.floor(Date.now() / 1000));
 		const { token, tokenparam } = this.tokenPair(ts);
-		const domain = this.pickDomain();
-		const url = `https://${domain}${path.startsWith('/') ? path : `/${path}`}`;
+		const domains = this.shuffle(this.API_DOMAINS);
+		const rel = path.startsWith('/') ? path : `/${path}`;
 
-		const res = await fetch(url, {
-			headers: {
-				token,
-				tokenparam,
-				'User-Agent':
-					'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
-				Accept: 'application/json, text/plain, */*',
-				'Accept-Encoding': 'identity',
-				'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+		let lastErr: unknown;
+
+		for (const domain of domains) {
+			const url = `https://${domain}${rel}`;
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), this.FETCH_TIMEOUT_MS);
+
+			try {
+				const res = await fetch(url, {
+					headers: {
+						token,
+						tokenparam,
+						'User-Agent':
+							'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+						Accept: 'application/json, text/plain, */*',
+						'Accept-Encoding': 'identity',
+						'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+					},
+					signal: controller.signal
+				});
+
+				if (!res.ok) {
+					lastErr = new Error(`JM API ${res.status} ${url}`);
+					continue;
+				}
+
+				const body = (await res.json()) as { code?: number; data?: string };
+				if (!body?.data) {
+					lastErr = new Error(`JM API empty data: ${url}`);
+					continue;
+				}
+
+				return this.decryptData(body.data, ts);
+			} catch (e) {
+				lastErr = e;
+				console.warn(`[jmcomic] domain fail ${domain}:`, e);
+			} finally {
+				clearTimeout(timer);
 			}
-		});
-
-		if (!res.ok) {
-			throw new Error(`JM API ${res.status} ${url}`);
 		}
 
-		const body = (await res.json()) as { code?: number; data?: string };
-		if (!body?.data) {
-			throw new Error(`JM API empty data: ${url}`);
-		}
-
-		return this.decryptData(body.data, ts);
+		throw lastErr instanceof Error
+			? lastErr
+			: new Error(`JM API all domains failed for ${rel}`);
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -141,8 +166,7 @@ export class JmcomicSource extends BaseSource {
 
 	getScrambleNum(photoId: string | number, filename: string): number {
 		const aid = parseInt(String(photoId), 10);
-		const scrambleId = this.SCRAMBLE_220980;
-		if (aid < scrambleId) return 0;
+		if (aid < this.SCRAMBLE_220980) return 0;
 		if (aid < this.SCRAMBLE_268850) return 10;
 		const x = aid < this.SCRAMBLE_421926 ? 10 : 8;
 		const name = filename.replace(/\.[^.]+$/, '');
@@ -192,40 +216,12 @@ export class JmcomicSource extends BaseSource {
 				.map((it) => this.mapListItem(it))
 				.filter(Boolean) as Manga[];
 
-			await this.enrichLatestChapter(list);
-
 			console.log(`[jmcomic] latest page=${p} → ${list.length}`);
 			return list.slice(0, this.PER_PAGE);
 		} catch (e) {
 			console.error('[jmcomic] getLatestManga', e);
 			return [];
 		}
-	}
-
-	private async enrichLatestChapter(list: Manga[]): Promise<void> {
-		await Promise.all(
-			list.map(async (m) => {
-				try {
-					const aid = this.extractId(m.id);
-					if (!aid) return;
-					const data = await this.apiGet(`/album?id=${aid}`);
-					const series: any[] = Array.isArray(data?.series) ? data.series : [];
-					if (series.length > 1) {
-						const sorts = series
-							.map((s) => parseInt(String(s?.sort || '0'), 10))
-							.filter((n) => n > 0);
-						const last = sorts.length ? Math.max(...sorts) : series.length;
-						m.latestChapter = `第${last}話`;
-					} else if (data?.total_photos) {
-						m.latestChapter = `${data.total_photos}P`;
-					} else {
-						m.latestChapter = '第1話';
-					}
-				} catch {
-					
-				}
-			})
-		);
 	}
 
 	async searchManga(
@@ -237,7 +233,6 @@ export class JmcomicSource extends BaseSource {
 		if (!q) return this.getLatestManga(page, opts);
 
 		try {
-		
 			const params = new URLSearchParams({
 				main_tag: '0',
 				search_query: q,
@@ -258,6 +253,7 @@ export class JmcomicSource extends BaseSource {
 						sourceId: this.id,
 						type: details.type || 'manga',
 						status: details.status,
+						latestChapter: details.latestChapter,
 						lang: this.DEFAULT_LANG
 					}
 				];
@@ -267,8 +263,6 @@ export class JmcomicSource extends BaseSource {
 			const list = content
 				.map((it) => this.mapListItem(it))
 				.filter(Boolean) as Manga[];
-
-			await this.enrichLatestChapter(list);
 
 			console.log(`[jmcomic] search "${q}" page=${page} → ${list.length}`);
 			return list.slice(0, this.PER_PAGE);
@@ -325,7 +319,8 @@ export class JmcomicSource extends BaseSource {
 			for (const s of series) {
 				const cid = String(s?.id || '').trim();
 				if (!cid) continue;
-				const sort = parseInt(String(s?.sort || '0'), 10) || chapters.length + 1;
+				const sort =
+					parseInt(String(s?.sort || '0'), 10) || chapters.length + 1;
 				const name = String(s?.name || '').trim();
 				chapters.push({
 					id: this.toId(cid),
@@ -335,7 +330,6 @@ export class JmcomicSource extends BaseSource {
 				});
 			}
 		} else {
-	
 			chapters.push({
 				id: this.toId(aid),
 				title: '第1話',
