@@ -7,16 +7,15 @@ const PAGES_TO_SYNC = [1];
 const LIMIT_PER_SOURCE = 24;
 const TIMEOUT_MS = 8000;
 
-// Source yang sering dipakai user (edit sesuai traffic kamu)
 const PRIORITY_SOURCES = [
-	'mangaread',
+	'hitomi',
 	'mangadex',
 	'asura',
 	'komiku',
 	'mangakakalot',
 	'flamecomics',
 	'weebcentral',
-	'mangafire',
+	'asmhentai',
 	'ehentai',
 	'nhentai'
 ];
