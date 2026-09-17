@@ -190,9 +190,9 @@
 	let siteUrl = $derived($page.url.origin);
 	let pageTitle = $derived(
 		isMulti
-			? 'Latest Manga (Multi Source) — RokuYomu'
+			? 'Multi Source — RokuYomu'
 			: currentSource
-				? `${sourceName(currentSource)} — Latest — RokuYomu`
+				? `${sourceName(currentSource)} — RokuYomu`
 				: 'RokuYomu — Baca Manga, Manhwa & Manhua'
 	);
 	let pageDesc = $derived(
