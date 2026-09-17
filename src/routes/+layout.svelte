@@ -232,6 +232,57 @@
 	// ── Lifecycle ────────────────────────────────────────────────────────────
 	onMount(() => {
 		const mq = window.matchMedia('(min-width: 1024px)');
+		// ── Auto-retry Error 1102 ────────────────────────────────────────────────
+        const MAX_RETRY = 2;
+        const RETRY_KEY = 'rokuyomu_1102_retry';
+        const RETRY_DELAY = 1400;
+
+        const isError1102 =
+	     document.body.innerText.includes('Error 1102') ||
+	     document.body.innerText.includes('Worker exceeded resource limits');
+
+if (isError1102) {
+	const currentRetry = parseInt(sessionStorage.getItem(RETRY_KEY) || '0', 10);
+
+	if (currentRetry < MAX_RETRY) {
+		sessionStorage.setItem(RETRY_KEY, String(currentRetry + 1));
+
+		const overlay = document.createElement('div');
+		overlay.id = 'retry-overlay';
+		overlay.innerHTML = `
+			<div style="
+				position:fixed;inset:0;z-index:99999;
+				display:flex;align-items:center;justify-content:center;
+				background:rgba(12,9,16,0.92);backdrop-filter:blur(8px);
+				font-family:system-ui,sans-serif;color:#e4e4e7;
+			">
+				<div style="text-align:center;">
+					<div style="
+						width:42px;height:42px;margin:0 auto 16px;
+						border:3px solid #3f3f46;border-top-color:#a78bfa;
+						border-radius:50%;animation:spin 0.8s linear infinite;
+					"></div>
+					<div style="font-size:15px;font-weight:500;">Sedang memuat ulang...</div>
+					<div style="font-size:12px;color:#71717a;margin-top:6px;">
+						Percobaan ${currentRetry + 1} dari ${MAX_RETRY}
+					</div>
+				</div>
+			</div>
+			<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+		`;
+		document.body.appendChild(overlay);
+
+		setTimeout(() => {
+			window.location.reload();
+		}, RETRY_DELAY);
+
+		return;
+	} else {
+		sessionStorage.removeItem(RETRY_KEY);
+	}
+} else {
+	sessionStorage.removeItem(RETRY_KEY);
+}
 
 		const applyMq = () => {
 			isDesktop = mq.matches;
