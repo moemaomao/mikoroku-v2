@@ -1,24 +1,18 @@
 import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
-import { createHash, createDecipheriv } from 'crypto';
+import { createHash, createDecipheriv } from 'node:crypto';
 
 /**
- * 18comic / 禁漫天堂 (JMComic) adapter
+ * 18comic / 禁漫天堂 (JMComic)
  *
- * Web  : https://18comic.vip  (Cloudflare — jangan scrape HTML)
- * API  : mobile API (token + AES-ECB decrypt)
+ * Deploy: Cloudflare Workers (adapter-cloudflare + nodejs_compat)
  *
- * ID format:
- *   manga   : /{numericId}
- *   chapter : /{photoId}
+ * Masalah production sebelumnya:
+ * 1. +page.server.ts timeout 4.5s — retry domain berurutan kehabisan waktu
+ * 2. return [] di-cache KV 30 menit → list kosong terus
+ * 3. import 'crypto' vs 'node:crypto'
  *
- * Cover  : https://cdn-msp.jmapiproxy1.cc/media/albums/{id}.jpg
- * Pages  : https://cdn-msp.jmapiproxy1.cc/media/photos/{photoId}/{filename}
- *
- * Catatan production:
- * - Jangan enrichLatestChapter di list (timeout serverless)
- * - Retry multi-domain bila 1 domain gagal/blocked
- * - Pastikan runtime Node.js (bukan Edge) — butuh crypto + Buffer
+ * Fix: race 2 domain (timeout 3.2s), throw on fail (jangan cache []), node:crypto
  */
 export class JmcomicSource extends BaseSource {
 	id = 'jmcomic';
@@ -46,13 +40,7 @@ export class JmcomicSource extends BaseSource {
 		'cdn-msp3.jmapiproxy2.cc'
 	];
 
-	private readonly SCRAMBLE_220980 = 220980;
-	private readonly SCRAMBLE_268850 = 268850;
-	private readonly SCRAMBLE_421926 = 421926;
-
-	private readonly FETCH_TIMEOUT_MS = 12000;
-
-	// ── Crypto ───────────────────────────────────────────────────────────────
+	private readonly FETCH_TIMEOUT_MS = 3200;
 
 	private md5hex(s: string): string {
 		return createHash('md5').update(s, 'utf8').digest('hex');
@@ -77,72 +65,69 @@ export class JmcomicSource extends BaseSource {
 		return JSON.parse(plain.toString('utf8'));
 	}
 
-	// ── API request ──────────────────────────────────────────────────────────
-
-	private shuffle<T>(arr: T[]): T[] {
-		const a = [...arr];
-		for (let i = a.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[a[i], a[j]] = [a[j], a[i]];
-		}
-		return a;
-	}
+	// ── API ──────────────────────────────────────────────────────────────────
 
 	private pickImgCdn(): string {
-		const list = this.IMG_CDN;
-		return list[Math.floor(Math.random() * list.length)];
+		return this.IMG_CDN[Math.floor(Math.random() * this.IMG_CDN.length)];
+	}
+
+	private async fetchOne(
+		domain: string,
+		path: string,
+		ts: string,
+		token: string,
+		tokenparam: string
+	): Promise<any> {
+		const url = `https://${domain}${path}`;
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), this.FETCH_TIMEOUT_MS);
+
+		try {
+			const res = await fetch(url, {
+				headers: {
+					token,
+					tokenparam,
+					'User-Agent':
+						'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
+					Accept: 'application/json, text/plain, */*',
+					'Accept-Encoding': 'identity',
+					'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+				},
+				signal: controller.signal
+			});
+
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const body = (await res.json()) as { data?: string };
+			if (!body?.data) throw new Error('empty data');
+			return this.decryptData(body.data, ts);
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	private async apiGet(path: string): Promise<any> {
 		const ts = String(Math.floor(Date.now() / 1000));
 		const { token, tokenparam } = this.tokenPair(ts);
-		const domains = this.shuffle(this.API_DOMAINS);
 		const rel = path.startsWith('/') ? path : `/${path}`;
 
-		let lastErr: unknown;
+		const shuffled = [...this.API_DOMAINS].sort(() => Math.random() - 0.5);
+		const pair = shuffled.slice(0, 2);
 
-		for (const domain of domains) {
-			const url = `https://${domain}${rel}`;
-			const controller = new AbortController();
-			const timer = setTimeout(() => controller.abort(), this.FETCH_TIMEOUT_MS);
-
-			try {
-				const res = await fetch(url, {
-					headers: {
-						token,
-						tokenparam,
-						'User-Agent':
-							'Mozilla/5.0 (Linux; Android 9; V1938CT Build/PQ3A.190705.11211812; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/91.0.4472.114 Safari/537.36',
-						Accept: 'application/json, text/plain, */*',
-						'Accept-Encoding': 'identity',
-						'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-					},
-					signal: controller.signal
-				});
-
-				if (!res.ok) {
-					lastErr = new Error(`JM API ${res.status} ${url}`);
-					continue;
+		try {
+			return await Promise.any(
+				pair.map((d) => this.fetchOne(d, rel, ts, token, tokenparam))
+			);
+		} catch {
+	
+			for (const d of shuffled.slice(2)) {
+				try {
+					return await this.fetchOne(d, rel, ts, token, tokenparam);
+				} catch {
+					/* next */
 				}
-
-				const body = (await res.json()) as { code?: number; data?: string };
-				if (!body?.data) {
-					lastErr = new Error(`JM API empty data: ${url}`);
-					continue;
-				}
-
-				return this.decryptData(body.data, ts);
-			} catch (e) {
-				lastErr = e;
-				console.warn(`[jmcomic] domain fail ${domain}:`, e);
-			} finally {
-				clearTimeout(timer);
 			}
+			throw new Error(`[jmcomic] all API domains failed for ${rel}`);
 		}
-
-		throw lastErr instanceof Error
-			? lastErr
-			: new Error(`JM API all domains failed for ${rel}`);
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
@@ -164,17 +149,6 @@ export class JmcomicSource extends BaseSource {
 		return `https://${this.pickImgCdn()}/media/photos/${photoId}/${filename}`;
 	}
 
-	getScrambleNum(photoId: string | number, filename: string): number {
-		const aid = parseInt(String(photoId), 10);
-		if (aid < this.SCRAMBLE_220980) return 0;
-		if (aid < this.SCRAMBLE_268850) return 10;
-		const x = aid < this.SCRAMBLE_421926 ? 10 : 8;
-		const name = filename.replace(/\.[^.]+$/, '');
-		const s = this.md5hex(`${aid}${name}`);
-		const num = s.charCodeAt(s.length - 1) % x;
-		return num * 2 + 2;
-	}
-
 	private mapListItem(item: any): Manga | null {
 		const id = String(item?.id || '').trim();
 		if (!id) return null;
@@ -186,8 +160,6 @@ export class JmcomicSource extends BaseSource {
 		const categoryTitle = item?.category?.title || '';
 		let type = 'manga';
 		if (/韓|韩|hanman/i.test(categoryTitle)) type = 'manhwa';
-		else if (/美漫|western/i.test(categoryTitle)) type = 'manga';
-		else if (/同人|單本|单本|短篇/i.test(categoryTitle)) type = 'manga';
 
 		return {
 			id: this.toId(id),
@@ -206,22 +178,17 @@ export class JmcomicSource extends BaseSource {
 		page: number,
 		_opts?: { lang?: string; type?: string }
 	): Promise<Manga[]> {
-		try {
-			const p = Math.max(1, Number(page) || 1);
-			const data = await this.apiGet(
-				`/categories/filter?page=${p}&order=&c=0&o=mr`
-			);
-			const content: any[] = data?.content || [];
-			const list = content
-				.map((it) => this.mapListItem(it))
-				.filter(Boolean) as Manga[];
+		const p = Math.max(1, Number(page) || 1);
+		const data = await this.apiGet(
+			`/categories/filter?page=${p}&order=&c=0&o=mr`
+		);
+		const content: any[] = data?.content || [];
+		const list = content
+			.map((it) => this.mapListItem(it))
+			.filter(Boolean) as Manga[];
 
-			console.log(`[jmcomic] latest page=${p} → ${list.length}`);
-			return list.slice(0, this.PER_PAGE);
-		} catch (e) {
-			console.error('[jmcomic] getLatestManga', e);
-			return [];
-		}
+		console.log(`[jmcomic] latest page=${p} → ${list.length}`);
+		return list.slice(0, this.PER_PAGE);
 	}
 
 	async searchManga(
@@ -232,44 +199,39 @@ export class JmcomicSource extends BaseSource {
 		const page = Math.max(1, opts?.page || 1);
 		if (!q) return this.getLatestManga(page, opts);
 
-		try {
-			const params = new URLSearchParams({
-				main_tag: '0',
-				search_query: q,
-				page: String(page),
-				o: 'mr',
-				t: 'a'
-			});
-			const data = await this.apiGet(`/search?${params.toString()}`);
+		const params = new URLSearchParams({
+			main_tag: '0',
+			search_query: q,
+			page: String(page),
+			o: 'mr',
+			t: 'a'
+		});
+		const data = await this.apiGet(`/search?${params.toString()}`);
 
-			if (data?.redirect_aid) {
-				const aid = String(data.redirect_aid);
-				const details = await this.getMangaDetails(aid);
-				return [
-					{
-						id: this.toId(aid),
-						title: details.title,
-						cover: details.cover,
-						sourceId: this.id,
-						type: details.type || 'manga',
-						status: details.status,
-						latestChapter: details.latestChapter,
-						lang: this.DEFAULT_LANG
-					}
-				];
-			}
-
-			const content: any[] = data?.content || [];
-			const list = content
-				.map((it) => this.mapListItem(it))
-				.filter(Boolean) as Manga[];
-
-			console.log(`[jmcomic] search "${q}" page=${page} → ${list.length}`);
-			return list.slice(0, this.PER_PAGE);
-		} catch (e) {
-			console.error('[jmcomic] searchManga', e);
-			return [];
+		if (data?.redirect_aid) {
+			const aid = String(data.redirect_aid);
+			const details = await this.getMangaDetails(aid);
+			return [
+				{
+					id: this.toId(aid),
+					title: details.title,
+					cover: details.cover,
+					sourceId: this.id,
+					type: details.type || 'manga',
+					status: details.status,
+					latestChapter: details.latestChapter,
+					lang: this.DEFAULT_LANG
+				}
+			];
 		}
+
+		const content: any[] = data?.content || [];
+		const list = content
+			.map((it) => this.mapListItem(it))
+			.filter(Boolean) as Manga[];
+
+		console.log(`[jmcomic] search "${q}" page=${page} → ${list.length}`);
+		return list.slice(0, this.PER_PAGE);
 	}
 
 	// ── Details ──────────────────────────────────────────────────────────────
@@ -342,8 +304,7 @@ export class JmcomicSource extends BaseSource {
 
 		let latestChapter: string | undefined;
 		if (chapters.length > 1) {
-			const last = chapters[chapters.length - 1];
-			latestChapter = `第${last.number}話`;
+			latestChapter = `第${chapters[chapters.length - 1].number}話`;
 		} else if (data?.total_photos) {
 			latestChapter = `${data.total_photos}P`;
 		} else if (chapters.length === 1) {
@@ -372,17 +333,11 @@ export class JmcomicSource extends BaseSource {
 		const pid = this.extractId(chapterId);
 		if (!pid) throw new Error(`JMComic: invalid chapterId ${chapterId}`);
 
-		try {
-			const data = await this.apiGet(`/chapter?id=${pid}`);
-			const images: string[] = Array.isArray(data?.images) ? data.images : [];
+		const data = await this.apiGet(`/chapter?id=${pid}`);
+		const images: string[] = Array.isArray(data?.images) ? data.images : [];
+		const pages = images.map((file: string) => this.pageUrl(pid, file));
 
-			const pages = images.map((file: string) => this.pageUrl(pid, file));
-
-			console.log(`[jmcomic] getChapterPages ${pid} → ${pages.length} pages`);
-			return pages;
-		} catch (err) {
-			console.error('[jmcomic] getChapterPages', err);
-			return [];
-		}
+		console.log(`[jmcomic] getChapterPages ${pid} → ${pages.length} pages`);
+		return pages;
 	}
 }
