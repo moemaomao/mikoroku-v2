@@ -54,6 +54,6 @@ declare module "$app/types" {
 		};
 		Pathname(): "/" | "/about" | "/about/" | "/api" | "/api/" | "/api/pages" | "/api/pages/" | "/api/proxy" | "/api/proxy/" | "/bookmark" | "/bookmark/" | "/history" | "/history/" | "/manga" | "/manga/" | `/manga/${string}` & {} | `/manga/${string}/` & {} | `/manga/${string}/${string}` & {} | `/manga/${string}/${string}/` & {} | "/privacy" | "/privacy/" | "/reader" | "/reader/" | `/reader/${string}` & {} | `/reader/${string}/` & {} | `/reader/${string}/${string}` & {} | `/reader/${string}/${string}/` & {} | "/report" | "/report/" | "/settings" | "/settings/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
-		Asset(): "/assetsignore.txt" | "/robots.txt" | string & {};
+		Asset(): "/assetsignore.txt" | "/robots.txt" | "/rokuyomu.png" | string & {};
 	}
 }

@@ -286,7 +286,7 @@
 			<p>No manga found matching the selected filters.</p>
 			{#if isMulti}
 				<p class="mt-2 text-sm">
-					Coba <a href="/settings" class="text-red-500 hover:underline">ubah preferred sources</a>
+					Silakan <a href="/settings" class="text-red-500 hover:underline">ubah preferred sources</a>
 					atau pilih source spesifik dari dropdown.
 				</p>
 			{/if}

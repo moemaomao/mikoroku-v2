@@ -376,13 +376,13 @@
 				{isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}"
 		>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-				<BookOpen class="h-5 w-5 shrink-0" /> Manga List
+				<BookOpen class="h-5 w-5 shrink-0" /> Dummy
 			</a>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-				<BookOpen class="h-5 w-5 shrink-0" /> Hentai List
+				<BookOpen class="h-5 w-5 shrink-0" /> Dummy
 			</a>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-				<Library class="h-5 w-5 shrink-0" /> Genre List
+				<Library class="h-5 w-5 shrink-0" /> Dummy
 			</a>
 			<a
 				href="/bookmark"
@@ -403,7 +403,7 @@
 	           onclick={(e) => handleNavigate(e, '/report')}
 	           class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
             >
-	           <MessageSquare class="h-5 w-5 shrink-0" /> Report
+	           <MessageSquare class="h-5 w-5 shrink-0" /> Report & Request
             </a>
 			<a
 				href="/settings"
@@ -413,7 +413,7 @@
 				<Settings class="h-5 w-5 shrink-0" /> Settings
 			</a>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-				<FileText class="h-5 w-5 shrink-0" /> Commission
+				<FileText class="h-5 w-5 shrink-0" /> Dummy
 			</a>
 
 			<div class="my-2 border-t {isDarkMode ? 'border-zinc-800/80' : 'border-zinc-200'}"></div>
@@ -432,10 +432,10 @@
 				rel="noopener noreferrer"
 				class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}"
 			>
-				<DollarSign class="h-5 w-5 shrink-0" /> Donation
+				<DollarSign class="h-5 w-5 shrink-0" /> Dummy
 			</a>
 			<a href="/" onclick={goHome} class="flex items-center gap-3 rounded-lg px-3 py-2.5 transition {navClass()}">
-				<Shield class="h-5 w-5 shrink-0" /> Admin Panel
+				<Shield class="h-5 w-5 shrink-0" /> Dummy
 			</a>
 		</nav>
 	</aside>
