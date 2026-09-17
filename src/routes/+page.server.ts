@@ -7,7 +7,6 @@ import type { Manga } from '$lib/server/sources/types';
 
 const LOAD_TIMEOUT_MS = 4500;
 const MAX_MANGAS = 24;
-const PER_SOURCE_LIMIT = 6;
 const MAX_PREFERRED = 4;
 const CONCURRENCY = 2;
 
@@ -64,9 +63,10 @@ async function fetchSourceList(
 	query: string,
 	lang: string,
 	type: string,
-	kv?: KVNamespace | null
+	kv?: KVNamespace | null,
+	limit: number = 6 // default
 ): Promise<Manga[]> {
-	const cacheKey = `browse:${id}:p${pageNum}:q${query}:l${lang}:t${type}`;
+	const cacheKey = `browse:${id}:p${pageNum}:q${query}:l${lang}:t${type}:lim${limit}`;
 
 	try {
 		return await getCached(
@@ -80,7 +80,7 @@ async function fetchSourceList(
 					LOAD_TIMEOUT_MS
 				);
 				const list = Array.isArray(result) ? result : [];
-				return list.slice(0, PER_SOURCE_LIMIT).map((m, index) =>
+				return list.slice(0, limit).map((m, index) =>
 					ensureUpdatedAt({ ...m, sourceId: m.sourceId || id }, pageNum, index)
 				);
 			},
@@ -107,76 +107,82 @@ export const load: PageServerLoad = async ({ url, request, setHeaders, depends, 
 	let preferredSources: string[] = [];
 
 	// ── Multi mode ───────────────────────────────────────────────────────────
-	if (!sourceParam) {
-		preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
-		const validIds = new Set(sources.map((s) => s.id));
-		preferredSources = preferredSources
-			.filter((id) => validIds.has(id))
-			.slice(0, MAX_PREFERRED);
+if (!sourceParam) {
+	preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
+	const validIds = new Set(sources.map((s) => s.id));
+	preferredSources = preferredSources
+		.filter((id) => validIds.has(id))
+		.slice(0, MAX_PREFERRED);
 
-		isMulti = true;
-		depends('browse:multi');
+	isMulti = true;
+	depends('browse:multi');
 
-		if (preferredSources.length === 0) {
-			mangas = [];
-		} else {
+	if (preferredSources.length === 0) {
+		mangas = [];
+	} else {
 
-			const sortedSources = [...preferredSources].sort().join(',');
-			const cacheKey = `browse:multi:${sortedSources}:p${pageNum}:q${query}:l${lang}:t${type}`;
+		const perSourceLimit = Math.ceil(MAX_MANGAS / preferredSources.length);
 
-			mangas = await getCached(
-				cacheKey,
-				async () => {
-					const lists: Manga[][] = [];
-					const conc = pageNum <= 1 ? CONCURRENCY : 1;
+		const sortedSources = [...preferredSources].sort().join(',');
+		const cacheKey = `browse:multi:${sortedSources}:p${pageNum}:q${query}:l${lang}:t${type}:ps${perSourceLimit}`;
 
-					for (let i = 0; i < preferredSources.length; i += conc) {
-						const batch = preferredSources.slice(i, i + conc);
-						const batchResults = await Promise.all(
-							batch.map((id) => fetchSourceList(id, pageNum, query, lang, type, locals.kv))
-						);
-						lists.push(...batchResults);
-					}
+		mangas = await getCached(
+			cacheKey,
+			async () => {
+				const lists: Manga[][] = [];
+				const conc = pageNum <= 1 ? CONCURRENCY : 1;
 
-					return mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
-				},
-				LIST_CACHE_TTL,
-				locals.kv
-			);
-		}
-	}
-	// ── Single source mode ───────────────────────────────────────────────────
-	else {
-		depends(`browse:${sourceParam}`);
-		try {
-			const cacheKey = `browse:${sourceParam}:p${pageNum}:q${query}:l${lang}:t${type}`;
-			mangas = await getCached(
-				cacheKey,
-				async () => {
-					const adapter = getSource(sourceParam);
-					const result = await withTimeout(
-						query
-							? adapter.searchManga(query, { page: pageNum, lang, type })
-							: adapter.getLatestManga(pageNum, { lang, type }),
-						LOAD_TIMEOUT_MS
-					);
-					const list = Array.isArray(result) ? result : [];
-					return list.slice(0, MAX_MANGAS).map((m, index) =>
-						ensureUpdatedAt(
-							{ ...m, sourceId: m.sourceId || sourceParam },
-							pageNum,
-							index
+				for (let i = 0; i < preferredSources.length; i += conc) {
+					const batch = preferredSources.slice(i, i + conc);
+					const batchResults = await Promise.all(
+						batch.map((id) =>
+							fetchSourceList(id, pageNum, query, lang, type, locals.kv, perSourceLimit)
 						)
 					);
-				},
-				LIST_CACHE_TTL,
-				locals.kv
-			);
-		} catch (e) {
-			console.error('[Browse] load failed:', e);
-			mangas = [];
-		}
+					lists.push(...batchResults);
+				}
+
+				return mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
+			},
+			LIST_CACHE_TTL,
+			locals.kv
+		);
 	}
+}
+	// ── Single source mode ───────────────────────────────────────────────────
+else {
+	depends(`browse:${sourceParam}`);
+	try {
+		const cacheKey = `browse:${sourceParam}:p${pageNum}:q${query}:l${lang}:t${type}:lim${MAX_MANGAS}`;
+		
+		mangas = await getCached(
+			cacheKey,
+			async () => {
+				const adapter = getSource(sourceParam);
+				const result = await withTimeout(
+					query
+						? adapter.searchManga(query, { page: pageNum, lang, type })
+						: adapter.getLatestManga(pageNum, { lang, type }),
+					LOAD_TIMEOUT_MS
+				);
+				const list = Array.isArray(result) ? result : [];
+				
+				return list.slice(0, MAX_MANGAS).map((m, index) =>
+					ensureUpdatedAt(
+						{ ...m, sourceId: m.sourceId || sourceParam },
+						pageNum,
+						index
+					)
+				);
+			},
+			LIST_CACHE_TTL,
+			locals.kv
+		);
+	} catch (e) {
+		console.error('[Browse] load failed:', e);
+		mangas = [];
+	}
+}
 
 	setHeaders({
 		'Cache-Control': `public, s-maxage=${LIST_CACHE_TTL}, stale-while-revalidate=900`

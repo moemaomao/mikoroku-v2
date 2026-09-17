@@ -6,11 +6,12 @@ import { getCached } from '$lib/server/cache';
 import type { PageServerLoad } from './$types';
 import type { Manga } from '$lib/server/sources/types';
 
-const LOAD_TIMEOUT_MS = 4000;
-const MAX_MANGAS = 40;
-const PER_SOURCE_LIMIT = 8;
-const MAX_PREFERRED = 3;
-const LIST_CACHE_TTL = 60 * 15;
+const LOAD_TIMEOUT_MS = 4500;
+const MAX_MANGAS = 24;
+const MAX_PREFERRED = 4;
+const CONCURRENCY = 2;
+
+const LIST_CACHE_TTL = 60 * 30;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -62,22 +63,33 @@ async function fetchSourceList(
 	pageNum: number,
 	query: string,
 	lang: string,
-	type: string
+	type: string,
+	kv?: KVNamespace | null,
+	limit: number = 6 // default
 ): Promise<Manga[]> {
+	const cacheKey = `browse:${id}:p${pageNum}:q${query}:l${lang}:t${type}:lim${limit}`;
+
 	try {
-		const adapter = getSource(id);
-		const result = await withTimeout(
-			query
-				? adapter.searchManga(query, { page: pageNum, lang, type })
-				: adapter.getLatestManga(pageNum, { lang, type }),
-			LOAD_TIMEOUT_MS
-		);
-		const list = Array.isArray(result) ? result : [];
-		return list.slice(0, PER_SOURCE_LIMIT).map((m, index) =>
-			ensureUpdatedAt({ ...m, sourceId: m.sourceId || id }, pageNum, index)
+		return await getCached(
+			cacheKey,
+			async () => {
+				const adapter = getSource(id);
+				const result = await withTimeout(
+					query
+						? adapter.searchManga(query, { page: pageNum, lang, type })
+						: adapter.getLatestManga(pageNum, { lang, type }),
+					LOAD_TIMEOUT_MS
+				);
+				const list = Array.isArray(result) ? result : [];
+				return list.slice(0, limit).map((m, index) =>
+					ensureUpdatedAt({ ...m, sourceId: m.sourceId || id }, pageNum, index)
+				);
+			},
+			LIST_CACHE_TTL,
+			kv
 		);
 	} catch (e) {
-		console.error(`[Browse multi] ${id} failed:`, e);
+		console.error(`[Browse] ${id} failed:`, e);
 		return [];
 	}
 }
@@ -96,75 +108,85 @@ export const load = async ({ url, request, setHeaders, depends, locals }: Parame
 	let preferredSources: string[] = [];
 
 	// ── Multi mode ───────────────────────────────────────────────────────────
-	if (!sourceParam) {
-		preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
-		const validIds = new Set(sources.map((s) => s.id));
-		preferredSources = preferredSources
-			.filter((id) => validIds.has(id))
-			.slice(0, MAX_PREFERRED);
+if (!sourceParam) {
+	preferredSources = parsePreferredFromCookie(request.headers.get('cookie'));
+	const validIds = new Set(sources.map((s) => s.id));
+	preferredSources = preferredSources
+		.filter((id) => validIds.has(id))
+		.slice(0, MAX_PREFERRED);
 
-		isMulti = true;
-		depends('browse:multi');
+	isMulti = true;
+	depends('browse:multi');
 
-		if (preferredSources.length === 0) {
-			mangas = [];
-		} else {
-			const cacheKey = `browse:multi:${preferredSources.join(',')}:p=${pageNum}:q=${query}:lang=${lang}:type=${type}`;
+	if (preferredSources.length === 0) {
+		mangas = [];
+	} else {
 
-			mangas = await getCached(
-				cacheKey,
-				async () => {
-					const lists: Manga[][] = [];
+		const perSourceLimit = Math.ceil(MAX_MANGAS / preferredSources.length);
 
-					for (const id of preferredSources) {
-						const list = await fetchSourceList(id, pageNum, query, lang, type);
-						lists.push(list);
-					}
-
-					return mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
-				},
-				LIST_CACHE_TTL,
-				locals.kv
-			);
-		}
-	}
-	// ── Single source mode ───────────────────────────────────────────────────
-	else {
-		depends(`browse:${sourceParam}`);
-
-		const cacheKey = `browse:single:${sourceParam}:p=${pageNum}:q=${query}:lang=${lang}:type=${type}`;
+		const sortedSources = [...preferredSources].sort().join(',');
+		const cacheKey = `browse:multi:${sortedSources}:p${pageNum}:q${query}:l${lang}:t${type}:ps${perSourceLimit}`;
 
 		mangas = await getCached(
 			cacheKey,
 			async () => {
-				try {
-					const adapter = getSource(sourceParam);
-					const result = await withTimeout(
-						query
-							? adapter.searchManga(query, { page: pageNum, lang, type })
-							: adapter.getLatestManga(pageNum, { lang, type }),
-						LOAD_TIMEOUT_MS
-					);
-					const list = Array.isArray(result) ? result : [];
-					return list.slice(0, MAX_MANGAS).map((m, index) =>
-						ensureUpdatedAt(
-							{ ...m, sourceId: m.sourceId || sourceParam },
-							pageNum,
-							index
+				const lists: Manga[][] = [];
+				const conc = pageNum <= 1 ? CONCURRENCY : 1;
+
+				for (let i = 0; i < preferredSources.length; i += conc) {
+					const batch = preferredSources.slice(i, i + conc);
+					const batchResults = await Promise.all(
+						batch.map((id) =>
+							fetchSourceList(id, pageNum, query, lang, type, locals.kv, perSourceLimit)
 						)
 					);
-				} catch (e) {
-					console.error('[Browse] load failed:', e);
-					return [];
+					lists.push(...batchResults);
 				}
+
+				return mergeByTime(lists, preferredSources).slice(0, MAX_MANGAS);
 			},
 			LIST_CACHE_TTL,
 			locals.kv
 		);
 	}
+}
+	// ── Single source mode ───────────────────────────────────────────────────
+else {
+	depends(`browse:${sourceParam}`);
+	try {
+		const cacheKey = `browse:${sourceParam}:p${pageNum}:q${query}:l${lang}:t${type}:lim${MAX_MANGAS}`;
+		
+		mangas = await getCached(
+			cacheKey,
+			async () => {
+				const adapter = getSource(sourceParam);
+				const result = await withTimeout(
+					query
+						? adapter.searchManga(query, { page: pageNum, lang, type })
+						: adapter.getLatestManga(pageNum, { lang, type }),
+					LOAD_TIMEOUT_MS
+				);
+				const list = Array.isArray(result) ? result : [];
+				
+				return list.slice(0, MAX_MANGAS).map((m, index) =>
+					ensureUpdatedAt(
+						{ ...m, sourceId: m.sourceId || sourceParam },
+						pageNum,
+						index
+					)
+				);
+			},
+			LIST_CACHE_TTL,
+			locals.kv
+		);
+	} catch (e) {
+		console.error('[Browse] load failed:', e);
+		mangas = [];
+	}
+}
 
 	setHeaders({
-		'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+		'Cache-Control': `public, s-maxage=${LIST_CACHE_TTL}, stale-while-revalidate=900`
 	});
 
 	return {

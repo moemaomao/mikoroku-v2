@@ -163,22 +163,42 @@
 		navigate(buildParams({ type: id }));
 	}
 
-	function selectSource(id: string) {
-		closeDropdown();
-		if (id === currentSource) return;
+	async function selectSource(id: string) {
+	closeDropdown();
+	if (id === currentSource) return;
 
-		setImpl(id);
-		selectedLang = 'all';
-		selectedType = 'all';
-		goto(`/?source=${id}`, { invalidateAll: true, keepFocus: true });
+	loading = true;
+	setImpl(id);
+	selectedLang = 'all';
+	selectedType = 'all';
+
+	try {
+		await goto(`/?source=${id}`, {
+			invalidateAll: true,
+			keepFocus: true,
+			noScroll: false
+		});
+	} finally {
+		loading = false;
 	}
+}
 
-	function selectMulti() {
+async function selectMulti() {
 	closeDropdown();
 	selectedLang = 'all';
 	selectedType = 'all';
 	setMultiMode();
-	goto('/', { invalidateAll: true, keepFocus: true });
+
+	loading = true;
+	try {
+		await goto('/', {
+			invalidateAll: true,
+			keepFocus: true,
+			noScroll: false
+		});
+	} finally {
+		loading = false;
+	}
 }
 
 	function handleSearch(e: SubmitEvent) {

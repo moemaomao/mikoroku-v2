@@ -5,7 +5,7 @@ import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 const LOAD_TIMEOUT_MS = 12000;
-const DETAIL_CACHE_TTL = 600;
+const DETAIL_CACHE_TTL = 600; // 10 menit
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -57,12 +57,11 @@ export const load = async ({ params, url, setHeaders, locals }: Parameters<PageS
 		});
 
 		return {
-	     manga,
-	     source: sourceId,
-	     selectedLang: lang,
-	     canonicalUrl: url.href
-        };
-		
+			manga,
+			source: sourceId,
+			selectedLang: lang,
+			canonicalUrl: url.href
+		};
 	} catch (e: any) {
 		console.error('[Manga Detail] load failed:', e);
 		if (e?.status) throw e;
