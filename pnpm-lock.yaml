@@ -23,6 +23,9 @@ importers:
       nprogress:
         specifier: ^0.2.0
         version: 0.2.0
+      sharp:
+        specifier: ^0.35.4
+        version: 0.35.4(@types/node@22.19.3)
     devDependencies:
       '@eslint/compat':
         specifier: ^1.4.0
@@ -3318,7 +3321,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.50.1
       debug: 4.4.3
       minimatch: 9.0.5
-      semver: 7.7.3
+      semver: 7.8.5
       tinyglobby: 0.2.15
       ts-api-utils: 2.1.0(typescript@5.9.3)
       typescript: 5.9.3

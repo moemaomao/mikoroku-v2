@@ -1,4 +1,5 @@
 import type { RequestHandler } from './$types';
+import { unscrambleJmImage, parseJmImageUrl } from '$lib/server/unscramble';
 
 const USER_AGENT =
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -150,10 +151,12 @@ export const GET: RequestHandler = async ({ url }) => {
 			sourceId === 'asmhentai' ||
 			/asmhentai\.com|images\.asmhentai\.com/i.test(decodedUrl);
 
-		// Manhuagui / hamreus CDN
 		const isManhuagui =
-			sourceId === 'manhuagui' ||
-			/hamreus\.com|manhuagui\.com|mhgui\.com/i.test(decodedUrl);
+            sourceId === 'manhuagui' ||
+            /hamreus\.com|manhuagui\.com|mhgui\.com/i.test(decodedUrl);
+		const isJmcomic =
+             sourceId === 'jmcomic' ||
+            /jmapiproxy|jmapinode|cdn-msp\.|18comic/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -262,7 +265,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			referer = 'https://asmhentai.com/';
 		} else if (isManhuagui) {
 			referer = 'https://www.manhuagui.com/';
-		}
+		} else if (isJmcomic) {
+            referer = 'https://www.cdnhjk.net/';
+        }
 
 		// ============================================================
 		// FETCH IMAGE
@@ -294,7 +299,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				);
 			}
 
-			const contentType =
+						const contentType =
 				imageResponse.headers.get('content-type') || 'image/jpeg';
 
 			const filenameParam = url.searchParams.get('filename');
@@ -302,18 +307,28 @@ export const GET: RequestHandler = async ({ url }) => {
 				? filenameParam.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
 				: getFilename(decodedUrl, contentType);
 
-			return new Response(imageResponse.body, {
+			// ── JMComic unscramble ──
+						let body: BodyInit = imageResponse.body as any;
+
+			if (isJmcomic) {
+				const parsed = parseJmImageUrl(decodedUrl);
+				if (parsed) {
+					const buf = Buffer.from(await imageResponse.arrayBuffer());
+					const fixed = await unscrambleJmImage(buf, parsed.photoId, parsed.filename);
+					body = new Uint8Array(fixed);
+				}
+			}
+
+			return new Response(body, {
 				headers: {
 					'Content-Type': contentType,
-
 					'Content-Disposition': `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-
 					'Cache-Control':
 						'public, max-age=31536000, immutable',
-
 					'Access-Control-Allow-Origin': '*'
 				}
 			});
+
 		} finally {
 			clearTimeout(timer);
 		}

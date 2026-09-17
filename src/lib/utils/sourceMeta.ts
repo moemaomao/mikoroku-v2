@@ -59,6 +59,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
 	zonatmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
 	lectortmo: { flag: 'es', lang: 'ES', isR18: false, color: 'bg-red-500' },
 	mangacopy: { flag: 'cn', lang: 'CN', isR18: false, color: 'bg-red-500' },
+	jmcomic: { flag: 'cn', lang: 'CN', isR18: false, color: 'bg-red-500' },
 	manhuagui: { flag: 'cn', lang: 'CN', isR18: false, color: 'bg-red-500' },
 	omegascans: { flag: 'gb', lang: 'EN', isR18: true, color: 'bg-orange-600' },
 	luvyaa: { flag: 'id', lang: 'ID', isR18: true, color: 'bg-green-500' },

@@ -5,9 +5,9 @@ import * as cheerio from 'cheerio';
 /**
  * Manhuagui (漫画柜) adapter
  *
- * Domain   : https://www.manhuagui.com  (atau https://tw.manhuagui.com)
+ * Domain   : https://www.manhuagui.com
  * Latest   : /update/
- * Search   : /s/{query}.html  atau /s/{query}_p{page}.html
+ * Search   : /s/{query}.html | /s/{query}_p{page}.html
  * Detail   : /comic/{id}/
  * Chapter  : /comic/{id}/{chapterId}.html
  *
@@ -15,10 +15,9 @@ import * as cheerio from 'cheerio';
  *   manga   : /comic/{numericId}
  *   chapter : /comic/{numericId}/{chapterId}.html
  *
- * Catatan:
- * - Halaman chapter pakai packed JS + LZString.
- * - Gambar di us.hamreus.com butuh Referer manhuagui.com
- *   → disarankan pakai proxy /api/proxy-image jika load dari browser.
+ * Image URL dikembalikan mentah (https://...).
+ * Frontend image.ts → proxyImage() yang wrap /api/proxy.
+ * Pastikan proxy set Referer https://www.manhuagui.com/ untuk hamreus.com & mhgui.com.
  */
 export class ManhuaguiSource extends BaseSource {
 	id = 'manhuagui';
@@ -27,8 +26,6 @@ export class ManhuaguiSource extends BaseSource {
 
 	private readonly PER_PAGE = 30;
 	private readonly DEFAULT_LANG = 'zh';
-
-	/** Image CDN – us biasanya paling stabil (alternatif: i / eu) */
 	private readonly IMG_HOST = 'https://us.hamreus.com';
 
 	// ── HTTP ─────────────────────────────────────────────────────────────────
@@ -110,12 +107,10 @@ export class ManhuaguiSource extends BaseSource {
 		const list: Manga[] = [];
 		const seen = new Set<string>();
 
-		// Struktur:
 		// <a class="cover" href="/comic/61495/" title="...">
 		//   <img src="//cf.mhgui.com/cpic/m/61495.jpg" />
 		//   <span class="tt">更新至02卷</span>
 		// </a>
-		// <p class="ell"><a href="..." title="...">Title</a></p>
 		$('a.cover[href*="/comic/"]').each((_, a) => {
 			const $a = $(a);
 			const href = $a.attr('href') || '';
@@ -133,14 +128,17 @@ export class ManhuaguiSource extends BaseSource {
 				.trim();
 
 			if (!title) {
-				const $titleA = $a.parent().find('p.ell a, a[href*="/comic/"]').not($a).first();
+				const $titleA = $a
+					.parent()
+					.find('p.ell a, a[href*="/comic/"]')
+					.not($a as any)
+					.first();
 				title = ($titleA.attr('title') || $titleA.text() || '')
 					.replace(/\s+/g, ' ')
 					.trim();
 			}
 			if (!title || title.length < 2) return;
 
-			// Cover dari cf.mhgui.com — pakai URL absolut langsung
 			let cover =
 				$img.attr('src') ||
 				$img.attr('data-src') ||
@@ -149,16 +147,10 @@ export class ManhuaguiSource extends BaseSource {
 			if (cover.startsWith('//')) cover = 'https:' + cover;
 			else if (cover.startsWith('/')) cover = 'https://cf.mhgui.com' + cover;
 			else if (!cover.startsWith('http')) cover = this.absUrl(cover);
-			// Proxy supaya Referer = manhuagui.com (anti hotlink browser)
-			if (/mhgui\.com|hamreus\.com/i.test(cover)) {
-				cover = `/api/proxy-image?url=${encodeURIComponent(cover)}&source=manhuagui`;
-			}
 
-			// Badge chapter dari <span class="tt">更新至02卷</span>
 			const tt = $a.find('span.tt').text().replace(/\s+/g, ' ').trim();
 			let latestChapter: string | undefined;
 			if (tt) {
-				// "更新至02卷" / "更新至49话机翻" / "更新至第23卷"
 				const cm = tt.match(/更新至\s*(.+)$/) || tt.match(/(.+)/);
 				if (cm) latestChapter = cm[1].trim();
 			}
@@ -217,8 +209,8 @@ export class ManhuaguiSource extends BaseSource {
 						$a.find('img').attr('src') ||
 						''
 				);
-				if (cover && /mhgui\.com|hamreus\.com/i.test(cover)) {
-					cover = `/api/proxy-image?url=${encodeURIComponent(cover)}&source=manhuagui`;
+				if (!cover) {
+					cover = `https://cf.mhgui.com/cpic/m/${m[1]}.jpg`;
 				}
 
 				list.push({
@@ -311,11 +303,11 @@ export class ManhuaguiSource extends BaseSource {
 				$('.hcover img, .cover img').first().attr('data-src') ||
 				''
 		);
-		if (cover && /mhgui\.com|hamreus\.com/i.test(cover)) {
-			cover = `/api/proxy-image?url=${encodeURIComponent(cover)}&source=manhuagui`;
+		if (!cover) {
+			cover = `https://cf.mhgui.com/cpic/h/${comicId}.jpg`;
 		}
 
-		let description =
+		const description =
 			$('.book-intro, .intro, .description, #intro')
 				.first()
 				.text()
@@ -326,7 +318,7 @@ export class ManhuaguiSource extends BaseSource {
 
 		const statusText =
 			$('.detail-list, .book-detail, .status').text() ||
-			$('li:contains("状态"), li:contains("狀態")').text() ||
+			$('li.status').text() ||
 			'';
 		const status = this.mapStatus(statusText);
 
@@ -336,10 +328,10 @@ export class ManhuaguiSource extends BaseSource {
 			if (t && !authors.includes(t)) authors.push(t);
 		});
 
-		// Genre hanya dari baris "漫画剧情" di .detail-list (jangan ambil nav site)
+		// Genre hanya dari baris "漫画剧情" di .detail-list
 		const genres: string[] = [];
-		const pushGenre = (t: string) => {
-			t = (t || '').trim();
+		const pushGenre = (raw: string) => {
+			const t = (raw || '').trim();
 			if (
 				!t ||
 				t.length > 20 ||
@@ -362,13 +354,16 @@ export class ManhuaguiSource extends BaseSource {
 			});
 		});
 
-		// Fallback: link ber-title di detail-list saja
 		if (genres.length === 0) {
 			$('ul.detail-list a[href*="/list/"][title]').each((_, a) => {
 				const href = $(a).attr('href') || '';
-				// skip region/year/letter indexes
-				if (/\/list\/(japan|korea|china|hongkong|taiwan|\d{4}|[a-z]|完结|连载)/i.test(href))
+				if (
+					/\/list\/(japan|korea|china|hongkong|taiwan|\d{4}|[a-z]|完结|连载)/i.test(
+						href
+					)
+				) {
 					return;
+				}
 				pushGenre($(a).attr('title') || $(a).text());
 			});
 		}
@@ -421,9 +416,6 @@ export class ManhuaguiSource extends BaseSource {
 
 	// ── Decoder (packed JS + LZString) ───────────────────────────────────────
 
-	/**
-	 * Minimal LZString.decompressFromBase64
-	 */
 	private decompressFromBase64(input: string): string | null {
 		if (input == null) return '';
 		if (input === '') return null;
@@ -603,9 +595,6 @@ export class ManhuaguiSource extends BaseSource {
 		}
 	}
 
-	/**
-	 * Unpack packed JS (Dean Edwards packer variant)
-	 */
 	private packedUnpack(
 		functionFrame: string,
 		a: number,
@@ -631,13 +620,12 @@ export class ManhuaguiSource extends BaseSource {
 			.replace(/\\'/g, "'");
 
 		const m = js.match(/\((\{[\s\S]*\})\)/);
-		if (!m) throw new Error('Manhuagui: failed to extract JSON from packed script');
+		if (!m) {
+			throw new Error('Manhuagui: failed to extract JSON from packed script');
+		}
 		return JSON.parse(m[1]);
 	}
 
-	/**
-	 * Extract + decode image data dari HTML chapter
-	 */
 	private decodeChapterData(html: string): {
 		files: string[];
 		path: string;
@@ -655,7 +643,9 @@ export class ManhuaguiSource extends BaseSource {
 			}
 			const [, functionFrame, aStr, cStr, b64] = m2;
 			const decompressed = this.decompressFromBase64(b64);
-			if (!decompressed) throw new Error('Manhuagui: LZString decompress failed');
+			if (!decompressed) {
+				throw new Error('Manhuagui: LZString decompress failed');
+			}
 			return this.packedUnpack(
 				functionFrame,
 				parseInt(aStr, 10),
@@ -666,7 +656,9 @@ export class ManhuaguiSource extends BaseSource {
 
 		const [, functionFrame, aStr, cStr, b64] = m;
 		const decompressed = this.decompressFromBase64(b64);
-		if (!decompressed) throw new Error('Manhuagui: LZString decompress failed');
+		if (!decompressed) {
+			throw new Error('Manhuagui: LZString decompress failed');
+		}
 
 		return this.packedUnpack(
 			functionFrame,
@@ -693,13 +685,8 @@ export class ManhuaguiSource extends BaseSource {
 
 			const pages = (data.files || []).map((file: string) => {
 				const encodedPath = encodeURI(data.path || '');
-				const realUrl = `${this.IMG_HOST}${encodedPath}${file}?e=${e}&m=${m}`;
-
-				// Proxy supaya browser bisa load (Referer wajib manhuagui.com).
-				// Kalau kamu sudah punya /api/proxy-image, biarkan seperti ini.
-				// Kalau belum, comment baris proxy dan return realUrl saja.
-				return `/api/proxy-image?url=${encodeURIComponent(realUrl)}&source=manhuagui`;
-				// return realUrl;
+				
+				return `${this.IMG_HOST}${encodedPath}${file}?e=${e}&m=${m}`;
 			});
 
 			console.log(`[manhuagui] getChapterPages → ${pages.length} pages`);
