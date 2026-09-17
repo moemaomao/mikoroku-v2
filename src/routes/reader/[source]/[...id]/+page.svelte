@@ -57,30 +57,30 @@
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 	function proxyImage(url: string, forDownload = false): string {
-	if (!url) return '';
-	let u = url.trim();
-	if (u.startsWith('//')) u = `https:${u}`;
-	else if (u.startsWith('/')) u = `https://weloma.net${u}`;
+		if (!url) return '';
+		let u = url.trim();
+		if (u.startsWith('//')) u = `https:${u}`;
+		else if (u.startsWith('/')) u = `https://weloma.net${u}`;
 
-	let filename = 'image.jpg';
-	try {
-		const path = new URL(u).pathname;
-		const last = path.split('/').pop() || '';
-		if (last) filename = decodeURIComponent(last);
-	} catch {}
+		let filename = 'image.jpg';
+		try {
+			const path = new URL(u).pathname;
+			const last = path.split('/').pop() || '';
+			if (last) filename = decodeURIComponent(last);
+		} catch {}
 
-	filename = filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim() || 'image.jpg';
-	if (!/\.[a-zA-Z0-9]{2,5}$/.test(filename)) filename += '.jpg';
+		filename = filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim() || 'image.jpg';
+		if (!/\.[a-zA-Z0-9]{2,5}$/.test(filename)) filename += '.jpg';
 
-	let proxy = `/api/proxy?url=${encodeURIComponent(u)}&source=${source}&filename=${encodeURIComponent(filename)}`;
+		let proxy = `/api/proxy?url=${encodeURIComponent(u)}&source=${source}&filename=${encodeURIComponent(filename)}`;
 
-	if (forDownload) return proxy;
+		if (forDownload) return proxy;
 
-	if (dataSaver && !/ihlv1\.xyz/i.test(u)) {
-		proxy += `&w=${imageQuality}`;
+		if (dataSaver && !/ihlv1\.xyz/i.test(u)) {
+			proxy += `&w=${imageQuality}`;
+		}
+		return proxy;
 	}
-	return proxy;
-}
 
 	function handleScroll() {
 		const y = window.scrollY;
@@ -131,6 +131,11 @@
 		}
 	}
 
+	function closeMenu() {
+		isMenuOpen = false;
+		showChapterList = false;
+	}
+
 	function toggleMode() {
 		currentMode = currentMode === 'webtoon' ? 'page' : 'webtoon';
 		localStorage.setItem('readerMode', currentMode);
@@ -171,7 +176,8 @@
 		if (!rawId) return;
 		const cleanId = String(rawId).replace(/^\/+/, '');
 		currentPageIndex = 0;
-		await goto(`/reader/${source}/${cleanId}`, { replaceState: true });
+		// Force reload data chapter baru
+		await goto(`/reader/${source}/${cleanId}`, { replaceState: true, invalidateAll: true });
 		await invalidateAll();
 		window.scrollTo(0, 0);
 	}
@@ -429,6 +435,14 @@
 		{/if}
 	</main>
 
+	{#if isMenuOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-[305]"
+			onclick={closeMenu}
+		></div>
+	{/if}
+
 	<div
 		class="fixed right-0 bottom-0 left-0 z-[100] flex justify-center gap-[18px] border-t px-5 py-3
 			{isDarkMode ? 'border-white/5' : 'border-zinc-300/60 bg-white/70 backdrop-blur-md'}"
@@ -440,8 +454,8 @@
 			title="Previous chapter"
 			class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border px-[15px] py-[5px] text-[0.92em] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-30
 				{isDarkMode
-					? 'border-white/15 bg-red-600/50 text-white/85 hover:bg-red-600/70'
-					: 'border-zinc-300 bg-red-600/85 text-white hover:bg-red-600'}"
+					? 'border-white/15 bg-purple-600/50 text-white/85 hover:bg-purple-600/70'
+					: 'border-zinc-300 bg-purple-600/85 text-white hover:bg-purple-600'}"
 		>
 			<svg
 				viewBox="0 0 24 24"
@@ -464,8 +478,8 @@
 			title="Next chapter"
 			class="flex min-w-[90px] items-center justify-center gap-1 rounded-[15px] border px-[15px] py-[5px] text-[0.92em] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-30
 				{isDarkMode
-					? 'border-white/15 bg-red-600/50 text-white/85 hover:bg-red-600/70'
-					: 'border-zinc-300 bg-red-600/85 text-white hover:bg-red-600'}"
+					? 'border-white/15 bg-purple-600/50 text-white/85 hover:bg-purple-600/70'
+					: 'border-zinc-300 bg-purple-600/85 text-white hover:bg-purple-600'}"
 		>
 			<svg
 				viewBox="0 0 24 24"
@@ -482,133 +496,135 @@
 		</button>
 	</div>
 
-	<div class="fixed right-[15px] bottom-[78px] z-[300] flex flex-col items-center gap-2.5">
+	<div class="fixed right-[15px] bottom-[78px] z-[320] flex flex-col items-center gap-2.5">
+	<button
+		onclick={scrollToTop}
+		class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(0,150,255,0.15)] text-[18px] text-[#4da6ff] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(0,150,255,0.25)]"
+		title="Scroll to top"
+	>
+		<ChevronsUp class="h-5 w-5" />
+	</button>
+
+	<button
+		onclick={handleDownload}
+		disabled={isDownloading || !pages?.length}
+		class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(0,200,120,0.15)] text-[18px] text-[#35d98a] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(0,200,120,0.25)] disabled:opacity-50"
+		title="Download ZIP"
+	>
+		<Download class="h-5 w-5" />
+	</button>
+
+	<div class="relative z-[330]">
 		<button
-			onclick={scrollToTop}
-			class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(0,150,255,0.15)] text-[18px] text-[#4da6ff] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(0,150,255,0.25)]"
-			title="Scroll to top"
+			onclick={() => {
+				isMenuOpen = !isMenuOpen;
+				if (!isMenuOpen) showChapterList = false;
+			}}
+			class="flex h-[42px] w-[42px] items-center justify-center rounded-full border-0 bg-transparent text-[21px] text-purple-500 transition hover:rotate-90"
+			title="Settings"
 		>
-			<ChevronsUp class="h-5 w-5" />
+			<Settings class="h-6 w-6" strokeWidth={2} />
 		</button>
 
-		<button
-			onclick={handleDownload}
-			disabled={isDownloading || !pages?.length}
-			class="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[rgba(0,200,120,0.15)] text-[18px] text-[#35d98a] backdrop-blur-md transition hover:scale-108 hover:bg-[rgba(0,200,120,0.25)] disabled:opacity-50"
-			title="Download ZIP"
-		>
-			<Download class="h-5 w-5" />
-		</button>
-
-		<div class="relative">
-			<button
-				onclick={() => {
-					isMenuOpen = !isMenuOpen;
-					if (!isMenuOpen) showChapterList = false;
-				}}
-				class="flex h-[42px] w-[42px] items-center justify-center rounded-full border-0 bg-transparent text-[21px] text-red-500 transition hover:rotate-90"
-				title="Settings"
+		{#if isMenuOpen}
+			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+			<div
+				class="absolute right-0 bottom-[52px] z-[340] flex max-h-[65vh] w-[210px] flex-col gap-2 overflow-y-auto rounded-xl px-3.5 py-3 shadow-[0_6px_25px_rgba(0,0,0,0.35)]
+					{isDarkMode ? 'bg-black/85' : 'border border-zinc-200 bg-white/95'}"
+				onclick={(e) => e.stopPropagation()}
 			>
-				<Settings class="h-6 w-6" strokeWidth={2} />
-			</button>
-
-			{#if isMenuOpen}
-				<div
-					class="absolute right-0 bottom-[52px] z-[310] flex max-h-[65vh] w-[210px] flex-col gap-2 overflow-y-auto rounded-xl px-3.5 py-3 shadow-[0_6px_25px_rgba(0,0,0,0.35)]
-						{isDarkMode ? 'bg-black/85' : 'border border-zinc-200 bg-white/95'}"
+				<button
+					onclick={toggleMode}
+					class="w-full rounded-lg border-0 bg-purple-800 px-3 py-2.5 text-left text-[0.87em] font-medium text-white transition hover:bg-purple-700"
 				>
-					<button
-						onclick={toggleMode}
-						class="w-full rounded-lg border-0 bg-red-800 px-3 py-2.5 text-left text-[0.87em] font-medium text-white transition hover:bg-red-700"
-					>
-						Mode: {currentMode === 'webtoon' ? 'Webtoon' : 'Page'}
-					</button>
+					Mode: {currentMode === 'webtoon' ? 'Webtoon' : 'Page'}
+				</button>
 
-					<select
-						class="w-full cursor-pointer rounded-lg border-0 bg-red-800 px-3 py-2.5 text-[0.87em] text-white outline-none"
-						value={currentPageIndex}
-						onchange={onPageSelect}
-					>
-						{#each pages as _, i}
-							<option value={i} class="bg-zinc-900 text-white">
-								Page {i + 1} / {pages.length}
-							</option>
-						{/each}
-					</select>
+				<select
+					class="w-full cursor-pointer rounded-lg border-0 bg-purple-800 px-3 py-2.5 text-[0.87em] text-white outline-none"
+					value={currentPageIndex}
+					onchange={onPageSelect}
+				>
+					{#each pages as _, i}
+						<option value={i} class="bg-zinc-900 text-white">
+							Page {i + 1} / {pages.length}
+						</option>
+					{/each}
+				</select>
 
-					<button
-						onclick={() => (showChapterList = !showChapterList)}
-						class="w-full rounded-lg border-0 bg-red-800 px-3 py-2.5 text-left text-[0.87em] font-medium text-white transition hover:bg-red-700"
-					>
-						Chapter List
-					</button>
+				<button
+					onclick={() => (showChapterList = !showChapterList)}
+					class="w-full rounded-lg border-0 bg-purple-800 px-3 py-2.5 text-left text-[0.87em] font-medium text-white transition hover:bg-purple-700"
+				>
+					Chapter List
+				</button>
 
-					{#if showChapterList}
-						<div
-							class="max-h-[280px] overflow-y-auto rounded-lg py-1
-								{isDarkMode ? 'bg-[rgba(25,25,25,0.8)]' : 'bg-zinc-100'}"
-						>
-							{#each chapters as chapter}
-								<button
-									onclick={() => goToChapter(chapter)}
-									class="w-full border-b px-3 py-2 text-left text-[0.84em] transition last:border-b-0
-										{isDarkMode
-											? 'border-zinc-600/80 text-white hover:bg-white/10'
-											: 'border-zinc-200 text-zinc-800 hover:bg-zinc-200/80'}
-										{chapter.id === chapterId || chapter.id === currentChapter?.id
-											? 'bg-red-500/25 font-medium'
-											: ''}"
-								>
-									{chapter.title}
-								</button>
-							{/each}
-							{#if !chapters?.length}
-								<p
-									class="px-3 py-2 text-center text-[0.84em]
-										{isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}"
-								>
-									Empty
-								</p>
-							{/if}
-						</div>
-					{/if}
+				{#if showChapterList}
+	<div
+		class="max-h-[280px] overflow-y-auto rounded-lg py-1
+			{isDarkMode ? 'bg-[rgba(25,25,25,0.8)]' : 'bg-zinc-100'}"
+	>
+		{#each [...(chapters || [])].reverse() as chapter}
+			<button
+				onclick={() => goToChapter(chapter)}
+				class="w-full border-b px-3 py-2 text-left text-[0.84em] transition last:border-b-0
+					{isDarkMode
+						? 'border-zinc-600/80 text-white hover:bg-white/10'
+						: 'border-zinc-200 text-zinc-800 hover:bg-zinc-200/80'}
+					{chapter.id === chapterId || chapter.id === currentChapter?.id
+						? 'bg-purple-500/25 font-medium'
+						: ''}"
+			>
+				{chapter.title}
+			</button>
+		{/each}
+		{#if !chapters?.length}
+			<p
+				class="px-3 py-2 text-center text-[0.84em]
+					{isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}"
+			>
+				Empty
+			</p>
+		{/if}
+	</div>
+{/if}
 
+				<div
+					class="flex items-center justify-between px-0.5 py-1 text-[0.87em]
+						{isDarkMode ? 'text-white' : 'text-zinc-800'}"
+				>
+					<span>Data Saver</span>
+					<input
+						type="checkbox"
+						checked={dataSaver}
+						onchange={toggleDataSaver}
+						class="h-4 w-4 cursor-pointer accent-purple-600"
+					/>
+				</div>
+
+				{#if dataSaver}
 					<div
-						class="flex items-center justify-between px-0.5 py-1 text-[0.87em]
+						class="flex flex-col gap-1.5
 							{isDarkMode ? 'text-white' : 'text-zinc-800'}"
 					>
-						<span>Data Saver</span>
+						<label for="image-quality" class="text-[0.8em]">
+							Quality:
+							<span class="font-semibold text-emerald-500">{imageQuality}</span>px
+						</label>
 						<input
-							type="checkbox"
-							checked={dataSaver}
-							onchange={toggleDataSaver}
-							class="h-4 w-4 cursor-pointer accent-red-600"
+							id="image-quality"
+							type="range"
+							min="600"
+							max="1200"
+							step="100"
+							value={imageQuality}
+							oninput={updateQuality}
+							class="w-full cursor-pointer accent-purple-600"
 						/>
 					</div>
-
-					{#if dataSaver}
-						<div
-							class="flex flex-col gap-1.5
-								{isDarkMode ? 'text-white' : 'text-zinc-800'}"
-						>
-							<label for="image-quality" class="text-[0.8em]">
-								Quality:
-								<span class="font-semibold text-emerald-500">{imageQuality}</span>px
-							</label>
-							<input
-								id="image-quality"
-								type="range"
-								min="600"
-								max="1200"
-								step="100"
-								value={imageQuality}
-								oninput={updateQuality}
-								class="w-full cursor-pointer accent-red-600"
-							/>
-						</div>
-					{/if}
-				</div>
-			{/if}
-		</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
+  </div>
 </div>
