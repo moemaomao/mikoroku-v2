@@ -193,20 +193,27 @@ else {
 	}
 }
 
-setHeaders({
-	'Cache-Control': `public, s-maxage=${LIST_CACHE_TTL}, stale-while-revalidate=900`
-});
 
-	return {
-		mangas,
-		sources,
-		currentSource,
-		currentPage: pageNum,
-		searchQuery: query,
-		selectedLang: lang,
-		selectedType: type,
-		needsSource: false,
-		isMulti,
-		preferredSources
-	};
+if (isMulti) {
+  setHeaders({
+    'Cache-Control': 'private, no-store'
+  });
+} else {
+  setHeaders({
+    'Cache-Control': 'public, s-maxage=180, stale-while-revalidate=900'
+  });
+}
+
+return {
+  mangas,
+  sources,
+  currentSource,
+  currentPage: pageNum,
+  searchQuery: query,
+  selectedLang: lang,
+  selectedType: type,
+  needsSource: false,
+  isMulti,
+  preferredSources
+ };
 };

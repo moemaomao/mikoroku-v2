@@ -164,23 +164,21 @@
 	}
 
 	async function selectSource(id: string) {
-	closeDropdown();
-	if (id === currentSource) return;
+  closeDropdown();
+  if (id === currentSource) return;
 
-	loading = true;
-	setImpl(id);
-	selectedLang = 'all';
-	selectedType = 'all';
-
-	try {
-		await goto(`/?source=${id}`, {
-			invalidateAll: true,
-			keepFocus: true,
-			noScroll: false
-		});
-	} finally {
-		loading = false;
-	}
+  setImpl(id);
+  selectedLang = 'all';
+  selectedType = 'all';
+  loading = true;
+  try {
+    await goto(`/?source=${id}`, {
+      invalidateAll: true,
+      keepFocus: true
+    });
+  } finally {
+    loading = false;
+  }
 }
 
 async function selectMulti() {
