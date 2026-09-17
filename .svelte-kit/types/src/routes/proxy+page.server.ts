@@ -65,9 +65,13 @@ async function fetchSourceList(
 	lang: string,
 	type: string,
 	kv?: KVNamespace | null,
-	limit: number = 6 // default
+	limit: number = 6
 ): Promise<Manga[]> {
-	const cacheKey = `browse:${id}:p${pageNum}:q${query}:l${lang}:t${type}:lim${limit}`;
+	const q = (query || '').trim();
+	const l = (lang || 'all').toLowerCase();
+	const t = (type || 'all').toLowerCase();
+
+	const cacheKey = `browse:${id}:p${pageNum}:q${q}:l${l}:t${t}:lim${limit}`;
 
 	try {
 		return await getCached(
@@ -75,9 +79,9 @@ async function fetchSourceList(
 			async () => {
 				const adapter = getSource(id);
 				const result = await withTimeout(
-					query
-						? adapter.searchManga(query, { page: pageNum, lang, type })
-						: adapter.getLatestManga(pageNum, { lang, type }),
+					q
+						? adapter.searchManga(q, { page: pageNum, lang: l, type: t })
+						: adapter.getLatestManga(pageNum, { lang: l, type: t }),
 					LOAD_TIMEOUT_MS
 				);
 				const list = Array.isArray(result) ? result : [];
@@ -154,20 +158,24 @@ if (!sourceParam) {
 else {
 	depends(`browse:${sourceParam}`);
 	try {
-		const cacheKey = `browse:${sourceParam}:p${pageNum}:q${query}:l${lang}:t${type}:lim${MAX_MANGAS}`;
-		
+		const q = (query || '').trim();
+		const l = (lang || 'all').toLowerCase();
+		const t = (type || 'all').toLowerCase();
+
+		const cacheKey = `browse:${sourceParam}:p${pageNum}:q${q}:l${l}:t${t}:lim${MAX_MANGAS}`;
+
 		mangas = await getCached(
 			cacheKey,
 			async () => {
 				const adapter = getSource(sourceParam);
 				const result = await withTimeout(
-					query
-						? adapter.searchManga(query, { page: pageNum, lang, type })
-						: adapter.getLatestManga(pageNum, { lang, type }),
+					q
+						? adapter.searchManga(q, { page: pageNum, lang: l, type: t })
+						: adapter.getLatestManga(pageNum, { lang: l, type: t }),
 					LOAD_TIMEOUT_MS
 				);
 				const list = Array.isArray(result) ? result : [];
-				
+
 				return list.slice(0, MAX_MANGAS).map((m, index) =>
 					ensureUpdatedAt(
 						{ ...m, sourceId: m.sourceId || sourceParam },
@@ -185,9 +193,9 @@ else {
 	}
 }
 
-	setHeaders({
-		'Cache-Control': `public, s-maxage=${LIST_CACHE_TTL}, stale-while-revalidate=900`
-	});
+setHeaders({
+	'Cache-Control': `public, s-maxage=${LIST_CACHE_TTL}, stale-while-revalidate=900`
+});
 
 	return {
 		mangas,

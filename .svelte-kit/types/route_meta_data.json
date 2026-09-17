@@ -7,6 +7,9 @@
 	"/about": [
 		"src/routes/+layout.server.ts"
 	],
+	"/api/cron/sync": [
+		"src/routes/api/cron/sync/+server.ts"
+	],
 	"/api/pages": [
 		"src/routes/api/pages/+server.ts"
 	],
