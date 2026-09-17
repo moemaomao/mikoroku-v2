@@ -10,7 +10,8 @@ const MAX_MANGAS = 24;
 const PER_SOURCE_LIMIT = 6;
 const MAX_PREFERRED = 4;
 const CONCURRENCY = 2;
-const LIST_CACHE_TTL = 180; // 3 menit
+
+const LIST_CACHE_TTL = 60 * 30;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 	return new Promise((resolve, reject) => {
@@ -119,7 +120,9 @@ export const load: PageServerLoad = async ({ url, request, setHeaders, depends, 
 		if (preferredSources.length === 0) {
 			mangas = [];
 		} else {
-			const cacheKey = `browse:multi:${preferredSources.join(',')}:p${pageNum}:q${query}:l${lang}:t${type}`;
+
+			const sortedSources = [...preferredSources].sort().join(',');
+			const cacheKey = `browse:multi:${sortedSources}:p${pageNum}:q${query}:l${lang}:t${type}`;
 
 			mangas = await getCached(
 				cacheKey,
@@ -176,7 +179,7 @@ export const load: PageServerLoad = async ({ url, request, setHeaders, depends, 
 	}
 
 	setHeaders({
-		'Cache-Control': 'public, s-maxage=180, stale-while-revalidate=900'
+		'Cache-Control': `public, s-maxage=${LIST_CACHE_TTL}, stale-while-revalidate=900`
 	});
 
 	return {
