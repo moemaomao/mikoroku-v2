@@ -184,21 +184,20 @@
 }
 
 async function selectMulti() {
-	closeDropdown();
-	selectedLang = 'all';
-	selectedType = 'all';
-	setMultiMode();
-
-	loading = true;
-	try {
-		await goto('/', {
-			invalidateAll: true,
-			keepFocus: true,
-			noScroll: false
-		});
-	} finally {
-		loading = false;
-	}
+  closeDropdown();
+  selectedLang = 'all';
+  selectedType = 'all';
+  setMultiMode();
+  loading = true;
+  try {
+    await goto('/', {
+      invalidateAll: true,
+      keepFocus: true,
+      noScroll: false
+    });
+  } finally {
+    loading = false;
+  }
 }
 
 	function handleSearch(e: SubmitEvent) {
