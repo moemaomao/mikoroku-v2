@@ -121,34 +121,39 @@ export const GET: RequestHandler = async ({ url }) => {
 			/mangafun[a-z]*\.(fun|xyz)|mangacopy\.com|copy2000\.|copy-manga\.|202[0-9]copy\.|copy20\.com/i.test(
 				decodedUrl
 			);
-	    const isIsekaiKomik =
-	        sourceId === 'isekaikomik' ||
-	       /isekaikomik\.(site|com)|cdn\.isekaikomik\.com/i.test(decodedUrl);
+		const isIsekaiKomik =
+			sourceId === 'isekaikomik' ||
+			/isekaikomik\.(site|com)|cdn\.isekaikomik\.com/i.test(decodedUrl);
 
-        const isIkiru =
-	        sourceId === 'ikiru' ||
-	        /ikiru\.wtf|cdn\.uqni\.net/i.test(decodedUrl);
-	    const isMangakuri =
-	        sourceId === 'mangakuri' ||
-	        /mangakuri\.online|cdnmangakuri|lonedev\.my\.id/i.test(decodedUrl);
-	    const isManhwaIndo =
-	         sourceId === 'manhwaindo' ||
-	        /manhwaindo\.my|upload\.gmbr\.pro|kacu\.gmbr\.pro/i.test(decodedUrl);
-        const isManhwaDesu =
-	         sourceId === 'manhwadesu' ||
-	        /manhwadesu\.wiki|cdn\.uqni\.net/i.test(decodedUrl);  
-	    const isVoratoon =
-	         sourceId === 'voratoon' ||
-	        /voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
-	    const isMangaDex =
-	         sourceId === 'mangadex' ||
-	        /mangadex\.org|uploads\.mangadex\.org/i.test(decodedUrl);
+		const isIkiru =
+			sourceId === 'ikiru' ||
+			/ikiru\.wtf|cdn\.uqni\.net/i.test(decodedUrl);
+		const isMangakuri =
+			sourceId === 'mangakuri' ||
+			/mangakuri\.online|cdnmangakuri|lonedev\.my\.id/i.test(decodedUrl);
+		const isManhwaIndo =
+			sourceId === 'manhwaindo' ||
+			/manhwaindo\.my|upload\.gmbr\.pro|kacu\.gmbr\.pro/i.test(decodedUrl);
+		const isManhwaDesu =
+			sourceId === 'manhwadesu' ||
+			/manhwadesu\.wiki|cdn\.uqni\.net/i.test(decodedUrl);
+		const isVoratoon =
+			sourceId === 'voratoon' ||
+			/voratoon\.(com|id)|cvr\.voratoon\.id/i.test(decodedUrl);
+		const isMangaDex =
+			sourceId === 'mangadex' ||
+			/mangadex\.org|uploads\.mangadex\.org/i.test(decodedUrl);
 		const isKumopoi =
-	         sourceId === 'kumopoi' ||
-	        /kumo\.gorae\.my\.id|kumopoi\.com/i.test(decodedUrl);
-			const isAsmHentai =
-	        sourceId === 'asmhentai' ||
-	        /asmhentai\.com|images\.asmhentai\.com/i.test(decodedUrl);
+			sourceId === 'kumopoi' ||
+			/kumo\.gorae\.my\.id|kumopoi\.com/i.test(decodedUrl);
+		const isAsmHentai =
+			sourceId === 'asmhentai' ||
+			/asmhentai\.com|images\.asmhentai\.com/i.test(decodedUrl);
+
+		// Manhuagui / hamreus CDN
+		const isManhuagui =
+			sourceId === 'manhuagui' ||
+			/hamreus\.com|manhuagui\.com|mhgui\.com/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -163,12 +168,13 @@ export const GET: RequestHandler = async ({ url }) => {
 			isMangaBatsCom ||
 			isDoujinDesu ||
 			isMangaCopy ||
-	        isIsekaiKomik ||
-	        isIkiru ||
+			isIsekaiKomik ||
+			isIkiru ||
 			isMangaDex ||
 			isKumopoi ||
 			isAsmHentai ||
-			isVoratoon;
+			isVoratoon ||
+			isManhuagui;
 
 		// ============================================================
 		// WESERV
@@ -237,24 +243,26 @@ export const GET: RequestHandler = async ({ url }) => {
 		} else if (isMangaCopy) {
 			referer = 'https://www.mangacopy.com/';
 		} else if (isIsekaiKomik) {
-	        referer = 'https://ch1.isekaikomik.site/';
-        } else if (isIkiru) {
-	        referer = 'https://08.ikiru.wtf/';
-        } else if (isMangakuri) {
-	        referer = 'https://lc2.mangakuri.online/';
-        } else if (isManhwaIndo) {
-	        referer = 'https://www.manhwaindo.my/';
-        } else if (isManhwaDesu) {
-	        referer = 'https://manhwadesu.wiki/';
-        } else if (isVoratoon) {
-	       referer = 'https://v2.voratoon.com/';
-        } else if (isMangaDex) {
-	       referer = 'https://mangadex.org/';
-        } else if (isKumopoi) {
-	       referer = 'https://beta.kumopoi.com/';
-        } else if (isAsmHentai) {
-	       referer = 'https://asmhentai.com/';
-        }
+			referer = 'https://ch1.isekaikomik.site/';
+		} else if (isIkiru) {
+			referer = 'https://08.ikiru.wtf/';
+		} else if (isMangakuri) {
+			referer = 'https://lc2.mangakuri.online/';
+		} else if (isManhwaIndo) {
+			referer = 'https://www.manhwaindo.my/';
+		} else if (isManhwaDesu) {
+			referer = 'https://manhwadesu.wiki/';
+		} else if (isVoratoon) {
+			referer = 'https://v2.voratoon.com/';
+		} else if (isMangaDex) {
+			referer = 'https://mangadex.org/';
+		} else if (isKumopoi) {
+			referer = 'https://beta.kumopoi.com/';
+		} else if (isAsmHentai) {
+			referer = 'https://asmhentai.com/';
+		} else if (isManhuagui) {
+			referer = 'https://www.manhuagui.com/';
+		}
 
 		// ============================================================
 		// FETCH IMAGE
@@ -290,9 +298,9 @@ export const GET: RequestHandler = async ({ url }) => {
 				imageResponse.headers.get('content-type') || 'image/jpeg';
 
 			const filenameParam = url.searchParams.get('filename');
-            const filename = filenameParam
-	        ? filenameParam.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
-	        : getFilename(decodedUrl, contentType);
+			const filename = filenameParam
+				? filenameParam.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
+				: getFilename(decodedUrl, contentType);
 
 			return new Response(imageResponse.body, {
 				headers: {
