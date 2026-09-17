@@ -16,6 +16,9 @@
 	"/api/proxy": [
 		"src/routes/api/proxy/+server.ts"
 	],
+	"/api/warm": [
+		"src/routes/api/warm/+server.ts"
+	],
 	"/bookmark": [
 		"src/routes/+layout.server.ts"
 	],
