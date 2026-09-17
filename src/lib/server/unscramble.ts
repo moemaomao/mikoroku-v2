@@ -1,11 +1,7 @@
 /**
  * JMComic image unscramble (禁漫图片解密)
- * Dipakai di /api/proxy saat source=jmcomic
- *
- * Algoritma sama dengan JMComic-Crawler-Python JmImageTool.decode_and_save
  */
 import { createHash } from 'crypto';
-import sharp from 'sharp';
 
 const SCRAMBLE_220980 = 220980;
 const SCRAMBLE_268850 = 268850;
@@ -24,18 +20,12 @@ export function getScrambleNum(photoId: string | number, filename: string): numb
 	return num * 2 + 2;
 }
 
-/** Parse photoId + filename dari CDN URL */
 export function parseJmImageUrl(url: string): { photoId: string; filename: string } | null {
-	// https://cdn-msp.jmapiproxy1.cc/media/photos/1473318/00001.webp
 	const m = url.match(/\/media\/photos\/(\d+)\/([^/?#]+)/i);
 	if (!m) return null;
 	return { photoId: m[1], filename: m[2] };
 }
 
-/**
- * Unscramble buffer gambar JM.
- * num=0 → return asli.
- */
 export async function unscrambleJmImage(
 	buffer: Buffer,
 	photoId: string,
@@ -44,50 +34,64 @@ export async function unscrambleJmImage(
 	const num = getScrambleNum(photoId, filename);
 	if (num <= 0) return buffer;
 
-	const meta = await sharp(buffer).metadata();
-	const w = meta.width;
-	const h = meta.height;
-	if (!w || !h) return buffer;
-
-	const over = h % num;
-	const composites: { input: Buffer; top: number; left: number }[] = [];
-
-	for (let i = 0; i < num; i++) {
-		let move = Math.floor(h / num);
-		let ySrc = h - move * (i + 1) - over;
-		let yDst = move * i;
-
-		if (i === 0) {
-			move += over;
-		} else {
-			yDst += over;
-		}
-
-		if (ySrc < 0) ySrc = 0;
-		if (ySrc + move > h) move = h - ySrc;
-		if (move <= 0) continue;
-
-		const strip = await sharp(buffer)
-			.extract({ left: 0, top: ySrc, width: w, height: move })
-			.toBuffer();
-
-		composites.push({ input: strip, top: yDst, left: 0 });
+	let sharp: typeof import('sharp').default;
+	try {
+		sharp = (await import('sharp')).default;
+	} catch (e) {
+		console.error('[jm-unscramble] sharp not available, skip unscramble:', e);
+		return buffer;
 	}
 
-	const format = meta.format === 'webp' ? 'webp' : meta.format === 'png' ? 'png' : 'jpeg';
+	try {
+		const meta = await sharp(buffer).metadata();
+		const w = meta.width;
+		const h = meta.height;
+		if (!w || !h) return buffer;
 
-	let pipeline = sharp({
-		create: {
-			width: w,
-			height: h,
-			channels: 3,
-			background: { r: 255, g: 255, b: 255 }
+		const over = h % num;
+		const composites: { input: Buffer; top: number; left: number }[] = [];
+
+		for (let i = 0; i < num; i++) {
+			let move = Math.floor(h / num);
+			let ySrc = h - move * (i + 1) - over;
+			let yDst = move * i;
+
+			if (i === 0) {
+				move += over;
+			} else {
+				yDst += over;
+			}
+
+			if (ySrc < 0) ySrc = 0;
+			if (ySrc + move > h) move = h - ySrc;
+			if (move <= 0) continue;
+
+			const strip = await sharp(buffer)
+				.extract({ left: 0, top: ySrc, width: w, height: move })
+				.toBuffer();
+
+			composites.push({ input: strip, top: yDst, left: 0 });
 		}
-	}).composite(composites);
 
-	if (format === 'webp') pipeline = pipeline.webp({ quality: 90 });
-	else if (format === 'png') pipeline = pipeline.png();
-	else pipeline = pipeline.jpeg({ quality: 90 });
+		const format =
+			meta.format === 'webp' ? 'webp' : meta.format === 'png' ? 'png' : 'jpeg';
 
-	return pipeline.toBuffer();
+		let pipeline = sharp({
+			create: {
+				width: w,
+				height: h,
+				channels: 3,
+				background: { r: 255, g: 255, b: 255 }
+			}
+		}).composite(composites);
+
+		if (format === 'webp') pipeline = pipeline.webp({ quality: 90 });
+		else if (format === 'png') pipeline = pipeline.png();
+		else pipeline = pipeline.jpeg({ quality: 90 });
+
+		return await pipeline.toBuffer();
+	} catch (e) {
+		console.error('[jm-unscramble] unscramble failed, return original:', e);
+		return buffer;
+	}
 }
