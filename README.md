@@ -41,7 +41,7 @@ Aggregates latest updates and search results from many sources (manga, manhwa, m
 - pnpm deploy
 
 ### Project Structure
-
+'''
 mikoroku-v2/
 ├── src/
 │   ├── lib/
@@ -76,3 +76,4 @@ mikoroku-v2/
 ├── svelte.config.js
 ├── vite.config.ts
 └── tsconfig.json
+'''
