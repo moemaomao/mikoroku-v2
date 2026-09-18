@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { BookX, Home, ArrowLeft, AlertTriangle } from 'lucide-svelte';
+	import { BookX, Home, ArrowLeft, AlertTriangle, RefreshCw } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 
@@ -39,6 +39,12 @@
 			history.back();
 		} else {
 			goto('/');
+		}
+	}
+
+	function hardReload() {
+		if (browser) {
+			window.location.reload();
 		}
 	}
 </script>
@@ -110,6 +116,17 @@
 		>
 			<ArrowLeft class="h-4 w-4" />
 			Go Back
+		</button>
+
+		<button
+			onclick={hardReload}
+			class="inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-medium transition
+				{isDarkMode
+					? 'border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10'
+					: 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
+		>
+			<RefreshCw class="h-4 w-4" />
+			Reload
 		</button>
 
 		<a
