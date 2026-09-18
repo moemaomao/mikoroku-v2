@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { BookX, Home, ArrowLeft, AlertTriangle, RefreshCw } from 'lucide-svelte';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 
 	let isDarkMode = $state(true);
@@ -17,24 +17,75 @@
 		}
 	}
 
-	onMount(() => {
-		syncTheme();
-		const obs = new MutationObserver(syncTheme);
-		obs.observe(document.documentElement, {
-			attributes: true,
-			attributeFilter: ['class']
-		});
-		return () => obs.disconnect();
-	});
-
 	const status = $derived($page.status ?? 500);
 	const message = $derived(
 		($page.error?.message as string) || 'Something went wrong'
 	);
-
 	const isNotFound = $derived(status === 404);
 
+	// --- Auto-retry logic ---
+	const MAX_RETRIES = 5;
+	const RETRY_DELAY_MS = 2500;
+
+	let retryCount = $state(0);
+	let isRetrying = $state(false);
+	let countdown = $state(0);
+	let cancelled = $state(false);
+
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	let countdownInterval: ReturnType<typeof setInterval> | null = null;
+
+	function clearTimers() {
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+		}
+		if (countdownInterval) {
+			clearInterval(countdownInterval);
+			countdownInterval = null;
+		}
+	}
+
+	function startCountdown(seconds: number) {
+		countdown = seconds;
+		countdownInterval = setInterval(() => {
+			countdown -= 1;
+			if (countdown <= 0 && countdownInterval) {
+				clearInterval(countdownInterval);
+				countdownInterval = null;
+			}
+		}, 1000);
+	}
+
+	function scheduleRetry() {
+		if (cancelled || retryCount >= MAX_RETRIES) {
+			isRetrying = false;
+			return;
+		}
+
+		isRetrying = true;
+		const next = retryCount + 1;
+		retryCount = next;
+
+		startCountdown(Math.ceil(RETRY_DELAY_MS / 1000));
+
+		timer = setTimeout(() => {
+			if (!cancelled && browser) {
+				sessionStorage.setItem('error-retry-count', String(next));
+				window.location.reload();
+			}
+		}, RETRY_DELAY_MS);
+	}
+
+	function cancelRetry() {
+		cancelled = true;
+		isRetrying = false;
+		clearTimers();
+		sessionStorage.removeItem('error-retry-count');
+	}
+
 	function goBack() {
+		cancelRetry();
 		if (browser && history.length > 1) {
 			history.back();
 		} else {
@@ -43,10 +94,42 @@
 	}
 
 	function hardReload() {
+		cancelRetry();
 		if (browser) {
+			sessionStorage.setItem('error-retry-count', '0'); // reset
 			window.location.reload();
 		}
 	}
+
+	onMount(() => {
+		syncTheme();
+		const obs = new MutationObserver(syncTheme);
+		obs.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['class']
+		});
+
+		const saved = sessionStorage.getItem('error-retry-count');
+		const current = saved ? parseInt(saved, 10) : 0;
+		retryCount = current;
+
+		const shouldAutoRetry = status === 404 || status === 500 || status === 503;
+
+		if (shouldAutoRetry && current < MAX_RETRIES) {
+			scheduleRetry();
+		} else {
+			sessionStorage.removeItem('error-retry-count');
+		}
+
+		return () => {
+			obs.disconnect();
+			clearTimers();
+		};
+	});
+
+	onDestroy(() => {
+		clearTimers();
+	});
 </script>
 
 <div
@@ -95,7 +178,7 @@
 
 	<!-- Hint -->
 	<p
-		class="mb-8 max-w-sm text-sm leading-relaxed
+		class="mb-4 max-w-sm text-sm leading-relaxed
 			{isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}"
 	>
 		{#if isNotFound}
@@ -104,6 +187,34 @@
 			Something went wrong on the server. Try reloading the page or come back later.
 		{/if}
 	</p>
+
+	<!-- Auto-retry status -->
+	{#if isRetrying}
+		<div
+			class="mb-6 flex flex-col items-center gap-2 rounded-xl px-4 py-3 text-sm
+				{isDarkMode ? 'bg-white/5 text-zinc-300' : 'bg-zinc-100 text-zinc-600'}"
+		>
+			<div class="flex items-center gap-2">
+				<RefreshCw class="h-4 w-4 animate-spin" />
+				<span>
+					Retrying… ({retryCount}/{MAX_RETRIES})
+					{#if countdown > 0}
+						— {countdown}s
+					{/if}
+				</span>
+			</div>
+			<button
+				onclick={cancelRetry}
+				class="text-xs underline opacity-70 hover:opacity-100"
+			>
+				Cancel
+			</button>
+		</div>
+	{:else if retryCount >= MAX_RETRIES}
+		<p class="mb-6 text-sm text-amber-500">
+			Auto-retry stopped after {MAX_RETRIES} attempts. Please try again later.
+		</p>
+	{/if}
 
 	<!-- Actions -->
 	<div class="flex flex-wrap items-center justify-center gap-3">
@@ -126,7 +237,7 @@
 					: 'border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}"
 		>
 			<RefreshCw class="h-4 w-4" />
-			Reload
+			Reload Now
 		</button>
 
 		<a
