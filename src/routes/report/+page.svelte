@@ -24,7 +24,9 @@
 		XCircle,
 		Wrench,
 		Trash2,
-		Shield
+		Shield,
+		ChevronDown,
+		Check
 	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { groupSourcesByLang, LANG_LABELS, getSourceMeta } from '$lib/utils/sourceMeta';
@@ -49,6 +51,14 @@
 		createdAt: Timestamp | null;
 		updatedAt: Timestamp | null;
 	};
+
+	const TYPE_OPTIONS: { id: ReportType; label: string }[] = [
+		{ id: 'add_source', label: 'Request New Source' },
+		{ id: 'fix_source', label: 'Broken / Error Source' },
+		{ id: 'bug', label: 'Bug / Other Error' },
+		{ id: 'feature', label: 'Feature Request' },
+		{ id: 'other', label: 'Other' }
+	];
 
 	const TYPE_LABELS: Record<ReportType, string> = {
 		add_source: 'Request New Source',
@@ -92,10 +102,19 @@
 	let formSourceLink = $state('');
 	let formSourceId = $state('');
 	let formMessage = $state('');
+	let typeDropdownOpen = $state(false);
+	let sourceDropdownOpen = $state(false);
 
 	const { data }: { data: PageData } = $props();
 	const groupedSources = $derived(groupSourcesByLang(data.sources ?? []));
 	const showSourcePicker = $derived(formType === 'fix_source' || formType === 'bug');
+	const showSourceLink = $derived(!(showSourcePicker && !!formSourceId));
+	const selectedTypeLabel = $derived(TYPE_LABELS[formType] ?? formType);
+	const selectedSourceName = $derived(
+		formSourceId
+			? (data.sources ?? []).find((s) => s.id === formSourceId)?.name || formSourceId
+			: '— Select source —'
+	);
 
 	let editingId = $state<string | null>(null);
 	let editStatus = $state<ReportStatus>('open');
@@ -103,6 +122,34 @@
 
 	const user = $derived(getUser());
 	const admin = $derived(isAdmin(user?.uid));
+
+	function selectType(id: ReportType) {
+		formType = id;
+		typeDropdownOpen = false;
+		sourceDropdownOpen = false;
+		if (id !== 'fix_source' && id !== 'bug') {
+			formSourceId = '';
+		}
+	}
+
+	function selectReportSource(id: string) {
+		formSourceId = id;
+		if (id) formSourceLink = '';
+		sourceDropdownOpen = false;
+	}
+
+	function clickOutside(node: HTMLElement) {
+		const handler = (e: MouseEvent) => {
+			if (!node.contains(e.target as Node)) {
+				typeDropdownOpen = false;
+				sourceDropdownOpen = false;
+			}
+		};
+		document.addEventListener('click', handler, true);
+		return {
+			destroy: () => document.removeEventListener('click', handler, true)
+		};
+	}
 
 	onMount(() => {
 		isDarkMode = document.documentElement.classList.contains('dark');
@@ -165,11 +212,11 @@
 		}
 
 		if (formType === 'fix_source' && !formSourceId) {
-			errorMsg = 'Pilih source yang bermasalah.';
+			errorMsg = 'Please select the affected source.';
 			return;
 		}
 
-		const link = formSourceLink.trim();
+		const link = showSourceLink ? formSourceLink.trim() : '';
 		if (link && !/^https?:\/\//i.test(link)) {
 			errorMsg = 'Source link must start with http:// or https://';
 			return;
@@ -199,6 +246,8 @@
 			formSourceId = '';
 			formMessage = '';
 			formType = 'add_source';
+			typeDropdownOpen = false;
+			sourceDropdownOpen = false;
 			successMsg = 'Report submitted successfully. Thank you!';
 			setTimeout(() => (successMsg = ''), 4000);
 		} catch (err: any) {
@@ -231,9 +280,7 @@
 			editingId = null;
 		} catch (err: any) {
 			console.error(err);
-			errorMsg = err?.code
-				? `${err.code}: ${err.message}`
-				: 'Failed to save changes.';
+			errorMsg = err?.code ? `${err.code}: ${err.message}` : 'Failed to save changes.';
 		}
 	}
 
@@ -257,6 +304,27 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function btnClass(open = false) {
+		return `flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-medium shadow-sm transition active:scale-[0.99] ${
+			isDarkMode
+				? 'border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600'
+				: 'border-zinc-300 bg-white text-zinc-900 hover:border-zinc-400'
+		}${open ? (isDarkMode ? ' border-violet-500/50' : ' border-violet-400') : ''}`;
+	}
+
+	function menuClass() {
+		return `absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-2xl border shadow-2xl ${
+			isDarkMode ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-200 bg-white'
+		}`;
+	}
+
+	function itemClass(selected: boolean) {
+		if (selected) {
+			return isDarkMode ? 'bg-violet-500/15 text-violet-300' : 'bg-violet-50 text-violet-700';
+		}
+		return isDarkMode ? 'hover:bg-zinc-800' : 'hover:bg-zinc-100';
 	}
 </script>
 
@@ -294,68 +362,175 @@
 		</div>
 	{/if}
 
-	<!-- Form -->
 	<form
 		onsubmit={submitReport}
 		class="mb-8 space-y-4 rounded-2xl border p-4 sm:p-5
 			{isDarkMode ? 'border-zinc-800 bg-zinc-900/40' : 'border-zinc-200 bg-white'}"
+		use:clickOutside
 	>
-		<div>
-			<label
-				for="report-type"
+		<!-- Report type -->
+		<div class="relative">
+			<p
+				id="report-type-label"
 				class="mb-1.5 block text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
 			>
 				Report type
-			</label>
-			<select
-				id="report-type"
-				bind:value={formType}
-				class="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition
-					{isDarkMode
-					? 'border-zinc-700 bg-zinc-900 text-zinc-100 focus:border-red-500'
-					: 'border-zinc-300 bg-white text-zinc-900 focus:border-red-500'}"
+			</p>
+			<button
+				type="button"
+				id="report-type-btn"
+				aria-labelledby="report-type-label"
+				aria-haspopup="listbox"
+				aria-expanded={typeDropdownOpen}
+				onclick={() => {
+					typeDropdownOpen = !typeDropdownOpen;
+					sourceDropdownOpen = false;
+				}}
+				class={btnClass(typeDropdownOpen)}
 			>
-				{#each Object.entries(TYPE_LABELS) as [value, label]}
-					<option value={value}>{label}</option>
-				{/each}
-			</select>
+				<span class="min-w-0 flex-1 truncate">{selectedTypeLabel}</span>
+				<ChevronDown
+					class="h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 {typeDropdownOpen
+						? 'rotate-180'
+						: ''}"
+				/>
+			</button>
+			{#if typeDropdownOpen}
+				<div class="{menuClass()} max-h-72 overflow-y-auto p-1.5" role="listbox">
+					{#each TYPE_OPTIONS as opt (opt.id)}
+						{@const selected = formType === opt.id}
+						<button
+							type="button"
+							role="option"
+							aria-selected={selected}
+							onclick={() => selectType(opt.id)}
+							class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition {itemClass(
+								selected
+							)}"
+						>
+							<span class="min-w-0 flex-1 truncate font-medium">{opt.label}</span>
+							{#if selected}
+								<Check class="h-4 w-4 shrink-0 text-violet-500" />
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
-
+		<!-- Source picker -->
 		{#if showSourcePicker}
-			<div>
-				<label
-					for="report-source-id"
+			<div class="relative">
+				<p
+					id="report-source-label"
 					class="mb-1.5 block text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
 				>
 					Source
-					<span class="font-normal opacity-60">(pilih yang error)</span>
-				</label>
-				<select
-					id="report-source-id"
-					bind:value={formSourceId}
-					class="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition
-						{isDarkMode
-						? 'border-zinc-700 bg-zinc-900 text-zinc-100 focus:border-red-500'
-						: 'border-zinc-300 bg-white text-zinc-900 focus:border-red-500'}"
+					<span class="font-normal opacity-60">(select the broken one)</span>
+				</p>
+				<button
+					type="button"
+					id="report-source-btn"
+					aria-labelledby="report-source-label"
+					aria-haspopup="listbox"
+					aria-expanded={sourceDropdownOpen}
+					onclick={() => {
+						sourceDropdownOpen = !sourceDropdownOpen;
+						typeDropdownOpen = false;
+					}}
+					class={btnClass(sourceDropdownOpen)}
 				>
-					<option value="">— Pilih source —</option>
-					{#each Object.entries(groupedSources) as [langKey, items]}
-						<optgroup label={LANG_LABELS[langKey] || langKey}>
-							{#each items as src (src.id)}
-								<option value={src.id}>{src.name}</option>
-							{/each}
-						</optgroup>
-					{/each}
-				</select>
-				{#if formSourceId}
-					{@const meta = getSourceMeta(formSourceId)}
-					<p class="mt-1 text-[11px] {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
-						Dipilih: <span class="font-medium">{formSourceId}</span>
+					{#if formSourceId}
+						{@const meta = getSourceMeta(formSourceId)}
+						<span class="fi fi-{meta.flag} rounded-sm text-base"></span>
+						<span class="min-w-0 flex-1 truncate">{selectedSourceName}</span>
 						{#if meta.isR18}
-							<span class="ml-1 rounded bg-red-600 px-1 py-0.5 text-[9px] font-bold text-white">R18</span>
+							<span class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white"
+								>R18</span
+							>
 						{/if}
-					</p>
+					{:else}
+						<span class="min-w-0 flex-1 truncate opacity-50">{selectedSourceName}</span>
+					{/if}
+					<ChevronDown
+						class="h-4 w-4 shrink-0 opacity-60 transition-transform duration-200 {sourceDropdownOpen
+							? 'rotate-180'
+							: ''}"
+					/>
+				</button>
+
+				{#if sourceDropdownOpen}
+					<div class="{menuClass()} max-h-[min(60vh,420px)]" role="listbox">
+						<div class="max-h-[min(60vh,420px)] overflow-y-auto p-1.5">
+							<button
+								type="button"
+								role="option"
+								aria-selected={!formSourceId}
+								onclick={() => selectReportSource('')}
+								class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition {itemClass(
+									!formSourceId
+								)}"
+							>
+								<span
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm opacity-50"
+									>—</span
+								>
+								<span class="flex-1 truncate font-medium">Select source</span>
+								{#if !formSourceId}
+									<Check class="h-4 w-4 shrink-0 text-violet-500" />
+								{/if}
+							</button>
+
+							<div
+								class="my-1.5 border-t {isDarkMode ? 'border-zinc-700/60' : 'border-zinc-200'}"
+							></div>
+
+							{#each Object.entries(groupedSources) as [langKey, items]}
+								<div
+									class="sticky top-0 z-10 -mx-1.5 my-1 px-3 py-1 text-[11px] font-bold uppercase tracking-wider
+										{isDarkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-white text-zinc-400'}"
+								>
+									{LANG_LABELS[langKey] || langKey}
+								</div>
+
+								{#each items as src (src.id)}
+									{@const meta = getSourceMeta(src.id)}
+									{@const isSelected = formSourceId === src.id}
+									<button
+										type="button"
+										role="option"
+										aria-selected={isSelected}
+										onclick={() => selectReportSource(src.id)}
+										class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition {itemClass(
+											isSelected
+										)}"
+									>
+										<span
+											class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-lg
+												{isDarkMode ? 'bg-zinc-800' : 'bg-zinc-100'}"
+										>
+											<span class="fi fi-{meta.flag} rounded-sm"></span>
+										</span>
+										<div class="min-w-0 flex-1">
+											<div class="flex items-center gap-2">
+												<span class="truncate text-sm font-medium">{src.name}</span>
+												{#if meta.isR18}
+													<span
+														class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white"
+														>R18</span
+													>
+												{/if}
+											</div>
+											<p class="mt-0.5 text-[11px] opacity-60">{meta.lang}</p>
+										</div>
+										{#if isSelected}
+											<Check class="h-4 w-4 shrink-0 text-violet-500" />
+										{/if}
+									</button>
+								{/each}
+							{/each}
+						</div>
+					</div>
 				{/if}
 			</div>
 		{/if}
@@ -380,29 +555,31 @@
 			/>
 		</div>
 
-		<div>
-			<label
-				for="report-source-link"
-				class="mb-1.5 block text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
-			>
-				Source link
-				<span class="font-normal opacity-60">(optional)</span>
-			</label>
-			<input
-				id="report-source-link"
-				type="url"
-				bind:value={formSourceLink}
-				placeholder="https://example.com"
-				maxlength="500"
-				class="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition
-					{isDarkMode
-					? 'border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-600 focus:border-red-500'
-					: 'border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400 focus:border-red-500'}"
-			/>
-			<p class="mt-1 text-[11px] {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
-				Paste the website URL for new source requests or broken source reports.
-			</p>
-		</div>
+		{#if showSourceLink}
+			<div>
+				<label
+					for="report-source-link"
+					class="mb-1.5 block text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
+				>
+					Source link
+					<span class="font-normal opacity-60">(optional)</span>
+				</label>
+				<input
+					id="report-source-link"
+					type="url"
+					bind:value={formSourceLink}
+					placeholder="https://example.com"
+					maxlength="500"
+					class="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition
+						{isDarkMode
+						? 'border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-600 focus:border-red-500'
+						: 'border-zinc-300 bg-white text-zinc-900 placeholder:text-zinc-400 focus:border-red-500'}"
+				/>
+				<p class="mt-1 text-[11px] {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
+					Paste the website URL for new source requests or broken source reports.
+				</p>
+			</div>
+		{/if}
 
 		<div>
 			<label
@@ -456,7 +633,6 @@
 		</div>
 	</form>
 
-	<!-- List -->
 	<div class="mb-3 flex items-center justify-between">
 		<h2
 			class="text-sm font-semibold uppercase tracking-wider {isDarkMode
@@ -493,9 +669,7 @@
 						{isDarkMode ? 'border-zinc-800 bg-zinc-900/30' : 'border-zinc-200 bg-white'}"
 				>
 					<div class="mb-2 flex flex-wrap items-center gap-2">
-						<span
-							class="rounded-md border px-2 py-0.5 text-[11px] font-medium {statusMeta.color}"
-						>
+						<span class="rounded-md border px-2 py-0.5 text-[11px] font-medium {statusMeta.color}">
 							<span class="inline-flex items-center gap-1">
 								<StatusIcon class="h-3 w-3" />
 								{statusMeta.label}
