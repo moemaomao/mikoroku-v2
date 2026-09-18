@@ -27,7 +27,6 @@ let ready = false;
 if (browser) {
 	(async () => {
 		try {
-			// Migrasi dari localStorage lama
 			const old = localStorage.getItem('mikoroku_history');
 			if (old) {
 				try {

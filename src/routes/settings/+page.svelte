@@ -3,6 +3,7 @@
 	import { Check, Settings, AlertTriangle } from 'lucide-svelte';
 	import { getPreferredSources, setPreferredSources } from '$lib/stores/preferredSources';
 	import { getSourceMeta, groupSourcesByLang, LANG_LABELS } from '$lib/utils/sourceMeta';
+	import { isBrokenSource } from '$lib/stores/brokenSources';
 	import type { PageData } from './$types';
 
 	const { data }: { data: PageData } = $props();
@@ -173,6 +174,11 @@
 							{#if meta.isR18}
 								<span class="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white"
 									>R18</span
+								>
+							{/if}
+							{#if meta.isError || isBrokenSource(src.id)}
+								<span class="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-black"
+									>ERROR</span
 								>
 							{/if}
 						</button>

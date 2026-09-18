@@ -24,7 +24,7 @@ export const dictionary = {
 		"/manga/[source]/[...id]": [~6],
 		"/privacy": [7],
 		"/reader/[source]/[...id]": [~8],
-		"/report": [9],
+		"/report": [~9],
 		"/settings": [~10]
 	};
 

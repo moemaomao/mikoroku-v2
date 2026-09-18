@@ -2,6 +2,7 @@ export type SourceMeta = {
 	flag: string;
 	lang: string;
 	isR18: boolean;
+	isError?: boolean;
 	color?: string;
 };
 
@@ -97,6 +98,7 @@ export const DEFAULT_META: SourceMeta = {
 	flag: 'un',
 	lang: 'Other',
 	isR18: false,
+	isError: false,
 	color: 'bg-zinc-600'
 };
 
@@ -145,4 +147,23 @@ export function groupSourcesByLang<T extends { id: string; name?: string }>(sour
 	for (const k of order) if (groups[k]) sorted[k] = groups[k];
 	for (const k of Object.keys(groups).sort()) if (!sorted[k]) sorted[k] = groups[k];
 	return sorted;
+}
+
+export function normalizeSourceId(id: string): string {
+	return String(id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+export function sourceHasError(
+	id: string,
+	brokenIds?: Set<string> | Iterable<string> | null
+): boolean {
+	const meta = getSourceMeta(id);
+	if (meta.isError) return true;
+	if (!brokenIds) return false;
+	const clean = normalizeSourceId(id);
+	if (brokenIds instanceof Set) return brokenIds.has(clean);
+	for (const x of brokenIds) {
+		if (normalizeSourceId(String(x)) === clean) return true;
+	}
+	return false;
 }

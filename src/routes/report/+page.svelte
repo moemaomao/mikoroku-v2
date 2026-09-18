@@ -26,6 +26,10 @@
 		Trash2,
 		Shield
 	} from 'lucide-svelte';
+	import type { PageData } from './$types';
+	import { groupSourcesByLang, LANG_LABELS, getSourceMeta } from '$lib/utils/sourceMeta';
+	import { setBrokenIds } from '$lib/stores/brokenSources';
+	import { getImpl } from '$lib/stores/impl';
 
 	type ReportType = 'add_source' | 'fix_source' | 'bug' | 'feature' | 'other';
 	type ReportStatus = 'open' | 'in_progress' | 'done' | 'rejected';
@@ -36,6 +40,7 @@
 		title: string;
 		message: string;
 		sourceLink: string | null;
+		sourceId: string | null;
 		status: ReportStatus;
 		userId: string | null;
 		userName: string;
@@ -85,7 +90,12 @@
 	let formType = $state<ReportType>('add_source');
 	let formTitle = $state('');
 	let formSourceLink = $state('');
+	let formSourceId = $state('');
 	let formMessage = $state('');
+
+	const { data }: { data: PageData } = $props();
+	const groupedSources = $derived(groupSourcesByLang(data.sources ?? []));
+	const showSourcePicker = $derived(formType === 'fix_source' || formType === 'bug');
 
 	let editingId = $state<string | null>(null);
 	let editStatus = $state<ReportStatus>('open');
@@ -108,10 +118,29 @@
 		}
 
 		const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+		try {
+			const current = getImpl();
+			if (current) formSourceId = current;
+		} catch {
+			/* ignore */
+		}
+
 		const unsub = onSnapshot(
 			q,
 			(snap) => {
 				reports = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Report);
+				const broken: string[] = [];
+				for (const d of snap.docs) {
+					const r = d.data() as Report;
+					if (
+						r.type === 'fix_source' &&
+						(r.status === 'open' || r.status === 'in_progress') &&
+						r.sourceId
+					) {
+						broken.push(r.sourceId);
+					}
+				}
+				setBrokenIds(broken);
 				loading = false;
 			},
 			(err) => {
@@ -135,6 +164,11 @@
 			return;
 		}
 
+		if (formType === 'fix_source' && !formSourceId) {
+			errorMsg = 'Pilih source yang bermasalah.';
+			return;
+		}
+
 		const link = formSourceLink.trim();
 		if (link && !/^https?:\/\//i.test(link)) {
 			errorMsg = 'Source link must start with http:// or https://';
@@ -151,6 +185,7 @@
 				title: formTitle.trim(),
 				message: formMessage.trim(),
 				sourceLink: link || null,
+				sourceId: formSourceId || null,
 				status: 'open',
 				userId: user?.uid ?? null,
 				userName: user?.displayName || user?.email || 'Anonymous',
@@ -161,6 +196,7 @@
 			});
 			formTitle = '';
 			formSourceLink = '';
+			formSourceId = '';
 			formMessage = '';
 			formType = 'add_source';
 			successMsg = 'Report submitted successfully. Thank you!';
@@ -284,6 +320,45 @@
 				{/each}
 			</select>
 		</div>
+
+
+		{#if showSourcePicker}
+			<div>
+				<label
+					for="report-source-id"
+					class="mb-1.5 block text-xs font-medium {isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}"
+				>
+					Source
+					<span class="font-normal opacity-60">(pilih yang error)</span>
+				</label>
+				<select
+					id="report-source-id"
+					bind:value={formSourceId}
+					class="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition
+						{isDarkMode
+						? 'border-zinc-700 bg-zinc-900 text-zinc-100 focus:border-red-500'
+						: 'border-zinc-300 bg-white text-zinc-900 focus:border-red-500'}"
+				>
+					<option value="">— Pilih source —</option>
+					{#each Object.entries(groupedSources) as [langKey, items]}
+						<optgroup label={LANG_LABELS[langKey] || langKey}>
+							{#each items as src (src.id)}
+								<option value={src.id}>{src.name}</option>
+							{/each}
+						</optgroup>
+					{/each}
+				</select>
+				{#if formSourceId}
+					{@const meta = getSourceMeta(formSourceId)}
+					<p class="mt-1 text-[11px] {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
+						Dipilih: <span class="font-medium">{formSourceId}</span>
+						{#if meta.isR18}
+							<span class="ml-1 rounded bg-red-600 px-1 py-0.5 text-[9px] font-bold text-white">R18</span>
+						{/if}
+					</p>
+				{/if}
+			</div>
+		{/if}
 
 		<div>
 			<label
@@ -440,6 +515,11 @@
 					<h3 class="mb-1 text-sm font-semibold {isDarkMode ? 'text-zinc-100' : 'text-zinc-900'}">
 						{r.title}
 					</h3>
+					{#if r.sourceId}
+						<p class="mb-1 text-xs {isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}">
+							Source: <span class="font-medium text-amber-400">{r.sourceId}</span>
+						</p>
+					{/if}
 					<p class="mb-2 whitespace-pre-wrap text-sm {isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}">
 						{r.message}
 					</p>

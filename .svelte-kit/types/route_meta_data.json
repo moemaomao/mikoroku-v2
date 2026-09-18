@@ -38,6 +38,7 @@
 		"src/routes/+layout.server.ts"
 	],
 	"/report": [
+		"src/routes/report/+page.server.ts",
 		"src/routes/+layout.server.ts"
 	],
 	"/settings": [
