@@ -325,8 +325,7 @@ async function selectMulti() {
 										{/if}
 										{#if meta.isError || isBrokenSource(source.id)}
 											<span
-												class="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold text-black"
-											>
+												class="rounded border border-red-500/50 bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold text-red-400">
 												ERROR
 											</span>
 										{/if}
