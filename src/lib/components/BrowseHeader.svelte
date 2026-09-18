@@ -255,7 +255,7 @@ async function selectMulti() {
 				<span class="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">R18</span>
 			{/if}
 			{#if !isMultiMode && (getSourceMeta(currentSource).isError || isBrokenSource(currentSource))}
-				<span class="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-black">ERROR</span>
+				<span class="rounded border border-red-500/50 bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold text-red-400">ERROR</span>
 			{/if}
 
 			{@render chevron(activeDropdown === 'source')}

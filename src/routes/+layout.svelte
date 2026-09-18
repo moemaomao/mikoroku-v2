@@ -10,6 +10,9 @@
 	import 'nprogress/nprogress.css';
 	import { isMultiMode } from '$lib/stores/impl';
 	import { untrack } from 'svelte';
+	import { collection, query, where, onSnapshot } from 'firebase/firestore';
+    import { db } from '$lib/firebase';
+    import { setBrokenIds } from '$lib/stores/brokenSources';
 
 	// Components
 	import Footer from '$lib/components/Footer.svelte';
@@ -230,26 +233,26 @@
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────────────
-	onMount(() => {
-		const mq = window.matchMedia('(min-width: 1024px)');
-		// ── Auto-retry Error 1102 ────────────────────────────────────────────────
-        const MAX_RETRY = 2;
-        const RETRY_KEY = 'rokuyomu_1102_retry';
-        const RETRY_DELAY = 1400;
+onMount(() => {
+	const mq = window.matchMedia('(min-width: 1024px)');
+	// ── Auto-retry Error 1102 ────────────────────────────────────────────────
+	const MAX_RETRY = 2;
+	const RETRY_KEY = 'rokuyomu_1102_retry';
+	const RETRY_DELAY = 1400;
 
-        const isError1102 =
-	     document.body.innerText.includes('Error 1102') ||
-	     document.body.innerText.includes('Worker exceeded resource limits');
+	const isError1102 =
+		document.body.innerText.includes('Error 1102') ||
+		document.body.innerText.includes('Worker exceeded resource limits');
 
-if (isError1102) {
-	const currentRetry = parseInt(sessionStorage.getItem(RETRY_KEY) || '0', 10);
+	if (isError1102) {
+		const currentRetry = parseInt(sessionStorage.getItem(RETRY_KEY) || '0', 10);
 
-	if (currentRetry < MAX_RETRY) {
-		sessionStorage.setItem(RETRY_KEY, String(currentRetry + 1));
+		if (currentRetry < MAX_RETRY) {
+			sessionStorage.setItem(RETRY_KEY, String(currentRetry + 1));
 
-		const overlay = document.createElement('div');
-		overlay.id = 'retry-overlay';
-		overlay.innerHTML = `
+			const overlay = document.createElement('div');
+			overlay.id = 'retry-overlay';
+			overlay.innerHTML = `
 			<div style="
 				position:fixed;inset:0;z-index:99999;
 				display:flex;align-items:center;justify-content:center;
@@ -270,97 +273,125 @@ if (isError1102) {
 			</div>
 			<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 		`;
-		document.body.appendChild(overlay);
+			document.body.appendChild(overlay);
 
-		setTimeout(() => {
-			window.location.reload();
-		}, RETRY_DELAY);
+			setTimeout(() => {
+				window.location.reload();
+			}, RETRY_DELAY);
 
-		return;
+			return;
+		} else {
+			sessionStorage.removeItem(RETRY_KEY);
+		}
 	} else {
 		sessionStorage.removeItem(RETRY_KEY);
 	}
-} else {
-	sessionStorage.removeItem(RETRY_KEY);
-}
 
-		const applyMq = () => {
-			isDesktop = mq.matches;
+	const applyMq = () => {
+		isDesktop = mq.matches;
 
-			if (isDesktop) {
-				isSidebarOpen = data.sidebarOpen;
-			} else {
-				isSidebarOpen = false;
-			}
-		};
-
-		applyMq();
-		mq.addEventListener('change', applyMq);
-
-		requestAnimationFrame(() => {
-			hasHydrated = true;
-		});
-
-		const savedTheme = localStorage.getItem('darkMode');
-		applyTheme(savedTheme === null ? true : savedTheme === 'true');
-
-		const savedHistory = localStorage.getItem('history_widget_open');
-		if (savedHistory !== null) {
-			isHistoryOpen = savedHistory === 'true';
+		if (isDesktop) {
+			isSidebarOpen = data.sidebarOpen;
+		} else {
+			isSidebarOpen = false;
 		}
+	};
 
-		loadBookmarks();
-		window.addEventListener('bookmarks-changed', loadBookmarks);
+	applyMq();
+	mq.addEventListener('change', applyMq);
 
-		const onDocClick = (e: MouseEvent) => {
-			const t = e.target as HTMLElement;
-			if (!t.closest('[data-dropdown]') && !t.closest('[data-dropdown-btn]')) {
-				isBookmarkOpen = false;
-				isAuthOpen = false;
-			}
-		};
-		document.addEventListener('click', onDocClick);
+	requestAnimationFrame(() => {
+		hasHydrated = true;
+	});
 
-		let lastScrollY = window.scrollY;
+	const savedTheme = localStorage.getItem('darkMode');
+	applyTheme(savedTheme === null ? true : savedTheme === 'true');
 
-		const handleScroll = () => {
-			const currentScrollY = window.scrollY;
+	const savedHistory = localStorage.getItem('history_widget_open');
+	if (savedHistory !== null) {
+		isHistoryOpen = savedHistory === 'true';
+	}
 
-			if (currentScrollY <= 10) {
-				isHeaderHidden = false;
-				lastScrollY = currentScrollY;
-				return;
-			}
+	loadBookmarks();
+	window.addEventListener('bookmarks-changed', loadBookmarks);
 
-			if (currentScrollY > lastScrollY) {
-				isHeaderHidden = true;
-			} else if (currentScrollY < lastScrollY) {
-				isHeaderHidden = false;
-			}
+	const onDocClick = (e: MouseEvent) => {
+		const t = e.target as HTMLElement;
+		if (!t.closest('[data-dropdown]') && !t.closest('[data-dropdown-btn]')) {
+			isBookmarkOpen = false;
+			isAuthOpen = false;
+		}
+	};
+	document.addEventListener('click', onDocClick);
 
+	let lastScrollY = window.scrollY;
+
+	const handleScroll = () => {
+		const currentScrollY = window.scrollY;
+
+		if (currentScrollY <= 10) {
+			isHeaderHidden = false;
 			lastScrollY = currentScrollY;
-		};
-
-		window.addEventListener('scroll', handleScroll, { passive: true });
-
-		return () => {
-			mq.removeEventListener('change', applyMq);
-			window.removeEventListener('bookmarks-changed', loadBookmarks);
-			document.removeEventListener('click', onDocClick);
-			window.removeEventListener('scroll', handleScroll);
-		};
-	});
-
-	$effect(() => {
-		const user = getUser();
-		if (user && browser) {
-			const t = setTimeout(() => {
-				syncBookmarksOnLogin();
-				syncHistoryOnLogin();
-			}, 600);
-			return () => clearTimeout(t);
+			return;
 		}
-	});
+
+		if (currentScrollY > lastScrollY) {
+			isHeaderHidden = true;
+		} else if (currentScrollY < lastScrollY) {
+			isHeaderHidden = false;
+		}
+
+		lastScrollY = currentScrollY;
+	};
+
+	window.addEventListener('scroll', handleScroll, { passive: true });
+
+	// ── Broken sources (ERROR badge) ───────────────────────────────────────
+	let unsubBroken: (() => void) | undefined;
+	if (db) {
+		try {
+			const qBroken = query(collection(db, 'reports'), where('type', '==', 'fix_source'));
+			unsubBroken = onSnapshot(
+				qBroken,
+				(snap) => {
+					const ids: string[] = [];
+					for (const d of snap.docs) {
+						const r = d.data() as { status?: string; sourceId?: string };
+						if (
+							(r.status === 'open' || r.status === 'in_progress') &&
+							r.sourceId
+						) {
+							ids.push(r.sourceId);
+						}
+					}
+					setBrokenIds(ids);
+				},
+				(err) => console.warn('[brokenSources]', err)
+			);
+		} catch (e) {
+			console.warn('[brokenSources] init failed', e);
+		}
+	}
+
+	return () => {
+		mq.removeEventListener('change', applyMq);
+		window.removeEventListener('bookmarks-changed', loadBookmarks);
+		document.removeEventListener('click', onDocClick);
+		window.removeEventListener('scroll', handleScroll);
+		unsubBroken?.();
+	};
+});
+
+$effect(() => {
+	const user = getUser();
+	if (user && browser) {
+		const t = setTimeout(() => {
+			syncBookmarksOnLogin();
+			syncHistoryOnLogin();
+		}, 600);
+		return () => clearTimeout(t);
+	}
+});
 </script>
 
 <svelte:head>
