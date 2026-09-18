@@ -180,12 +180,12 @@
 				for (const d of snap.docs) {
 					const r = d.data() as Report;
 					if (
-						r.type === 'fix_source' &&
-						(r.status === 'open' || r.status === 'in_progress') &&
-						r.sourceId
-					) {
-						broken.push(r.sourceId);
-					}
+                      (r.type === 'fix_source' || r.type === 'bug') &&
+                      (r.status === 'open' || r.status === 'in_progress') &&
+                        r.sourceId
+                        ) {
+                     broken.push(r.sourceId);
+                  }
 				}
 				setBrokenIds(broken);
 				loading = false;
