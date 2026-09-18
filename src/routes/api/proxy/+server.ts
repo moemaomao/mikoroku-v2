@@ -6,6 +6,9 @@ const USER_AGENT =
 
 const FETCH_TIMEOUT_MS = 12000;
 
+/** chapterKey -> { cookie, expires } */
+const ryukomikSessionCache = new Map<string, { cookie: string; expires: number }>();
+
 function getFilename(url: string, contentType: string): string {
 	let filename = 'image';
 
@@ -41,6 +44,80 @@ function getFilename(url: string, contentType: string): string {
 	}
 
 	return filename;
+}
+
+function ryukomikChapterKeyFromUrl(url: string): string | null {
+	// https://storage.ryukomik.my.id/chapters/{slug}/{n}/file.webp
+	const m = url.match(/\/chapters\/([^/]+)\/(\d+)\//i);
+	if (!m) return null;
+	return `${m[1]}/chapter-${m[2]}`;
+}
+
+async function unlockRyukomik(chapterKey: string): Promise<string | null> {
+	const now = Math.floor(Date.now() / 1000);
+	const hit = ryukomikSessionCache.get(chapterKey);
+	if (hit && hit.expires > now + 30) return hit.cookie;
+
+	const res = await fetch('https://ryukomik.my.id/api/image-session', {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json',
+			accept: 'application/json',
+			'user-agent': USER_AGENT,
+			referer: `https://ryukomik.my.id/chapter/project/${chapterKey}`,
+			origin: 'https://ryukomik.my.id'
+		},
+		body: JSON.stringify({ chapter: chapterKey })
+	});
+
+	const rawText = await res.text();
+	if (!res.ok) {
+		console.warn('[proxy/ryukomik] image-session', res.status, rawText.slice(0, 200));
+		return null;
+	}
+
+	let data: { ok?: boolean; expires?: number } = {};
+	try {
+		data = JSON.parse(rawText);
+	} catch {
+		/* ignore */
+	}
+
+	const lines: string[] = [];
+	const anyHeaders = res.headers as Headers & { getSetCookie?: () => string[] };
+	if (typeof anyHeaders.getSetCookie === 'function') {
+		lines.push(...anyHeaders.getSetCookie());
+	}
+
+	res.headers.forEach((value, key) => {
+		if (key.toLowerCase() === 'set-cookie') lines.push(value);
+	});
+	const single = res.headers.get('set-cookie');
+	if (single && !lines.includes(single)) lines.push(single);
+
+	let cookieVal = '';
+	for (const line of lines) {
+		const m = String(line).match(/ryu_image_access=([^;\s]+)/i);
+		if (m) {
+			cookieVal = `ryu_image_access=${m[1]}`;
+			break;
+		}
+	}
+
+	if (!cookieVal) {
+		console.warn(
+			'[proxy/ryukomik] no ryu_image_access in headers; lines=',
+			lines.length,
+			'raw=',
+			rawText.slice(0, 120)
+		);
+		return null;
+	}
+
+	const expires = typeof data.expires === 'number' ? data.expires : now + 3500;
+	ryukomikSessionCache.set(chapterKey, { cookie: cookieVal, expires });
+	console.log('[proxy/ryukomik] unlocked', chapterKey, 'exp', expires);
+	return cookieVal;
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -152,11 +229,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			/asmhentai\.com|images\.asmhentai\.com/i.test(decodedUrl);
 
 		const isManhuagui =
-            sourceId === 'manhuagui' ||
-            /hamreus\.com|manhuagui\.com|mhgui\.com/i.test(decodedUrl);
+			sourceId === 'manhuagui' ||
+			/hamreus\.com|manhuagui\.com|mhgui\.com/i.test(decodedUrl);
 		const isJmcomic =
-             sourceId === 'jmcomic' ||
-            /jmapiproxy|jmapinode|cdn-msp\.|18comic/i.test(decodedUrl);
+			sourceId === 'jmcomic' ||
+			/jmapiproxy|jmapinode|cdn-msp\.|18comic/i.test(decodedUrl);
+
+		const isRyukomik =
+			sourceId === 'ryukomik' ||
+			/storage\.ryukomik\.my\.id|ryukomik\.my\.id/i.test(decodedUrl);
 
 		const skipWeserv =
 			isHitomi ||
@@ -177,7 +258,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			isKumopoi ||
 			isAsmHentai ||
 			isVoratoon ||
-			isManhuagui;
+			isManhuagui ||
+			isRyukomik;
 
 		// ============================================================
 		// WESERV
@@ -201,10 +283,11 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// ============================================================
-		// REFERER
+		// REFERER + COOKIE (ryukomik image-session)
 		// ============================================================
 
 		let referer = 'https://nhentai.net/';
+		let extraCookie = '';
 
 		try {
 			referer = new URL(decodedUrl).origin + '/';
@@ -266,8 +349,17 @@ export const GET: RequestHandler = async ({ url }) => {
 		} else if (isManhuagui) {
 			referer = 'https://www.manhuagui.com/';
 		} else if (isJmcomic) {
-            referer = 'https://www.cdnhjk.net/';
-        }
+			referer = 'https://www.cdnhjk.net/';
+		} else if (isRyukomik) {
+			const key = ryukomikChapterKeyFromUrl(decodedUrl);
+			if (key) {
+				referer = `https://ryukomik.my.id/chapter/project/${key}`;
+				const cookie = await unlockRyukomik(key);
+				if (cookie) extraCookie = cookie;
+			} else {
+				referer = 'https://ryukomik.my.id/';
+			}
+		}
 
 		// ============================================================
 		// FETCH IMAGE
@@ -280,17 +372,21 @@ export const GET: RequestHandler = async ({ url }) => {
 		}, FETCH_TIMEOUT_MS);
 
 		try {
+			const headers: Record<string, string> = {
+				'User-Agent': USER_AGENT,
+				Referer: referer,
+				Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+				'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+			};
+			if (extraCookie) headers['Cookie'] = extraCookie;
+
 			const imageResponse = await fetch(decodedUrl, {
-				headers: {
-					'User-Agent': USER_AGENT,
-					Referer: referer,
-					Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
-					'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
-				},
+				headers,
 				signal: controller.signal
 			});
 
 			if (!imageResponse.ok) {
+				console.warn('[proxy] image fetch fail', imageResponse.status, decodedUrl.slice(0, 120));
 				return new Response(
 					`Failed to fetch image: ${imageResponse.status}`,
 					{
@@ -299,7 +395,16 @@ export const GET: RequestHandler = async ({ url }) => {
 				);
 			}
 
-						const contentType =
+			const guard = imageResponse.headers.get('x-ryukomik-image-guard') || '';
+			if (isRyukomik && guard === 'promo') {
+				console.warn('[proxy/ryukomik] still promo after unlock', decodedUrl.slice(0, 120));
+				// drop cache so next try re-sessions
+				const k = ryukomikChapterKeyFromUrl(decodedUrl);
+				if (k) ryukomikSessionCache.delete(k);
+				return new Response('Ryukomik image still locked (promo)', { status: 502 });
+			}
+
+			const contentType =
 				imageResponse.headers.get('content-type') || 'image/jpeg';
 
 			const filenameParam = url.searchParams.get('filename');
@@ -308,7 +413,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				: getFilename(decodedUrl, contentType);
 
 			// ── JMComic unscramble ──
-						let body: BodyInit = imageResponse.body as any;
+			let body: BodyInit = imageResponse.body as any;
 
 			if (isJmcomic) {
 				const parsed = parseJmImageUrl(decodedUrl);

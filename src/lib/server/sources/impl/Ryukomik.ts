@@ -6,13 +6,20 @@ import * as cheerio from 'cheerio';
  * Ryukomik adapter (ryukomik.my.id)
  *
  * Stack: Next.js (RSC)
- * Catalog page 1 : homepage "Project Update" + /api/source/project/search → 24 judul
- * Page 2+        : sisa pool project
+ * Catalog page 1 : homepage "Project Update" + /api/source/project/search → 24 titles
+ * Page 2+        : remaining project pool
  * Search         : /api/source/project/search?q=
- * Detail         : /komik/project/{slug}  (meta dari RSC flight data)
+ * Detail         : /komik/project/{slug}  (meta from RSC flight data)
  * Chapter        : /chapter/project/{slug}/chapter-{n}
  * Pages          : storage.ryukomik.my.id/chapters/{slug}/{n}/...
+ *
+ * Image guard:
+ *   CDN serves promo PNG unless unlocked via POST /api/image-session
+ *   body: { chapter: "{slug}/chapter-{n}" } → Set-Cookie ryu_image_access
+ *   Reader loads pages through /api/proxy?url=...&source=ryukomik
+ *   Proxy attaches the session cookie and streams original images
  */
+
 export class RyukomikSource extends BaseSource {
 	id = 'ryukomik';
 	name = 'Ryukomik';
@@ -558,97 +565,112 @@ export class RyukomikSource extends BaseSource {
 		};
 	}
 
-	async getChapterPages(chapterId: string): Promise<string[]> {
-		const path = this.cleanId(
-			chapterId.startsWith('/') ? chapterId : `/${chapterId}`
-		);
+	/**
+ * Replace getChapterPages() in Ryukomik.ts
+ * Return RAW storage URLs only — reader/proxyImage() wraps once via /api/proxy.
+ */
 
-		const maxAttempts = 3;
-		let lastErr: unknown;
+async getChapterPages(chapterId: string): Promise<string[]> {
+	const path = this.cleanId(
+		chapterId.startsWith('/') ? chapterId : `/${chapterId}`
+	);
 
-		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+	const keyMatch = path.match(
+		/\/chapter\/project\/([^/]+\/chapter-\d+(?:\.\d+)?)/i
+	);
+	const chapterKey = keyMatch
+		? keyMatch[1]
+		: path.replace(/^\/chapter\/project\//i, '').replace(/^\/+/, '');
+
+	const maxAttempts = 3;
+	let lastErr: unknown;
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			// Optional warm-up (proxy also unlocks per image)
 			try {
-				const html = await this.fetchHtml(path);
-				const images: string[] = [];
-				const seen = new Set<string>();
+				await fetch(`${this.baseUrl}/api/image-session`, {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+						'user-agent':
+							'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+						referer: `${this.baseUrl}/chapter/project/${chapterKey}`,
+						origin: this.baseUrl
+					},
+					body: JSON.stringify({ chapter: chapterKey })
+				});
+			} catch {
+				/* ignore */
+			}
 
-				const push = (src: string) => {
-					src = this.absUrl((src || '').trim().split(/\s+/)[0]);
-					if (
-						!src ||
-						seen.has(src) ||
-						!/^https?:\/\//i.test(src) ||
-						src.startsWith('data:') ||
-						/logo|icon|avatar|spinner|ads|banner|placeholder/i.test(
-							src
-						) ||
-						/\/covers\//i.test(src) ||
-						/\.gif(\?|$)/i.test(src)
-					) {
-						return;
+			const html = await this.fetchHtml(path);
+			const images: string[] = [];
+			const seen = new Set<string>();
+
+			const push = (src: string) => {
+				src = this.absUrl((src || '').trim().split(/\s+/)[0]);
+				if (
+					!src ||
+					seen.has(src) ||
+					!/^https?:\/\/storage\.ryukomik\.my\.id\//i.test(src) ||
+					src.startsWith('data:') ||
+					/logo|icon|avatar|spinner|ads|banner|placeholder|recruitment/i.test(src) ||
+					/\/covers\//i.test(src) ||
+					/\.gif(\?|$)/i.test(src)
+				) {
+					return;
+				}
+				seen.add(src);
+				// RAW url only — do NOT prefix /api/proxy here
+				images.push(src);
+			};
+
+			const re =
+				/https:\/\/storage\.ryukomik\.my\.id\/chapters\/[^"'\\\s]+?\.(?:jpg|jpeg|png|webp)/gi;
+			for (const u of html.match(re) || []) push(u);
+
+			if (images.length === 0) {
+				const $ = cheerio.load(html);
+				$('img').each((_, img) => {
+					const src =
+						$(img).attr('data-src') ||
+						$(img).attr('src') ||
+						'';
+					if (/storage\.ryukomik\.my\.id\/chapters\//i.test(src)) {
+						push(src);
 					}
-					seen.add(src);
-					images.push(src);
-				};
+				});
+			}
 
-				const re =
-					/https:\/\/storage\.ryukomik\.my\.id\/chapters\/[^"'\\\s]+?\.(?:jpg|jpeg|png|webp)/gi;
-				const found = html.match(re) || [];
-				for (const u of found) push(u);
-
-				if (images.length > 0) {
-					const numbered = images.filter((u) =>
-						/\/\d{2,4}[_-]\d{2,4}\.(webp|jpg|png)$/i.test(u)
-					);
-					if (numbered.length >= Math.min(3, images.length)) {
-						console.log(
-							`[ryukomik] ${numbered.length} pages → ${path}`
-						);
-						return numbered;
-					}
-				}
-
-				if (images.length === 0) {
-					const $ = cheerio.load(html);
-					$('img').each((_, img) => {
-						const src =
-							$(img).attr('data-src') ||
-							$(img).attr('src') ||
-							'';
-						if (/storage\.ryukomik\.my\.id\/chapters\//i.test(src)) {
-							push(src);
-						}
-					});
-				}
-
-				if (images.length === 0) {
-					console.warn(
-						`[ryukomik] 0 pages attempt=${attempt}`,
-						path,
-						'htmlLen=',
-						html.length
-					);
-					lastErr = new Error('Ryukomik chapter has 0 images');
-					await new Promise((r) => setTimeout(r, 400 * attempt));
-					continue;
-				}
-
-				console.log(`[ryukomik] ${images.length} pages → ${path}`);
-				return images;
-			} catch (e) {
-				lastErr = e;
-				console.error(
-					`[ryukomik] getChapterPages attempt=${attempt}`,
+			if (images.length === 0) {
+				console.warn(
+					`[ryukomik] 0 pages attempt=${attempt}`,
 					path,
-					e
+					'htmlLen=',
+					html.length
 				);
-				if (attempt < maxAttempts) {
-					await new Promise((r) => setTimeout(r, 500 * attempt));
-				}
+				lastErr = new Error('Ryukomik chapter has 0 images');
+				await new Promise((r) => setTimeout(r, 400 * attempt));
+				continue;
+			}
+
+			const numbered = images.filter((u) =>
+				/ch-chapter-\d+_\d+|_\d{2,4}_|\/\d{2,4}[_-]/i.test(u)
+			);
+			const out = numbered.length >= Math.min(3, images.length) ? numbered : images;
+			console.log(`[ryukomik] ${out.length} pages → ${path}`);
+			return out;
+		} catch (e) {
+			lastErr = e;
+			console.error(`[ryukomik] getChapterPages attempt=${attempt}`, path, e);
+			if (attempt < maxAttempts) {
+				await new Promise((r) => setTimeout(r, 500 * attempt));
 			}
 		}
-
-		console.error('[ryukomik] getChapterPages failed', path, lastErr);
-		return [];
 	}
+
+	console.error('[ryukomik] getChapterPages failed', path, lastErr);
+	return [];
+}
 }
