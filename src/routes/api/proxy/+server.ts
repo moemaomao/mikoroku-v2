@@ -83,12 +83,13 @@ async function unlockRyukomik(chapterKey: string): Promise<string | null> {
 		/* ignore */
 	}
 
+	// Collect all Set-Cookie values (Node / undici / CF Workers)
 	const lines: string[] = [];
 	const anyHeaders = res.headers as Headers & { getSetCookie?: () => string[] };
 	if (typeof anyHeaders.getSetCookie === 'function') {
 		lines.push(...anyHeaders.getSetCookie());
 	}
-
+	// Fallback: iterate (Workers may expose multiple)
 	res.headers.forEach((value, key) => {
 		if (key.toLowerCase() === 'set-cookie') lines.push(value);
 	});
@@ -104,6 +105,7 @@ async function unlockRyukomik(chapterKey: string): Promise<string | null> {
 		}
 	}
 
+	// Last resort: some runtimes hide Set-Cookie from JS — session still needed per request
 	if (!cookieVal) {
 		console.warn(
 			'[proxy/ryukomik] no ryu_image_access in headers; lines=',
@@ -239,6 +241,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			sourceId === 'ryukomik' ||
 			/storage\.ryukomik\.my\.id|ryukomik\.my\.id/i.test(decodedUrl);
 
+		const isSoftkomik =
+			sourceId === 'softkomik' ||
+			/image\.komik\.im|psy1\.komik\.im|softkomik\.(co|org)/i.test(decodedUrl);
+
 		const skipWeserv =
 			isHitomi ||
 			isBlockedWeserv ||
@@ -259,7 +265,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			isAsmHentai ||
 			isVoratoon ||
 			isManhuagui ||
-			isRyukomik;
+			isRyukomik ||
+			isSoftkomik;
 
 		// ============================================================
 		// WESERV
@@ -280,6 +287,11 @@ export const GET: RequestHandler = async ({ url }) => {
 				'&q=70&output=webp&n=-1';
 
 			return Response.redirect(weserv, 302);
+		}
+
+		// Softkomik CDN watermarks datacenter IPs — let the browser fetch directly
+		if (isSoftkomik && /^https?:\/\//i.test(decodedUrl)) {
+			return Response.redirect(decodedUrl, 302);
 		}
 
 		// ============================================================

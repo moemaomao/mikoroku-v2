@@ -304,10 +304,51 @@ export class SoftkomikSource extends BaseSource {
 	};
 }
 
-	async getChapterPages(chapterId: string): Promise<string[]> {
+	/**
+ * Replace SoftkomikSource.getChapterPages with this full method.
+ * Captures Set-Cookie from site visit, then session → imgs API.
+ */
+
+async getChapterPages(chapterId: string): Promise<string[]> {
+	const UA =
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+
+	const collectCookies = (res: Response, jar: Map<string, string>) => {
+		const anyHeaders = res.headers as Headers & { getSetCookie?: () => string[] };
+		const lines: string[] = [];
+		if (typeof anyHeaders.getSetCookie === 'function') {
+			lines.push(...anyHeaders.getSetCookie());
+		}
+		res.headers.forEach((value, key) => {
+			if (key.toLowerCase() === 'set-cookie') lines.push(value);
+		});
+		const single = res.headers.get('set-cookie');
+		if (single && !lines.includes(single)) lines.push(single);
+
+		for (const line of lines) {
+			const m = String(line).match(/^([^=]+)=([^;]*)/);
+			if (m) jar.set(m[1].trim(), m[2].trim());
+		}
+	};
+
+	const cookieHeader = (jar: Map<string, string>) =>
+		[...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+
 	try {
 		const path = this.cleanId(chapterId.startsWith('/') ? chapterId : `/${chapterId}`);
-		const html = await this.fetchHtml(path);
+		const jar = new Map<string, string>();
+
+		// 1) Visit chapter page (sets anti-bot cookies) + parse __NEXT_DATA__
+		const pageRes = await fetch(`${this.baseUrl}${path}`, {
+			headers: {
+				'User-Agent': UA,
+				Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+				'Accept-Language': 'en-US,en;q=0.9',
+				Referer: `${this.baseUrl}/`
+			}
+		});
+		collectCookies(pageRes, jar);
+		const html = await pageRes.text();
 		const next = this.extractNextData(html);
 		const pageData = next?.props?.pageProps?.data || {};
 
@@ -321,60 +362,99 @@ export class SoftkomikSource extends BaseSource {
 			'';
 		const chapterDataId = pageData?.data?._id || '';
 
-		// TODO: token ini expire, ambil ulang dari browser kalau mati
-		const X_TOKEN =
-			'eyJpcCI6IjE4Mi4yLjE2NC4yMTIiLCJleHAiOjE3ODkzMzgyOTU3OTgsInR5cGUiOiJjaGFwdGVySW1nIiwic291cmNlIjoiYnJvd3NlciIsInVzZXJBZ2VudCI6Ik1vemlsbGEvNS4wIChXaW5kb3dzIE5UIDEwLjA7IFdpbjY0OyB4NjQpIEFwcGxlV2ViS2l0LzUzNy4zNiAoS0hUTUwsIGxpa2UgR2Vja28pIENocm9tZS8xNTIuMC4wLjAgU2FmYXJpLzUzNy4zNiJ9'; // ganti full dari DevTools
-		const X_SIGN =
-			'b58f19fb80e6739dceb770b45d11247c29412cb1bc8d0d07fdb3c64615987353';
-
-		if (slug && chapter && chapterDataId) {
-			try {
-				const apiUrl =
-					`https://api.softkomik.org/komik/` +
-					`${encodeURIComponent(slug)}/chapter/${encodeURIComponent(chapter)}/imgs/${encodeURIComponent(chapterDataId)}`;
-
-				const res = await fetch(apiUrl, {
-					headers: {
-						Accept: 'application/json, text/plain, */*',
-						Origin: 'https://softkomik.co',
-						Referer: 'https://softkomik.co/',
-						'User-Agent':
-							'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
-						'X-Token': X_TOKEN,
-						'X-Sign': X_SIGN
-					}
-				});
-
-				if (res.ok) {
-					const json: any = await res.json();
-					const list: string[] = json?.imageSrc || json?.data?.imageSrc || [];
-					if (list.length > 0) {
-						console.log('[softkomik] sample:', list[0]);
-						const storageInter2 = pageData?.data?.storageInter2;
-						const backBS3 = pageData?.data?.backBS3;
-						const cdnBase =
-							storageInter2 || !backBS3
-								? 'https://image.komik.im/softkomik'
-								: 'https://psy1.komik.im';
-
-						return list
-							.map((src: string) => {
-								if (!src) return '';
-								if (src.startsWith('http')) return src;
-								return `${cdnBase}/${src.replace(/^\//, '')}`;
-							})
-							.filter(Boolean);
-					}
-				} else {
-					console.warn(`[softkomik] imgs API status ${res.status} → ${apiUrl}`);
-				}
-			} catch (e) {
-				console.warn('[softkomik] imgs API error:', e);
-			}
+		if (!slug || !chapter || !chapterDataId) {
+			console.warn('[softkomik] missing slug/chapter/id', { slug, chapter, chapterDataId });
+			return [];
 		}
 
-		console.log(`[softkomik] pages 0 → ${path}`);
-		return [];
+		// 2) Warm homepage cookies too
+		try {
+			const homeRes = await fetch(`${this.baseUrl}/`, {
+				headers: {
+					'User-Agent': UA,
+					Accept: 'text/html',
+					Referer: `${this.baseUrl}/`,
+					Cookie: cookieHeader(jar)
+				}
+			});
+			collectCookies(homeRes, jar);
+		} catch {
+			/* ignore */
+		}
+
+		// 3) Session token (requires cookies — plain fetch without jar → 404)
+		const sessRes = await fetch(`${this.baseUrl}/api/session/chapter/oaisos`, {
+			headers: {
+				'User-Agent': UA,
+				Accept: 'application/json, text/plain, */*',
+				Origin: this.baseUrl,
+				Referer: `${this.baseUrl}/`,
+				Cookie: cookieHeader(jar)
+			}
+		});
+		collectCookies(sessRes, jar);
+
+		if (!sessRes.ok) {
+			console.warn('[softkomik] session failed', sessRes.status, 'cookies', jar.size);
+			return [];
+		}
+
+		const sess: any = await sessRes.json();
+		const token = sess?.token || '';
+		let sign = String(sess?.sign || '');
+		if (sign.includes('|oiq&')) sign = sign.split('|oiq&')[0];
+
+		if (!token || !sign) {
+			console.warn('[softkomik] session missing token/sign');
+			return [];
+		}
+
+		// 4) Images API
+		const apiUrl =
+			`https://api.softkomik.org/komik/` +
+			`${encodeURIComponent(slug)}/chapter/${encodeURIComponent(chapter)}/imgs/${encodeURIComponent(chapterDataId)}`;
+
+		const res = await fetch(apiUrl, {
+			headers: {
+				'User-Agent': UA,
+				Accept: 'application/json, text/plain, */*',
+				Origin: this.baseUrl,
+				Referer: `${this.baseUrl}/`,
+				'X-Token': token,
+				'X-Sign': sign,
+				Cookie: cookieHeader(jar)
+			}
+		});
+
+		if (!res.ok) {
+			console.warn(`[softkomik] imgs API status ${res.status} → ${apiUrl}`);
+			return [];
+		}
+
+		const json: any = await res.json();
+		const list: string[] = json?.imageSrc || json?.data?.imageSrc || [];
+		if (!list.length) {
+			console.log(`[softkomik] pages 0 → ${path}`);
+			return [];
+		}
+
+		const storageInter2 = pageData?.data?.storageInter2;
+		const backBS3 = pageData?.data?.backBS3;
+		const cdnBase =
+			storageInter2 || !backBS3
+				? 'https://image.komik.im/softkomik'
+				: 'https://psy1.komik.im';
+
+		const pages = list
+			.map((src: string) => {
+				if (!src) return '';
+				if (src.startsWith('http')) return src;
+				return `${cdnBase}/${src.replace(/^\//, '')}`;
+			})
+			.filter(Boolean);
+
+		console.log(`[softkomik] ${pages.length} pages → ${path}`);
+		return pages;
 	} catch (e) {
 		console.error('[softkomik] getChapterPages fatal:', e);
 		return [];
