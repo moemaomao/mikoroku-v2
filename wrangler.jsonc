@@ -29,6 +29,9 @@
   "triggers": {
     "crons": ["*/20 * * * *"]
   },
+  "vars": {
+    "WARM_BASE_URL": "https://mikoroku.top"
+  },
   "observability": {
     "enabled": true
   }

@@ -50,9 +50,9 @@ export default {
       `[cron] triggered ${controller.cron} at ${new Date(controller.scheduledTime).toISOString()}`
     );
 
-    const base =
+      const base =
       (typeof env.WARM_BASE_URL === "string" && env.WARM_BASE_URL) ||
-      "https://mikoroku-v2.moemaomao.workers.dev";
+      "https://mikoroku.top";
 
     const pagesToWarm = [
       "/",

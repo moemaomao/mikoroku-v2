@@ -59,6 +59,8 @@ type FirebaseCompat = {
   auth: () => {
     currentUser: AuthUser | null;
     onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
+    signInWithEmailAndPassword: (email: string, password: string) => Promise<unknown>;
+    createUserWithEmailAndPassword: (email: string, password: string) => Promise<unknown>;
   };
   firestore: (() => {
     collection: (name: string) => FirestoreCollection;
