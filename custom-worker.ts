@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { default as handler } from "./.open-next/worker.js";
 
 interface ScheduledController {

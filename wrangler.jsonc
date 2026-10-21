@@ -15,16 +15,16 @@
     }
   ],
   "kv_namespaces": [
-  {
-    "binding": "NEXT_INC_CACHE_KV",
-    "id": "bed9746f9fc74d819eaa01aa31b9cf94",
-    "preview_id": "62a3241068df42319fff4db2984ee99d"
-  },
-  {
-    "binding": "MIKOROKU_CACHE",
-    "id": "bed9746f9fc74d819eaa01aa31b9cf94",
-    "preview_id": "62a3241068df42319fff4db2984ee99d"
-  }
+    {
+      "binding": "NEXT_INC_CACHE_KV",
+      "id": "4cf3f06d81e544e4ac88eb261d936cd7",
+      "preview_id": "4cf3f06d81e544e4ac88eb261d936cd7"
+    },
+    {
+      "binding": "MIKOROKU_V2_CACHE",
+      "id": "4cf3f06d81e544e4ac88eb261d936cd7",
+      "preview_id": "4cf3f06d81e544e4ac88eb261d936cd7"
+    }
   ],
   "triggers": {
     "crons": ["*/20 * * * *"]
