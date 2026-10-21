@@ -20,7 +20,7 @@
 }
 
 html:not(.dark) .detail-route {
-  --bg: #5252522c;
+  --bg: #fff;
   --container: #ffffffbd;
   --text: #050000;
   --text-soft: #444444;
@@ -30,6 +30,10 @@ html:not(.dark) .detail-route {
   --border: rgba(0, 0, 0, 0.10);
   --overlay: rgba(66, 65, 65, 0.185);
   --bg-layer-opacity: 0.22;
+}
+
+html:not(.dark) body:has(.detail-route) {
+  background: #fff;
 }
 
 html.dark .detail-route {
@@ -117,6 +121,7 @@ html.dark .detail-route #bgLayer {
 html.dark .detail-route .container::after {
   background: rgba(15, 15, 30, 0.514) !important;
 }
+
 
 html:not(.dark) .detail-route .info h1 {
   color: #111111 !important;
@@ -499,6 +504,25 @@ html.light .detail-route .demographic-tag {
   color: var(--text);
 }
 
+.detail-route .synopsis-content p {
+  margin: 0 0 10px;
+}
+
+.detail-route .synopsis-content p:last-child {
+  margin-bottom: 0;
+}
+
+.detail-route .synopsis-content ul,
+.detail-route .synopsis-content ol {
+  margin: 0 0 10px;
+  padding-left: 24px;
+}
+
+.detail-route .synopsis-content a {
+  color: var(--link, #60a5fa);
+  text-decoration: underline;
+}
+
 .detail-route .section-title {
   font-size: 20px;
   margin: 25px 0 15px;
@@ -585,6 +609,7 @@ html.light .detail-route .demographic-tag {
   box-sizing: border-box;
 }
 
+/* Angka server mengikuti warna tombol (biru/kuning) */
 .detail-route #sourceSv1Btn .server-number { color: #1d4ed8; }
 .detail-route #sourceSv1Btn.active .server-number { color: #fff; }
 .detail-route #sourceSv2Btn .server-number { color: #b45309; }
@@ -694,7 +719,7 @@ html.light .detail-route .demographic-tag {
    ========================================================= */
 .detail-route .chapter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   justify-content: stretch;
   align-content: start;
   gap: 8px;
@@ -858,9 +883,10 @@ html.light .detail-route .demographic-tag {
   transform: scale(0.97);
 }
 
+/* Source badge — angka/teks saja, tanpa lingkaran/bg hitam */
 .detail-route .chapter-source-badge {
   position: absolute;
-  top: 22px;
+  top: 22px; /* di bawah ikon mata (read/unread) top:4px + 16px */
   right: 4px;
   z-index: 5;
   pointer-events: none;
@@ -930,6 +956,7 @@ html.light .detail-route .demographic-tag {
 
 .detail-route .chapter-grid.list-mode .chapter-item::before,
 .detail-route .chapter-grid.list-mode .chapter-item::after {
+  /* keep read icons, but don't cover label area */
   left: auto;
   right: 10px;
 }
@@ -1200,7 +1227,7 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
   }
 
   .detail-route .chapter-grid {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     justify-content: stretch;
     align-content: start;
     gap: 10px;
@@ -1269,7 +1296,7 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
   }
 
   .detail-route .chapter-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     justify-content: stretch;
     align-content: start;
     gap: 10px;
@@ -1287,36 +1314,21 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
    ========================================================= */
 @media (min-width: 1024px) {
   .detail-route {
-    --detail-rec-space: 375px;
+    --detail-rec-space: calc(var(--sidebar-width) + 40px);
     --detail-gutter: 55px;
     --detail-max-width: 1150px;
-  }
-
-  .detail-route .container {
-    width: min(
+    --detail-content-width: min(
       var(--detail-max-width),
       calc(100% - var(--detail-rec-space) - (var(--detail-gutter) * 2))
     );
-    max-width: var(--detail-max-width);
-    margin-top: 30px;
-    margin-bottom: 30px;
-    margin-left: max(
+    --detail-content-left: max(
       var(--detail-gutter),
       calc((100% - var(--detail-rec-space) - var(--detail-max-width)) / 2)
     );
-    margin-right: var(--detail-rec-space);
-    transform: none;
-    transition:
-      margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      background 0.3s ease,
-      color 0.3s ease;
   }
 
-  body.sidebar-open .detail-route .container {
-    width: min(
+  body.sidebar-open .detail-route {
+    --detail-content-width: min(
       var(--detail-max-width),
       calc(
         100%
@@ -1325,43 +1337,69 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
         - (var(--detail-gutter) * 2)
       )
     );
-    max-width: var(--detail-max-width);
-    margin-left: calc(
+    --detail-content-left: calc(
       var(--sidebar-width)
       + max(
         var(--detail-gutter),
         calc(
-        (100% - var(--sidebar-width) - var(--detail-rec-space) - var(--detail-max-width)) / 2
+          (100% - var(--sidebar-width) - var(--detail-rec-space) - var(--detail-max-width)) / 2
         )
       )
     );
-    margin-right: var(--detail-rec-space);
+  }
+
+  .detail-route.recommendations-hidden {
+    --detail-content-width: min(
+      var(--detail-max-width),
+      calc(100% - (var(--detail-gutter) * 2))
+    );
+    --detail-content-left: max(
+      var(--detail-gutter),
+      calc((100% - var(--detail-max-width)) / 2)
+    );
+  }
+
+  body.sidebar-open .detail-route.recommendations-hidden {
+    --detail-content-width: min(
+      var(--detail-max-width),
+      calc(100% - var(--sidebar-width) - (var(--detail-gutter) * 2))
+    );
+    --detail-content-left: calc(
+      var(--sidebar-width)
+      + max(
+        var(--detail-gutter),
+        calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2)
+      )
+    );
+  }
+
+  .detail-route .container,
+  .detail-route .detail-widgets {
+    width: var(--detail-content-width);
+    max-width: var(--detail-max-width);
+    margin-left: var(--detail-content-left);
+    margin-right: 0;
+  }
+
+  .detail-route .container {
+    margin-top: 30px;
+    margin-bottom: 30px;
     transform: none;
+    transition:
+      margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      background 0.3s ease,
+      color 0.3s ease;
   }
 
-}
-
-@media (min-width: 1024px) and (max-width: 1279px) {
-  .detail-route {
-    --detail-rec-space: 320px;
-  }
-}
-
-@media (min-width: 1280px) and (max-width: 1439px) {
-  .detail-route {
-    --detail-rec-space: 375px;
-  }
-}
-
-@media (min-width: 1440px) and (max-width: 1599px) {
-  .detail-route {
-    --detail-rec-space: 375px;
-  }
-}
-
-@media (min-width: 1600px) {
-  .detail-route {
-    --detail-rec-space: 375px;
+  .detail-route .detail-widgets {
+    margin-top: 24px;
+    margin-bottom: 24px;
+    transition:
+      margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -1372,7 +1410,37 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
   text-align: center;
 }
 
+.detail-route .detail-route-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.detail-route .detail-route-spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid rgba(128, 128, 128, 0.25);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: detail-route-spin 0.8s linear infinite;
+}
+
+@keyframes detail-route-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .detail-route .detail-widgets {
   width: min(100% - 24px, 1150px);
   margin: 24px auto;
+}
+
+@media (min-width: 1024px) {
+  .detail-route .detail-widgets {
+    width: var(--detail-content-width);
+    max-width: var(--detail-max-width);
+    margin-left: var(--detail-content-left);
+    margin-right: 0;
+  }
 }

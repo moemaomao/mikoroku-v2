@@ -559,8 +559,11 @@ html.dark .reader-title-block > span:last-child { color: #a5a5ad; }
 }
 
 .reader-download-status {
+  position: sticky;
+  top: 3px;
+  z-index: 6;
   width: min(calc(100% - 28px), 780px);
-  margin: 14px auto 0;
+  margin: 8px auto 0;
   padding: 10px 13px;
   border: 1px solid rgba(128, 128, 140, .2);
   border-radius: 11px;
@@ -1061,5 +1064,4 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
   .reader-page-select select { max-width: 76px; padding: 5px; }
   .reader-floating-controls { right: 10px; left: auto; bottom: 12px; }
 }
-
 

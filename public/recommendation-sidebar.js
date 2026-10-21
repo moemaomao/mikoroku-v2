@@ -132,6 +132,7 @@
   box-sizing:border-box;font-family:'Kodchasan',sans-serif;color:var(--text)
 }
 #rec-sidebar-root *,#rec-sidebar-root *:before,#rec-sidebar-root *:after{box-sizing:border-box}
+#rec-sidebar-root[hidden],#rec-sidebar-show-button[hidden]{display:none!important}
 html:not(.dark) #rec-sidebar-root{
   --card:rgba(0,0,0,.035);--border:rgba(0,0,0,.1);
   --text:#111;--muted:#555;--accent:#7c3aed
@@ -145,35 +146,59 @@ html:not(.dark) #rec-sidebar-root{
 
 /* TITLE */
 #rec-sidebar-root .rec-section-title{
-  display:flex;align-items:center;gap:8px;margin:0 14px 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 14px 12px;
   font-size:15px;font-weight:700;color:var(--text)
 }
 #rec-sidebar-root .rec-section-title svg{color:var(--accent);flex-shrink:0}
-
-/* GRID */
-#rec-sidebar-root .rec-grid{
-  display:flex;gap:10px;padding:0 14px 8px;overflow-x:auto;overflow-y:hidden;
-  -webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;
-  scrollbar-width:none;-ms-overflow-style:none
+#rec-sidebar-root .rec-heading{display:flex;align-items:center;gap:8px}
+#rec-sidebar-root .rec-toggle{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;padding:0;border:1px solid var(--border);
+  border-radius:6px;background:transparent;color:var(--text);cursor:pointer;
+  flex:0 0 28px
 }
-#rec-sidebar-root .rec-grid::-webkit-scrollbar{display:none}
+#rec-sidebar-root .rec-toggle:hover{background:var(--card)}
+#rec-sidebar-root .rec-toggle svg{transition:transform .2s ease}
+#rec-sidebar-show-button{
+  --card:#fff;--border:rgba(0,0,0,.12);--text:#111;--accent:#7c3aed;
+  position:fixed;top:50%;right:0;z-index:10000;display:flex;
+  align-items:center;justify-content:center;width:36px;height:44px;
+  border:1px solid var(--border);border-right:0;border-radius:8px 0 0 8px;
+  background:var(--card);color:var(--text);cursor:pointer;
+  box-shadow:0 2px 10px rgba(0,0,0,.16);transform:translateY(-50%)
+}
+html.dark #rec-sidebar-show-button{
+  --card:#1a1a2e;--border:rgba(255,255,255,.16);--text:#fff;--accent:#a78bfa
+}
+#rec-sidebar-show-button:hover{background:var(--surface)}
+#rec-sidebar-show-button svg{color:var(--accent)}
+#rec-sidebar-show-button:focus-visible,#rec-sidebar-root .rec-toggle:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px
+}
 
-/* CARD */
+/* LIST */
+#rec-sidebar-root .rec-grid{
+  display:flex;flex-direction:column;gap:8px;padding:0 14px 8px;
+  max-height:65vh;overflow-x:hidden;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;scrollbar-width:thin
+}
+
+/* LIST ITEM */
 #rec-sidebar-root .rec-card{
-  display:block;flex:0 0 92px;width:92px;max-width:92px;
-  text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;
+  display:flex;align-items:center;gap:9px;flex:0 0 auto;width:100%;max-width:none;
+  height:82px;min-height:82px;padding:5px;text-decoration:none;color:inherit;border-radius:8px;overflow:hidden;
   background:var(--card);border:1px solid var(--border);
-  scroll-snap-align:start;transition:.18s ease
+  transition:.18s ease
 }
 #rec-sidebar-root .rec-card:hover{
-  transform:translateY(-2px);border-color:rgba(167,139,250,.45);
+  transform:translateX(2px);border-color:rgba(167,139,250,.45);
   background:rgba(255,255,255,.1)
 }
 html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
 
 /* COVER */
 #rec-sidebar-root .rec-thumb{
-  width:100%;aspect-ratio:2/3;overflow:hidden;background:#1a1a1a
+  width:48px;height:70px;flex:0 0 48px;overflow:hidden;background:#1a1a1a;border-radius:4px
 }
 #rec-sidebar-root .rec-thumb img{
   display:block;width:100%;height:100%;object-fit:cover
@@ -181,8 +206,9 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
 
 /* TITLE */
 #rec-sidebar-root .rec-title{
-  padding:6px 4px 7px;font-size:10px;font-weight:600;line-height:1.25;
-  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  min-width:0;padding:4px;font-size:12px;font-weight:600;line-height:1.35;
+  text-align:left;white-space:normal;overflow:hidden;display:-webkit-box;
+  -webkit-box-orient:vertical;-webkit-line-clamp:2;
   color:var(--text)
 }
 
@@ -198,30 +224,26 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
 @media(min-width:768px){
   #rec-sidebar-root{width:calc(100% - 40px);max-width:1150px}
   #rec-sidebar-root .rec-section-title{margin:0 18px 12px;font-size:16px}
-  #rec-sidebar-root .rec-grid{
-    display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,110px),1fr));
-    gap:12px;padding:0 18px 4px;overflow:visible;scroll-snap-type:none
-  }
-  #rec-sidebar-root .rec-grid::-webkit-scrollbar{display:none}
-  #rec-sidebar-root .rec-card{flex:none;width:100%;max-width:none}
-  #rec-sidebar-root .rec-title{font-size:11px;padding:7px 5px 8px}
+  #rec-sidebar-root .rec-grid{padding:0 18px 8px}
+}
+
+@media(max-width:767px){
+  #rec-sidebar-root{height:auto!important;margin-bottom:8px}
+  #rec-sidebar-root .rec-grid{max-height:440px;gap:12px}
+  #rec-sidebar-root .rec-card:nth-child(n+6){display:none}
 }
 
 /* DESKTOP */
 @media(min-width:1024px){
   #rec-sidebar-root{
     position:absolute;top:30px;right:20px;
-    width:calc(var(--detail-rec-space,375px) - 20px);
-    max-width:355px;height:auto;max-height:none;
-    margin:0;padding:0;overflow:visible
+    width:var(--sidebar-width,280px);max-width:none;
+    height:auto;max-height:none;margin:0;padding:0;overflow:visible
   }
   #rec-sidebar-root .rec-section-title{margin:0 0 12px;font-size:16px}
-  #rec-sidebar-root .rec-grid{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:8px;padding:0
-  }
-  #rec-sidebar-root .rec-card{border-radius:8px}
-  #rec-sidebar-root .rec-title{font-size:9px;padding:5px 3px 6px;line-height:1.2}
+  #rec-sidebar-root .rec-panel{display:flex;flex-direction:column;height:100%;padding:0}
+  #rec-sidebar-root .rec-grid{flex:1;min-height:0;max-height:none;padding:0 0 8px}
+  #rec-sidebar-root .rec-title{font-size:11px}
 }
 `;
 
@@ -240,11 +262,43 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
     root.innerHTML =
       '<div class="rec-panel">' +
       '<h3 class="rec-section-title">' +
+      '<span class="rec-heading">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>' +
-      "Rekomendasi</h3>" +
+      "Rekomendasi</span>" +
+      '<button type="button" class="rec-toggle" id="rec-toggle-button" aria-label="Sembunyikan rekomendasi" title="Sembunyikan rekomendasi" aria-expanded="true" aria-controls="rec-sidebar-root">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>' +
+      "</button></h3>" +
       '<div class="rec-grid" id="rec-recommend-grid">' +
       '<div class="rec-loading"><i class="fas fa-spinner fa-spin"></i>Memuat...</div>' +
       "</div></div>";
+
+    var toggle = root.querySelector("#rec-toggle-button");
+    var showButton = document.createElement("button");
+    showButton.id = "rec-sidebar-show-button";
+    showButton.type = "button";
+    showButton.hidden = true;
+    showButton.setAttribute("aria-label", "Tampilkan rekomendasi");
+    showButton.title = "Tampilkan rekomendasi";
+    showButton.setAttribute("aria-controls", "rec-sidebar-root");
+    showButton.innerHTML =
+      '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+
+    function showRecommendations() {
+      root.hidden = false;
+      showButton.hidden = true;
+      root.parentElement?.classList.remove("recommendations-hidden");
+      toggle.focus();
+    }
+
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        root.hidden = true;
+        showButton.hidden = false;
+        root.parentElement?.classList.add("recommendations-hidden");
+        showButton.focus();
+      });
+    }
+    showButton.addEventListener("click", showRecommendations);
 
     var container = document.querySelector(".container");
     var footer = document.getElementById("site-footer");
@@ -254,6 +308,23 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
       footer.parentNode.insertBefore(root, footer);
     } else {
       document.body.appendChild(root);
+    }
+    document.body.appendChild(showButton);
+
+    if (container && "ResizeObserver" in window) {
+      var heightObserver = new ResizeObserver(function () {
+        if (!root.isConnected) {
+          heightObserver.disconnect();
+          return;
+        }
+        root.style.height = container.offsetHeight + "px";
+      });
+      heightObserver.observe(container);
+      root.style.height = container.offsetHeight + "px";
+      window.addEventListener("mikoroku:cleanup-recommendations", function cleanup() {
+        heightObserver.disconnect();
+        window.removeEventListener("mikoroku:cleanup-recommendations", cleanup);
+      });
     }
   }
 

@@ -117,6 +117,11 @@ function imageWithQuality(url: string, quality: number): string {
   return url;
 }
 
+function adaptiveImageWidth(): number {
+  if (typeof window === "undefined") return 1600;
+  return Math.max(800, Math.min(2000, Math.round(window.innerWidth * (window.devicePixelRatio || 1))));
+}
+
 function getCurrentChapterCache(slug: string): ChapterRecord | null {
   try {
     const value = JSON.parse(localStorage.getItem("currentChapter") || "null") as (ChapterRecord & { slug?: string }) | null;
@@ -525,9 +530,9 @@ export default function ReaderPage({
     data.images.slice(start, start + 4).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
-      image.src = src;
+      image.src = imageWithQuality(src, dataSaver ? imageQuality : adaptiveImageWidth());
     });
-  }, [data, kind, mode, page]);
+  }, [data, dataSaver, imageQuality, kind, mode, page]);
 
   useEffect(() => {
     if (!data || kind !== "manga" || mode !== "long-strip") return;
@@ -564,7 +569,9 @@ export default function ReaderPage({
   useEffect(() => {
     setDataSaver(localStorage.getItem("dataSaver") === "true");
     const savedQuality = Number(localStorage.getItem("imageQuality"));
-    if ([600, 700, 800, 900, 1000, 1100, 1200].includes(savedQuality)) setImageQuality(savedQuality);
+    if ([600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000].includes(savedQuality)) {
+      setImageQuality(savedQuality);
+    }
   }, []);
 
   useEffect(() => {
@@ -725,25 +732,33 @@ export default function ReaderPage({
     setDownloadProgress(0);
     setDownloadStatus(`Downloading 0/${data.images.length} images...`);
     const archive = new JSZip();
+    const results = new Array<Blob | null>(data.images.length).fill(null);
+    let completed = 0;
     let succeeded = 0;
     let failed = 0;
 
     try {
-      for (const [index, imageUrl] of data.images.entries()) {
-        let imageBlob: Blob | undefined;
-        const candidates = [
-          imageUrl,
-          `https://images.weserv.nl/?url=${encodeURIComponent(imageUrl)}&n=-1`,
-        ];
-        for (const candidate of candidates) {
-          for (let attempt = 0; attempt < 2 && !imageBlob; attempt += 1) {
+      let nextIndex = 0;
+      const downloadWorker = async () => {
+        while (nextIndex < data.images.length) {
+          const index = nextIndex++;
+          const imageUrl = data.images[index];
+          const readerUrl = imageWithQuality(imageUrl, dataSaver ? imageQuality : adaptiveImageWidth());
+          const candidates = [
+            readerUrl,
+            imageUrl,
+            `https://images.weserv.nl/?url=${encodeURIComponent(imageUrl)}&n=-1`,
+          ];
+          let imageBlob: Blob | undefined;
+
+          for (const candidate of [...new Set(candidates)]) {
             const controller = new AbortController();
             const timeout = window.setTimeout(() => controller.abort(), 40000);
             try {
               const response = await fetch(candidate, {
                 mode: "cors",
                 credentials: "omit",
-                cache: "no-store",
+                cache: "force-cache",
                 signal: controller.signal,
                 referrerPolicy: "no-referrer",
               });
@@ -751,32 +766,39 @@ export default function ReaderPage({
               const blob = await response.blob();
               if (blob.size < 100) throw new Error("Image is empty or invalid.");
               imageBlob = blob;
+              break;
             } catch (downloadError) {
-              if (attempt === 1 && candidate === candidates[candidates.length - 1]) {
+              if (candidate === candidates[candidates.length - 1]) {
                 console.warn(`Failed to download page ${index + 1}.`, downloadError);
               }
-              if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 500));
             } finally {
               window.clearTimeout(timeout);
             }
           }
-          if (imageBlob) break;
-        }
-        if (imageBlob) {
-          let extension = imageBlob.type.split("/")[1]?.replace("jpeg", "jpg") || "";
-          if (!/^[a-z0-9]{2,5}$/i.test(extension)) {
-            extension = new URL(imageUrl).pathname.split(".").pop()?.match(/^[a-z0-9]{2,5}$/i)?.[0] || "jpg";
+
+          if (imageBlob) {
+            results[index] = imageBlob;
+            succeeded += 1;
+          } else {
+            failed += 1;
           }
-          archive.file(`${String(index + 1).padStart(3, "0")}.${extension}`, imageBlob);
-          succeeded += 1;
-        } else {
-          failed += 1;
+          completed += 1;
+          setDownloadStatus(`Downloading ${completed}/${data.images.length} images · ${succeeded} succeeded`);
+          setDownloadProgress(Math.round((completed / data.images.length) * 100));
         }
-        setDownloadStatus(`Downloading ${index + 1}/${data.images.length} images · ${succeeded} succeeded`);
-        setDownloadProgress(Math.round(((index + 1) / data.images.length) * 100));
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, data.images.length) }, () => downloadWorker()));
 
       if (!succeeded) throw new Error("No images could be downloaded. Check your connection and try again.");
+      results.forEach((imageBlob, index) => {
+        if (!imageBlob) return;
+        const imageUrl = data.images[index];
+        let extension = imageBlob.type.split("/")[1]?.replace("jpeg", "jpg") || "";
+        if (!/^[a-z0-9]{2,5}$/i.test(extension)) {
+          extension = new URL(imageUrl).pathname.split(".").pop()?.match(/^[a-z0-9]{2,5}$/i)?.[0] || "jpg";
+        }
+        archive.file(`${String(index + 1).padStart(3, "0")}.${extension}`, imageBlob);
+      });
       const zipBlob = await archive.generateAsync({ type: "blob" });
       const objectUrl = URL.createObjectURL(zipBlob);
       const anchor = document.createElement("a");
@@ -871,11 +893,11 @@ export default function ReaderPage({
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode}`}>
             {mode === "long-strip" ? data.images.map((image, index) => (
-              <img key={`${image}:${index}`} src={imageWithQuality(image, dataSaver ? imageQuality : 0)} alt={`Page ${index + 1}`} loading={dataSaver && index > 0 ? "lazy" : index < 2 ? "eager" : "lazy"} onError={handleImageError} />
+              <img key={`${image}:${index}`} src={imageWithQuality(image, dataSaver ? imageQuality : adaptiveImageWidth())} alt={`Page ${index + 1}`} loading={index < 2 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "auto"} decoding="async" onError={handleImageError} />
             )) : (
               <>
                 <div className="reader-single-page-frame">
-                  <img src={imageWithQuality(data.images[page - 1], dataSaver ? imageQuality : 0)} alt={`Page ${page}`} onError={handleImageError} />
+                  <img src={imageWithQuality(data.images[page - 1], dataSaver ? imageQuality : adaptiveImageWidth())} alt={`Page ${page}`} fetchPriority="high" decoding="async" onError={handleImageError} />
                   <button className="reader-image-nav reader-image-nav-previous" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
                     <i className="fas fa-chevron-left" aria-hidden="true" />
                   </button>
@@ -955,7 +977,7 @@ export default function ReaderPage({
           </label>
           {dataSaver && <label className="reader-setting-block">
             <span><strong>Image quality</strong><small>{imageQuality}px</small></span>
-            <input type="range" min="600" max="1200" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
+            <input type="range" min="600" max="2000" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
           </label>}
           <button type="button" className="reader-setting-row reader-setting-button" onClick={() => void downloadChapter()} disabled={!data || downloading}>
             <div><strong>{downloading ? "Downloading chapter..." : "Download chapter"}</strong><small>Save all pages as a ZIP file</small></div>

@@ -35,6 +35,12 @@
   text-align: center;
 }
 
+@media (max-width: 767px) {
+  .community-widgets.detail-widgets {
+    margin-top: 0;
+  }
+}
+
 html.dark .community-widget-error {
   color: #ff8e8e;
 }

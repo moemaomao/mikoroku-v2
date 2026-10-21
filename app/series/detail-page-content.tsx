@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import CommunityWidgets from "../community-widgets";
 import { isNovelSeries } from "../../lib/reader-kind";
 
@@ -103,6 +103,69 @@ function asString(value: unknown, fallback = ""): string {
 function asStringList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => asString(item).trim()).filter(Boolean);
   return asString(value).split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+type SynopsisNode = {
+  tag: string;
+  children: Array<SynopsisNode | string>;
+  href?: string;
+};
+
+function decodeSynopsisText(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, "\u00a0")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
+}
+
+function parseSynopsis(value: string): Array<SynopsisNode | string> {
+  const allowedTags = new Set(["p", "strong", "b", "em", "i", "u", "ol", "ul", "li", "br", "a", "h1", "h2", "h3", "blockquote"]);
+  const root: SynopsisNode = { tag: "", children: [] };
+  const stack = [root];
+  const tokens = value.match(/<!--[\s\S]*?-->|<\/?[a-z][^>]*>|[^<]+|</gi) || [];
+
+  for (const token of tokens) {
+    if (token.startsWith("<!--")) continue;
+    const tagMatch = token.match(/^<\/?([a-z][\w-]*)\b([^>]*)>/i);
+    if (!tagMatch) {
+      stack[stack.length - 1].children.push(decodeSynopsisText(token));
+      continue;
+    }
+
+    const tag = tagMatch[1].toLowerCase();
+    if (!allowedTags.has(tag)) continue;
+    if (token.startsWith("</")) {
+      const matchingIndex = stack.findLastIndex((node) => node.tag === tag);
+      if (matchingIndex > 0) stack.length = matchingIndex;
+      continue;
+    }
+
+    const node: SynopsisNode = { tag, children: [] };
+    if (tag === "a") {
+      const href = tagMatch[2].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const candidate = decodeSynopsisText(href?.[1] || href?.[2] || href?.[3] || "").trim();
+      if (/^(https?:|mailto:)/i.test(candidate)) node.href = candidate;
+    }
+    stack[stack.length - 1].children.push(node);
+    if (tag !== "br" && !/\/\s*>$/.test(token)) stack.push(node);
+  }
+  return root.children;
+}
+
+function renderSynopsisNodes(nodes: Array<SynopsisNode | string>, keyPrefix = "synopsis"): ReactNode[] {
+  return nodes.map((node, index) => {
+    if (typeof node === "string") return node;
+    const key = `${keyPrefix}-${index}`;
+    const props = node.tag === "a" && node.href
+      ? { key, href: node.href, target: "_blank", rel: "noopener noreferrer" }
+      : { key };
+    return createElement(node.tag, props, ...renderSynopsisNodes(node.children, key));
+  });
 }
 
 function decodeFirestoreValue(value: unknown): unknown {
@@ -524,6 +587,46 @@ function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapt
   return merged;
 }
 
+function cacheChapterList(slug: string, chapters: Chapter[]): void {
+  const key = `chapters_${slug}`;
+  const data = chapters.map(({ id, num, title, thumbnail, isNovel, url, source, createdAt, updatedAt, date, timestamp, order }) => ({
+    id,
+    num,
+    title,
+    thumbnail,
+    isNovel,
+    url,
+    source,
+    createdAt,
+    updatedAt,
+    date,
+    timestamp,
+    order,
+  }));
+  const value = JSON.stringify({ time: Date.now(), data });
+
+  try {
+    localStorage.removeItem(key);
+    localStorage.setItem(key, value);
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== "QuotaExceededError") {
+      console.warn(`Cache chapter tidak dapat disimpan untuk ${slug}.`, error);
+      return;
+    }
+
+    try {
+      for (const cachedKey of Object.keys(localStorage)) {
+        if (cachedKey.startsWith("chapters_") && cachedKey !== key) {
+          localStorage.removeItem(cachedKey);
+        }
+      }
+      localStorage.setItem(key, value);
+    } catch (retryError) {
+      console.warn(`Cache chapter tidak dapat disimpan karena kuota penyimpanan browser penuh untuk ${slug}.`, retryError);
+    }
+  }
+}
+
 function parseDateValue(value?: string | number): Date | null {
   if (!value) return null;
   const rawValue = String(value).trim();
@@ -699,7 +802,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         previous.filter((item) => item.source !== source && item.source !== "firestore"),
         finalResult,
       );
-      localStorage.setItem(`chapters_${slug}`, JSON.stringify({ time: Date.now(), data: merged }));
+      cacheChapterList(slug, merged);
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       console.error(`Chapter ${source} gagal dimuat.`, error);
@@ -862,7 +965,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       <>
         <div id="site-header" />
         <main className="detail-route">
-          <p className="detail-route-message" role="status">Memuat detail manga...</p>
+          <div className="detail-route-loading" role="status" aria-label="Memuat detail manga">
+            <span className="detail-route-spinner" aria-hidden="true" />
+          </div>
         </main>
         <div id="site-footer" />
         <RouteIntegrations />
@@ -995,7 +1100,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             )}
             <section className="synopsis">
               <h2>Synopsis</h2>
-              <p>{manga.desc || "Synopsis tidak tersedia."}</p>
+              {manga.desc
+                ? <div className="synopsis-content">{renderSynopsisNodes(parseSynopsis(manga.desc))}</div>
+                : <p>Synopsis tidak tersedia.</p>}
             </section>
             <div id="announcement-widget" />
 
@@ -1132,10 +1239,13 @@ function RouteIntegrations() {
     })();
 
     return () => {
+      window.dispatchEvent(new Event("mikoroku:cleanup-recommendations"));
       for (const script of added) script.remove();
       document.getElementById("site-header")?.replaceChildren();
       document.getElementById("site-footer")?.replaceChildren();
       document.getElementById("rec-recommend-grid")?.replaceChildren();
+      document.getElementById("rec-sidebar-root")?.remove();
+      document.getElementById("rec-sidebar-show-button")?.remove();
     };
   }, []);
 
