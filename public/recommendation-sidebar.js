@@ -138,7 +138,7 @@ html:not(.dark) #rec-sidebar-root{
   --text:#111;--muted:#555;--accent:#7c3aed
 }
 
-/* PANEL TANPA BACKGROUND */
+/* PANEL */
 #rec-sidebar-root .rec-panel{
   background:transparent;border:0;border-radius:0;
   padding:14px 0 16px;overflow:hidden
@@ -153,12 +153,12 @@ html:not(.dark) #rec-sidebar-root{
 #rec-sidebar-root .rec-heading{display:flex;align-items:center;gap:8px}
 #rec-sidebar-root .rec-toggle{
   display:inline-flex;align-items:center;justify-content:center;
-  width:28px;height:28px;padding:0;border:1px solid var(--border);
-  border-radius:6px;background:transparent;color:var(--text);cursor:pointer;
+  width:28px;height:28px;padding:0;border:1px solid rgba(239,68,68,.35);
+  border-radius:6px;background:transparent;color:#ef4444;cursor:pointer;
   flex:0 0 28px
 }
-#rec-sidebar-root .rec-toggle:hover{background:var(--card)}
-#rec-sidebar-root .rec-toggle svg{transition:transform .2s ease}
+#rec-sidebar-root .rec-toggle:hover{background:rgba(239,68,68,.1)}
+#rec-sidebar-root .rec-toggle svg{color:#ef4444}
 #rec-sidebar-show-button{
   --card:#fff;--border:rgba(0,0,0,.12);--text:#111;--accent:#7c3aed;
   position:fixed;top:50%;right:0;z-index:10000;display:flex;
@@ -258,18 +258,18 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
 
     var root = document.createElement("aside");
     root.id = "rec-sidebar-root";
-    root.setAttribute("aria-label", "Rekomendasi Manga");
+    root.setAttribute("aria-label", "Manga recommendations");
     root.innerHTML =
       '<div class="rec-panel">' +
       '<h3 class="rec-section-title">' +
       '<span class="rec-heading">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>' +
-      "Rekomendasi</span>" +
-      '<button type="button" class="rec-toggle" id="rec-toggle-button" aria-label="Sembunyikan rekomendasi" title="Sembunyikan rekomendasi" aria-expanded="true" aria-controls="rec-sidebar-root">' +
-      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>' +
+      "Recommendations</span>" +
+      '<button type="button" class="rec-toggle" id="rec-toggle-button" aria-label="Hide recommendations" title="Hide recommendations" aria-expanded="true" aria-controls="rec-sidebar-root">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg>' +
       "</button></h3>" +
       '<div class="rec-grid" id="rec-recommend-grid">' +
-      '<div class="rec-loading"><i class="fas fa-spinner fa-spin"></i>Memuat...</div>' +
+      '<div class="rec-loading"><i class="fas fa-spinner fa-spin"></i>Loading...</div>' +
       "</div></div>";
 
     var toggle = root.querySelector("#rec-toggle-button");
@@ -277,8 +277,8 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
     showButton.id = "rec-sidebar-show-button";
     showButton.type = "button";
     showButton.hidden = true;
-    showButton.setAttribute("aria-label", "Tampilkan rekomendasi");
-    showButton.title = "Tampilkan rekomendasi";
+    showButton.setAttribute("aria-label", "Show recommendations");
+    showButton.title = "Show recommendations";
     showButton.setAttribute("aria-controls", "rec-sidebar-root");
     showButton.innerHTML =
       '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
@@ -312,15 +312,20 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
     document.body.appendChild(showButton);
 
     if (container && "ResizeObserver" in window) {
+      var syncRootSize = function () {
+        var containerStyle = window.getComputedStyle(container);
+        var bottomSpacing = parseFloat(containerStyle.marginBottom) || 0;
+        root.style.height = container.offsetHeight + bottomSpacing + "px";
+      };
       var heightObserver = new ResizeObserver(function () {
         if (!root.isConnected) {
           heightObserver.disconnect();
           return;
         }
-        root.style.height = container.offsetHeight + "px";
+        syncRootSize();
       });
       heightObserver.observe(container);
-      root.style.height = container.offsetHeight + "px";
+      syncRootSize();
       window.addEventListener("mikoroku:cleanup-recommendations", function cleanup() {
         heightObserver.disconnect();
         window.removeEventListener("mikoroku:cleanup-recommendations", cleanup);
@@ -483,7 +488,7 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
     var picks = pickRecommend(allManga);
     grid.innerHTML = picks.length
       ? picks.map(buildCard).join("")
-      : '<div class="rec-empty">Belum ada rekomendasi</div>';
+      : '<div class="rec-empty">No recommendations yet</div>';
   }
 
   function renderAll() {
@@ -499,7 +504,7 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
           return res.json();
         })
         .then(function (list) {
-          if (!Array.isArray(list)) throw new Error("JSON harus array");
+          if (!Array.isArray(list)) throw new Error("JSON must be an array");
           list.forEach(function (item) {
             if (!item) return;
             var full = buildFullManga(item, "github");
@@ -650,7 +655,7 @@ html.light #rec-sidebar-root .rec-card:hover{background:rgba(0,0,0,.06)}
       rebuildList();
       if (!allManga.length) {
         var g = document.getElementById("rec-recommend-grid");
-        if (g) g.innerHTML = '<div class="rec-empty">Tidak ada data rekomendasi</div>';
+        if (g) g.innerHTML = '<div class="rec-empty">No recommendations available</div>';
       } else {
         renderAll();
       }

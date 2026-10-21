@@ -60,6 +60,8 @@ type BloggerEntry = {
 
 declare global {
   interface Window {
+    mangaData?: Record<string, unknown>;
+    initSiteHeader?: () => void;
     firestore?: unknown;
     fs?: {
       collection?: (...args: unknown[]) => unknown;
@@ -1199,6 +1201,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 function RouteIntegrations() {
   useEffect(() => {
     const added: HTMLScriptElement[] = [];
+    let mangaDataCheck: number | undefined;
+    let mangaDataTimeout: number | undefined;
     const load = (src: string, persistent = false) => new Promise<void>((resolve) => {
       const existing = [...document.scripts].find((script) => script.src === new URL(src, location.href).href);
       if (existing) {
@@ -1217,6 +1221,22 @@ function RouteIntegrations() {
     });
 
     void load("/header.js", true).then(() => window.initSiteHeader?.());
+    void load("/manga-data.js", true).then(() => {
+      const notifySearchReady = () => {
+        if (Object.keys(window.mangaData || {}).length <= 5) return false;
+        if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
+        if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
+        window.dispatchEvent(new Event("mangaDataReady"));
+        return true;
+      };
+
+      if (notifySearchReady()) return;
+      mangaDataCheck = window.setInterval(() => notifySearchReady(), 100);
+      mangaDataTimeout = window.setTimeout(() => {
+        if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
+        console.error("Manga search data did not become available on the series page.");
+      }, 15000);
+    });
 
     void (async () => {
       await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
@@ -1234,6 +1254,8 @@ function RouteIntegrations() {
     })();
 
     return () => {
+      if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
+      if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
       window.dispatchEvent(new Event("mikoroku:cleanup-recommendations"));
       for (const script of added) script.remove();
       document.getElementById("site-header")?.replaceChildren();
