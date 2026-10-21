@@ -1,0 +1,1992 @@
+.loadingPage,
+.loginPage {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  color: #eef2ff;
+  background:
+    radial-gradient(ellipse 70% 40% at 15% 0%, rgb(91 140 255 / 20%), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 90% 100%, rgb(167 139 250 / 12%), transparent 50%),
+    #0f1424;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.loadingPage p {
+  color: #aab5ce;
+}
+
+.loginCard {
+  width: min(100%, 410px);
+  padding: 34px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 22px;
+  background: rgb(22 28 48 / 88%);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 38%);
+}
+
+.brandMark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 14px;
+  color: white;
+  background: linear-gradient(145deg, #6b9bff, #a78bfa);
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.loginCard .brandMark {
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  color: #8295b9;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.loginCard h1,
+.topbar h1 {
+  margin: 0;
+  color: #f5f7ff;
+  font-size: 25px;
+}
+
+.loginDescription {
+  margin: 8px 0 26px;
+  color: #9aa8c7;
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  color: #bac5dc;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea,
+.searchBox input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 12px;
+  outline: none;
+  color: #eef2ff;
+  background: rgb(10 15 29 / 55%);
+  font: inherit;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.searchBox:focus-within {
+  border-color: rgb(107 155 255 / 70%);
+  box-shadow: 0 0 0 3px rgb(107 155 255 / 16%);
+}
+
+.field input:read-only {
+  color: #8591a9;
+}
+
+.field select option {
+  color: #eef2ff;
+  background: #161e32;
+}
+
+.loginCard .field + .field {
+  margin-top: 16px;
+}
+
+.primaryButton,
+.secondaryButton,
+.logoutButton {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border: 1px solid rgb(107 155 255 / 45%);
+  border-radius: 9px;
+  color: #f5f7ff;
+  background: rgb(107 155 255 / 15%);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover,
+.logoutButton:hover {
+  border-color: #6b9bff;
+  background: rgb(107 155 255 / 25%);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.logoutButton:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
+.loginCard .primaryButton {
+  width: 100%;
+  margin-top: 22px;
+}
+
+.secondaryButton {
+  border-color: rgb(255 255 255 / 13%);
+  background: rgb(255 255 255 / 5%);
+}
+
+.logoutButton {
+  width: 100%;
+  border-color: rgb(248 113 113 / 35%);
+  color: #ffaaaa;
+  background: rgb(248 113 113 / 8%);
+}
+
+.error,
+.errorBanner {
+  color: #ffaaaa;
+}
+
+.loginCard .error {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
+.adminShell {
+  display: grid;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  grid-template-columns: 250px minmax(0, 1fr);
+  overflow: hidden;
+  color: #eef2ff;
+  background: #111221;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+}
+
+:global(body.adminPageBody) {
+  margin: 0;
+  overflow-x: hidden;
+  background: #111221;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 14px 10px;
+  border-right: 1px solid rgb(255 255 255 / 8%);
+  background:
+    linear-gradient(180deg, rgb(11 16 32 / 78%) 0%, rgb(11 16 32 / 88%) 100%),
+    url("https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg") center / cover no-repeat;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 8px 16px;
+  color: #eef2ff;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.navigation {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+}
+
+.navigation button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #b5c0d8;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navigation button svg,
+.sidebarAction svg,
+.logoutButton svg,
+.secondaryButton svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.navigation button:hover,
+.navigation .activeNav {
+  border-color: rgb(174 192 255 / 26%);
+  color: #f6f7ff;
+  background: rgb(164 177 255 / 18%);
+  box-shadow: inset 0 0 18px rgb(157 174 255 / 8%);
+}
+
+.navigationDivider {
+  height: 1px;
+  margin: 6px 4px;
+  background: rgb(255 255 255 / 10%);
+}
+
+.sidebarFooter {
+  display: grid;
+  gap: 3px;
+  margin-top: auto;
+  padding: 10px 0 0;
+}
+
+.sidebarAction {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #b5c0d8;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebarAction:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 8%);
+}
+
+.workspace {
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.topbar {
+  position: sticky;
+  z-index: 2;
+  top: 12px;
+  display: flex;
+  height: 62px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 12px 16px 12px 24px;
+  padding: 0 14px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 13px;
+  background: rgb(24 26 45 / 94%);
+  box-shadow: 0 5px 20px rgb(0 0 0 / 12%);
+}
+
+.searchBox {
+  display: flex;
+  width: min(100%, 280px);
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 999px;
+  color: #8190ae;
+  background: rgb(19 21 38 / 75%);
+}
+
+.searchBox input {
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.searchBox input::placeholder {
+  color: #7e88a2;
+}
+
+.content {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0 16px 48px 24px;
+}
+
+.notice,
+.warning,
+.errorBanner {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgb(107 155 255 / 25%);
+  border-radius: 10px;
+  color: #c4d4ff;
+  background: rgb(107 155 255 / 9%);
+  font-size: 12px;
+}
+
+.warning {
+  border-color: rgb(251 191 36 / 25%);
+  color: #f6d88a;
+  background: rgb(251 191 36 / 8%);
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-color: rgb(248 113 113 / 25%);
+  color: #ffaaaa;
+  background: rgb(248 113 113 / 8%);
+}
+
+.errorBanner button {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dashboard {
+  display: block;
+}
+
+.welcomeCard,
+.statCard,
+.panel {
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 14px;
+  background: rgb(22 28 48 / 88%);
+  box-shadow: 0 12px 35px rgb(0 0 0 / 12%);
+}
+
+.welcomeCard {
+  display: flex;
+  min-height: 176px;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  padding: 20px;
+  border-radius: 13px;
+  background: #191a2e;
+  text-align: center;
+}
+
+.welcomeCard h2,
+.panelHeading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.welcomeCard > p,
+.panelHeading p {
+  margin: 9px 0 17px;
+  color: #939bb4;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+}
+
+.statCard span,
+.statCard small {
+  color: #98a6c1;
+  font-size: 12px;
+}
+
+.statCard strong {
+  color: #f5f7ff;
+  font-size: 34px;
+}
+
+.panel {
+  min-width: 0;
+  padding: 24px;
+}
+
+.panelActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mangaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.mangaCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 13px;
+  background: rgb(24 26 45 / 92%);
+  transition: transform 150ms ease, border-color 150ms ease;
+}
+
+.mangaCard:hover {
+  transform: translateY(-2px);
+  border-color: rgb(129 161 255 / 55%);
+}
+
+.mangaCoverButton {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 0.73;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #202238;
+  cursor: pointer;
+}
+
+.mangaCoverButton > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 180ms ease;
+}
+
+.mangaCoverButton:hover > img {
+  transform: scale(1.035);
+}
+
+.mangaCoverButton > .coverPlaceholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+.mangaSource,
+.mangaDraftBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 7px;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 5px;
+  color: white;
+  background: rgb(102 54 198 / 80%);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.mangaDraftBadge {
+  top: auto;
+  bottom: 8px;
+  background: rgb(217 119 6 / 88%);
+}
+
+.mangaCardBody {
+  display: flex;
+  min-height: 132px;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 10px 11px 11px;
+}
+
+.mangaCardTitle {
+  display: -webkit-box;
+  min-height: 38px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  color: #edf0fc;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  cursor: pointer;
+}
+
+.mangaCardTitle:hover {
+  color: #a9c0ff;
+}
+
+.mangaStatus {
+  padding: 3px 8px;
+  border: 1px solid rgb(52 211 153 / 30%);
+  border-radius: 999px;
+  color: #75dbb1;
+  background: rgb(52 211 153 / 9%);
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.mangaStatus[data-status="completed"] {
+  border-color: rgb(107 155 255 / 35%);
+  color: #9fc0ff;
+  background: rgb(107 155 255 / 9%);
+}
+
+.mangaStatus[data-status="hiatus"] {
+  border-color: rgb(251 191 36 / 35%);
+  color: #f5d178;
+  background: rgb(251 191 36 / 8%);
+}
+
+.mangaCardBody > small {
+  color: #98a6c1;
+  font-size: 11px;
+}
+
+.mangaCardActions {
+  display: flex;
+  width: 100%;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.mangaCardActions button {
+  flex: 1;
+  padding: 7px 5px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 7px;
+  color: #d9e0f1;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mangaCardActions .deleteButton {
+  border-color: rgb(248 113 113 / 35%);
+  color: #ff9a9a;
+}
+
+.mangaCardActions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.panelHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panelHeading p {
+  margin: 6px 0 0;
+}
+
+.inlineStatus {
+  margin: 0 0 12px;
+  color: #aebcda;
+  font-size: 12px;
+}
+
+.reportReason {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.detailTabs {
+  display: flex;
+  gap: 18px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.detailTabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: #9caac4;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.detailTabs .activeDetailTab {
+  border-bottom-color: #8aaaff;
+  color: #e9efff;
+}
+
+.detailTabs + .panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.chapterTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.chapterTools > small {
+  margin-left: auto;
+  color: #909bb2;
+  font-size: 12px;
+}
+
+.successButton {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid rgb(52 211 153 / 38%);
+  border-radius: 9px;
+  color: #62dba9;
+  background: rgb(52 211 153 / 7%);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chapterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.chapterCard {
+  display: flex;
+  min-width: 0;
+  min-height: 104px;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 11px;
+  background: rgb(24 26 45 / 90%);
+  cursor: grab;
+}
+
+.chapterCard:active {
+  cursor: grabbing;
+}
+
+.chapterCardHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chapterCardHeading strong {
+  overflow: hidden;
+  color: #eaf0ff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapterCardHeading small {
+  flex: 0 0 auto;
+  color: #90a7e7;
+  font-size: 11px;
+}
+
+.chapterDate {
+  color: #8d99b4;
+  font-size: 11px;
+}
+
+.chapterCard .rowActions {
+  gap: 6px;
+  margin-top: auto;
+}
+
+.chapterCard .rowActions button {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  place-items: center;
+  min-height: 30px;
+  padding: 5px 4px;
+  font-size: 12px;
+}
+
+.deleteButton {
+  padding: 7px 9px;
+  border: 1px solid rgb(248 113 113 / 35%);
+  border-radius: 8px;
+  color: #ff9b9b;
+  background: rgb(248 113 113 / 7%);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.deleteButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.detailHeader > img,
+.detailHeader > .coverPlaceholder {
+  width: 104px;
+  height: 148px;
+  flex: 0 0 104px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.detailMeta {
+  display: grid;
+  gap: 8px;
+}
+
+.detailMeta h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.detailMeta p {
+  margin: 0;
+  color: #8c98b0;
+  font-size: 14px;
+}
+
+.detailBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detailBadges span {
+  padding: 5px 9px;
+  border: 1px solid rgb(107 155 255 / 22%);
+  border-radius: 999px;
+  color: #a9c0ff;
+  background: rgb(107 155 255 / 8%);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.chapterListHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0 12px;
+}
+
+.chapterListHeading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.chapterListHeading span,
+.chapterImageCount {
+  color: #8996b0;
+  font-size: 10px;
+}
+
+.chapterList {
+  display: grid;
+  gap: 8px;
+}
+
+.chapterRow {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.chapterInfo {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chapterInfo strong {
+  overflow: hidden;
+  color: #e9edfa;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapterInfo small {
+  color: #8996b0;
+  font-size: 10px;
+}
+
+.reportLink {
+  color: #9db9ff;
+  text-decoration: none;
+}
+
+.resolveButton {
+  padding: 7px 9px;
+  border: 1px solid rgb(52 211 153 / 30%);
+  border-radius: 7px;
+  color: #74e4b5;
+  background: rgb(52 211 153 / 9%);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.genreSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.genreSummary span {
+  min-width: 140px;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 10px;
+  color: #aab5cb;
+  background: rgb(255 255 255 / 3%);
+  font-size: 12px;
+}
+
+.genreSummary strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #f5f7ff;
+  font-size: 24px;
+}
+
+.settingsSection {
+  padding: 16px 0;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.settingsSection h3 {
+  margin: 0;
+  color: #eef2ff;
+  font-size: 13px;
+}
+
+.settingsSection p {
+  max-width: 700px;
+  margin: 8px 0 14px;
+  color: #98a6c1;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.mangaTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.mangaTable th,
+.mangaTable td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.mangaTable th {
+  color: #8291ad;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mangaIdentity {
+  display: flex;
+  min-width: 230px;
+  align-items: center;
+  gap: 12px;
+}
+
+.mangaIdentity img,
+.coverPlaceholder {
+  display: grid;
+  width: 42px;
+  height: 58px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 6px;
+  color: #9eb8ff;
+  background: #222d47;
+  object-fit: cover;
+  font-weight: 800;
+}
+
+.mangaIdentity strong,
+.mangaIdentity small {
+  display: block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mangaIdentity small {
+  margin-top: 5px;
+  color: #8794ad;
+  font-size: 10px;
+}
+
+.sourceBadge {
+  display: inline-block;
+  padding: 4px 7px;
+  border: 1px solid rgb(167 139 250 / 25%);
+  border-radius: 999px;
+  color: #c2afff;
+  background: rgb(167 139 250 / 9%);
+  font-size: 10px;
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+}
+
+.rowActions button {
+  padding: 6px 9px;
+  border: 1px solid rgb(107 155 255 / 25%);
+  border-radius: 7px;
+  color: #bed0ff;
+  background: rgb(107 155 255 / 8%);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rowActions .deleteButton {
+  border-color: rgb(248 113 113 / 25%);
+  color: #ffaaaa;
+  background: rgb(248 113 113 / 7%);
+}
+
+.rowActions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.emptyState {
+  padding: 40px 10px;
+  color: #98a6c1;
+  font-size: 13px;
+  text-align: center;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.chapterNumberFields {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chapterThumbnailField {
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chapterImagesField {
+  gap: 8px;
+}
+
+.chapterImagesField > textarea {
+  margin-top: 0;
+}
+
+.chapterContentField {
+  margin-top: 12px;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.fileUploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.fileUploadRow input[type="file"] {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  color: #c7d0e2;
+  background: rgb(10 15 29 / 55%);
+  font: inherit;
+  font-size: 10px;
+}
+
+.coverPreview {
+  display: block;
+  width: 74px;
+  height: 105px;
+  margin-top: 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.thumbnailPreview {
+  display: block;
+  width: 100px;
+  height: 133px;
+  margin-top: 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  object-fit: contain;
+}
+
+.uploadStatus {
+  display: block;
+  margin: 7px 0;
+  color: #aebce0;
+  font-size: 10px;
+}
+
+.imageListToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+}
+
+.imageListToolbar > span {
+  margin-left: auto;
+  color: #8995ac;
+  font-size: 10px;
+}
+
+.uploadedImageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  margin: 12px 0;
+  padding: 2px;
+}
+
+.uploadedImage {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background: #111522;
+  cursor: grab;
+}
+
+.uploadedImage > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.imageIndex {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: white;
+  background: rgb(10 12 20 / 72%);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.imageFileName {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 18px 7px 7px;
+  background: linear-gradient(to top, rgb(0 0 0 / 82%), transparent);
+  color: white;
+  background: rgb(10 12 20 / 75%);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadedImageActions {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  background: rgb(10 12 20 / 75%);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.uploadedImage:hover .uploadedImageActions,
+.uploadedImage:focus-within .uploadedImageActions {
+  opacity: 1;
+}
+
+.uploadedImageActions button {
+  flex: 1;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 0;
+  color: #f5f7ff;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.uploadedImageActions button:hover {
+  color: #9db9ff;
+  background: rgb(107 155 255 / 18%);
+}
+
+.selectedMangaLabel {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 8px;
+  color: #dfe6f8;
+  background: rgb(255 255 255 / 4%);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.selectedMangaLabel svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+:global(.admin-rich-editor .ql-toolbar.ql-snow),
+:global(.admin-rich-editor .ql-container.ql-snow) {
+  border-color: rgb(255 255 255 / 14%);
+}
+
+:global(.admin-rich-editor .ql-toolbar.ql-snow) {
+  border-radius: 8px 8px 0 0;
+  background: rgb(255 255 255 / 7%);
+}
+
+:global(.admin-rich-editor .ql-container.ql-snow) {
+  border-radius: 0 0 8px 8px;
+  background: rgb(10 15 29 / 38%);
+}
+
+:global(.admin-rich-editor .ql-editor) {
+  min-height: 200px;
+  color: #eef2ff;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 13px;
+}
+
+:global(.admin-rich-editor-chapter .ql-editor) {
+  min-height: 220px;
+}
+
+:global(.admin-rich-editor .ql-editor.ql-blank::before) {
+  color: #8491ac;
+}
+
+:global(.admin-rich-editor .ql-snow .ql-stroke) {
+  stroke: #b7c1d6;
+}
+
+:global(.admin-rich-editor .ql-snow .ql-fill) {
+  fill: #b7c1d6;
+}
+
+:global(.admin-rich-editor .ql-snow .ql-picker) {
+  color: #b7c1d6;
+}
+
+:global(.admin-rich-editor .ql-snow .ql-picker-options) {
+  border-color: rgb(255 255 255 / 15%) !important;
+  background: #202338 !important;
+}
+
+:global(.admin-rich-editor .ql-snow .ql-picker-item) {
+  color: #e9edfa;
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  color: #b8c4da;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.checkboxField input {
+  width: 16px;
+  height: 16px;
+  accent-color: #6b9bff;
+}
+
+.formActions {
+  display: flex;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.quickAddWrap {
+  position: fixed;
+  z-index: 5;
+  right: 24px;
+  bottom: 24px;
+}
+
+.quickAddButton {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 1px solid rgb(107 155 255 / 60%);
+  border-radius: 50%;
+  color: #91b0ff;
+  background: rgb(17 18 33 / 92%);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 22%);
+  font: inherit;
+  font-size: 27px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.quickAddButton:hover {
+  border-color: #a4bcff;
+  background: rgb(107 155 255 / 15%);
+}
+
+.quickAddMenu {
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.quickAddMenu button {
+  padding: 10px 15px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  color: #eef2ff;
+  background: #202238;
+  box-shadow: 0 5px 20px rgb(0 0 0 / 20%);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.quickAddMenu button:hover {
+  color: #a9c0ff;
+  border-color: rgb(107 155 255 / 50%);
+}
+
+.modalBackdrop {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: flex;
+  overflow-y: auto;
+  align-items: flex-start;
+  padding: 12px 20px 20px;
+  background: rgb(7 9 19 / 76%);
+  backdrop-filter: blur(5px);
+}
+
+.chapterModal {
+  position: relative;
+  width: min(100%, 720px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: 8px auto 20px;
+  padding: 24px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 15px;
+  color: #eef2ff;
+  background: #171a2b;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 45%);
+}
+
+.chapterModal h2 {
+  margin: 0 52px 14px 0;
+  padding-right: 52px;
+  font-size: 18px;
+}
+
+.chapterModal > .field {
+  margin-bottom: 10px;
+}
+
+.modalClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 9px;
+  color: #b8c4da;
+  background: transparent;
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.chapterModal .error {
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+
+.lightMode {
+  color: #22283b;
+  background: #eef1f7;
+}
+
+.lightMode .sidebar {
+  background:
+    linear-gradient(180deg, rgb(235 239 250 / 82%) 0%, rgb(223 229 244 / 88%) 100%),
+    url("https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg") center / cover no-repeat;
+}
+
+.lightMode .brand,
+.lightMode .navigation button,
+.lightMode .sidebarAction {
+  color: #27324a;
+}
+
+.lightMode .sidebar {
+  border-color: rgb(20 29 55 / 13%);
+}
+
+.lightMode .navigation button svg,
+.lightMode .sidebarAction svg {
+  stroke: currentColor;
+}
+
+.lightMode .navigation button:hover,
+.lightMode .navigation .activeNav {
+  color: #202a44;
+  background: rgb(107 135 220 / 16%);
+}
+
+.lightMode .navigationDivider {
+  background: rgb(20 29 55 / 15%);
+}
+
+.lightMode .topbar,
+.lightMode .welcomeCard,
+.lightMode .panel,
+.lightMode .statCard {
+  border-color: rgb(20 29 55 / 12%);
+  color: #252c40;
+  background: #fff;
+}
+
+.lightMode .topbar h1,
+.lightMode .welcomeCard h2,
+.lightMode .panelHeading h2,
+.lightMode .detailMeta h2,
+.lightMode .detailMeta p,
+.lightMode .field,
+.lightMode .detailTabs button,
+.lightMode .selectedMangaLabel,
+.lightMode .chapterModal,
+.lightMode .chapterModal h2,
+.lightMode .chapterCardHeading strong,
+.lightMode .mangaCardTitle,
+.lightMode .imageListToolbar > span,
+.lightMode .chapterTools > small,
+.lightMode .fileUploadRow input[type="file"],
+.lightMode .chapterDate,
+.lightMode .detailMeta .detailBadges span,
+.lightMode .settingsSection code,
+.lightMode .settingsSection h3,
+.lightMode .genreSummary strong,
+.lightMode .statCard strong {
+  color: #252c40;
+}
+
+.lightMode .welcomeCard > p,
+.lightMode .panelHeading p,
+.lightMode .settingsSection p,
+.lightMode .inlineStatus {
+  color: #68738b;
+}
+
+.lightMode .field input,
+.lightMode .field select,
+.lightMode .field textarea,
+.lightMode .searchBox input {
+  border-color: rgb(20 29 55 / 17%);
+  color: #20283b;
+  background: #fff;
+}
+
+.lightMode .searchBox,
+.lightMode .fileUploadRow input[type="file"] {
+  border-color: rgb(20 29 55 / 15%);
+  color: #252c40;
+  background: #f6f7fb;
+}
+
+.lightMode .field input::placeholder,
+.lightMode .field textarea::placeholder {
+  color: #778198;
+}
+
+.lightMode .searchBox input::placeholder {
+  color: #78839a;
+}
+
+.lightMode .searchBox input {
+  background: transparent;
+}
+
+.lightMode .primaryButton,
+.lightMode .successButton {
+  border-color: #4168c8;
+  color: #fff;
+  background: #4168c8;
+}
+
+.lightMode .primaryButton:hover,
+.lightMode .successButton:hover {
+  border-color: #3156b2;
+  background: #3156b2;
+}
+
+.lightMode .secondaryButton {
+  border-color: rgb(38 51 81 / 22%);
+  color: #303c58;
+  background: #f0f2f8;
+}
+
+.lightMode .secondaryButton:hover {
+  border-color: #8ca5df;
+  background: #e7ecf8;
+}
+
+.lightMode .logoutButton {
+  border-color: rgb(190 46 64 / 28%);
+  color: #a5293c;
+  background: rgb(190 46 64 / 7%);
+}
+
+.lightMode .detailHeader,
+.lightMode .detailTabs,
+.lightMode .settingsSection {
+  border-color: rgb(20 29 55 / 13%);
+}
+
+.lightMode .detailBadges span {
+  border-color: rgb(20 29 55 / 14%);
+  color: #43516e;
+  background: #f1f3f8;
+}
+
+.lightMode .detailTabs button {
+  color: #58647c;
+}
+
+.lightMode .detailTabs .activeDetailTab {
+  border-bottom-color: #4168c8;
+  color: #274a9a;
+}
+
+.lightMode .chapterTools .successButton {
+  color: #fff;
+}
+
+.lightMode .chapterCard {
+  border-color: rgb(20 29 55 / 16%);
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(24 37 70 / 6%);
+}
+
+.lightMode .chapterCardHeading small {
+  color: #4c65a3;
+}
+
+.lightMode .chapterDate {
+  color: #66718a;
+}
+
+.lightMode .chapterCard .rowActions button:not(.deleteButton) {
+  border-color: rgb(57 89 163 / 19%);
+  color: #3959a3;
+  background: #f2f5fc;
+}
+
+.lightMode .deleteButton {
+  border-color: rgb(190 46 64 / 26%);
+  color: #a5293c;
+  background: rgb(190 46 64 / 6%);
+}
+
+.lightMode .chapterModal {
+  border-color: rgb(20 29 55 / 14%);
+  color: #252c40;
+  background: #fff;
+}
+
+.lightMode .chapterModal .field {
+  color: #36425b;
+}
+
+.lightMode .chapterImagesField > span,
+.lightMode .chapterThumbnailField > span,
+.lightMode .chapterContentField .field > span {
+  color: #36425b;
+}
+
+.lightMode .chapterModal .fileUploadRow input[type="file"] {
+  border-color: #c8d0e0;
+  color: #1a2035;
+  background: #f0f3f8;
+}
+
+.lightMode .imageIndex {
+  color: #fff;
+}
+
+.lightMode .uploadedImageActions {
+  background: rgb(20 29 55 / 76%);
+}
+
+.lightMode .uploadedImageActions button {
+  color: #fff;
+}
+
+.lightMode .modalClose {
+  border-color: rgb(20 29 55 / 15%);
+  color: #4a5670;
+}
+
+.lightMode .selectedMangaLabel {
+  border-color: rgb(20 29 55 / 12%);
+  color: #34415d;
+  background: #f4f6fa;
+}
+
+.lightMode .uploadedImage {
+  border-color: rgb(20 29 55 / 15%);
+  background: #eef1f6;
+}
+
+.lightMode .imageListToolbar > span,
+.lightMode .uploadStatus {
+  color: #596680;
+}
+
+.lightMode .notice {
+  border-color: rgb(54 93 190 / 22%);
+  color: #29447f;
+  background: rgb(54 93 190 / 7%);
+}
+
+.lightMode .warning {
+  border-color: rgb(171 116 11 / 23%);
+  color: #79540b;
+  background: rgb(171 116 11 / 7%);
+}
+
+.lightMode .error,
+.lightMode .errorBanner {
+  color: #a5293c;
+}
+
+.lightMode .errorBanner {
+  border-color: rgb(190 46 64 / 22%);
+  background: rgb(190 46 64 / 6%);
+}
+
+.lightMode .mangaTable th,
+.lightMode .mangaTable td,
+.lightMode .settingsSection {
+  border-color: rgb(20 29 55 / 10%);
+}
+
+.lightMode .mangaTable,
+.lightMode .mangaTable td,
+.lightMode .mangaIdentity strong {
+  color: #2a334a;
+}
+
+.lightMode .mangaTable th,
+.lightMode .mangaIdentity small {
+  color: #5c6881;
+}
+
+.lightMode .rowActions button:not(.deleteButton),
+.lightMode .resolveButton {
+  border-color: rgb(57 89 163 / 20%);
+  color: #3959a3;
+  background: rgb(57 89 163 / 6%);
+}
+
+.lightMode .rowActions .deleteButton {
+  border-color: rgb(190 46 64 / 26%);
+  color: #a5293c;
+  background: rgb(190 46 64 / 6%);
+}
+
+.lightMode .emptyState,
+.lightMode .chapterListHeading span,
+.lightMode .chapterImageCount {
+  color: #66718a;
+}
+
+.lightMode .chapterRow,
+.lightMode .genreSummary span {
+  border-color: rgb(20 29 55 / 13%);
+  color: #34415d;
+  background: rgb(20 29 55 / 3%);
+}
+
+.lightMode .chapterInfo strong,
+.lightMode .chapterListHeading h3 {
+  color: #2a334a;
+}
+
+.lightMode .chapterInfo small {
+  color: #66718a;
+}
+
+.lightMode .sourceBadge {
+  border-color: rgb(102 54 198 / 20%);
+  color: #5635a2;
+  background: rgb(102 54 198 / 6%);
+}
+
+.lightMode .mangaCard,
+.lightMode .chapterCard {
+  border-color: rgb(20 29 55 / 13%);
+  background: #fff;
+}
+
+.lightMode .mangaCardTitle,
+.lightMode .chapterCardHeading strong {
+  color: #252c40;
+}
+
+.lightMode .chapterDate,
+.lightMode .chapterCardHeading small {
+  color: #68738b;
+}
+
+.lightMode .mangaCardBody > small,
+.lightMode .panelHeading p,
+.lightMode .detailMeta p {
+  color: #626e86;
+}
+
+.lightMode .mangaStatus {
+  border-color: rgb(17 125 83 / 24%);
+  color: #176b4b;
+  background: rgb(17 125 83 / 7%);
+}
+
+.lightMode .mangaStatus[data-status="completed"] {
+  border-color: rgb(54 93 190 / 24%);
+  color: #294d9e;
+  background: rgb(54 93 190 / 7%);
+}
+
+.lightMode .mangaStatus[data-status="hiatus"] {
+  border-color: rgb(171 116 11 / 24%);
+  color: #805b10;
+  background: rgb(171 116 11 / 7%);
+}
+
+.lightMode .mangaCardActions button:not(.deleteButton) {
+  border-color: rgb(20 29 55 / 15%);
+  color: #34415d;
+  background: #f6f7fa;
+}
+
+.lightMode .quickAddMenu button {
+  border-color: rgb(20 29 55 / 14%);
+  color: #29344d;
+  background: #fff;
+}
+
+.lightMode :global(.admin-rich-editor .ql-toolbar.ql-snow),
+.lightMode :global(.admin-rich-editor .ql-container.ql-snow) {
+  border-color: rgb(20 29 55 / 18%);
+}
+
+.lightMode :global(.admin-rich-editor .ql-snow .ql-stroke) {
+  stroke: #47536c;
+}
+
+.lightMode :global(.admin-rich-editor .ql-snow .ql-fill) {
+  fill: #47536c;
+}
+
+.lightMode :global(.admin-rich-editor .ql-snow .ql-picker) {
+  color: #47536c;
+}
+
+.lightMode :global(.admin-rich-editor .ql-snow .ql-picker-options) {
+  border-color: rgb(20 29 55 / 18%) !important;
+  background: #fff !important;
+}
+
+.lightMode :global(.admin-rich-editor .ql-snow .ql-picker-item) {
+  color: #28344c;
+}
+
+.lightMode :global(.admin-rich-editor .ql-editor) {
+  color: #252c40;
+}
+
+.lightMode :global(.admin-rich-editor .ql-container.ql-snow) {
+  background: #fff;
+}
+
+.lightMode :global(.admin-rich-editor .ql-toolbar.ql-snow) {
+  background: #f2f4f9;
+}
+
+.lightMode .quickAddButton {
+  color: #486bd2;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .adminShell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .searchBox {
+    width: min(100%, 240px);
+  }
+
+  .content {
+    padding-left: 18px;
+    padding-right: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .adminShell {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    padding: 12px;
+  }
+
+  .brand {
+    padding-bottom: 10px;
+  }
+
+  .navigation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .navigation button {
+    justify-content: center;
+    gap: 5px;
+    min-height: 42px;
+    padding: 9px 5px;
+    font-size: 12px;
+  }
+
+  .sidebarFooter {
+    margin-top: 12px;
+    padding-top: 8px;
+  }
+
+  .topbar {
+    position: static;
+    height: 56px;
+    margin: 10px 12px;
+  }
+
+  .content {
+    padding: 0 12px 80px;
+  }
+
+  .mangaGrid {
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+    gap: 10px;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fullWidth {
+    grid-column: auto;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panelHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chapterModal {
+    max-height: calc(100dvh - 20px);
+    margin-top: 0;
+    padding: 20px 15px;
+  }
+
+  .modalBackdrop {
+    padding: 10px;
+  }
+
+  .chapterModal .formGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .detailHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chapterTools > small {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .chapterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  }
+
+  .uploadedImageGrid {
+    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  }
+
+  .chapterRow {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .chapterInfo {
+    flex-basis: calc(100% - 20px);
+  }
+}

@@ -1,0 +1,40 @@
+.community-widgets {
+  display: grid;
+  gap: 24px;
+  width: min(100% - 24px, 1150px);
+  margin: 24px auto;
+}
+
+.community-widgets .community-reactions {
+  position: relative;
+  z-index: 4;
+  min-height: 60px;
+}
+
+.community-widgets .community-comments {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.community-widgets .community-reactions .reaction {
+  margin: 10px 0 0 !important;
+}
+
+.community-widgets .community-comments #comment-widget {
+  margin: 0 auto !important;
+}
+
+.community-widgets .community-comments #comments-title {
+  margin-top: 0 !important;
+}
+
+.community-widget-error {
+  margin: 12px 0;
+  color: #b42318;
+  text-align: center;
+}
+
+html.dark .community-widget-error {
+  color: #ff8e8e;
+}

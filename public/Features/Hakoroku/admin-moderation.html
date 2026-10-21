@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Moderation - Comment Widget</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 15px; }
+    th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+    th { background: #333; color: white; }
+    .btn { padding: 6px 12px; margin: 2px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-delete { background: #f44336; color: white; }
+    .btn-delete:hover { background: #d32f2f; }
+    .btn-ban { background: #ff9800; color: white; }
+    .btn-ban:hover { background: #f57c00; }
+    .btn-ignore { background: #9e9e9e; color: white; }
+    .btn-ignore:hover { background: #757575; }
+    #admin-auth-zone { background: white; padding: 20px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .btn-login { background: #4285F4; color: white; padding: 10px 20px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-logout { background: #333; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+    #panel-content { display: none; }
+  </style>
+</head>
+<body>
+
+  <h1>🔧 Admin Moderation Panel</h1>
+
+  <div id="admin-auth-zone">
+    <p id="auth-status">Memeriksa status admin...</p>
+    <button id="btn-google-login" class="btn-login" style="display:none;">Login Admin dengan Google</button>
+  </div>
+
+  <div id="panel-content">
+
+  <h2>Daftar Laporan (Pending)</h2>
+
+  <table id="report-table">
+    <thead>
+      <tr>
+        <th>Tanggal</th>
+        <th>Alasan</th>
+        <th>Isi Teks / ID Komentar</th>
+        <th>Reporter</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>🚫 Daftar User Dibanned</h2>
+
+  <table id="ban-table">
+    <thead>
+      <tr>
+        <th>Nama</th>
+        <th>UID</th>
+        <th>Alasan</th>
+        <th>Tanggal Ban</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+</div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+  
+  <script>
+    const firebaseConfig = { 
+      apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
+      authDomain: "widget-comment.firebaseapp.com",
+      projectId: "widget-comment",
+      storageBucket: "widget-comment.firebasestorage.app",
+      messagingSenderId: "249700505242",
+      appId: "1:249700505242:web:dab240af09caf30ad7f123" 
+    };
+    firebase.initializeApp(firebaseConfig);
+    
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    
+    const ADMIN_EMAILS = ['mikorokuscan@gmail.com', 'moemaomao@gmail.com'];
+
+    auth.onAuthStateChanged(user => {
+      const authZone = document.getElementById('admin-auth-zone');
+      const statusText = document.getElementById('auth-status');
+      const loginBtn = document.getElementById('btn-google-login');
+      const panelContent = document.getElementById('panel-content');
+
+      if (user && ADMIN_EMAILS.includes(user.email)) {
+        statusText.innerHTML = `Login sebagai Admin: <strong>${user.email}</strong> <button class="btn-logout" onclick="auth.signOut()">Logout</button>`;
+        loginBtn.style.display = 'none';
+        panelContent.style.display = 'block';
+        loadReports();
+        loadBannedUsers(); 
+      } else {
+        
+        if (user) {
+          statusText.innerHTML = `<span style="color:red;">Akun (${user.email}) bukan Admin resmi!</span> <button class="btn-logout" onclick="auth.signOut()">Ganti Akun</button>`;
+        } else {
+          statusText.innerText = "Anda harus login menggunakan Akun Admin untuk mengakses panel ini.";
+        }
+        loginBtn.style.display = 'inline-block';
+        panelContent.style.display = 'none'; 
+      }
+    });
+
+    document.getElementById('btn-google-login').onclick = () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(err => {
+        alert("Gagal Login: " + err.message);
+      });
+    };
+
+    async function loadReports() {
+
+  const tbody =
+    document.querySelector('#report-table tbody');
+
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="5"
+          style="text-align:center;padding:20px;">
+        Loading laporan...
+      </td>
+    </tr>
+  `;
+
+  try {
+
+    const snapshot = await db
+      .collection('reports')
+      .where('status', '==', 'pending')
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    tbody.innerHTML = '';
+
+    if (snapshot.empty) {
+
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5"
+              style="text-align:center;
+                     padding:40px;
+                     color:#888;">
+            Belum ada laporan masuk
+          </td>
+        </tr>
+      `;
+
+      return;
+    }
+
+    for (const doc of snapshot.docs) {
+
+      const r = doc.data();
+
+      let commentDisplay =
+        `<small>ID: ${r.commentId}</small>`;
+
+      try {
+
+        const pId = r.postId || "home";
+
+        const commentDoc = await db
+          .collection('comments')
+          .doc(pId)
+          .collection('postComments')
+          .doc(r.commentId)
+          .get();
+
+        if (commentDoc.exists) {
+
+          const c = commentDoc.data();
+
+          const author =
+            c.displayName ||
+            c.author ||
+            c.username ||
+            "Anonymous";
+
+          const text =
+            c.text ||
+            c.comment ||
+            "(Komentar kosong)";
+
+          commentDisplay = `
+  <strong>${author}</strong>
+  <br><br>
+
+  ${text}
+
+  <br><br>
+
+  <small style="color:#888;">
+    UID: ${c.uid || '-'}
+  </small>
+
+  <br>
+
+  <small style="color:#888;">
+    ID: ${r.commentId}
+  </small>
+
+  ${
+    r.commentLink
+      ? `
+      <br><br>
+
+      <a
+        href="${r.commentLink}"
+        target="_blank"
+        style="
+          color:#1976d2;
+          font-weight:bold;
+          text-decoration:none;
+        "
+      >
+        🔗 Buka Komentar
+      </a>
+      `
+      : ''
+  }
+`;
+
+        } else if (r.commentText) {
+
+          commentDisplay = `
+  ${r.commentText}
+
+  <br>
+
+  <small style="color:#888;">
+    ID: ${r.commentId}
+  </small>
+
+  ${
+    r.commentLink
+      ? `
+      <br><br>
+
+      <a
+        href="${r.commentLink}"
+        target="_blank"
+        style="
+          color:#1976d2;
+          font-weight:bold;
+          text-decoration:none;
+        "
+      >
+        🔗 Buka Komentar
+      </a>
+      `
+      : ''
+  }
+`;
+        }
+
+      } catch(err) {
+
+        console.error(
+          "Gagal load komentar:",
+          err
+        );
+      }
+
+      const row =
+        document.createElement('tr');
+
+      row.innerHTML = `
+        <td>
+          ${
+            r.timestamp
+              ? r.timestamp
+                  .toDate()
+                  .toLocaleString('id-ID')
+              : '-'
+          }
+        </td>
+
+        <td>
+          <span style="color:#d32f2f;">
+            ⚠️ ${r.reason || 'Tidak ada alasan'}
+          </span>
+        </td>
+
+        <td style="
+          max-width:450px;
+          word-break:break-word;
+        ">
+          ${commentDisplay}
+        </td>
+
+        <td>
+  ${r.reporterName || 'Anonymous'}
+
+  ${
+    r.reporterUsername
+      ? `<br><small style="color:#666">@${r.reporterUsername}</small>`
+      : ''
+  }
+
+  ${
+    r.reporterUid
+      ? `<br><small style="color:#999">${r.reporterUid}</small>`
+      : ''
+  }
+ </td>
+ 
+
+        <td>
+          <button
+            class="btn btn-delete"
+            onclick="deleteComment('${r.commentId}','${doc.id}')">
+            Hapus Komentar
+          </button>
+
+          <button
+            class="btn btn-ban"
+            onclick="banUser('${r.commentId}','${doc.id}')">
+            Ban User
+          </button>
+
+          <button
+            class="btn btn-ignore"
+            onclick="ignoreReport('${doc.id}')">
+            Abaikan
+          </button>
+        </td>
+      `;
+
+      tbody.appendChild(row);
+    }
+
+  } catch(error) {
+
+    console.error(error);
+
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5"
+            style="color:red;text-align:center;">
+          Error Memuat Laporan:
+          ${error.message}
+        </td>
+      </tr>
+    `;
+  }
+}
+
+    async function deleteComment(commentId, reportId) {
+      if (!confirm("Apakah Anda yakin ingin menghapus komentar ini secara permanen?")) return;
+
+      try {
+        const reportDoc = await db.collection('reports').doc(reportId).get();
+        const rData = reportDoc.data();
+        const pId = rData.postId || "home"; 
+
+        await db.collection('comments').doc(pId).collection('postComments').doc(commentId).delete();
+        await db.collection('reports').doc(reportId).update({ status: 'resolved' });
+        
+        alert("Komentar berhasil dihapus!");
+        loadReports();
+      } catch (err) {
+        alert("Gagal menghapus komentar: " + err.message);
+      }
+    }
+
+    async function banUser(commentId, reportId) {
+      if (!confirm("Ban pengguna yang menulis komentar ini?")) return;
+
+      try {
+        const reportDoc = await db.collection('reports').doc(reportId).get();
+        const rData = reportDoc.data();
+        const pId = rData.postId || "home";
+
+        const commentDoc = await db.collection('comments').doc(pId).collection('postComments').doc(commentId).get();
+        
+        if (!commentDoc.exists) {
+          alert("Komentar asli tidak ditemukan di post '" + pId + "'.");
+          return;
+        }
+
+        const commentData = commentDoc.data();
+        const targetUid = commentData.uid;
+        const targetName = commentData.displayName || commentData.username || "User";
+
+        if (!targetUid) {
+          alert("Gagal memblokir: UID pengguna tidak ditemukan.");
+          return;
+        }
+
+        await db.collection('bannedUsers').doc(targetUid).set({
+  active: true,
+  displayName: targetName,
+  username: commentData.username || "",
+  avatar: commentData.avatar || "",
+  bannedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  reason: "Melanggar aturan komunitas (via Moderation Panel)"
+});
+
+        await db.collection('comments').doc(pId).collection('postComments').doc(commentId).delete();
+        await db.collection('reports').doc(reportId).update({ status: 'resolved' });
+
+        alert(`Sukses! ${targetName} telah dibanned.`);
+        loadReports();
+
+      } catch (err) {
+        alert("Gagal melakukan ban user: " + err.message);
+      }
+    }
+
+   async function loadBannedUsers() {
+
+  const tbody =
+    document.querySelector('#ban-table tbody');
+
+  tbody.innerHTML =
+    '<tr><td colspan="5">Loading...</td></tr>';
+
+  try {
+
+    const snapshot = await db
+      .collection('bannedUsers')
+      .where('active', '==', true)
+      .get();
+
+    tbody.innerHTML = '';
+
+    if (snapshot.empty) {
+
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5"
+              style="text-align:center;">
+            Tidak ada user dibanned
+          </td>
+        </tr>
+      `;
+
+      return;
+    }
+
+    snapshot.forEach(doc => {
+
+      const data = doc.data();
+
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${data.displayName || '-'}</td>
+        <td>${doc.id}</td>
+        <td>${data.reason || '-'}</td>
+        <td>
+          ${
+            data.bannedAt
+              ? data.bannedAt
+                  .toDate()
+                  .toLocaleString('id-ID')
+              : '-'
+          }
+        </td>
+        <td>
+          <button
+            class="btn"
+            style="background:#4caf50;color:white"
+            onclick="unbanUser('${doc.id}')">
+            Unban
+          </button>
+        </td>
+      `;
+
+      tbody.appendChild(tr);
+
+    });
+
+  } catch(err) {
+
+    console.error(err);
+
+    tbody.innerHTML =
+      '<tr><td colspan="5">Error</td></tr>';
+  }
+}
+
+async function unbanUser(uid) {
+
+  if (
+    !confirm(
+      "Yakin ingin membuka blokir user ini?"
+    )
+  ) return;
+
+  try {
+
+    await db
+      .collection('bannedUsers')
+      .doc(uid)
+      .update({
+        active: false,
+        unbannedAt:
+          firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+    alert("User berhasil di-unban");
+
+    loadBannedUsers();
+
+  } catch(err) {
+
+    alert(
+      "Gagal unban: " + err.message
+    );
+  }
+}
+
+    async function ignoreReport(reportId) {
+      if (!confirm("Abaikan laporan ini?")) return;
+      try {
+        await db.collection('reports').doc(reportId).update({ status: 'ignored' });
+        loadReports();
+      } catch (err) {
+        alert("Gagal memperbarui laporan: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "Mikoroku",
+  "short_name": "Mikoroku",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#7A0000",
+  "description": "Platform baca manga ecchi bahasa Indonesia",
+  "icons": [
+    {
+      "src": "/assets/icons/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/icons/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

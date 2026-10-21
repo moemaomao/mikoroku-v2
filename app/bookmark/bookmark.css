@@ -1,0 +1,258 @@
+.bookmark-route {
+  --bookmark-bg: #ffffff;
+  --bookmark-text: #111111;
+  --bookmark-container: #f5f5f5;
+  --bookmark-header: #ffffff;
+  --bookmark-card: rgba(0, 0, 0, 0.05);
+  --bookmark-card-hover: rgba(0, 0, 0, 0.1);
+  --bookmark-muted: #666666;
+  --bookmark-cover: #dddddd;
+  min-height: calc(100vh - 50px);
+  padding: 1px 12px 32px;
+  background: var(--bookmark-bg);
+  color: var(--bookmark-text);
+  transition: background 0.3s, color 0.3s;
+}
+
+html.dark .bookmark-route {
+  --bookmark-bg: #0b0b0b;
+  --bookmark-text: #ffffff;
+  --bookmark-container: #0f0f1e;
+  --bookmark-header: #1a1a2e;
+  --bookmark-card: rgba(255, 255, 255, 0.05);
+  --bookmark-card-hover: rgba(255, 255, 255, 0.1);
+  --bookmark-muted: #999999;
+  --bookmark-cover: #222222;
+}
+
+.bookmark-route .bookmark-container {
+  width: 100%;
+  max-width: 900px;
+  min-height: calc(100vh - 51px);
+  margin: auto;
+  background: var(--bookmark-container);
+  transition: background 0.3s;
+}
+
+.bookmark-route .bookmark-header {
+  padding: 14px 16px 6px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  background: transparent;
+}
+
+.bookmark-route .bookmark-header h1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bookmark-route .bookmark-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 15px 17px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.bookmark-route .bookmark-notice > i {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.bookmark-route .bookmark-notice.guest {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+html.dark .bookmark-route .bookmark-notice.guest {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.bookmark-route .bookmark-notice.logged-in {
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+
+html.dark .bookmark-route .bookmark-notice.logged-in {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+
+.bookmark-route .bookmark-sync-error {
+  margin: 0 15px 12px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.bookmark-route .bookmark-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 0;
+  padding: 15px;
+  list-style: none;
+}
+
+.bookmark-route .bookmark-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bookmark-card);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.bookmark-route .bookmark-card:hover {
+  background: var(--bookmark-card-hover);
+}
+
+.bookmark-route .bookmark-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bookmark-route .bookmark-cover {
+  display: block;
+  flex: 0 0 70px;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--bookmark-cover);
+}
+
+.bookmark-route .bookmark-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.bookmark-route .bookmark-card:hover .bookmark-cover img {
+  transform: scale(1.05);
+}
+
+.bookmark-route .bookmark-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.bookmark-route .bookmark-title {
+  display: block;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.bookmark-route .bookmark-remove {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.bookmark-route .bookmark-remove:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.bookmark-route .bookmark-empty {
+  padding: 80px 20px;
+  color: var(--bookmark-muted);
+  text-align: center;
+}
+
+.bookmark-route .bookmark-empty > i {
+  font-size: 34px;
+}
+
+.bookmark-route .bookmark-empty h2 {
+  margin: 12px 0;
+  font-size: 18px;
+}
+
+.bookmark-route .bookmark-empty button {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (min-width: 768px) {
+  .bookmark-route .bookmark-container {
+    max-width: 720px;
+    margin: 20px auto;
+    border-radius: 20px;
+  }
+
+  .bookmark-route .bookmark-header h1 {
+    font-size: 20px;
+  }
+
+  .bookmark-route .bookmark-notice {
+    margin: 0 20px 14px;
+    font-size: 13px;
+  }
+
+  .bookmark-route .bookmark-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .bookmark-route .bookmark-title {
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .bookmark-route .bookmark-container {
+    max-width: 1150px;
+    margin: 30px auto;
+    border-radius: 24px;
+  }
+
+  .bookmark-route .bookmark-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    padding: 25px 30px;
+  }
+
+  .bookmark-route .bookmark-title {
+    font-size: 12px;
+  }
+}

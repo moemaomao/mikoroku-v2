@@ -1,0 +1,161 @@
+.commission-page {
+  min-height: calc(100vh - 70px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  color: var(--text, #1e293b);
+  background: radial-gradient(ellipse at top, rgba(217, 70, 239, .12), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(244, 63, 94, .1), transparent 40%);
+}
+
+.commission-card {
+  width: min(100%, 560px);
+  padding: 36px 32px;
+  border: 1px solid rgba(128, 128, 128, .25);
+  border-radius: 20px;
+  background: var(--card, #fff);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .12);
+}
+
+.commission-card > header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.commission-card h1 {
+  margin: 0 0 8px;
+  color: #d946ef;
+  font-size: 1.6rem;
+}
+
+.commission-card > header p,
+.commission-payment p {
+  color: var(--text-soft, #64748b);
+}
+
+.commission-price {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 6px 14px;
+  border: 1px solid rgba(217, 70, 239, .25);
+  border-radius: 999px;
+  color: #d946ef;
+}
+
+.commission-card form,
+.commission-card label {
+  display: grid;
+  gap: 8px;
+}
+
+.commission-card form {
+  gap: 18px;
+}
+
+.commission-card label {
+  font-size: .9rem;
+  font-weight: 600;
+}
+
+.commission-card label > span {
+  display: inline;
+  color: #d946ef;
+}
+
+.commission-card input,
+.commission-card textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 1px solid rgba(128, 128, 128, .3);
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+
+.commission-card textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.commission-total,
+.commission-payment {
+  padding: 14px 16px;
+  border: 1px solid rgba(217, 70, 239, .25);
+  border-radius: 12px;
+  background: rgba(217, 70, 239, .07);
+}
+
+.commission-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.commission-total strong {
+  color: #d946ef;
+}
+
+.commission-payment {
+  text-align: center;
+}
+
+.commission-payment a,
+.commission-card form > button {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #be123c;
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.commission-card form > button {
+  background: linear-gradient(135deg, #d946ef, #c084fc);
+}
+
+.commission-faq {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px dashed rgba(128, 128, 128, .35);
+}
+
+.commission-faq h2 {
+  color: #d946ef;
+  font-size: 1rem;
+}
+
+.commission-faq > div {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(128, 128, 128, .2);
+  border-radius: 10px;
+}
+
+.commission-faq p {
+  margin-bottom: 0;
+  color: var(--text-soft, #64748b);
+  font-size: .85rem;
+}
+
+@media (max-width: 480px) {
+  .commission-page { padding: 15px; }
+  .commission-card { padding: 28px 20px; }
+  .commission-card h1 { font-size: 1.35rem; }
+}
+
+@media (min-width: 769px) {
+  body.sidebar-open .commission-page {
+    width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+  }
+}

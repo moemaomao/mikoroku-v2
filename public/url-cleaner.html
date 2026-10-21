@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URL Cleaner Pro</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      color: #333;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    header {
+      background: linear-gradient(135deg, #4c51bf, #7c3aed);
+      color: white;
+      padding: 25px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .content {
+      padding: 30px;
+    }
+    textarea {
+      width: 100%;
+      height: 280px;
+      padding: 15px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      font-family: monospace;
+      font-size: 14px;
+      resize: vertical;
+    }
+    textarea:focus {
+      border-color: #6366f1;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .btn {
+      padding: 12px 24px;
+      margin: 8px 5px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 15px;
+    }
+    .btn-primary {
+      background: #6366f1;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #4f46e5;
+      transform: translateY(-2px);
+    }
+    .btn-secondary {
+      background: #64748b;
+      color: white;
+    }
+    .output-box {
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 18px;
+      margin-top: 15px;
+      min-height: 100px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+    .copy-btn {
+      float: right;
+      padding: 6px 14px;
+      font-size: 13px;
+      background: #64748b;
+      color: white;
+      border-radius: 8px;
+      margin-top: 8px;
+    }
+    .copy-btn:hover {
+      background: #475569;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 25px 0 10px 0;
+      color: #1e2937;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔗 URL Cleaner Pro</h1>
+      <p>Ekstrak URL Gambar dari Kode HTML manapun</p>
+    </header>
+
+    <div class="content">
+      <textarea id="input" placeholder="Paste kode HTML di sini..."></textarea>
+
+      <div style="text-align: center; margin: 20px 0;">
+        <button class="btn btn-primary" onclick="cleanURLs()">🔍 Ekstrak URL Gambar</button>
+        <button class="btn btn-secondary" onclick="clearAll()">🗑️ Reset</button>
+      </div>
+
+      <div class="title">✅ Hasil URL Bersih</div>
+      <div class="output-box" id="output"></div>
+      <button class="copy-btn" onclick="copyText('output')">📋 Copy Semua URL</button>
+
+      <div class="title">📋 Markdown Siap Pakai</div>
+      <div class="output-box" id="markdown"></div>
+      <button class="copy-btn" onclick="copyText('markdown')">📋 Copy Markdown</button>
+    </div>
+  </div>
+
+  <script>
+    function cleanURLs() {
+      const input = document.getElementById('input').value;
+      const outputDiv = document.getElementById('output');
+      const markdownDiv = document.getElementById('markdown');
+      
+      // Regex universal untuk gambar (bisa menangkap hampir semua URL gambar)
+      const regex = /https?:\/\/[^\s"']+\.(jpg|jpeg|png|gif|webp|bmp|svg|JPG|JPEG|PNG|GIF|WEBP)/g;
+      let urls = input.match(regex) || [];
+
+      // Backup: ambil semua URL http/https jika tidak ada yang match ekstensi
+      if (urls.length === 0) {
+        const broadRegex = /https?:\/\/[^\s"']+/g;
+        urls = input.match(broadRegex) || [];
+      }
+
+      // Hilangkan duplikat
+      urls = [...new Set(urls)];
+
+      let htmlResult = '';
+      let mdResult = '';
+
+      urls.forEach((url, i) => {
+        htmlResult += `<div style="margin:8px 0; word-break:break-all;">
+                         ${i+1}. <a href="${url}" target="_blank" style="color:#6366f1;">${url}</a>
+                       </div>`;
+        mdResult += `![Gambar ${i+1}](${url})\n\n`;
+      });
+
+      if (urls.length === 0) {
+        outputDiv.innerHTML = `<p style="color:#ef4444; text-align:center;">Tidak ditemukan URL gambar.</p>`;
+        markdownDiv.innerHTML = "";
+      } else {
+        outputDiv.innerHTML = htmlResult;
+        markdownDiv.innerHTML = `<pre style="margin:0; white-space:pre-wrap; font-size:14px;">${mdResult}</pre>`;
+      }
+    }
+
+    function copyText(id) {
+      const element = document.getElementById(id);
+      let textToCopy = '';
+
+      if (id === 'output') {
+        textToCopy = Array.from(element.getElementsByTagName('a'))
+                          .map(a => a.href)
+                          .join('\n');
+      } else {
+        textToCopy = element.innerText;
+      }
+
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = event.target;
+        const original = btn.innerText;
+        btn.innerText = '✅ Copied!';
+        setTimeout(() => btn.innerText = original, 2000);
+      });
+    }
+
+    function clearAll() {
+      document.getElementById('input').value = '';
+      document.getElementById('output').innerHTML = '';
+      document.getElementById('markdown').innerHTML = '';
+    }
+  </script>
+</body>
+</html>
