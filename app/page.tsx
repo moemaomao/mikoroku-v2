@@ -5,7 +5,6 @@ export default function HomePage() {
     <>
       <div id="site-header" />
       <main>
-        <div id="buildlog-widget" />
         <div id="heroSection" />
 
         <div className="main-layout">

@@ -24,7 +24,6 @@ const scripts: ScriptSource[] = [
   { src: "/firebasepost.js" },
   { src: "/widget.js" },
   { src: "/footer.js" },
-  { src: "/buildlog.js" },
 ];
 
 const adFrameDocument = `<!DOCTYPE html>

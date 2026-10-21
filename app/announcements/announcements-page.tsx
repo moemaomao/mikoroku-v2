@@ -156,9 +156,10 @@ function MarkdownContent({ value }: { value: string }) {
       paragraphLines.push(lines[index].trim());
       index += 1;
     }
+    const paragraphNumber = blockNumber++;
     blocks.push(
-      <p key={`block-${blockNumber}`}>
-        {renderInlineMarkdown(paragraphLines.join(" "), `paragraph-${blockNumber++}`)}
+      <p key={`block-${paragraphNumber}`}>
+        {renderInlineMarkdown(paragraphLines.join(" "), `paragraph-${paragraphNumber}`)}
       </p>,
     );
   }
