@@ -170,28 +170,49 @@
 }
 
 .adminShell {
-  display: grid;
-  height: 100vh;
-  height: 100dvh;
-  min-height: 0;
-  grid-template-columns: 250px minmax(0, 1fr);
-  overflow: hidden;
+  display: block;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
   color: #eef2ff;
   background: #111221;
   font-family: Inter, system-ui, sans-serif;
   font-size: 14px;
 }
 
+:global(html),
 :global(body.adminPageBody) {
-  margin: 0;
+  margin: 0 !important;
+  padding: 0 !important;
   overflow-x: hidden;
+  overflow-y: auto;
   background: #111221;
 }
 
-.sidebar {
-  position: sticky;
+:global(body.adminPageBody.adminLight) {
+  background: #eef1f7 !important;
+}
+
+:global(body.adminPageBody .adminShell),
+.adminShell {
+  position: relative;
+  margin: 0 !important;
+  padding: 0 !important;
   top: 0;
+  left: 0;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 40;
   display: flex;
+  width: 250px;
   height: 100vh;
   height: 100dvh;
   flex-direction: column;
@@ -201,16 +222,18 @@
   background:
     linear-gradient(180deg, rgb(11 16 32 / 78%) 0%, rgb(11 16 32 / 88%) 100%),
     url("https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg") center / cover no-repeat;
+  box-sizing: border-box;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 8px 16px;
+  min-height: 40px;
+  padding: 4px 10px 18px;
   color: #eef2ff;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   text-decoration: none;
 }
 
@@ -223,15 +246,16 @@
 .navigation button {
   display: flex;
   align-items: center;
-  gap: 11px;
-  min-height: 42px;
-  padding: 9px 11px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 11px;
-  color: #b5c0d8;
+  border-radius: 12px;
+  color: #c5d0ea;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
@@ -240,14 +264,14 @@
 .sidebarAction svg,
 .logoutButton svg,
 .secondaryButton svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.9;
+  stroke-width: 2;
 }
 
 .navigation button:hover,
@@ -255,7 +279,7 @@
   border-color: rgb(174 192 255 / 26%);
   color: #f6f7ff;
   background: rgb(164 177 255 / 18%);
-  box-shadow: inset 0 0 18px rgb(157 174 255 / 8%);
+  box-shadow: none;
 }
 
 .navigationDivider {
@@ -273,16 +297,17 @@
 
 .sidebarAction {
   display: flex;
-  min-height: 42px;
+  min-height: 48px;
   align-items: center;
-  gap: 11px;
-  padding: 9px 11px;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 9px;
-  color: #b5c0d8;
+  border-radius: 12px;
+  color: #c5d0ea;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
@@ -294,11 +319,11 @@
 
 .workspace {
   min-width: 0;
-  height: 100vh;
-  height: 100dvh;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
+  margin-left: 250px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
 }
 
 .topbar {
@@ -314,7 +339,7 @@
   border: 1px solid rgb(255 255 255 / 11%);
   border-radius: 13px;
   background: rgb(24 26 45 / 94%);
-  box-shadow: 0 5px 20px rgb(0 0 0 / 12%);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 6%);
 }
 
 .searchBox {
@@ -396,7 +421,7 @@
   border: 1px solid rgb(255 255 255 / 9%);
   border-radius: 14px;
   background: rgb(22 28 48 / 88%);
-  box-shadow: 0 12px 35px rgb(0 0 0 / 12%);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
 }
 
 .welcomeCard {
@@ -457,8 +482,9 @@
 
 .mangaGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  content-visibility: auto;
 }
 
 .mangaCard {
@@ -466,15 +492,19 @@
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 13px;
-  background: rgb(24 26 45 / 92%);
-  transition: transform 150ms ease, border-color 150ms ease;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(22, 28, 48, 0.88);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
+  contain: layout style paint;
+  /* no transform / filter — keep scroll smooth */
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .mangaCard:hover {
-  transform: translateY(-2px);
-  border-color: rgb(129 161 255 / 55%);
+  border-color: rgba(107, 155, 255, 0.4);
+  background: rgba(28, 36, 58, 0.95);
 }
 
 .mangaCoverButton {
@@ -494,11 +524,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 180ms ease;
-}
-
-.mangaCoverButton:hover > img {
-  transform: scale(1.035);
 }
 
 .mangaCoverButton > .coverPlaceholder {
@@ -556,6 +581,7 @@
   text-overflow: ellipsis;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   cursor: pointer;
 }
 
@@ -610,7 +636,33 @@
   cursor: pointer;
 }
 
-.mangaCardActions .deleteButton {
+.mangaCardActions .editButton {
+  padding: 7px 10px;
+  border: 1px solid rgba(107, 155, 255, 0.4);
+  border-radius: 8px;
+  color: #9eb8ff;
+  background: rgba(107, 155, 255, 0.1);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.editButton:hover {
+  border-color: rgba(107, 155, 255, 0.7);
+  background: rgba(107, 155, 255, 0.18);
+  color: #c5d6ff;
+}
+
+.chapterDraftBadge {
+  flex: 0 0 auto;
+  color: #fbbf24;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.deleteButton {
   border-color: rgb(248 113 113 / 35%);
   color: #ff9a9a;
 }
@@ -718,21 +770,29 @@
 
 .chapterGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
 }
 
 .chapterCard {
   display: flex;
   min-width: 0;
-  min-height: 104px;
+  min-height: 96px;
   flex-direction: column;
-  gap: 9px;
-  padding: 11px;
-  border: 1px solid rgb(255 255 255 / 11%);
-  border-radius: 11px;
-  background: rgb(24 26 45 / 90%);
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(22, 28, 48, 0.88);
   cursor: grab;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 104px;
+  contain: layout style paint;
+  transition: border-color 0.15s ease;
+}
+
+.chapterCard:hover {
+  border-color: rgba(107, 155, 255, 0.4);
 }
 
 .chapterCard:active {
@@ -766,29 +826,39 @@
 }
 
 .chapterCard .rowActions {
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   margin-top: auto;
 }
 
 .chapterCard .rowActions button {
-  display: grid;
+  display: inline-flex;
   min-width: 0;
-  flex: 1;
-  place-items: center;
-  min-height: 30px;
-  padding: 5px 4px;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 8px;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .deleteButton {
-  padding: 7px 9px;
-  border: 1px solid rgb(248 113 113 / 35%);
+  padding: 7px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
   border-radius: 8px;
   color: #ff9b9b;
-  background: rgb(248 113 113 / 7%);
+  background: rgba(248, 113, 113, 0.1);
   font: inherit;
   font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
+}
+
+.deleteButton:hover {
+  border-color: rgba(248, 113, 113, 0.7);
+  background: rgba(248, 113, 113, 0.18);
+  color: #ffc0c0;
 }
 
 .deleteButton:disabled {
@@ -1263,26 +1333,37 @@
   stroke-width: 1.8;
 }
 
+:global(.admin-rich-editor) {
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgb(10 15 29 / 55%);
+}
+
 :global(.admin-rich-editor .ql-toolbar.ql-snow),
 :global(.admin-rich-editor .ql-container.ql-snow) {
-  border-color: rgb(255 255 255 / 14%);
+  border: none !important;
 }
 
 :global(.admin-rich-editor .ql-toolbar.ql-snow) {
-  border-radius: 8px 8px 0 0;
-  background: rgb(255 255 255 / 7%);
+  border-bottom: 1px solid rgb(255 255 255 / 12%) !important;
+  border-radius: 0;
+  background: rgb(255 255 255 / 6%);
+  padding: 8px 10px;
 }
 
 :global(.admin-rich-editor .ql-container.ql-snow) {
-  border-radius: 0 0 8px 8px;
-  background: rgb(10 15 29 / 38%);
+  border-radius: 0;
+  background: transparent;
 }
 
 :global(.admin-rich-editor .ql-editor) {
   min-height: 200px;
   color: #eef2ff;
   font-family: Inter, system-ui, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 12px 14px;
 }
 
 :global(.admin-rich-editor-chapter .ql-editor) {
@@ -1291,18 +1372,53 @@
 
 :global(.admin-rich-editor .ql-editor.ql-blank::before) {
   color: #8491ac;
+  font-style: normal;
 }
 
-:global(.admin-rich-editor .ql-snow .ql-stroke) {
-  stroke: #b7c1d6;
+:global(.admin-rich-editor .ql-snow .ql-stroke),
+:global(.admin-rich-editor .ql-snow .ql-stroke-miter) {
+  stroke: #d5def5 !important;
+  stroke-width: 1.6 !important;
 }
 
-:global(.admin-rich-editor .ql-snow .ql-fill) {
-  fill: #b7c1d6;
+:global(.admin-rich-editor .ql-snow .ql-fill),
+:global(.admin-rich-editor .ql-snow .ql-stroke.ql-fill) {
+  fill: #d5def5 !important;
 }
 
-:global(.admin-rich-editor .ql-snow .ql-picker) {
-  color: #b7c1d6;
+:global(.admin-rich-editor .ql-snow .ql-picker),
+:global(.admin-rich-editor .ql-snow .ql-picker-label) {
+  color: #d5def5 !important;
+}
+
+:global(.admin-rich-editor .ql-snow.ql-toolbar button),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button) {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:global(.admin-rich-editor .ql-snow.ql-toolbar button:hover),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button:hover),
+:global(.admin-rich-editor .ql-snow.ql-toolbar button.ql-active),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button.ql-active) {
+  color: #9eb8ff !important;
+}
+
+:global(.admin-rich-editor .ql-snow.ql-toolbar button:hover .ql-stroke),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button:hover .ql-stroke),
+:global(.admin-rich-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button.ql-active .ql-stroke) {
+  stroke: #9eb8ff !important;
+}
+
+:global(.admin-rich-editor .ql-snow.ql-toolbar button:hover .ql-fill),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button:hover .ql-fill),
+:global(.admin-rich-editor .ql-snow.ql-toolbar button.ql-active .ql-fill),
+:global(.admin-rich-editor .ql-snow .ql-toolbar button.ql-active .ql-fill) {
+  fill: #9eb8ff !important;
 }
 
 :global(.admin-rich-editor .ql-snow .ql-picker-options) {
@@ -1352,7 +1468,7 @@
   border-radius: 50%;
   color: #91b0ff;
   background: rgb(17 18 33 / 92%);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 22%);
+  box-shadow: none;
   font: inherit;
   font-size: 27px;
   line-height: 1;
@@ -1378,7 +1494,7 @@
   border-radius: 999px;
   color: #eef2ff;
   background: #202238;
-  box-shadow: 0 5px 20px rgb(0 0 0 / 20%);
+  box-shadow: none;
   font: inherit;
   font-size: 11px;
   text-align: left;
@@ -1399,7 +1515,7 @@
   align-items: flex-start;
   padding: 12px 20px 20px;
   background: rgb(7 9 19 / 76%);
-  backdrop-filter: blur(5px);
+  backdrop-filter: none;
 }
 
 .chapterModal {
@@ -1413,7 +1529,7 @@
   border-radius: 15px;
   color: #eef2ff;
   background: #171a2b;
-  box-shadow: 0 22px 70px rgb(0 0 0 / 45%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
 }
 
 .chapterModal h2 {
@@ -1819,21 +1935,32 @@
   background: #fff;
 }
 
-.lightMode :global(.admin-rich-editor .ql-toolbar.ql-snow),
-.lightMode :global(.admin-rich-editor .ql-container.ql-snow) {
-  border-color: rgb(20 29 55 / 18%);
+.lightMode :global(.admin-rich-editor) {
+  border-color: rgb(20 29 55 / 15%);
+  background: #fff;
 }
 
-.lightMode :global(.admin-rich-editor .ql-snow .ql-stroke) {
-  stroke: #47536c;
+.lightMode :global(.admin-rich-editor .ql-toolbar.ql-snow) {
+  border-bottom-color: rgb(20 29 55 / 12%) !important;
+  background: #f2f4f9;
+}
+
+.lightMode :global(.admin-rich-editor .ql-container.ql-snow) {
+  background: transparent;
+}
+
+.lightMode :global(.admin-rich-editor .ql-snow .ql-stroke),
+.lightMode :global(.admin-rich-editor .ql-snow .ql-stroke-miter) {
+  stroke: #47536c !important;
 }
 
 .lightMode :global(.admin-rich-editor .ql-snow .ql-fill) {
-  fill: #47536c;
+  fill: #47536c !important;
 }
 
-.lightMode :global(.admin-rich-editor .ql-snow .ql-picker) {
-  color: #47536c;
+.lightMode :global(.admin-rich-editor .ql-snow .ql-picker),
+.lightMode :global(.admin-rich-editor .ql-snow .ql-picker-label) {
+  color: #47536c !important;
 }
 
 .lightMode :global(.admin-rich-editor .ql-snow .ql-picker-options) {
@@ -1849,22 +1976,25 @@
   color: #252c40;
 }
 
-.lightMode :global(.admin-rich-editor .ql-container.ql-snow) {
-  background: #fff;
-}
-
-.lightMode :global(.admin-rich-editor .ql-toolbar.ql-snow) {
-  background: #f2f4f9;
-}
-
 .lightMode .quickAddButton {
   color: #486bd2;
   background: #fff;
 }
 
+@media (max-width: 1100px) {
+  .mangaGrid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .chapterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+    gap: 8px;
+  }
+}
+
 @media (max-width: 900px) {
   .adminShell {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 200px minmax(0, 1fr);
   }
 
   .searchBox {
@@ -1872,16 +2002,61 @@
   }
 
   .content {
-    padding-left: 18px;
-    padding-right: 14px;
+    padding-left: 16px;
+    padding-right: 12px;
+  }
+
+  .detailHeader {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .chapterGrid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 }
 
 @media (max-width: 640px) {
+  .mangaGrid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+
+  .chapterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .chapterCard {
+    min-height: 88px;
+    padding: 10px;
+  }
+
+  .mangaCardBody {
+    min-height: 110px;
+    padding: 8px 9px 9px;
+  }
+
+  .detailHeader > img,
+  .detailHeader > .coverPlaceholder {
+    width: 72px;
+    height: 102px;
+    flex-basis: 72px;
+  }
+
+  .detailMeta h2 {
+    font-size: 18px;
+  }
+
   .adminShell {
     height: auto;
     min-height: 100dvh;
     grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .workspace {
+    height: auto;
     overflow: visible;
   }
 
@@ -1989,4 +2164,311 @@
   .chapterInfo {
     flex-basis: calc(100% - 20px);
   }
+}
+
+.mangaGrid,
+.chapterGrid {
+  content-visibility: auto;
+  contain: layout style;
+}
+
+.mangaCoverButton > img {
+  content-visibility: auto;
+}
+
+.mangaCard,
+.chapterCard,
+.mangaCoverButton,
+.mangaCoverButton > img {
+  transform: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mangaCard,
+  .chapterCard {
+    transition: none !important;
+  }
+}
+
+.topbar {
+  display: none !important;
+}
+
+.inlineSearch {
+  display: flex;
+  justify-content: flex-end;
+  margin: 16px 20px 20px;
+  padding-bottom: 4px;
+}
+
+.inlineSearch .searchBox {
+  width: min(100%, 280px);
+}
+
+.inlineSearch .searchBox input {
+  width: 100%;
+}
+
+.content {
+  padding-top: 4px;
+}
+
+.topbar {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.workspace > .topbar {
+  display: none !important;
+}
+
+.inlineSearch {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 20px 24px !important;
+}
+
+:global(.admin-rich-editor.ql-container),
+:global(.admin-rich-editor) {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  background: rgba(10, 15, 29, 0.55) !important;
+  overflow: hidden !important;
+  box-shadow: none !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar.ql-snow) {
+  border: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 0 !important;
+}
+
+:global(.admin-rich-editor .ql-container.ql-snow) {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar .ql-stroke) {
+  stroke: #e8eefc !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar .ql-fill) {
+  fill: #e8eefc !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar .ql-picker) {
+  color: #e8eefc !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar button svg) {
+  opacity: 1 !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar button) {
+  opacity: 1 !important;
+  color: #e8eefc !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar button:hover),
+:global(.admin-rich-editor .ql-toolbar button.ql-active) {
+  color: #9eb8ff !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar button:hover .ql-stroke),
+:global(.admin-rich-editor .ql-toolbar button.ql-active .ql-stroke) {
+  stroke: #9eb8ff !important;
+}
+
+:global(.admin-rich-editor .ql-toolbar button:hover .ql-fill),
+:global(.admin-rich-editor .ql-toolbar button.ql-active .ql-fill) {
+  fill: #9eb8ff !important;
+}
+
+.lightMode :global(.admin-rich-editor) {
+  border-color: rgba(20, 29, 55, 0.15) !important;
+  background: #fff !important;
+}
+
+.lightMode :global(.admin-rich-editor .ql-toolbar.ql-snow) {
+  background: #f2f4f9 !important;
+  border-bottom-color: rgba(20, 29, 55, 0.12) !important;
+}
+
+.lightMode :global(.admin-rich-editor .ql-toolbar .ql-stroke) {
+  stroke: #3d4a63 !important;
+}
+
+.lightMode :global(.admin-rich-editor .ql-toolbar .ql-fill) {
+  fill: #3d4a63 !important;
+}
+
+.lightMode :global(.admin-rich-editor .ql-toolbar button) {
+  color: #3d4a63 !important;
+}
+
+.topbar,
+:global(header.topbar),
+:global(#site-header),
+:global(.site-header),
+:global(#header),
+:global(.main-header) {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+.workspace {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.inlineSearch {
+  margin-top: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.workspace,
+.sidebar,
+.chapterModal,
+:global(body.adminPageBody) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 140, 180, 0.45) transparent;
+}
+
+.workspace::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar,
+.chapterModal::-webkit-scrollbar,
+:global(body.adminPageBody)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.workspace::-webkit-scrollbar-track,
+.sidebar::-webkit-scrollbar-track,
+.chapterModal::-webkit-scrollbar-track,
+:global(body.adminPageBody)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace::-webkit-scrollbar-thumb,
+.sidebar::-webkit-scrollbar-thumb,
+.chapterModal::-webkit-scrollbar-thumb,
+:global(body.adminPageBody)::-webkit-scrollbar-thumb {
+  background: rgba(120, 140, 180, 0.4);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.workspace::-webkit-scrollbar-thumb:hover,
+.sidebar::-webkit-scrollbar-thumb:hover,
+.chapterModal::-webkit-scrollbar-thumb:hover,
+:global(body.adminPageBody)::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 140, 180, 0.65);
+  background-clip: padding-box;
+}
+
+.lightMode .workspace,
+.lightMode .sidebar,
+.lightMode .chapterModal {
+  scrollbar-color: rgba(100, 120, 160, 0.4) transparent;
+}
+
+.lightMode .workspace::-webkit-scrollbar-thumb,
+.lightMode .sidebar::-webkit-scrollbar-thumb,
+.lightMode .chapterModal::-webkit-scrollbar-thumb {
+  background: rgba(100, 120, 160, 0.35);
+  background-clip: padding-box;
+}
+
+.lightMode .workspace::-webkit-scrollbar-thumb:hover,
+.lightMode .sidebar::-webkit-scrollbar-thumb:hover,
+.lightMode .chapterModal::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 120, 160, 0.55);
+  background-clip: padding-box;
+}
+
+.workspace {
+  scrollbar-gutter: auto;
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+  .workspace {
+    margin-left: 0 !important;
+  }
+}
+
+.inlineSearch {
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  margin: 0 !important;
+  padding: 20px 24px 16px !important;
+  box-sizing: border-box;
+  background: transparent !important;
+  border: 0 !important;
+  min-height: 0 !important;
+}
+
+.inlineSearch .searchBox {
+  width: min(100%, 280px) !important;
+  margin: 0 !important;
+}
+
+.workspace {
+  margin-left: 250px !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+  background: #eef1f7;
+}
+
+.adminShell:not(.lightMode) .workspace,
+:global(body.adminPageBody:not(.adminLight)) .workspace {
+  background: #111221;
+}
+
+.lightMode .workspace,
+:global(body.adminPageBody.adminLight) .workspace {
+  background: #eef1f7 !important;
+}
+
+.adminShell {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  background: #111221;
+}
+
+.lightMode.adminShell,
+.adminShell.lightMode {
+  background: #eef1f7 !important;
+}
+
+:global(body.adminPageBody.adminLight) {
+  background: #eef1f7 !important;
+}
+
+:global(html) {
+  background: #eef1f7;
+}
+
+:global(body.adminPageBody:not(.adminLight)),
+:global(html:has(body.adminPageBody:not(.adminLight))) {
+  background: #111221 !important;
 }

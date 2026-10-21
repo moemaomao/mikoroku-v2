@@ -1481,49 +1481,62 @@ export default function AdminPage() {
             className={activeSection === "dashboard" ? styles.activeNav : ""}
             onClick={() => setActiveSection("dashboard")}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg> Dashboard
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Dashboard
           </button>
           <button
             className={activeSection === "manga-list" ? styles.activeNav : ""}
             onClick={() => setActiveSection("manga-list")}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v17H7a3 3 0 0 1-3-3z" /><path d="M4 18a3 3 0 0 1 3-3h13" /></svg> Manga List
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            Manga List
           </button>
           <button onClick={openNewManga}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg> Add New Manga
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+            Add New Manga
           </button>
           <button
             className={activeSection === "reports" ? styles.activeNav : ""}
             onClick={() => setActiveSection("reports")}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M12 8v4m0 4h.01" /></svg> Report
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg>
+            Report
           </button>
           <div className={styles.navigationDivider} />
           <button
             className={activeSection === "genres" ? styles.activeNav : ""}
             onClick={() => setActiveSection("genres")}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" /><path d="M9 2v3m6-3v3m0 14v3m-6-3v3" /></svg> Genres &amp; Tags
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            Genres &amp; Tags
           </button>
           <button
             className={activeSection === "settings" ? styles.activeNav : ""}
             onClick={() => setActiveSection("settings")}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.7 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.7-1l-1.7.7-1.4-2.4L7.3 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.7-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.7 1l1.7-.7 1.4 2.4-1.4 1.1a8 8 0 0 1 0 2z" /></svg> Settings
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            Settings
+          </button>
+          <button className={styles.sidebarAction} type="button" onClick={toggleTheme}>
+            {isLightMode ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            )}
+            {isLightMode ? "Dark Mode" : "Light Mode"}
           </button>
         </nav>
         <div className={styles.sidebarFooter}>
-          <button className={styles.sidebarAction} onClick={toggleTheme}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg> {isLightMode ? "Dark Mode" : "Dark / Light Mode"}
-          </button>
           <button className={styles.logoutButton} onClick={handleLogout} disabled={busy}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19l7-7-7-7m7 7H3" /></svg> Logout
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
           </button>
         </div>
       </aside>
 
       <section className={styles.workspace}>
-        <header className={styles.topbar}>
+        {/* Search inline */}
+        <div className={styles.inlineSearch}>
           <label className={styles.searchBox}>
             <input
               aria-label="Cari manga"
@@ -1535,7 +1548,7 @@ export default function AdminPage() {
               }}
             />
           </label>
-        </header>
+        </div>
 
         <div className={styles.content}>
           {message && <p className={styles.notice}>{message}</p>}
@@ -1584,7 +1597,6 @@ export default function AdminPage() {
                     <article className={styles.mangaCard} key={item.slug}>
                       <button className={styles.mangaCoverButton} onClick={() => void openMangaChapters(item)} aria-label={`Open ${item.title}`}>
                         {item.cover ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={item.cover} alt="" loading="lazy" />
                         ) : <span className={styles.coverPlaceholder}>M</span>}
                         <span className={styles.mangaSource}>{item.source === "hybrid" ? "HYBRID" : item.source.toUpperCase()}</span>
@@ -1610,7 +1622,6 @@ export default function AdminPage() {
             <section className={styles.panel}>
               <div className={styles.detailHeader}>
                 {selectedManga.cover ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={selectedManga.cover} alt="" />
                 ) : <span className={styles.coverPlaceholder}>M</span>}
                 <div className={styles.detailMeta}>
@@ -1706,14 +1717,27 @@ export default function AdminPage() {
                         >
                           <div className={styles.chapterCardHeading}>
                             <strong>{chapter.title || `Chapter ${chapter.num}`}</strong>
-                            <small>{chapter.num}{chapter.isDraft ? " · DRAFT" : ""}</small>
+                            {chapter.isDraft ? <small className={styles.chapterDraftBadge}>DRAFT</small> : null}
                           </div>
                           <span className={styles.chapterDate}>{chapter.date ? new Date(getTimestamp(chapter.date)).toLocaleDateString("id-ID") : ""}</span>
                           <div className={styles.rowActions}>
-                            <button aria-label={`Move chapter ${chapter.num} up`} onClick={() => moveChapter(chapter.num, -1)}>↑</button>
-                            <button aria-label={`Move chapter ${chapter.num} down`} onClick={() => moveChapter(chapter.num, 1)}>↓</button>
-                            <button aria-label={`Edit chapter ${chapter.num}`} onClick={() => openChapterEditor(chapter)}>✎</button>
-                            <button className={styles.deleteButton} aria-label={`Delete chapter ${chapter.num}`} onClick={() => void deleteChapter(chapter)} disabled={busy}>⌑</button>
+                            <button
+                              type="button"
+                              className={styles.editButton}
+                              aria-label={`Edit chapter ${chapter.num}`}
+                              onClick={() => openChapterEditor(chapter)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.deleteButton}
+                              aria-label={`Delete chapter ${chapter.num}`}
+                              onClick={() => void deleteChapter(chapter)}
+                              disabled={busy}
+                            >
+                              Delete
+                            </button>
                           </div>
                         </article>
                       ))}
@@ -1852,7 +1876,6 @@ export default function AdminPage() {
               </div>
               <input type="url" placeholder="Thumbnail URL" value={chapterDraft.thumbnail} onChange={(event) => setChapterDraft((current) => ({ ...current, thumbnail: event.target.value }))} />
               {chapterDraft.thumbnail && (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img className={styles.thumbnailPreview} src={chapterDraft.thumbnail} alt="Chapter thumbnail preview" />
               )}
             </div>

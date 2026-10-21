@@ -94,9 +94,9 @@ export default function RichTextEditor({
   }, [value]);
 
   return (
-    <div
-      className={`admin-rich-editor admin-rich-editor-${kind}`}
-      ref={containerRef}
-    />
+    <div className={`admin-rich-editor admin-rich-editor-${kind}`}>
+      {/* Quill injects toolbar as sibling of the mount node — keep mount inside wrapper */}
+      <div ref={containerRef} />
+    </div>
   );
 }
