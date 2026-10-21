@@ -585,7 +585,6 @@ html.light .detail-route .demographic-tag {
   box-sizing: border-box;
 }
 
-/* Angka server mengikuti warna tombol (biru/kuning) */
 .detail-route #sourceSv1Btn .server-number { color: #1d4ed8; }
 .detail-route #sourceSv1Btn.active .server-number { color: #fff; }
 .detail-route #sourceSv2Btn .server-number { color: #b45309; }
@@ -859,10 +858,9 @@ html.light .detail-route .demographic-tag {
   transform: scale(0.97);
 }
 
-/* Source badge — angka/teks saja, tanpa lingkaran/bg hitam */
 .detail-route .chapter-source-badge {
   position: absolute;
-  top: 22px; /* di bawah ikon mata (read/unread) top:4px + 16px */
+  top: 22px;
   right: 4px;
   z-index: 5;
   pointer-events: none;
@@ -925,25 +923,41 @@ html.light .detail-route .demographic-tag {
   align-items: center;
   border-radius: 12px;
   overflow: hidden;
+  width: 100%;
+  padding: 0;
+  background: var(--surface, rgba(0, 0, 0, 0.15));
+}
+
+.detail-route .chapter-grid.list-mode .chapter-item::before,
+.detail-route .chapter-grid.list-mode .chapter-item::after {
+  left: auto;
+  right: 10px;
 }
 
 .detail-route .chapter-grid.list-mode .chapter-item img {
-  width: 90px;
-  height: 100%;
+  position: static !important;
+  inset: auto !important;
+  width: 90px !important;
+  height: 100% !important;
   object-fit: cover;
   flex-shrink: 0;
+  border-radius: 0;
 }
 
 .detail-route .chapter-grid.list-mode .chapter-label {
-  position: static;
+  position: static !important;
+  inset: auto !important;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
   gap: 5px;
-  background: transparent;
-  padding: 12px;
+  background: transparent !important;
+  padding: 12px 48px 12px 14px;
   text-align: left;
   flex: 1;
+  min-width: 0;
+  color: inherit;
 }
 
 .detail-route .chapter-grid.list-mode .chapter-title {
@@ -972,9 +986,11 @@ html.light .detail-route .chapter-grid.list-mode .chapter-date {
 }
 
 .detail-route .chapter-grid.list-mode .chapter-source-badge {
-  top: 30px;
-  right: 6px;
-  font-size: 9px;
+  top: 50% !important;
+  right: 12px !important;
+  transform: translateY(-50%);
+  font-size: 10px;
+  text-shadow: none;
 }
 
 /* =========================================================
