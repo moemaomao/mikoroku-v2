@@ -55,3 +55,8 @@ Authenticate Wrangler with the intended Cloudflare account, then run:
 npm run preview
 npm run deploy
 ```
+
+For a Cloudflare Workers Git deployment, set the build command to
+`npm run cf:build` so OpenNext generates `.open-next/` before Wrangler deploys
+the Worker. Do not use `npm run build` as the Workers build command; it only
+builds the standalone Next.js app.
