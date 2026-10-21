@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mikoroku-v2",
-  "main": ".open-next/worker.js",
+  "main": "./custom-worker.ts",
   "compatibility_date": "2026-10-20",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -13,5 +13,23 @@
       "binding": "WORKER_SELF_REFERENCE",
       "service": "mikoroku-v2"
     }
-  ]
+  ],
+  "kv_namespaces": [
+  {
+    "binding": "NEXT_INC_CACHE_KV",
+    "id": "bed9746f9fc74d819eaa01aa31b9cf94",
+    "preview_id": "62a3241068df42319fff4db2984ee99d"
+  },
+  {
+    "binding": "MIKOROKU_CACHE",
+    "id": "bed9746f9fc74d819eaa01aa31b9cf94",
+    "preview_id": "62a3241068df42319fff4db2984ee99d"
+  }
+  ],
+  "triggers": {
+    "crons": ["*/20 * * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
 }
