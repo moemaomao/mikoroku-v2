@@ -1345,10 +1345,29 @@ html.dark .reader-bottom-nav {
 .reader-bottom-nav .reader-bottom-previous > i:first-child {
   width: auto !important;
   height: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   padding: 0 !important;
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
+  line-height: 1;
+}
+
+.reader-bottom-nav .reader-bottom-next > i:last-child {
+  width: auto !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  line-height: 1;
 }
 
 /* Label: horizontal, bukan stack */
@@ -1404,10 +1423,6 @@ html.dark .reader-bottom-nav {
   font-weight: 700;
   letter-spacing: .03em;
   text-transform: uppercase;
-}
-
-.reader-bottom-next > i:first-child {
-  order: 0;
 }
 
 .reader-bottom-chapter-menu,
@@ -1494,6 +1509,10 @@ html.dark .reader-bottom-nav {
     overflow-y: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;
+  }
+
+  .reader-bottom-chapter-menu {
+    width: min(260px, calc(100vw - 48px));
   }
 }
 
