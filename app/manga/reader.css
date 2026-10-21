@@ -295,7 +295,31 @@ html.dark .reader-page {
   color: #f3f3f5;
 }
 
-html.dark .reader-page:fullscreen { background: #111216; }
+html.dark .reader-page:fullscreen,
+html.dark .reader-page:-webkit-full-screen {
+  background: #111216;
+}
+
+/* Fullscreen: harus bisa di-scroll */
+.reader-page:fullscreen,
+.reader-page:-webkit-full-screen {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: 48px;
+}
+
+.reader-page:fullscreen .reader-images img,
+.reader-page:-webkit-full-screen .reader-images img {
+  max-width: 100%;
+  height: auto;
+}
 
 .reader-toolbar {
   position: relative;
@@ -759,6 +783,16 @@ html.dark .reader-images { background: #0a0a0c; }
 .reader-bottom-chapter-menu > button.is-current { background: color-mix(in srgb, var(--reader-accent) 10%, transparent); color: var(--reader-accent-bright); font-weight: 700; }
 
 .reader-floating-controls { right: 18px; left: auto; bottom: 22px; }
+.reader-floating-controls {
+  transition: opacity .22s ease, transform .22s ease, visibility .22s ease;
+  will-change: opacity, transform;
+}
+.reader-floating-controls.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(12px);
+}
 .reader-floating-controls button {
   border-color: rgba(128, 128, 140, .22);
   background: var(--reader-surface);
@@ -956,7 +990,6 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
 
   .reader-settings-backdrop { align-items: flex-end; justify-content: center; padding: 12px; }
   .reader-settings-panel { width: min(100%, 480px); max-height: min(76vh, 640px); border-radius: 18px; }
-  /* Mobile: satu baris sejajar, icon saja */
   .reader-bottom-nav {
     grid-template-columns: 1fr 1fr 1fr;
     gap: 8px;
@@ -989,7 +1022,6 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
     justify-content: center;
     text-align: center;
   }
-  /* Sembunyikan semua teks di mobile */
   .reader-bottom-button > span,
   .reader-bottom-button .reader-bottom-chevron {
     display: none !important;
@@ -1002,7 +1034,6 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
     font-size: 14px;
     flex: 0 0 auto;
   }
-  /* Next: ikon arrow di kanan HTML — pastikan tetap terlihat & center */
   .reader-bottom-next > i.fa-arrow-right {
     display: grid;
     place-items: center;

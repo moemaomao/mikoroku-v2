@@ -403,6 +403,12 @@ export default function ReaderPage({
   const [readerNotice, setReaderNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [floatingHidden, setFloatingHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
+  useEffect(() => {
+    if (settingsOpen || reportOpen) setFloatingHidden(false);
+  }, [settingsOpen, reportOpen]);
+
   const [chapterListOpen, setChapterListOpen] = useState(false);
   const [bottomChapterListOpen, setBottomChapterListOpen] = useState(false);
   const bottomChaptersRef = useRef<HTMLDivElement | null>(null);
@@ -581,19 +587,46 @@ export default function ReaderPage({
       window.setTimeout(() => window.scrollTo({ top: savedPosition }), 120);
     }
     let saveTimer = 0;
+    lastScrollYRef.current = window.scrollY;
     const updateProgress = () => {
+      const y = window.scrollY;
       const scrollable = document.documentElement.scrollHeight - window.innerHeight;
-      setReaderProgress(scrollable > 0 ? Math.min(100, Math.round((window.scrollY / scrollable) * 100)) : 0);
+      setReaderProgress(scrollable > 0 ? Math.min(100, Math.round((y / scrollable) * 100)) : 0);
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
-        localStorage.setItem(scrollKey, String(window.scrollY));
+        localStorage.setItem(scrollKey, String(y));
       }, 250);
+
+      const delta = y - lastScrollYRef.current;
+      if (y < 48) {
+        setFloatingHidden(false);
+      } else if (delta > 8) {
+        setFloatingHidden(true);
+      } else if (delta < -8) {
+        setFloatingHidden(false);
+      }
+      lastScrollYRef.current = y;
+    };
+
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.classList?.contains("reader-page")) {
+        const y = target.scrollTop;
+        const delta = y - lastScrollYRef.current;
+        if (y < 48) setFloatingHidden(false);
+        else if (delta > 8) setFloatingHidden(true);
+        else if (delta < -8) setFloatingHidden(false);
+        lastScrollYRef.current = y;
+      }
+      updateProgress();
     };
     window.addEventListener("scroll", updateProgress, { passive: true });
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true });
     updateProgress();
     return () => {
       window.clearTimeout(saveTimer);
       window.removeEventListener("scroll", updateProgress);
+      document.removeEventListener("scroll", onScroll, { capture: true } as EventListenerOptions);
     };
   }, [data, mode, slug]);
 
@@ -882,7 +915,7 @@ export default function ReaderPage({
           <span><small>Next chapter</small><strong>{chapterIndex < data.chapters.length - 1 ? `Chapter ${data.chapters[chapterIndex + 1]}` : "Unavailable"}</strong></span><i className="fas fa-arrow-right" aria-hidden="true" />
         </button>
       </nav>}
-      <div className="reader-floating-controls">
+      <div className={`reader-floating-controls${floatingHidden ? " is-hidden" : ""}`}>
         <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top" title="Back to top"><i className="fas fa-arrow-up" aria-hidden="true" /></button>
         <button type="button" className={settingsOpen ? "is-active" : ""} onClick={() => {
           setSettingsOpen((open) => !open);
