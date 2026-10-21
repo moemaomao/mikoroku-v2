@@ -9,6 +9,7 @@ type ScriptSource = {
 };
 
 const scripts: ScriptSource[] = [
+  { src: "/header.js" },
   { src: "/manga-data.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js" },
@@ -18,7 +19,6 @@ const scripts: ScriptSource[] = [
   },
   { src: "/auth-loader.js" },
   { src: "/user-modals.js" },
-  { src: "/header.js" },
   { src: "/firebase.js", type: "module" },
   { src: "/firebasepost.js" },
   { src: "/githubmangapost.js" },

@@ -46,6 +46,14 @@ function loadScript(src: string, type = "text/javascript"): Promise<void> {
 }
 
 async function initializeSiteChrome(showChrome: boolean, showFooter: boolean): Promise<void> {
+  const headerPromise = showChrome
+    ? loadScript("/header.js")
+        .then(() => window.initSiteHeader?.())
+        .catch((error: unknown) => {
+          console.error("Header dan sidebar gagal dimuat.", error);
+        })
+    : Promise.resolve();
+
   try {
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
@@ -76,7 +84,6 @@ async function initializeSiteChrome(showChrome: boolean, showFooter: boolean): P
 
   const scripts = [
     ...(showChrome && window.firebase ? ["/auth-loader.js", "/user-modals.js"] : []),
-    ...(showChrome ? ["/header.js"] : []),
     ...(showFooter ? ["/footer.js"] : []),
   ];
   for (const src of scripts) {
@@ -84,9 +91,7 @@ async function initializeSiteChrome(showChrome: boolean, showFooter: boolean): P
       console.error(`Integrasi situs gagal dimuat: ${src}`, error);
     });
   }
-  if (showChrome) {
-    window.initSiteHeader?.();
-  }
+  await headerPromise;
   if (showFooter) window.initSiteFooter?.();
 }
 

@@ -1205,7 +1205,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 function RouteIntegrations() {
   useEffect(() => {
     const added: HTMLScriptElement[] = [];
-    const load = (src: string) => new Promise<void>((resolve) => {
+    const load = (src: string, persistent = false) => new Promise<void>((resolve) => {
       const existing = [...document.scripts].find((script) => script.src === new URL(src, location.href).href);
       if (existing) {
         resolve();
@@ -1218,9 +1218,11 @@ function RouteIntegrations() {
         console.error(`Gagal memuat integrasi halaman manga: ${src}`);
         resolve();
       };
-      added.push(script);
+      if (!persistent) added.push(script);
       document.body.appendChild(script);
     });
+
+    void load("/header.js", true).then(() => window.initSiteHeader?.());
 
     void (async () => {
       await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
@@ -1232,7 +1234,6 @@ function RouteIntegrations() {
       document.head.appendChild(firebaseInit);
       await load("/auth-loader.js");
       await load("/user-modals.js");
-      await load("/header.js");
       await load("/footer.js");
       await load("/announcement.js");
       await load("/recommendation-sidebar.js");

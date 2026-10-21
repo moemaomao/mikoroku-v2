@@ -216,6 +216,12 @@ function loadScript(src: string, type = "text/javascript"): Promise<void> {
 }
 
 async function initializeBookmarkIntegrations(): Promise<void> {
+  const headerPromise = loadScript("/header.js")
+    .then(() => window.initSiteHeader?.())
+    .catch((error: unknown) => {
+      console.error("Header dan sidebar bookmark gagal dimuat.", error);
+    });
+
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
@@ -224,10 +230,10 @@ async function initializeBookmarkIntegrations(): Promise<void> {
 
   await loadScript("/manga-data.js");
   await loadScript("/firebase.js", "module");
-  for (const src of ["/auth-loader.js", "/user-modals.js", "/header.js", "/footer.js"]) {
+  for (const src of ["/auth-loader.js", "/user-modals.js", "/footer.js"]) {
     await loadScript(src);
   }
-  window.initSiteHeader?.();
+  await headerPromise;
   window.initSiteFooter?.();
 }
 
