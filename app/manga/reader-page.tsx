@@ -20,6 +20,7 @@ type ChapterRecord = {
   isNovel?: boolean;
   source?: string;
   order?: number;
+  url?: string;
 };
 
 type ReaderData = {
@@ -30,6 +31,7 @@ type ReaderData = {
   text: string;
   chapters: string[];
   chapter: string;
+  source?: string;
 };
 
 const firestoreBase = "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
@@ -76,23 +78,41 @@ function decodeDocument(document: { fields?: Record<string, unknown> }): Record<
   return Object.fromEntries(Object.entries(document.fields || {}).map(([key, value]) => [key, decodeFirestoreValue(value)]));
 }
 
-function imageList(input: unknown): string[] {
+function imageList(input: unknown, allowAnyUrl = false): string[] {
   if (Array.isArray(input)) {
-    return input.flatMap((value) => {
-      if (typeof value === "string") return [value];
-      if (value && typeof value === "object") {
-        const record = value as Record<string, unknown>;
-        const url = record.url || record.src;
-        return typeof url === "string" ? [url] : [];
-      }
-      return [];
-    }).filter((url) => /^https?:\/\//i.test(url));
+    return [...new Set(input.flatMap((value) => imageList(value, true)))];
+  }
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>;
+    const url = record.url || record.src || record.image || record.imageUrl;
+    return typeof url === "string" ? imageList(url, true) : [];
   }
   if (typeof input !== "string") return [];
-  const htmlImages = [...input.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map((match) => match[1]);
-  if (htmlImages.length) return htmlImages.filter((url) => /^https?:\/\//i.test(url));
-  if (/^https?:\/\//i.test(input.trim())) return [input.trim()];
-  return input.match(/https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?[^\s"'<>]*)?/gi) || [];
+
+  const value = input.trim();
+  if (!value) return [];
+  if (value.startsWith("[") || value.startsWith("{")) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (parsed !== input) return imageList(parsed, allowAnyUrl);
+    } catch {
+    }
+  }
+
+  const htmlImages = [...value.matchAll(/<img\b[^>]*?\b(?:src|data-src|data-original)=["']([^"']+)["']/gi)]
+    .map((match) => match[1]);
+  const candidates = htmlImages.length
+    ? htmlImages
+    : value.split(/[\r\n]+/).flatMap((line) =>
+        line.match(/https?:\/\/[^\s"'<>]+/gi) || [],
+      );
+
+  return [...new Set(candidates.map((url) => url.replace(/[),;}\]]+$/, "").trim()).filter((url) => {
+    if (!/^https?:\/\//i.test(url)) return false;
+    if (allowAnyUrl) return true;
+    return /\.(?:jpg|jpeg|png|gif|webp|bmp|avif)(?:$|[?#])/i.test(url) ||
+      /(?:blogger\.googleusercontent\.com|googleusercontent\.com|imgur\.com|pixiv\.net)/i.test(url);
+  }))];
 }
 
 function novelText(value: unknown): string {
@@ -122,6 +142,12 @@ function adaptiveImageWidth(): number {
   return Math.max(800, Math.min(2000, Math.round(window.innerWidth * (window.devicePixelRatio || 1))));
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
 function getCurrentChapterCache(slug: string): ChapterRecord | null {
   try {
     const value = JSON.parse(localStorage.getItem("currentChapter") || "null") as (ChapterRecord & { slug?: string }) | null;
@@ -144,6 +170,82 @@ function getCachedChapters(slug: string): ChapterRecord[] {
     console.warn("Stored chapter list is invalid.", error);
   }
   return [];
+}
+
+type BloggerFeedEntry = {
+  title?: { $t?: string };
+  link?: Array<{ rel?: string; href?: string }>;
+  content?: { $t?: string };
+};
+
+function getJsonp<T>(url: string, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Chapter request was superseded.", "AbortError"));
+      return;
+    }
+
+    const callbackName = `mikorokuReaderJsonp${Date.now()}${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const globalWindow = window as typeof window & Record<string, unknown>;
+    let settled = false;
+    const finish = (error?: Error, data?: T) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      script.remove();
+      delete globalWindow[callbackName];
+      if (error) reject(error);
+      else resolve(data as T);
+    };
+    const onAbort = () => finish(new DOMException("Chapter request was superseded.", "AbortError"));
+    const timeout = window.setTimeout(
+      () => finish(new Error("Timed out while loading the chapter from Blogger.")),
+      15000,
+    );
+    globalWindow[callbackName] = (data: T) => finish(undefined, data);
+    script.onerror = () => finish(new Error("Failed to load the chapter from Blogger."));
+    signal.addEventListener("abort", onAbort, { once: true });
+    const feedUrl = new URL(url);
+    feedUrl.searchParams.set("callback", callbackName);
+    script.src = feedUrl.href;
+    document.head.appendChild(script);
+  });
+}
+
+function normalizePostUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "").toLowerCase();
+  } catch {
+    return value.trim().replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+async function getBloggerChapterImages(
+  chapter: ChapterRecord,
+  signal: AbortSignal,
+): Promise<string[]> {
+  if (chapter.source !== "blogger" && chapter.source !== "blogger2") return [];
+  const title = String(chapter.title || "").trim();
+  if (!title) return [];
+  const domain = chapter.source === "blogger"
+    ? "https://www.mikodrive.my.id"
+    : "https://www.yomidays.my.id";
+  const feedUrl = new URL("/feeds/posts/default", domain);
+  feedUrl.searchParams.set("alt", "json-in-script");
+  feedUrl.searchParams.set("max-results", "20");
+  feedUrl.searchParams.set("q", title);
+  const feed = await getJsonp<{ feed?: { entry?: BloggerFeedEntry[] } }>(feedUrl.href, signal);
+  const targetUrl = chapter.url ? normalizePostUrl(chapter.url) : "";
+  const entry = (feed.feed?.entry || []).find((item) => {
+    const alternateUrl = item.link?.find((link) => link.rel === "alternate")?.href || "";
+    return targetUrl
+      ? normalizePostUrl(alternateUrl) === targetUrl
+      : item.title?.$t?.trim().toLowerCase() === title.toLowerCase();
+  });
+  return imageList(entry?.content?.$t, true);
 }
 
 async function getFirestoreDocument(path: string, signal: AbortSignal): Promise<Record<string, unknown> | null> {
@@ -223,6 +325,30 @@ async function getFirestoreChapters(
   return documents;
 }
 
+async function getReaderChapterDocuments(
+  slug: string,
+  signal: AbortSignal,
+): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+  try {
+    const response = await fetch(
+      `${firestoreBase}/manga/${encodeURIComponent(slug)}/chapters?pageSize=1000`,
+      { signal },
+    );
+    if (!response.ok) throw new Error(`The chapter list returned HTTP ${response.status}.`);
+    const result = await response.json() as {
+      documents?: Array<{ name?: string; fields?: Record<string, unknown> }>;
+    };
+    return (result.documents || []).map((document) => ({
+      id: document.name?.split("/").at(-1) || "",
+      data: decodeDocument(document),
+    }));
+  } catch (error) {
+    if (signal.aborted) throw error;
+    console.warn("Could not load chapters from Firestore REST; trying Firebase SDK.", error);
+    return getFirestoreChapters(slug, signal);
+  }
+}
+
 async function loadReaderData(
   slug: string,
   chapter: string,
@@ -259,19 +385,38 @@ async function loadReaderData(
       text: "",
       chapters: [targetChapter],
       chapter: targetChapter,
+      source: String(chapterData?.source || cachedCurrent?.source || ""),
     };
   }
   const cachedContent = chapterData?.content || chapterData?.text || chapterData?.html;
-  if (resolvedKind === "manga" && !imageList(chapterData?.images || chapterData?.pages).length) {
+  if (resolvedKind === "manga" &&
+    !imageList(chapterData?.images || chapterData?.pages, true).length &&
+    !imageList(cachedContent).length) {
     try {
-      chapterData = await getFirestoreDocument(
-        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(targetChapter)}`,
-        signal,
-      ) || chapterData;
+      const bloggerImages = await getBloggerChapterImages(chapterData || {}, signal);
+      if (bloggerImages.length) chapterData = { ...chapterData, images: bloggerImages };
     } catch (error) {
       if (signal.aborted) throw error;
-      if (!chapterData) throw error;
-      console.warn("Firestore chapter could not be loaded; using the cached chapter.", error);
+      console.warn("Blogger chapter images could not be loaded; trying Firestore.", error);
+    }
+  }
+
+  if (resolvedKind === "manga" &&
+    !imageList(chapterData?.images || chapterData?.pages, true).length &&
+    !imageList(chapterData?.content || chapterData?.html).length) {
+    try {
+      const storedChapter = await getFirestoreDocument(
+        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(targetChapter)}`,
+        signal,
+      );
+      if (storedChapter &&
+        (imageList(storedChapter.images || storedChapter.pages, true).length ||
+          imageList(storedChapter.content || storedChapter.html).length)) {
+        chapterData = storedChapter;
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn("Firestore chapter document could not be loaded; trying the chapter list.", error);
     }
   } else if (resolvedKind === "novel" &&
     (typeof cachedContent !== "string" || !cachedContent.trim())) {
@@ -291,53 +436,32 @@ async function loadReaderData(
   }
 
   let chapters = cachedChapters.map((item) => String(item.num ?? item.order ?? "")).filter(Boolean);
-  if (!chapters.length) {
+  if (!chapters.length ||
+    (resolvedKind === "manga" &&
+      !imageList(chapterData?.images || chapterData?.pages, true).length &&
+      !imageList(chapterData?.content || chapterData?.html).length)) {
     try {
-      const response = await fetch(
-        `${firestoreBase}/manga/${encodeURIComponent(slug)}/chapters?pageSize=1000`,
-        { signal },
+      const documents = await getReaderChapterDocuments(slug, signal);
+      const fetchedChapters = documents
+        .map(({ id, data }) => String(data.num ?? data.order ?? id))
+        .filter(Boolean);
+      if (!chapters.length) chapters = fetchedChapters;
+      const current = documents.find(({ id, data }) =>
+        id === targetChapter ||
+        String(data.num ?? "") === targetChapter ||
+        String(data.order ?? "") === targetChapter,
       );
-      if (response.ok) {
-        const result = await response.json() as { documents?: Array<{ name?: string; fields?: Record<string, unknown> }> };
-        const documents = (result.documents || []).map((document) => ({
-          id: document.name?.split("/").at(-1) || "",
-          data: decodeDocument(document),
-        }));
-        chapters = documents.map(({ id, data }) => String(data.num ?? data.order ?? id)).filter(Boolean);
-        const current = documents.find(({ id, data }) =>
-          id === targetChapter ||
-          String(data.num ?? "") === targetChapter ||
-          String(data.order ?? "") === targetChapter,
-        );
-        if (!chapterData && current) chapterData = current.data;
-        if (!documents.length) throw new Error("The Firestore REST chapter list is empty.");
-      } else {
-        throw new Error(`The chapter list returned HTTP ${response.status}.`);
+      if (current) {
+        const currentImages = imageList(current.data.images || current.data.pages, true);
+        const currentContent = current.data.content || current.data.text || current.data.html;
+        if (currentImages.length || imageList(currentContent).length || !chapterData) {
+          chapterData = current.data;
+        }
       }
     } catch (error) {
       if (signal.aborted) throw error;
-      try {
-        const documents = await getFirestoreChapters(slug, signal);
-        chapters = documents.map(({ id, data }) => String(data.num ?? data.order ?? id)).filter(Boolean);
-        const current = documents.find(({ id, data }) =>
-          id === targetChapter ||
-          String(data.num ?? "") === targetChapter ||
-          String(data.order ?? "") === targetChapter,
-        );
-        if (!chapterData && current) chapterData = current.data;
-        if (!chapters.length && !chapterData) throw new Error("Firestore has no readable chapters.");
-      } catch (sdkError) {
-        if (signal.aborted) throw sdkError;
-        if (!chapterData) {
-          throw new Error(
-            `The chapter list failed to load through REST and Firebase SDK: ${
-              sdkError instanceof Error ? sdkError.message : String(sdkError)
-            }`,
-            { cause: error },
-          );
-        }
-        console.warn("The chapter list failed through REST and Firebase SDK; using the available chapter.", sdkError);
-      }
+      if (!chapterData) throw error;
+      console.warn("The Firestore chapter list failed; using the cached chapter.", error);
     }
   }
   if (!chapters.includes(targetChapter)) chapters.push(targetChapter);
@@ -358,7 +482,7 @@ async function loadReaderData(
       ? (chapterData.data as Record<string, unknown>).content
       : "");
   const rawImages = chapterData?.images || chapterData?.pages;
-  const images = [...new Set([...imageList(rawImages), ...imageList(content)])];
+  const images = [...new Set([...imageList(rawImages, true), ...imageList(content)])];
   const text = novelText(content);
   if (resolvedKind === "manga" && !images.length && text) resolvedKind = "novel";
   if (!chapterData) throw new Error(`Chapter ${targetChapter} tidak ditemukan.`);
@@ -373,6 +497,7 @@ async function loadReaderData(
     text,
     chapters,
     chapter: targetChapter,
+    source: typeof chapterData.source === "string" ? chapterData.source : undefined,
   };
 }
 
@@ -483,7 +608,7 @@ export default function ReaderPage({
           title: result.title,
           label: result.chapterTitle,
           images: result.images,
-          source: "firestore",
+          source: result.source || "firestore",
         }));
         localStorage.setItem(`read_${result.title}`, JSON.stringify([
           ...new Set([
@@ -499,11 +624,15 @@ export default function ReaderPage({
         document.title = `${result.chapterTitle} - ${result.title} | Mikoroku`;
       })
       .catch((loadError: unknown) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || isAbortError(loadError)) return;
         console.error("Reader failed to load the chapter.", loadError);
         setError(loadError instanceof Error ? loadError.message : "Failed to load chapter.");
       });
-    return () => controller.abort();
+    return () => {
+      if (!controller.signal.aborted) {
+        controller.abort(new DOMException("Chapter request was superseded.", "AbortError"));
+      }
+    };
   }, [chapter, kind, preferStoredChapter, slug]);
 
   const chapterIndex = useMemo(
