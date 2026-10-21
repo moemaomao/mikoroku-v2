@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mikoroku-next",
+  "name": "mikoroku-v2",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-10-20",
   "compatibility_flags": ["nodejs_compat"],
@@ -11,7 +11,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "mikoroku-next"
+      "service": "mikoroku-v2"
     }
   ]
 }
