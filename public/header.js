@@ -35,6 +35,14 @@ const initHeader = () => {
   </div>
 
   <div class="header-right">
+    <a id="announcementLink" class="icon-btn announcement-link" href="/announcements" aria-label="Announcements" title="Announcements">
+      <span class="sr-only">Announcements</span>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+        <path d="M10 21h4"></path>
+      </svg>
+      <span id="announcementBadge" class="announcement-badge" aria-hidden="true" hidden></span>
+    </a>
     <button id="darkModeToggle" class="icon-btn" aria-label="Dark mode">
       <span class="sr-only">Dark mode</span>
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -694,7 +702,77 @@ function initHeaderAuthListener() {
   });
 
   updateHeaderBookmarkIcon();
+  initAnnouncementBadge();
 };
+
+function initAnnouncementBadge() {
+  if (window.announcementBadgeCheck) return;
+
+  const updateBadge = (database) => {
+    database.collection("announcements")
+      .where("published", "==", true)
+      .get()
+      .then((snapshot) => {
+        let readIds = [];
+        try {
+          const storedIds = JSON.parse(localStorage.getItem("announcementsReadIds") || "[]");
+          if (Array.isArray(storedIds)) readIds = storedIds;
+        } catch (error) {
+          console.error("Could not read announcement read status.", error);
+        }
+
+        const unreadCount = snapshot.docs.filter((item) => !readIds.includes(item.id)).length;
+        const badge = document.getElementById("announcementBadge");
+        if (!badge) return;
+        badge.hidden = unreadCount === 0;
+        badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+        badge.setAttribute("aria-label", `${unreadCount} unread announcements`);
+        document.getElementById("announcementLink")?.setAttribute(
+          "aria-label",
+          unreadCount ? `Announcements, ${unreadCount} unread` : "Announcements",
+        );
+      })
+      .catch((error) => {
+        console.error("Could not load announcement badge.", error);
+      });
+  };
+
+  const connect = () => {
+    if (!window.firebase?.firestore) return false;
+    try {
+      const appName = "mikoroku-announcements";
+      const app = window.firebase.apps.find((item) => item.name === appName) ||
+        window.firebase.initializeApp({
+          apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
+          authDomain: "mikoroku.firebaseapp.com",
+          databaseURL: "https://mikoroku-default-rtdb.firebaseio.com",
+          projectId: "mikoroku",
+          storageBucket: "mikoroku.firebasestorage.app",
+          messagingSenderId: "271920446600",
+          appId: "1:271920446600:web:974b11c707ebc11a7bf33d",
+        }, appName);
+      updateBadge(app.firestore());
+      return true;
+    } catch (error) {
+      console.error("Could not initialize announcement notifications.", error);
+      return true;
+    }
+  };
+
+  if (connect()) return;
+  let attempts = 0;
+  window.announcementBadgeCheck = window.setInterval(() => {
+    attempts += 1;
+    if (connect()) {
+      window.clearInterval(window.announcementBadgeCheck);
+      window.announcementBadgeCheck = undefined;
+    } else if (attempts >= 120) {
+      window.clearInterval(window.announcementBadgeCheck);
+      window.announcementBadgeCheck = undefined;
+      console.error("Announcement notifications could not connect to Firebase.");
+    }
+  }, 250);
+}
 
 window.initSiteHeader = initHeader;
 

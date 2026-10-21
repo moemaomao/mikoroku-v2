@@ -2664,6 +2664,115 @@
   }
 }
 
+.announcementEditor {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0 24px;
+  padding: 18px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(10 15 29 / 30%);
+}
+
+.announcementEditor h3,
+.announcementAdminHeading h3 {
+  margin: 0;
+  color: #eef2ff;
+  font-size: 15px;
+}
+
+.announcementPublishToggle {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 9px;
+  color: #bac5dc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.announcementMarkdownHint {
+  margin: -9px 0 0;
+  color: #98a6c1;
+  font-size: 12px;
+}
+
+.announcementPublishToggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #7199f5;
+}
+
+.announcementAdminList {
+  display: grid;
+  gap: 12px;
+}
+
+.announcementAdminCard {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 11px;
+  background: rgb(10 15 29 / 24%);
+}
+
+.announcementAdminHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.announcementAdminHeading p {
+  margin: 7px 0 0;
+  color: #98a6c1;
+  font-size: 12px;
+}
+
+.announcementAdminContent {
+  margin: 14px 0 0;
+  color: #c3cbe0;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.lightMode .announcementEditor,
+.lightMode .announcementAdminCard {
+  border-color: rgb(28 46 78 / 14%);
+  background: rgb(255 255 255 / 70%);
+}
+
+.lightMode .announcementEditor h3,
+.lightMode .announcementAdminHeading h3 {
+  color: #263754;
+}
+
+.lightMode .announcementPublishToggle,
+.lightMode .announcementAdminContent,
+.lightMode .announcementMarkdownHint {
+  color: #465873;
+}
+
+.lightMode .announcementAdminHeading p {
+  color: #667892;
+}
+
+@media (max-width: 600px) {
+  .announcementEditor {
+    padding: 14px;
+  }
+
+  .announcementAdminHeading {
+    flex-direction: column;
+  }
+
+  .announcementAdminHeading .panelActions {
+    width: 100%;
+  }
+}
+
 .uploadNoticeBackdrop {
   position: fixed;
   z-index: 5000;

@@ -139,6 +139,16 @@ type AdminReport = {
   createdAt: unknown;
 };
 
+type AdminAnnouncement = {
+  id: string;
+  title: string;
+  content: string;
+  published: boolean;
+  createdAt: unknown;
+  publishedAt: unknown;
+  updatedAt: unknown;
+};
+
 type ChapterDraft = {
   mangaSlug: string;
   number: string;
@@ -571,7 +581,7 @@ export default function AdminPage() {
   const [warning, setWarning] = useState("");
   const [queryText, setQueryText] = useState("");
   const [activeSection, setActiveSection] = useState<
-    "dashboard" | "manga-list" | "editor" | "manga-detail" | "reports" | "genres" | "settings"
+    "dashboard" | "manga-list" | "editor" | "manga-detail" | "reports" | "announcements" | "genres" | "settings"
   >("dashboard");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [editing, setEditing] = useState<MangaRecord | null>(null);
@@ -590,6 +600,13 @@ export default function AdminPage() {
   const [reportList, setReportList] = useState<AdminReport[]>([]);
   const [reportStatus, setReportStatus] = useState("");
   const [loadingReports, setLoadingReports] = useState(false);
+  const [announcementList, setAnnouncementList] = useState<AdminAnnouncement[]>([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
+  const [announcementStatus, setAnnouncementStatus] = useState("");
+  const [editingAnnouncement, setEditingAnnouncement] = useState<AdminAnnouncement | null>(null);
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementContent, setAnnouncementContent] = useState("");
+  const [announcementPublished, setAnnouncementPublished] = useState(true);
   const [settingsStatus, setSettingsStatus] = useState("");
   const [uploadNotice, setUploadNotice] = useState<UploadNotice | null>(null);
   const coverFileInput = useRef<HTMLInputElement>(null);
@@ -733,6 +750,12 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === "reports" && user) void loadReports();
     // Reports are refreshed whenever the Report section is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, user]);
+
+  useEffect(() => {
+    if (activeSection === "announcements" && user) void loadAnnouncements();
+    // Announcements are refreshed whenever the section is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, user]);
 
@@ -983,6 +1006,128 @@ export default function AdminPage() {
       setReportStatus(`Failed to load reports: ${getErrorMessage(error)}`);
     } finally {
       setLoadingReports(false);
+    }
+  }
+
+  async function loadAnnouncements() {
+    setLoadingAnnouncements(true);
+    setAnnouncementStatus("");
+    try {
+      const { firestore } = getAdminFirebase();
+      const snapshot = await getDocs(collection(firestore, "announcements"));
+      const announcements = snapshot.docs
+        .map((item) => {
+          const data = item.data();
+          return {
+            id: item.id,
+            title: text(data.title),
+            content: text(data.content),
+            published: data.published === true,
+            createdAt: data.createdAt,
+            publishedAt: data.publishedAt,
+            updatedAt: data.updatedAt,
+          };
+        })
+        .sort((left, right) => getTimestamp(right.updatedAt || right.createdAt) - getTimestamp(left.updatedAt || left.createdAt));
+      setAnnouncementList(announcements);
+      setAnnouncementStatus(
+        announcements.length
+          ? `${announcements.length} announcement${announcements.length === 1 ? "" : "s"} found.`
+          : "There are no announcements yet.",
+      );
+      return true;
+    } catch (error) {
+      console.error("Failed to load announcements.", error);
+      setAnnouncementStatus(`Failed to load announcements: ${getErrorMessage(error)}`);
+      return false;
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  }
+
+  function editAnnouncement(announcement: AdminAnnouncement) {
+    setEditingAnnouncement(announcement);
+    setAnnouncementTitle(announcement.title);
+    setAnnouncementContent(announcement.content);
+    setAnnouncementPublished(announcement.published);
+    setAnnouncementStatus("");
+  }
+
+  function resetAnnouncementForm() {
+    setEditingAnnouncement(null);
+    setAnnouncementTitle("");
+    setAnnouncementContent("");
+    setAnnouncementPublished(true);
+    setAnnouncementStatus("");
+  }
+
+  async function saveAnnouncement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = announcementTitle.trim();
+    const content = announcementContent.trim();
+    if (!title || !content) {
+      setAnnouncementStatus("A title and message are required.");
+      return;
+    }
+
+    setBusy(true);
+    setAnnouncementStatus("");
+    const wasEditing = Boolean(editingAnnouncement);
+    const successMessage = wasEditing ? "Announcement updated." : "Announcement created.";
+    try {
+      const { firestore } = getAdminFirebase();
+      const now = Date.now();
+      if (editingAnnouncement) {
+        await updateDoc(doc(firestore, "announcements", editingAnnouncement.id), {
+          title,
+          content,
+          published: announcementPublished,
+          publishedAt: announcementPublished
+            ? getTimestamp(editingAnnouncement.publishedAt) || now
+            : null,
+          updatedAt: now,
+        });
+      } else {
+        const announcementRef = doc(collection(firestore, "announcements"));
+        await setDoc(announcementRef, {
+          title,
+          content,
+          published: announcementPublished,
+          createdAt: now,
+          publishedAt: announcementPublished ? now : null,
+          updatedAt: now,
+        });
+      }
+      resetAnnouncementForm();
+      const refreshed = await loadAnnouncements();
+      setAnnouncementStatus(
+        refreshed
+          ? successMessage
+          : "Announcement was saved, but the list could not be refreshed. Use Refresh to verify it.",
+      );
+    } catch (error) {
+      console.error("Failed to save announcement.", error);
+      setAnnouncementStatus(`Failed to save announcement: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeAnnouncement(announcement: AdminAnnouncement) {
+    if (!window.confirm(`Delete the announcement "${announcement.title}"? This cannot be undone.`)) return;
+    setBusy(true);
+    setAnnouncementStatus("");
+    try {
+      const { firestore } = getAdminFirebase();
+      await deleteDoc(doc(firestore, "announcements", announcement.id));
+      setAnnouncementList((current) => current.filter((item) => item.id !== announcement.id));
+      if (editingAnnouncement?.id === announcement.id) resetAnnouncementForm();
+      setAnnouncementStatus("Announcement deleted.");
+    } catch (error) {
+      console.error("Failed to delete announcement.", error);
+      setAnnouncementStatus(`Failed to delete announcement: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1675,6 +1820,16 @@ export default function AdminPage() {
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg>
             Report
           </button>
+          <button
+            className={activeSection === "announcements" ? styles.activeNav : ""}
+            onClick={() => {
+              setActiveSection("announcements");
+              setMobileNavOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11v2a2 2 0 0 0 2 2h2l7 4V5l-7 4H5a2 2 0 0 0-2 2Z"/><path d="m7 15 1.5 5h3L10 16"/><path d="M18 9a5 5 0 0 1 0 6"/></svg>
+            Announcements
+          </button>
           <div className={styles.navigationDivider} />
           <button
             className={activeSection === "genres" ? styles.activeNav : ""}
@@ -2000,6 +2155,118 @@ export default function AdminPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeSection === "announcements" && (
+            <section className={styles.panel}>
+              <div className={styles.panelHeading}>
+                <div>
+                  <h2>Announcements</h2>
+                  <p>Create and manage messages shown on the public announcements page.</p>
+                </div>
+                <button
+                  className={styles.secondaryButton}
+                  type="button"
+                  onClick={() => void loadAnnouncements()}
+                  disabled={loadingAnnouncements || busy}
+                >
+                  {loadingAnnouncements ? "Loading..." : "Refresh"}
+                </button>
+              </div>
+              {announcementStatus && <p className={styles.inlineStatus}>{announcementStatus}</p>}
+
+              <form className={styles.announcementEditor} onSubmit={(event) => void saveAnnouncement(event)}>
+                <h3>{editingAnnouncement ? "Edit announcement" : "Add announcement"}</h3>
+                <label className={styles.field}>
+                  <span>Title</span>
+                  <input
+                    value={announcementTitle}
+                    onChange={(event) => setAnnouncementTitle(event.target.value)}
+                    maxLength={160}
+                    required
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Message</span>
+                  <textarea
+                    value={announcementContent}
+                    onChange={(event) => setAnnouncementContent(event.target.value)}
+                    placeholder={"Markdown supported: **bold**, *italic*, # headings, - lists, [links](https://example.com), and ```code```"}
+                    rows={6}
+                    required
+                  />
+                </label>
+                <p className={styles.announcementMarkdownHint}>
+                  Supports Markdown formatting. Raw HTML is displayed as text.
+                </p>
+                <label className={styles.announcementPublishToggle}>
+                  <input
+                    type="checkbox"
+                    checked={announcementPublished}
+                    onChange={(event) => setAnnouncementPublished(event.target.checked)}
+                  />
+                  <span>Publish announcement</span>
+                </label>
+                <div className={styles.panelActions}>
+                  <button className={styles.primaryButton} type="submit" disabled={busy}>
+                    {busy ? "Saving..." : editingAnnouncement ? "Save Changes" : "Create Announcement"}
+                  </button>
+                  {editingAnnouncement && (
+                    <button
+                      className={styles.secondaryButton}
+                      type="button"
+                      onClick={resetAnnouncementForm}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {loadingAnnouncements ? (
+                <p className={styles.emptyState}>Loading announcements...</p>
+              ) : announcementList.length === 0 ? (
+                <p className={styles.emptyState}>There are no announcements to manage.</p>
+              ) : (
+                <div className={styles.announcementAdminList}>
+                  {announcementList.map((announcement) => (
+                    <article className={styles.announcementAdminCard} key={announcement.id}>
+                      <div className={styles.announcementAdminHeading}>
+                        <div>
+                          <h3>{announcement.title}</h3>
+                          <p>
+                            {announcement.published ? "Published" : "Draft"}
+                            {getTimestamp(announcement.updatedAt || announcement.createdAt)
+                              ? ` · Updated ${new Date(getTimestamp(announcement.updatedAt || announcement.createdAt)).toLocaleDateString("en-US")}`
+                              : ""}
+                          </p>
+                        </div>
+                        <div className={styles.panelActions}>
+                          <button
+                            className={styles.secondaryButton}
+                            type="button"
+                            onClick={() => editAnnouncement(announcement)}
+                            disabled={busy}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className={styles.deleteButton}
+                            type="button"
+                            onClick={() => void removeAnnouncement(announcement)}
+                            disabled={busy}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <p className={styles.announcementAdminContent}>{announcement.content}</p>
+                    </article>
+                  ))}
                 </div>
               )}
             </section>

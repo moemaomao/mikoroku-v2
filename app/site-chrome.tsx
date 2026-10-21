@@ -46,6 +46,14 @@ function loadScript(src: string, type = "text/javascript"): Promise<void> {
 }
 
 async function initializeSiteChrome(showChrome: boolean, showFooter: boolean): Promise<void> {
+  if (!showChrome) {
+    if (showFooter) {
+      await loadScript("/footer.js");
+      window.initSiteFooter?.();
+    }
+    return;
+  }
+
   const headerPromise = showChrome
     ? loadScript("/header.js")
         .then(() => window.initSiteHeader?.())

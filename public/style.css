@@ -169,6 +169,28 @@ input#searchManga {
   color: #222;
 }
 
+.announcement-link {
+  position: relative;
+  text-decoration: none;
+}
+
+.announcement-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 2px solid var(--header-bg, #fff);
+  border-radius: 999px;
+  background: #e53935;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+}
+
 .icon {
   width: 24px;
   height: 24px;
