@@ -1,9 +1,3 @@
-/**
- * Helper KV cache untuk data aplikasi (manga list, detail, chapter list, dll).
- * Binding: MIKOROKU_CACHE
- */
-
-// Minimal interface supaya tidak error sebelum wrangler types di-generate
 interface KVNamespace {
   get(
     key: string,
@@ -18,8 +12,6 @@ interface KVNamespace {
 }
 
 function getKv(): KVNamespace | null {
-  // Di OpenNext / Cloudflare, binding tersedia via process.env atau global
-  // setelah wrangler types di-generate.
   const env = (globalThis as any).env || (process.env as any);
   return (env?.MIKOROKU_CACHE as KVNamespace) || null;
 }
@@ -63,9 +55,6 @@ export async function kvDelete(key: string): Promise<void> {
   await kv.delete(key);
 }
 
-/**
- * Cache-aside helper
- */
 export async function withKvCache<T>(
   key: string,
   ttlSeconds: number,
@@ -77,14 +66,12 @@ export async function withKvCache<T>(
   }
 
   const fresh = await fetcher();
-  // jangan cache null/undefined
   if (fresh !== null && fresh !== undefined) {
     await kvSet(key, fresh, ttlSeconds);
   }
   return fresh;
 }
 
-/** Prefixed keys biar rapi */
 export const CacheKeys = {
   mangaList: (page = 1) => `manga:list:p${page}`,
   hentaiList: (page = 1) => `hentai:list:p${page}`,

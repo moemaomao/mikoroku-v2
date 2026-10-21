@@ -2,6 +2,7 @@
 
 import type { FormEventHandler, RefObject } from "react";
 import type { MangaDraft } from "./admin-page";
+import { CoverImage } from "../lib/cover-image";
 import RichTextEditor from "./rich-text-editor";
 import styles from "./admin.module.css";
 
@@ -9,7 +10,6 @@ type MangaMetadataEditorProps = {
   draft: MangaDraft;
   editing: boolean;
   busy: boolean;
-  coverUploadStatus: string;
   coverFileInput: RefObject<HTMLInputElement | null>;
   onChange: (key: keyof MangaDraft, value: string | boolean) => void;
   onUploadCover: () => void;
@@ -21,7 +21,6 @@ export default function MangaMetadataEditor({
   draft,
   editing,
   busy,
-  coverUploadStatus,
   coverFileInput,
   onChange,
   onUploadCover,
@@ -33,7 +32,7 @@ export default function MangaMetadataEditor({
       <div className={styles.panelHeading}>
         <div>
           <h2>{editing ? "Info & Metadata" : "Add New Manga"}</h2>
-          <p>Kelola detail manga, deskripsi, tag, dan cover.</p>
+          <p>Manage manga details, description, tags, and cover art.</p>
         </div>
       </div>
       <div className={styles.formGrid}>
@@ -59,10 +58,8 @@ export default function MangaMetadataEditor({
             <input ref={coverFileInput} type="file" accept="image/*" />
             <button type="button" className={styles.secondaryButton} onClick={onUploadCover} disabled={busy}>Upload Cover</button>
           </div>
-          {coverUploadStatus && <small className={styles.uploadStatus}>{coverUploadStatus}</small>}
           {draft.cover && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className={styles.coverPreview} src={draft.cover} alt="Cover preview" />
+            <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" />
           )}
         </div>
         <label className={styles.field}>
@@ -143,7 +140,7 @@ export default function MangaMetadataEditor({
         <span>Save as Draft</span>
       </label>
       <div className={styles.formActions}>
-        <button className={styles.primaryButton} disabled={busy}>{busy ? "Menyimpan..." : "Save Manga"}</button>
+        <button className={styles.primaryButton} disabled={busy}>{busy ? "Saving..." : "Save Manga"}</button>
         <button type="button" className={styles.secondaryButton} onClick={onCancel}>Cancel</button>
       </div>
     </form>

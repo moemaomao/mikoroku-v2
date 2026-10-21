@@ -1200,13 +1200,6 @@
   object-fit: contain;
 }
 
-.uploadStatus {
-  display: block;
-  margin: 7px 0;
-  color: #aebce0;
-  font-size: 10px;
-}
-
 .imageListToolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1798,8 +1791,7 @@
   background: #eef1f6;
 }
 
-.lightMode .imageListToolbar > span,
-.lightMode .uploadStatus {
+.lightMode .imageListToolbar > span {
   color: #596680;
 }
 
@@ -2432,6 +2424,12 @@
   margin: 0 !important;
 }
 
+.backToListButton {
+  flex: 0 0 auto;
+  margin-right: auto;
+  white-space: nowrap;
+}
+
 .workspace {
   margin-left: 250px !important;
   padding-top: 0 !important;
@@ -2471,4 +2469,313 @@
 :global(body.adminPageBody:not(.adminLight)),
 :global(html:has(body.adminPageBody:not(.adminLight))) {
   background: #111221 !important;
+}
+
+.mobileMenuButton,
+.mobileNavOverlay {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .adminShell {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .mobileMenuButton {
+    display: inline-flex;
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    padding: 9px;
+    border: 1px solid rgb(255 255 255 / 13%);
+    border-radius: 12px;
+    color: #eef2ff;
+    background: rgb(255 255 255 / 5%);
+    cursor: pointer;
+  }
+
+  .mobileMenuButton svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .mobileNavOverlay {
+    position: fixed;
+    z-index: 999;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgb(5 8 18 / 55%);
+    cursor: default;
+  }
+
+  .sidebar {
+    position: fixed !important;
+    z-index: 1000;
+    top: 0;
+    left: 0;
+    width: min(240px, 82vw) !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    padding: 20px 14px;
+    border-right: 1px solid rgb(255 255 255 / 12%);
+    background:
+      linear-gradient(180deg, rgb(11 16 32 / 78%) 0%, rgb(11 16 32 / 88%) 100%),
+      url("https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg") center / cover no-repeat;
+    transform: translateX(-100%);
+    transition: transform 300ms ease;
+    will-change: transform;
+  }
+
+  .mobileSidebarOpen {
+    transform: translateX(0);
+  }
+
+  .brand {
+    min-height: 40px;
+    margin-bottom: 12px;
+    padding: 4px 6px 12px;
+  }
+
+  .navigation {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .navigation button {
+    min-width: 0;
+    min-height: 46px;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .navigationDivider {
+    display: block;
+    margin: 8px 4px;
+  }
+
+  .sidebarFooter {
+    display: grid;
+    gap: 3px;
+    margin-top: auto;
+    padding-top: 10px;
+  }
+
+  .sidebarFooter .logoutButton {
+    width: 100%;
+  }
+
+  .lightMode .mobileMenuButton {
+    border-color: rgb(20 29 55 / 14%);
+    color: #27324a;
+    background: rgb(20 29 55 / 4%);
+  }
+
+  .workspace {
+    width: 100% !important;
+    max-width: 100%;
+    min-height: 0;
+    margin-left: 0 !important;
+  }
+
+  .inlineSearch {
+    justify-content: flex-start !important;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 12px 8px !important;
+  }
+
+  .inlineSearch .searchBox {
+    width: auto !important;
+    flex: 1 1 180px;
+    max-width: none;
+  }
+
+  .content {
+    width: 100%;
+    min-width: 0;
+    padding: 0 12px 84px;
+  }
+
+  .panel,
+  .dashboard {
+    min-width: 0;
+    margin: 0;
+  }
+
+  .panelHeading,
+  .panelActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .panelActions {
+    flex-wrap: wrap;
+  }
+
+  .panelActions > button {
+    flex: 1 1 auto;
+  }
+
+  .mangaGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mangaCard {
+    min-width: 0;
+  }
+
+  .mangaCardBody {
+    min-width: 0;
+    min-height: 104px;
+    gap: 5px;
+    padding: 7px 6px 8px;
+  }
+
+  .mangaCardTitle {
+    min-height: 30px;
+    font-size: 11px;
+  }
+
+  .mangaCardActions button {
+    min-width: 0;
+    padding: 6px 3px;
+    font-size: 10px;
+  }
+
+  .mangaCardActions {
+    flex-wrap: wrap;
+  }
+}
+
+.uploadNoticeBackdrop {
+  position: fixed;
+  z-index: 5000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(5 8 18 / 62%);
+  backdrop-filter: blur(3px);
+}
+
+.uploadNoticeCard {
+  display: flex;
+  width: min(100%, 440px);
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 16px;
+  color: #eef2ff;
+  background: #181a2d;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+}
+
+.uploadNoticeCard[data-status="success"] {
+  border-color: rgb(52 211 153 / 40%);
+}
+
+.uploadNoticeCard[data-status="error"] {
+  border-color: rgb(248 113 113 / 45%);
+}
+
+.uploadNoticeIcon,
+.uploadNoticeSpinner {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: 50%;
+  color: #b9caff;
+  background: rgb(107 155 255 / 15%);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.uploadNoticeCard[data-status="success"] .uploadNoticeIcon {
+  color: #6ee7b7;
+  background: rgb(52 211 153 / 14%);
+}
+
+.uploadNoticeCard[data-status="error"] .uploadNoticeIcon {
+  color: #fca5a5;
+  background: rgb(248 113 113 / 14%);
+}
+
+.uploadNoticeSpinner {
+  border: 3px solid rgb(107 155 255 / 24%);
+  border-top-color: #8fb0ff;
+  background: transparent;
+  animation: uploadNoticeSpin 800ms linear infinite;
+}
+
+.uploadNoticeContent {
+  min-width: 0;
+  flex: 1;
+}
+
+.uploadNoticeContent strong {
+  display: block;
+  font-size: 15px;
+}
+
+.uploadNoticeContent p {
+  margin: 5px 0 0;
+  color: #aab5ce;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.uploadNoticeClose {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  color: #aab5ce;
+  font-size: 23px;
+}
+
+.lightMode .uploadNoticeCard {
+  border-color: rgb(20 29 55 / 14%);
+  color: #202a3e;
+  background: #fff;
+}
+
+.lightMode .uploadNoticeContent p {
+  color: #5a6478;
+}
+
+.lightMode .uploadNoticeClose {
+  color: #5a6478;
+}
+
+@keyframes uploadNoticeSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uploadNoticeSpinner {
+    animation-duration: 2s;
+  }
 }

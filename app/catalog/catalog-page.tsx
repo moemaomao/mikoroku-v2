@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
+import { CoverImage } from "../lib/cover-image";
 import "./catalog.css";
 
 type Manga = {
@@ -305,7 +306,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
                 return (
                   <a className="catalog-card" href={`/series/${encodeURIComponent(slug)}`} key={`${slug}:${titleValue}`}>
                     <span className="catalog-cover">
-                      {cover ? <img src={cover} alt="" loading="lazy" onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">Tidak ada sampul</span>}
+                      {cover ? <CoverImage src={cover} alt="" onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">Tidak ada sampul</span>}
                     </span>
                     <span className="catalog-card-title">{titleValue}</span>
                   </a>

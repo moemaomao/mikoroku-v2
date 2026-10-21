@@ -26,6 +26,7 @@ type ChapterRecord = {
 type ReaderData = {
   kind: ReaderKind;
   title: string;
+  cover: string;
   chapterTitle: string;
   images: string[];
   text: string;
@@ -380,6 +381,7 @@ async function loadReaderData(
     return {
       kind: resolvedKind,
       title: String(manga?.title || manga?.name || cachedCurrent?.title || slug.replace(/-/g, " ")),
+      cover: String(manga?.img || manga?.cover || ""),
       chapterTitle: `Chapter ${targetChapter}`,
       images: [],
       text: "",
@@ -492,6 +494,7 @@ async function loadReaderData(
   return {
     kind: resolvedKind,
     title,
+    cover: String(manga?.img || manga?.cover || ""),
     chapterTitle: String(chapterData.label || chapterData.chapterTitle || chapterData.title || `Chapter ${targetChapter}`),
     images,
     text,
@@ -541,19 +544,28 @@ export default function ReaderPage({
 
   const [chapterListOpen, setChapterListOpen] = useState(false);
   const [bottomChapterListOpen, setBottomChapterListOpen] = useState(false);
+  const [bottomPageListOpen, setBottomPageListOpen] = useState(false);
   const bottomChaptersRef = useRef<HTMLDivElement | null>(null);
+  const bottomPagesRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!bottomChapterListOpen) return;
+    if (bottomChapterListOpen || bottomPageListOpen) setFloatingHidden(false);
+  }, [bottomChapterListOpen, bottomPageListOpen]);
+
+  useEffect(() => {
+    if (!bottomChapterListOpen && !bottomPageListOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      const root = bottomChaptersRef.current;
-      if (!root) return;
-      if (event.target instanceof Node && !root.contains(event.target)) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (bottomChaptersRef.current && !bottomChaptersRef.current.contains(target)) {
         setBottomChapterListOpen(false);
+      }
+      if (bottomPagesRef.current && !bottomPagesRef.current.contains(target)) {
+        setBottomPageListOpen(false);
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [bottomChapterListOpen]);
+  }, [bottomChapterListOpen, bottomPageListOpen]);
 
   const [dataSaver, setDataSaver] = useState(false);
   const [imageQuality, setImageQuality] = useState(600);
@@ -606,10 +618,35 @@ export default function ReaderPage({
           slug,
           num: result.chapter,
           title: result.title,
+          cover: result.cover,
           label: result.chapterTitle,
           images: result.images,
           source: result.source || "firestore",
         }));
+        const readerRoute = result.kind === "novel" ? "/read" : "/reader";
+        const historyItem = {
+          series: result.title,
+          title: result.title,
+          chapter: result.chapterTitle,
+          cover: result.cover,
+          slug,
+          url: `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`,
+          time: Date.now(),
+        };
+        try {
+          const savedHistory = JSON.parse(localStorage.getItem("readingHistory") || "[]") as unknown;
+          const history = Array.isArray(savedHistory)
+            ? savedHistory.filter((item): item is typeof historyItem =>
+                Boolean(item) && typeof item === "object" &&
+                "url" in item && typeof item.url === "string" &&
+                item.url !== historyItem.url,
+              )
+            : [];
+          history.unshift(historyItem);
+          localStorage.setItem("readingHistory", JSON.stringify(history.slice(0, 50)));
+        } catch (historyError) {
+          console.error("Reading history could not be saved.", historyError);
+        }
         localStorage.setItem(`read_${result.title}`, JSON.stringify([
           ...new Set([
             ...(() => {
@@ -741,6 +778,13 @@ export default function ReaderPage({
       } else if (delta < -8) {
         setFloatingHidden(false);
       }
+      if (mode === "long-strip" && data.kind === "manga") {
+        const images = [...document.querySelectorAll<HTMLImageElement>(".reader-images.long-strip img")];
+        const readingLine = window.innerHeight * 0.55;
+        const visibleIndex = images.findIndex((image) => image.getBoundingClientRect().bottom >= readingLine);
+        const currentPage = visibleIndex >= 0 ? visibleIndex + 1 : images.length;
+        if (currentPage > 0) setPage((previous) => previous === currentPage ? previous : currentPage);
+      }
       lastScrollYRef.current = y;
     };
 
@@ -752,6 +796,13 @@ export default function ReaderPage({
         if (y < 48) setFloatingHidden(false);
         else if (delta > 8) setFloatingHidden(true);
         else if (delta < -8) setFloatingHidden(false);
+        if (mode === "long-strip" && data.kind === "manga") {
+          const images = [...target.querySelectorAll<HTMLImageElement>(".reader-images.long-strip img")];
+          const readingLine = window.innerHeight * 0.55;
+          const visibleIndex = images.findIndex((image) => image.getBoundingClientRect().bottom >= readingLine);
+          const currentPage = visibleIndex >= 0 ? visibleIndex + 1 : images.length;
+          if (currentPage > 0) setPage((previous) => previous === currentPage ? previous : currentPage);
+        }
         lastScrollYRef.current = y;
       }
       updateProgress();
@@ -1045,25 +1096,65 @@ export default function ReaderPage({
           </article>
         )}
 
-      {data && <nav className="reader-bottom-nav" aria-label="Chapter navigation">
-        <button className="reader-bottom-button reader-bottom-previous" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0}>
-          <i className="fas fa-arrow-left" aria-hidden="true" /><span><small>Previous chapter</small><strong>{chapterIndex > 0 ? `Chapter ${data.chapters[chapterIndex - 1]}` : "Unavailable"}</strong></span>
+      {data && <nav className={`reader-bottom-nav${floatingHidden ? " is-hidden" : ""}`} aria-label="Chapter navigation">
+        <button className="reader-bottom-button reader-bottom-previous" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
+          <i className="fas fa-chevron-left" aria-hidden="true" /><span className="reader-bottom-label"><strong>Prev</strong></span>
         </button>
-        <div className="reader-bottom-chapters" ref={bottomChaptersRef}>
-          <button className={`reader-bottom-button reader-bottom-list ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
-            <i className="fas fa-list" aria-hidden="true" /><span><small>Browse</small><strong>Chapter list</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
-          </button>
-          {bottomChapterListOpen && <div className="reader-bottom-chapter-menu" role="listbox" aria-label="Chapter list">
-            <div className="reader-bottom-menu-heading"><strong>{data.chapters.length} chapters</strong><button type="button" onClick={() => setBottomChapterListOpen(false)} aria-label="Close chapter list">×</button></div>
-            {[...data.chapters].reverse().map((item) => (
-              <button type="button" role="option" aria-selected={item === data.chapter} key={item} className={item === data.chapter ? "is-current" : ""} onClick={() => changeChapter(item)}>
-                <span>Chapter {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
+        <div className="reader-bottom-middle">
+          <div className="reader-bottom-chapters" ref={bottomChaptersRef}>
+            <button className={`reader-bottom-button reader-bottom-list ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
+              <span className="reader-bottom-label"><strong aria-label={`Chapter ${data.chapter}`}><span className="reader-bottom-chapter-prefix">Chapter </span>{data.chapter}</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
+            </button>
+            {bottomChapterListOpen && <div className="reader-bottom-chapter-menu" role="listbox" aria-label="Chapter list">
+              <div className="reader-bottom-menu-heading"><strong>{data.chapters.length} chapters</strong><button type="button" onClick={() => setBottomChapterListOpen(false)} aria-label="Close chapter list">×</button></div>
+              {[...data.chapters].reverse().map((item) => (
+                <button type="button" role="option" aria-selected={item === data.chapter} key={item} className={item === data.chapter ? "is-current" : ""} onClick={() => changeChapter(item)}>
+                  <span>Chapter {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
+                </button>
+              ))}
+            </div>}
+          </div>
+          {data.kind === "manga" && data.images.length > 0 && (
+            <div className="reader-bottom-pages" ref={bottomPagesRef}>
+              <button
+                className={`reader-bottom-button reader-bottom-page-count ${bottomPageListOpen ? "is-active" : ""}`}
+                type="button"
+                aria-label={`Jump to page ${page} of ${data.images.length}`}
+                aria-haspopup="listbox"
+                aria-expanded={bottomPageListOpen}
+                onClick={() => setBottomPageListOpen((open) => !open)}
+              >
+                <span className="reader-bottom-label"><strong>{page} / {data.images.length}</strong></span>
+                <i className={`fas ${bottomPageListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
               </button>
-            ))}
-          </div>}
+              {bottomPageListOpen && <div className="reader-bottom-page-menu" role="listbox" aria-label="Jump to page">
+                <div className="reader-bottom-menu-heading"><strong>Go to page</strong><button type="button" onClick={() => setBottomPageListOpen(false)} aria-label="Close page list">×</button></div>
+                <div className="reader-bottom-page-options">
+                  {data.images.map((_, index) => {
+                    const pageNumber = index + 1;
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={pageNumber === page}
+                        key={pageNumber}
+                        className={pageNumber === page ? "is-current" : ""}
+                        onClick={() => {
+                          goToPage(pageNumber);
+                          setBottomPageListOpen(false);
+                        }}
+                      >
+                        {pageNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>}
+            </div>
+          )}
         </div>
-        <button className="reader-bottom-button reader-bottom-next" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1}>
-          <span><small>Next chapter</small><strong>{chapterIndex < data.chapters.length - 1 ? `Chapter ${data.chapters[chapterIndex + 1]}` : "Unavailable"}</strong></span><i className="fas fa-arrow-right" aria-hidden="true" />
+        <button className="reader-bottom-button reader-bottom-next" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
+          <span className="reader-bottom-label"><strong>Next</strong></span><i className="fas fa-chevron-right" aria-hidden="true" />
         </button>
       </nav>}
       <div className={`reader-floating-controls${floatingHidden ? " is-hidden" : ""}`}>

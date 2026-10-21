@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CoverImage } from "../lib/cover-image";
 
 type Bookmark = {
   title: string;
@@ -530,10 +531,9 @@ export default function BookmarkPage() {
                 <li className="bookmark-card" key={normalizeTitle(bookmark.title)}>
                   <button className="bookmark-open" type="button" onClick={() => openBookmark(bookmark)}>
                     <span className="bookmark-cover">
-                      <img
+                      <CoverImage
                         src={bookmark.img || "/assets/icons/favicon.ico"}
                         alt=""
-                        loading="lazy"
                         onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
                       />
                     </span>

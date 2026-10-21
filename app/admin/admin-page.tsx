@@ -31,6 +31,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import "quill/dist/quill.snow.css";
 import styles from "./admin.module.css";
+import { CoverImage } from "../lib/cover-image";
 import RichTextEditor from "./rich-text-editor";
 import MangaMetadataEditor from "./manga-metadata-editor";
 
@@ -45,6 +46,8 @@ const firebaseConfig = {
 };
 
 const ADMIN_APP_NAME = "mikoroku-admin";
+const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache";
+const ADMIN_MANGA_CACHE_DURATION = 5 * 60 * 1000;
 const GITHUB_JSON =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
@@ -155,6 +158,11 @@ type AdminChapter = {
   isDraft: boolean;
   date: unknown;
   order: number;
+};
+
+type UploadNotice = {
+  status: "uploading" | "success" | "error";
+  message: string;
 };
 
 const emptyDraft: MangaDraft = {
@@ -289,10 +297,10 @@ function slugify(value: string): string {
 
 async function uploadToImgBB(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) {
-    throw new Error(`${file.name} bukan file gambar.`);
+    throw new Error(`${file.name} is not an image file.`);
   }
   if (file.size > 32 * 1024 * 1024) {
-    throw new Error(`${file.name} melebihi batas 32 MB.`);
+    throw new Error(`${file.name} exceeds the 32 MB limit.`);
   }
   const formData = new FormData();
   formData.append("image", file);
@@ -306,7 +314,7 @@ async function uploadToImgBB(file: File): Promise<string> {
     error?: { message?: string };
   } = await response.json();
   if (!response.ok || !result.success || !result.data?.url) {
-    throw new Error(result.error?.message || `Upload gagal (${response.status}).`);
+    throw new Error(result.error?.message || `Upload failed (${response.status}).`);
   }
   return result.data.url;
 }
@@ -326,7 +334,7 @@ function splitList(value: string): string[] {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
-  return "Terjadi kesalahan yang tidak diketahui.";
+  return "An unknown error occurred.";
 }
 
 function getLoginErrorMessage(error: unknown): string {
@@ -336,14 +344,14 @@ function getLoginErrorMessage(error: unknown): string {
       : "";
   switch (code) {
     case "auth/invalid-email":
-      return "Format email tidak valid.";
+      return "Invalid email format.";
     case "auth/user-not-found":
-      return "Email belum terdaftar.";
+      return "This email is not registered.";
     case "auth/wrong-password":
     case "auth/invalid-credential":
-      return "Email atau password salah.";
+      return "Incorrect email or password.";
     case "auth/too-many-requests":
-      return "Terlalu banyak percobaan. Coba lagi nanti.";
+      return "Too many attempts. Please try again later.";
     default:
       return getErrorMessage(error);
   }
@@ -383,6 +391,52 @@ function isSummaryEntry(value: unknown): value is SummaryEntry {
     "updatedAt" in value &&
     typeof value.updatedAt === "number"
   );
+}
+
+function readAdminMangaCache(): { items: MangaRecord[]; time: number } | null {
+  try {
+    const cached: unknown = JSON.parse(
+      window.localStorage.getItem(ADMIN_MANGA_CACHE_KEY) || "null",
+    );
+    if (
+      !cached ||
+      typeof cached !== "object" ||
+      !("time" in cached) ||
+      typeof cached.time !== "number" ||
+      !("items" in cached) ||
+      !Array.isArray(cached.items)
+    ) {
+      return null;
+    }
+    const items = cached.items.flatMap((item) => {
+      if (!item || typeof item !== "object" || !("slug" in item)) return [];
+      const slug = text(item.slug);
+      return slug ? [fromFirestore(slug, item as Record<string, unknown>)] : [];
+    });
+    return { items, time: cached.time };
+  } catch (error) {
+    console.warn("Admin catalog cache is invalid and will be ignored.", error);
+    return null;
+  }
+}
+
+function writeAdminMangaCache(items: MangaRecord[]): void {
+  try {
+    window.localStorage.setItem(
+      ADMIN_MANGA_CACHE_KEY,
+      JSON.stringify({ time: Date.now(), items }),
+    );
+  } catch (error) {
+    console.warn("Unable to save the admin catalog cache.", error);
+  }
+}
+
+function invalidateAdminMangaCache(): void {
+  try {
+    window.localStorage.removeItem(ADMIN_MANGA_CACHE_KEY);
+  } catch (error) {
+    console.warn("Unable to clear the admin catalog cache.", error);
+  }
 }
 
 function getTimestamp(value: unknown): number {
@@ -519,6 +573,7 @@ export default function AdminPage() {
   const [activeSection, setActiveSection] = useState<
     "dashboard" | "manga-list" | "editor" | "manga-detail" | "reports" | "genres" | "settings"
   >("dashboard");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [editing, setEditing] = useState<MangaRecord | null>(null);
   const [draft, setDraft] = useState<MangaDraft>({ ...emptyDraft });
   const [selectedManga, setSelectedManga] = useState<MangaRecord | null>(null);
@@ -536,11 +591,11 @@ export default function AdminPage() {
   const [reportStatus, setReportStatus] = useState("");
   const [loadingReports, setLoadingReports] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState("");
-  const [chapterUploadStatus, setChapterUploadStatus] = useState("");
-  const [coverUploadStatus, setCoverUploadStatus] = useState("");
+  const [uploadNotice, setUploadNotice] = useState<UploadNotice | null>(null);
   const coverFileInput = useRef<HTMLInputElement>(null);
   const thumbnailFileInput = useRef<HTMLInputElement>(null);
   const chapterFilesInput = useRef<HTMLInputElement>(null);
+  const loadingMangaRef = useRef(false);
   const chapterImageUrls = useMemo(
     () => chapterDraft.images.split(/\r?\n/).map((url) => url.trim()).filter(Boolean),
     [chapterDraft.images],
@@ -550,42 +605,101 @@ export default function AdminPage() {
     setIsLightMode(window.localStorage.getItem("theme") === "light");
   }, []);
 
-  const loadManga = useCallback(async () => {
+  useEffect(() => {
+    if (!uploadNotice || uploadNotice.status === "uploading") return;
+    const timeout = window.setTimeout(() => setUploadNotice(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [uploadNotice]);
+
+  const loadManga = useCallback(async (force = false) => {
+    if (loadingMangaRef.current) return;
+    const cached = readAdminMangaCache();
+    if (!force && cached && Date.now() - cached.time < ADMIN_MANGA_CACHE_DURATION) {
+      setManga(cached.items);
+      setLoadError("");
+      setWarning("");
+      return;
+    }
+
+    loadingMangaRef.current = true;
     setLoadingManga(true);
     setLoadError("");
     setWarning("");
     try {
       const { firestore } = getAdminFirebase();
-      const snapshot = await getDocs(collection(firestore, "manga"));
-      const firestoreManga = snapshot.docs.map((item) =>
-        fromFirestore(item.id, item.data()),
-      );
+      const [summaryResult, githubResult] = await Promise.allSettled([
+        getDoc(doc(firestore, "meta", "mangaSummary")),
+        fetch(GITHUB_JSON, { cache: force ? "no-cache" : "default" }).then(async (response) => {
+          if (!response.ok) throw new Error(`GitHub mengembalikan ${response.status}.`);
+          const remoteData: unknown = await response.json();
+          if (!Array.isArray(remoteData)) {
+            throw new Error("The GitHub manga data has an invalid format.");
+          }
+          return remoteData
+            .filter(
+              (entry): entry is Record<string, unknown> =>
+                typeof entry === "object" && entry !== null,
+            )
+            .map(mapGithubRecord)
+            .filter((entry): entry is MangaRecord => entry !== null);
+        }),
+      ]);
 
-      let githubManga: MangaRecord[] = [];
-      try {
-        const response = await fetch(`${GITHUB_JSON}?t=${Date.now()}`);
-        if (!response.ok) throw new Error(`GitHub mengembalikan ${response.status}.`);
-        const remoteData: unknown = await response.json();
-        if (!Array.isArray(remoteData)) {
-          throw new Error("Format data manga GitHub tidak valid.");
+      const firestoreManga: MangaRecord[] = [];
+      let summaryWarning = "";
+      if (summaryResult.status === "fulfilled" && summaryResult.value.exists()) {
+        const entries: unknown = summaryResult.value.data().list;
+        if (Array.isArray(entries)) {
+          for (const entry of entries) {
+            if (!isSummaryEntry(entry)) continue;
+            firestoreManga.push(fromFirestore(entry.slug, entry));
+          }
         }
-        githubManga = remoteData
-          .filter(
-            (entry): entry is Record<string, unknown> =>
-              typeof entry === "object" && entry !== null,
-          )
-          .map(mapGithubRecord)
-          .filter((entry): entry is MangaRecord => entry !== null);
-      } catch (error) {
-        console.error("Data manga GitHub gagal dimuat.", error);
-        setWarning(`Data GitHub tidak tersedia: ${getErrorMessage(error)}`);
+      } else if (summaryResult.status === "rejected") {
+        console.warn("Failed to load the Firestore manga summary.", summaryResult.reason);
+        summaryWarning = `Firestore summary unavailable: ${getErrorMessage(summaryResult.reason)}.`;
+      }
+      if (!firestoreManga.length && !summaryWarning) {
+        summaryWarning = "The Firestore summary is empty or invalid.";
       }
 
-      setManga(mergeGithubMetadata(githubManga, firestoreManga));
+      const githubManga = githubResult.status === "fulfilled" ? githubResult.value : [];
+      if (githubResult.status === "rejected") {
+        console.warn("Failed to load the GitHub manga catalog.", githubResult.reason);
+      }
+      if (!githubManga.length && !firestoreManga.length) {
+        if (cached?.items.length) {
+          setManga(cached.items);
+          setWarning(
+            `Could not load the latest catalog. Showing the local cache. ${summaryWarning} ${githubResult.status === "rejected" ? getErrorMessage(githubResult.reason) : ""}`.trim(),
+          );
+          return;
+        }
+        throw new Error(
+          summaryWarning ||
+            (githubResult.status === "rejected"
+              ? getErrorMessage(githubResult.reason)
+              : "No catalog data is available."),
+        );
+      }
+
+      const loadedManga = mergeGithubMetadata(githubManga, firestoreManga);
+      setManga(loadedManga);
+      writeAdminMangaCache(loadedManga);
+      const githubWarning = githubResult.status === "rejected"
+        ? `GitHub data unavailable: ${getErrorMessage(githubResult.reason)}.`
+        : "";
+      setWarning([summaryWarning, githubWarning].filter(Boolean).join(" "));
     } catch (error) {
-      console.error("Daftar manga admin gagal dimuat.", error);
-      setLoadError(`Gagal memuat manga: ${getErrorMessage(error)}`);
+      console.error("Failed to load the admin manga list.", error);
+      if (cached?.items.length) {
+        setManga(cached.items);
+        setWarning(`Could not load the latest catalog. Showing the local cache: ${getErrorMessage(error)}`);
+      } else {
+        setLoadError(`Failed to load manga: ${getErrorMessage(error)}`);
+      }
     } finally {
+      loadingMangaRef.current = false;
       setLoadingManga(false);
     }
   }, []);
@@ -599,8 +713,8 @@ export default function AdminPage() {
         setAuthReady(true);
       },
       (error) => {
-        console.error("Status login admin gagal dibaca.", error);
-        setLoginError(`Gagal memeriksa sesi: ${getErrorMessage(error)}`);
+        console.error("Failed to read the admin sign-in status.", error);
+        setLoginError(`Failed to verify the session: ${getErrorMessage(error)}`);
         setAuthReady(true);
       },
     );
@@ -655,7 +769,7 @@ export default function AdminPage() {
       await signOut(auth);
       setActiveSection("dashboard");
     } catch (error) {
-      setMessage(`Gagal logout: ${getErrorMessage(error)}`);
+      setMessage(`Failed to log out: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -700,12 +814,12 @@ export default function AdminPage() {
     event.preventDefault();
     const slug = draft.slug.trim() || slugify(draft.title);
     if (!draft.title.trim() || !slug) {
-      setMessage("Judul dan slug manga wajib diisi.");
+      setMessage("Manga title and slug are required.");
       return;
     }
     const parsedRating = Number(draft.rating);
     if (draft.rating.trim() && (!Number.isFinite(parsedRating) || parsedRating < 0 || parsedRating > 10)) {
-      setMessage("Rating harus berupa angka antara 0 dan 10.");
+      setMessage("Rating must be a number between 0 and 10.");
       return;
     }
     setBusy(true);
@@ -716,7 +830,7 @@ export default function AdminPage() {
       if (!editing || editing.slug !== slug) {
         const existing = await getDoc(mangaRef);
         if (existing.exists()) {
-          setMessage(`Slug "${slug}" sudah digunakan.`);
+          setMessage(`The slug "${slug}" is already in use.`);
           setBusy(false);
           return;
         }
@@ -774,14 +888,15 @@ export default function AdminPage() {
           [savedManga],
         ),
       );
+      invalidateAdminMangaCache();
 
       try {
         await updateSummary(firestore, savedManga);
-        setMessage("Manga berhasil disimpan.");
+        setMessage("Manga saved successfully.");
       } catch (error) {
-        console.error("Ringkasan manga gagal diperbarui.", error);
+        console.error("Failed to update the manga summary.", error);
         setMessage(
-          `Manga tersimpan, tetapi ringkasan gagal diperbarui: ${getErrorMessage(error)}`,
+          `Manga saved, but the summary could not be updated: ${getErrorMessage(error)}`,
         );
       }
       setEditing(savedManga);
@@ -794,15 +909,15 @@ export default function AdminPage() {
         setActiveSection("manga-list");
       }
     } catch (error) {
-      console.error("Manga gagal disimpan.", error);
-      setMessage(`Gagal menyimpan manga: ${getErrorMessage(error)}`);
+      console.error("Failed to save the manga.", error);
+      setMessage(`Failed to save manga: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDeleteManga(item: MangaRecord) {
-    if (!window.confirm(`Hapus manga "${item.slug}" beserta seluruh chapter?`)) return;
+    if (!window.confirm(`Delete manga "${item.slug}" and all of its chapters?`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -817,18 +932,19 @@ export default function AdminPage() {
       }
       await deleteDoc(doc(firestore, "manga", item.slug));
       setManga((current) => current.filter((entry) => entry.slug !== item.slug));
+      invalidateAdminMangaCache();
       try {
         await updateSummary(firestore, item, true);
-        setMessage(`Manga "${item.slug}" dan chapter-nya berhasil dihapus.`);
+        setMessage(`Manga "${item.slug}" and its chapters were deleted successfully.`);
       } catch (error) {
-        console.error("Ringkasan manga gagal diperbarui setelah penghapusan.", error);
+        console.error("Failed to update the manga summary after deletion.", error);
         setMessage(
-          `Manga terhapus, tetapi ringkasan gagal diperbarui: ${getErrorMessage(error)}`,
+          `Manga deleted, but the summary could not be updated: ${getErrorMessage(error)}`,
         );
       }
     } catch (error) {
-      console.error("Manga gagal dihapus.", error);
-      setMessage(`Gagal menghapus manga: ${getErrorMessage(error)}`);
+      console.error("Failed to delete manga.", error);
+      setMessage(`Failed to delete manga: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -861,17 +977,17 @@ export default function AdminPage() {
         })
         .sort((left, right) => getTimestamp(right.createdAt) - getTimestamp(left.createdAt));
       setReportList(reports);
-      setReportStatus(reports.length ? `${reports.length} laporan menunggu ditinjau.` : "Tidak ada laporan pending.");
+      setReportStatus(reports.length ? `${reports.length} reports are awaiting review.` : "There are no pending reports.");
     } catch (error) {
-      console.error("Laporan chapter gagal dimuat.", error);
-      setReportStatus(`Gagal memuat laporan: ${getErrorMessage(error)}`);
+      console.error("Failed to load chapter reports.", error);
+      setReportStatus(`Failed to load reports: ${getErrorMessage(error)}`);
     } finally {
       setLoadingReports(false);
     }
   }
 
   async function resolveReport(report: AdminReport) {
-    if (!window.confirm(`Tandai laporan chapter ${report.chapter} sebagai selesai?`)) return;
+    if (!window.confirm(`Mark the report for chapter ${report.chapter} as resolved?`)) return;
     setBusy(true);
     setReportStatus("");
     try {
@@ -882,10 +998,10 @@ export default function AdminPage() {
         resolvedBy: auth.currentUser?.email || "admin",
       });
       setReportList((current) => current.filter((item) => item.id !== report.id));
-      setReportStatus("Laporan berhasil ditandai selesai.");
+      setReportStatus("Report marked as resolved.");
     } catch (error) {
-      console.error("Laporan gagal diperbarui.", error);
-      setReportStatus(`Gagal memperbarui laporan: ${getErrorMessage(error)}`);
+      console.error("Failed to update the report.", error);
+      setReportStatus(`Failed to update report: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -893,7 +1009,7 @@ export default function AdminPage() {
 
   async function rebuildSummary() {
     setBusy(true);
-    setSettingsStatus("Menyusun ulang ringkasan manga...");
+    setSettingsStatus("Rebuilding the manga summary...");
     try {
       const { firestore } = getAdminFirebase();
       const entries = manga
@@ -904,10 +1020,10 @@ export default function AdminPage() {
         { list: entries, count: entries.length, updatedAt: Date.now() },
         { merge: true },
       );
-      setSettingsStatus(`Ringkasan berhasil diperbarui: ${entries.length} manga.`);
+      setSettingsStatus(`Summary updated successfully: ${entries.length} manga.`);
     } catch (error) {
-      console.error("Ringkasan manga gagal dibuat ulang.", error);
-      setSettingsStatus(`Gagal membuat ulang ringkasan: ${getErrorMessage(error)}`);
+      console.error("Failed to rebuild the manga summary.", error);
+      setSettingsStatus(`Failed to rebuild summary: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -928,7 +1044,7 @@ export default function AdminPage() {
 
   async function backupFirestore(includeChapters: boolean) {
     setBusy(true);
-    setSettingsStatus(includeChapters ? "Membuat backup manga dan chapter..." : "Membuat backup manga...");
+    setSettingsStatus(includeChapters ? "Creating a manga and chapter backup..." : "Creating a manga backup...");
     try {
       const { firestore } = getAdminFirebase();
       const mangaSnapshot = await getDocs(collection(firestore, "manga"));
@@ -946,7 +1062,7 @@ export default function AdminPage() {
           chapterCount += chapters.size;
         }
         mangaData.push(record);
-        setSettingsStatus(`Memproses manga ${mangaData.length}/${mangaSnapshot.size}...`);
+        setSettingsStatus(`Processing manga ${mangaData.length}/${mangaSnapshot.size}...`);
       }
       const now = new Date();
       const stamp = now.toISOString().slice(0, 19).replace(/[:T]/g, "-");
@@ -963,12 +1079,12 @@ export default function AdminPage() {
       );
       setSettingsStatus(
         includeChapters
-          ? `Backup selesai: ${mangaData.length} manga dan ${chapterCount} chapter.`
-          : `Backup selesai: ${mangaData.length} manga.`,
+          ? `Backup completed: ${mangaData.length} manga and ${chapterCount} chapters.`
+          : `Backup completed: ${mangaData.length} manga.`,
       );
     } catch (error) {
-      console.error("Backup Firestore gagal.", error);
-      setSettingsStatus(`Backup gagal: ${getErrorMessage(error)}`);
+      console.error("Firestore backup failed.", error);
+      setSettingsStatus(`Backup failed: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -986,7 +1102,7 @@ export default function AdminPage() {
     setEditingChapterNumber(null);
     setChapterDraft({ ...emptyChapterDraft });
     setChapterError("");
-    setChapterUploadStatus("");
+    setUploadNotice(null);
     setQuickAddOpen(false);
     setChapterModalOpen(true);
   }
@@ -994,19 +1110,19 @@ export default function AdminPage() {
   async function uploadCoverFile() {
     const file = coverFileInput.current?.files?.[0];
     if (!file) {
-      setMessage("Pilih file gambar cover terlebih dahulu.");
+      setUploadNotice({ status: "error", message: "Choose a cover image file first." });
       return;
     }
     setBusy(true);
-    setCoverUploadStatus("Uploading cover...");
+    setUploadNotice({ status: "uploading", message: "Uploading cover..." });
     try {
       const url = await uploadToImgBB(file);
       setDraft((current) => ({ ...current, cover: url }));
-      setCoverUploadStatus("Cover berhasil diunggah.");
+      setUploadNotice({ status: "success", message: "Cover uploaded successfully." });
       if (coverFileInput.current) coverFileInput.current.value = "";
     } catch (error) {
-      console.error("Cover gagal diunggah.", error);
-      setCoverUploadStatus(`Upload cover gagal: ${getErrorMessage(error)}`);
+      console.error("Failed to upload the cover.", error);
+      setUploadNotice({ status: "error", message: `Cover upload failed: ${getErrorMessage(error)}` });
     } finally {
       setBusy(false);
     }
@@ -1015,19 +1131,19 @@ export default function AdminPage() {
   async function uploadThumbnailFile() {
     const file = thumbnailFileInput.current?.files?.[0];
     if (!file) {
-      setChapterError("Pilih file gambar thumbnail terlebih dahulu.");
+      setUploadNotice({ status: "error", message: "Choose a thumbnail image file first." });
       return;
     }
     setBusy(true);
-    setChapterUploadStatus("Uploading thumbnail...");
+    setUploadNotice({ status: "uploading", message: "Uploading thumbnail..." });
     try {
       const url = await uploadToImgBB(file);
       setChapterDraft((current) => ({ ...current, thumbnail: url }));
-      setChapterUploadStatus("Thumbnail berhasil diunggah.");
+      setUploadNotice({ status: "success", message: "Thumbnail uploaded successfully." });
       if (thumbnailFileInput.current) thumbnailFileInput.current.value = "";
     } catch (error) {
-      console.error("Thumbnail gagal diunggah.", error);
-      setChapterUploadStatus(`Upload thumbnail gagal: ${getErrorMessage(error)}`);
+      console.error("Failed to upload the thumbnail.", error);
+      setUploadNotice({ status: "error", message: `Thumbnail upload failed: ${getErrorMessage(error)}` });
     } finally {
       setBusy(false);
     }
@@ -1038,7 +1154,7 @@ export default function AdminPage() {
       left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }),
     );
     if (!files.length) {
-      setChapterError("Pilih satu atau beberapa gambar chapter terlebih dahulu.");
+      setUploadNotice({ status: "error", message: "Choose one or more chapter images first." });
       return;
     }
     setBusy(true);
@@ -1046,7 +1162,10 @@ export default function AdminPage() {
     const uploaded: string[] = [];
     try {
       for (let index = 0; index < files.length; index += 1) {
-        setChapterUploadStatus(`Uploading ${index + 1} / ${files.length}...`);
+        setUploadNotice({
+          status: "uploading",
+          message: `Uploading image ${index + 1} of ${files.length}...`,
+        });
         uploaded.push(await uploadToImgBB(files[index]));
         setChapterDraft((current) => ({
           ...current,
@@ -1056,15 +1175,19 @@ export default function AdminPage() {
             uploaded[Math.min(2, uploaded.length - 1)],
         }));
       }
-      setChapterUploadStatus(`${uploaded.length} gambar berhasil diunggah.`);
+      setUploadNotice({
+        status: "success",
+        message: `${uploaded.length} chapter image${uploaded.length === 1 ? "" : "s"} uploaded successfully.`,
+      });
       if (chapterFilesInput.current) chapterFilesInput.current.value = "";
     } catch (error) {
-      console.error("Gambar chapter gagal diunggah.", error);
-      setChapterUploadStatus(
-        uploaded.length
-          ? `${uploaded.length} gambar berhasil; upload berikutnya gagal: ${getErrorMessage(error)}`
-          : `Upload gambar gagal: ${getErrorMessage(error)}`,
-      );
+      console.error("Failed to upload chapter images.", error);
+      setUploadNotice({
+        status: "error",
+        message: uploaded.length
+          ? `${uploaded.length} image${uploaded.length === 1 ? "" : "s"} uploaded; the next upload failed: ${getErrorMessage(error)}`
+          : `Image upload failed: ${getErrorMessage(error)}`,
+      });
     } finally {
       setBusy(false);
     }
@@ -1143,8 +1266,8 @@ export default function AdminPage() {
         });
       setChapters(loaded);
     } catch (error) {
-      console.error(`Chapter manga ${item.slug} gagal dimuat.`, error);
-      setMessage(`Gagal memuat chapter: ${getErrorMessage(error)}`);
+      console.error(`Failed to load chapters for ${item.slug}.`, error);
+      setMessage(`Failed to load chapters: ${getErrorMessage(error)}`);
     } finally {
       setLoadingChapters(false);
     }
@@ -1167,7 +1290,7 @@ export default function AdminPage() {
   }
 
   async function deleteChapter(chapter: AdminChapter) {
-    if (!selectedManga || !window.confirm(`Hapus chapter ${chapter.num}?`)) return;
+    if (!selectedManga || !window.confirm(`Delete chapter ${chapter.num}?`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -1200,11 +1323,12 @@ export default function AdminPage() {
       setSelectedManga(nextManga);
       setChapters(remaining);
       setManga((current) => current.map((item) => item.slug === nextManga.slug ? nextManga : item));
+      invalidateAdminMangaCache();
       await updateSummary(firestore, nextManga);
-      setMessage(`Chapter ${chapter.num} berhasil dihapus.`);
+      setMessage(`Chapter ${chapter.num} deleted successfully.`);
     } catch (error) {
-      console.error(`Chapter ${chapter.num} gagal dihapus.`, error);
-      setMessage(`Gagal menghapus chapter: ${getErrorMessage(error)}`);
+      console.error(`Failed to delete chapter ${chapter.num}.`, error);
+      setMessage(`Failed to delete chapter: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -1240,10 +1364,10 @@ export default function AdminPage() {
         order: chapters.length - index,
       }));
       setChapters(ordered);
-      setMessage("Urutan chapter berhasil disimpan.");
+      setMessage("Chapter order saved successfully.");
     } catch (error) {
-      console.error("Urutan chapter gagal disimpan.", error);
-      setMessage(`Gagal menyimpan urutan chapter: ${getErrorMessage(error)}`);
+      console.error("Failed to save the chapter order.", error);
+      setMessage(`Failed to save chapter order: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -1254,7 +1378,7 @@ export default function AdminPage() {
     const mangaSlug = chapterDraft.mangaSlug.trim();
     const chapterNumber = chapterDraft.number.trim();
     if (!mangaSlug || !chapterNumber) {
-      setChapterError("Manga dan nomor chapter wajib diisi.");
+      setChapterError("Manga and chapter number are required.");
       return;
     }
     const typedImages = chapterDraft.images
@@ -1273,11 +1397,11 @@ export default function AdminPage() {
       .replace(/\u00a0/g, " ")
       .trim();
     if (!images.length && !chapterTextContent) {
-      setChapterError("Masukkan URL gambar atau isi chapter.");
+      setChapterError("Add image URLs or chapter content.");
       return;
     }
     if (images.some((image) => !/^https?:\/\//i.test(image))) {
-      setChapterError("Setiap URL gambar harus diawali http:// atau https://.");
+      setChapterError("Each image URL must start with http:// or https://.");
       return;
     }
     setBusy(true);
@@ -1301,7 +1425,7 @@ export default function AdminPage() {
         chapterNumber !== oldChapterNumber &&
         (await getDoc(doc(firestore, "manga", mangaSlug, "chapters", chapterNumber))).exists()
       ) {
-        setChapterError(`Chapter ${chapterNumber} sudah ada.`);
+        setChapterError(`Chapter ${chapterNumber} already exists.`);
         setBusy(false);
         return;
       }
@@ -1340,16 +1464,39 @@ export default function AdminPage() {
           doc(firestore, "manga", mangaSlug, "chapters", oldChapterNumber),
         );
       }
+      invalidateAdminMangaCache();
 
       const isNewChapter = !existingChapterSnapshot.exists();
       const isRenamedChapter = Boolean(
         oldChapterNumber && oldChapterNumber !== chapterNumber,
       );
       let nextManga = currentManga;
+      let refreshedChapters: AdminChapter[] | null = null;
       if (isNewChapter || isRenamedChapter) {
         const allChapters = await getDocs(
           collection(firestore, "manga", mangaSlug, "chapters"),
         );
+        refreshedChapters = allChapters.docs
+          .map((chapter) => {
+            const data = chapter.data();
+            return {
+              num: chapter.id,
+              title: text(data.title) || `Chapter ${chapter.id}`,
+              thumbnail: text(data.thumbnail),
+              images: stringList(data.images),
+              content: text(data.content),
+              isDraft: data.isDraft === true,
+              date: data.date,
+              order: typeof data.order === "number" ? data.order : 0,
+            };
+          })
+          .sort((left, right) => {
+            const leftNumber = Number.parseFloat(left.num);
+            const rightNumber = Number.parseFloat(right.num);
+            return Number.isFinite(rightNumber - leftNumber)
+              ? rightNumber - leftNumber
+              : right.order - left.order;
+          });
         const chapterNumbers = allChapters.docs.map((chapter) => chapter.id);
         const latestChapter = chapterNumbers.sort((left, right) => {
           const leftNumber = Number.parseFloat(left);
@@ -1409,19 +1556,33 @@ export default function AdminPage() {
           await updateSummary(firestore, nextManga);
         }
       }
+      if (nextManga) {
+        setManga((current) => current.map((item) => item.slug === mangaSlug ? nextManga : item));
+      }
+      if (selectedManga?.slug === mangaSlug) {
+        const nextChapters = refreshedChapters || [
+          ...chapters.filter((chapter) =>
+            chapter.num !== oldChapterNumber && chapter.num !== chapterNumber,
+          ),
+          record,
+        ].sort((left, right) => {
+          const leftNumber = Number.parseFloat(left.num);
+          const rightNumber = Number.parseFloat(right.num);
+          return Number.isFinite(rightNumber - leftNumber)
+            ? rightNumber - leftNumber
+            : right.order - left.order;
+        });
+        setChapters(nextChapters);
+      }
       setChapterModalOpen(false);
-      setMessage(`Chapter ${chapterNumber} berhasil disimpan.`);
+      setMessage(`Chapter ${chapterNumber} saved successfully.`);
       setEditingChapterNumber(null);
       if (selectedManga?.slug === mangaSlug && nextManga) {
         setSelectedManga(nextManga);
-        await openMangaChapters(nextManga);
-      } else if (selectedManga?.slug === mangaSlug) {
-        await openMangaChapters(selectedManga);
       }
-      await loadManga();
     } catch (error) {
-      console.error("Chapter gagal disimpan.", error);
-      setChapterError(`Gagal menyimpan chapter: ${getErrorMessage(error)}`);
+      console.error("Failed to save the chapter.", error);
+      setChapterError(`Failed to save chapter: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -1430,7 +1591,7 @@ export default function AdminPage() {
   if (!authReady) {
     return (
       <main className={styles.loadingPage}>
-        <p>Memeriksa sesi admin...</p>
+        <p>Checking admin session...</p>
       </main>
     );
   }
@@ -1442,7 +1603,7 @@ export default function AdminPage() {
           <div className={styles.brandMark}>M</div>
           <p className={styles.eyebrow}>MIKOROKU</p>
           <h1>Admin Login</h1>
-          <p className={styles.loginDescription}>Masuk untuk mengelola katalog manga.</p>
+          <p className={styles.loginDescription}>Sign in to manage the manga catalog.</p>
           <label className={styles.field}>
             <span>Email</span>
             <input
@@ -1474,30 +1635,42 @@ export default function AdminPage() {
 
   return (
     <main className={`${styles.adminShell} ${isLightMode ? styles.lightMode : ""}`}>
-      <aside className={styles.sidebar}>
+      <aside className={`${styles.sidebar} ${mobileNavOpen ? styles.mobileSidebarOpen : ""}`}>
         <a className={styles.brand} href="/">Mikoroku Admin</a>
-        <nav className={styles.navigation} aria-label="Admin navigation">
+        <nav id="admin-navigation" className={styles.navigation} aria-label="Admin navigation">
           <button
             className={activeSection === "dashboard" ? styles.activeNav : ""}
-            onClick={() => setActiveSection("dashboard")}
+            onClick={() => {
+              setActiveSection("dashboard");
+              setMobileNavOpen(false);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             Dashboard
           </button>
           <button
             className={activeSection === "manga-list" ? styles.activeNav : ""}
-            onClick={() => setActiveSection("manga-list")}
+            onClick={() => {
+              setActiveSection("manga-list");
+              setMobileNavOpen(false);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
             Manga List
           </button>
-          <button onClick={openNewManga}>
+          <button onClick={() => {
+            setMobileNavOpen(false);
+            openNewManga();
+          }}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
             Add New Manga
           </button>
           <button
             className={activeSection === "reports" ? styles.activeNav : ""}
-            onClick={() => setActiveSection("reports")}
+            onClick={() => {
+              setActiveSection("reports");
+              setMobileNavOpen(false);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg>
             Report
@@ -1505,14 +1678,20 @@ export default function AdminPage() {
           <div className={styles.navigationDivider} />
           <button
             className={activeSection === "genres" ? styles.activeNav : ""}
-            onClick={() => setActiveSection("genres")}
+            onClick={() => {
+              setActiveSection("genres");
+              setMobileNavOpen(false);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
             Genres &amp; Tags
           </button>
           <button
             className={activeSection === "settings" ? styles.activeNav : ""}
-            onClick={() => setActiveSection("settings")}
+            onClick={() => {
+              setActiveSection("settings");
+              setMobileNavOpen(false);
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
             Settings
@@ -1533,13 +1712,43 @@ export default function AdminPage() {
           </button>
         </div>
       </aside>
+      {mobileNavOpen && (
+        <button
+          className={styles.mobileNavOverlay}
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
 
       <section className={styles.workspace}>
         {/* Search inline */}
         <div className={styles.inlineSearch}>
+          <button
+            className={styles.mobileMenuButton}
+            type="button"
+            aria-controls="admin-navigation"
+            aria-expanded={mobileNavOpen}
+            aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {mobileNavOpen
+                ? <path d="m18 6-12 12M6 6l12 12" />
+                : <path d="M4 6h16M4 12h16M4 18h16" />}
+            </svg>
+          </button>
+          {activeSection === "manga-detail" && (
+            <button
+              className={`${styles.secondaryButton} ${styles.backToListButton}`}
+              onClick={() => setActiveSection("manga-list")}
+            >
+              Back to Manga List
+            </button>
+          )}
           <label className={styles.searchBox}>
             <input
-              aria-label="Cari manga"
+              aria-label="Search manga"
               placeholder="Search title or slug..."
               value={queryText}
               onChange={(event) => {
@@ -1556,7 +1765,7 @@ export default function AdminPage() {
           {loadError && (
             <div className={styles.errorBanner}>
               <span>{loadError}</span>
-              <button onClick={() => void loadManga()}>Coba lagi</button>
+              <button onClick={() => void loadManga(true)}>Try Again</button>
             </div>
           )}
 
@@ -1578,26 +1787,26 @@ export default function AdminPage() {
               <div className={styles.panelHeading}>
                 <div>
                   <h2>Manga List</h2>
-                  <p>{filteredManga.length.toLocaleString("id-ID")} manga</p>
+                  <p>{filteredManga.length.toLocaleString("en-US")} manga</p>
                 </div>
                 <div className={styles.panelActions}>
-                  <button className={styles.secondaryButton} onClick={() => void loadManga()} disabled={loadingManga}>
-                    {loadingManga ? "Memuat..." : "Force Refresh"}
+                  <button className={styles.secondaryButton} onClick={() => void loadManga(true)} disabled={loadingManga}>
+                    {loadingManga ? "Loading..." : "Force Refresh"}
                   </button>
                   <button className={styles.primaryButton} onClick={openNewManga}>＋ Add Manga</button>
                 </div>
               </div>
               {loadingManga ? (
-                <p className={styles.emptyState}>Memuat katalog manga...</p>
+                <p className={styles.emptyState}>Loading manga catalog...</p>
               ) : filteredManga.length === 0 ? (
-                <p className={styles.emptyState}>Tidak ada manga yang cocok.</p>
+                <p className={styles.emptyState}>No matching manga found.</p>
               ) : (
                 <div className={styles.mangaGrid}>
                   {filteredManga.map((item) => (
                     <article className={styles.mangaCard} key={item.slug}>
                       <button className={styles.mangaCoverButton} onClick={() => void openMangaChapters(item)} aria-label={`Open ${item.title}`}>
                         {item.cover ? (
-                          <img src={item.cover} alt="" loading="lazy" />
+                          <CoverImage src={item.cover} alt="" />
                         ) : <span className={styles.coverPlaceholder}>M</span>}
                         <span className={styles.mangaSource}>{item.source === "hybrid" ? "HYBRID" : item.source.toUpperCase()}</span>
                         {item.isDraft && <span className={styles.mangaDraftBadge}>DRAFT</span>}
@@ -1605,7 +1814,7 @@ export default function AdminPage() {
                       <div className={styles.mangaCardBody}>
                         <button className={styles.mangaCardTitle} title={item.title} onClick={() => void openMangaChapters(item)}>{item.title || item.slug}</button>
                         <span className={styles.mangaStatus} data-status={slugify(item.status)}>{item.isDraft ? "DRAFT" : item.status.toUpperCase()}</span>
-                        <small>{item.chapterCount} Chapter</small>
+                        <small>{item.chapterCount} Chapters</small>
                         <div className={styles.mangaCardActions}>
                           <button onClick={() => openEditor(item)}>Edit</button>
                           <button className={styles.deleteButton} onClick={() => void handleDeleteManga(item)} disabled={busy}>Delete</button>
@@ -1622,7 +1831,7 @@ export default function AdminPage() {
             <section className={styles.panel}>
               <div className={styles.detailHeader}>
                 {selectedManga.cover ? (
-                  <img src={selectedManga.cover} alt="" />
+                  <CoverImage src={selectedManga.cover} alt="" loading="eager" />
                 ) : <span className={styles.coverPlaceholder}>M</span>}
                 <div className={styles.detailMeta}>
                   <div className={styles.detailBadges}>
@@ -1637,12 +1846,11 @@ export default function AdminPage() {
                     <button className={styles.primaryButton} onClick={() => {
                       setChapterDraft({ ...emptyChapterDraft, mangaSlug: selectedManga.slug });
                       setEditingChapterNumber(null);
-                      setChapterUploadStatus("");
+                      setUploadNotice(null);
                       setChapterModalOpen(true);
                     }}>＋ Add Chapter</button>
                     <button className={styles.deleteButton} onClick={() => void handleDeleteManga(selectedManga)} disabled={busy}>Delete Manga</button>
                     <button className={styles.secondaryButton} onClick={() => void openMangaChapters(selectedManga)} disabled={loadingChapters}>Refresh</button>
-                    <button className={styles.secondaryButton} onClick={() => setActiveSection("manga-list")}>Back to Manga List</button>
                   </div>
                 </div>
               </div>
@@ -1669,7 +1877,6 @@ export default function AdminPage() {
                   draft={draft}
                   editing
                   busy={busy}
-                  coverUploadStatus={coverUploadStatus}
                   coverFileInput={coverFileInput}
                   onChange={updateDraftField}
                   onUploadCover={() => void uploadCoverFile()}
@@ -1683,15 +1890,15 @@ export default function AdminPage() {
                     <button className={styles.successButton} onClick={() => {
                       setChapterDraft({ ...emptyChapterDraft, mangaSlug: selectedManga.slug });
                       setEditingChapterNumber(null);
-                      setChapterUploadStatus("");
+                      setUploadNotice(null);
                       setChapterModalOpen(true);
                     }}>＋ Add Chapter</button>
                     <button className={styles.secondaryButton} onClick={() => void openMangaChapters(selectedManga)} disabled={loadingChapters}>⟳ Refresh</button>
                     <button className={styles.secondaryButton} onClick={() => void saveChapterOrder()} disabled={busy || !chapters.length}>▣ Save Order</button>
                     <small>Drag or use arrows to reorder chapters.</small>
                   </div>
-                  {loadingChapters ? <p className={styles.emptyState}>Memuat chapter...</p> : chapters.length === 0 ? (
-                    <p className={styles.emptyState}>Belum ada chapter pada manga ini.</p>
+                  {loadingChapters ? <p className={styles.emptyState}>Loading chapters...</p> : chapters.length === 0 ? (
+                    <p className={styles.emptyState}>This manga has no chapters yet.</p>
                   ) : (
                     <div className={styles.chapterGrid}>
                       {chapters.map((chapter, index) => (
@@ -1719,7 +1926,7 @@ export default function AdminPage() {
                             <strong>{chapter.title || `Chapter ${chapter.num}`}</strong>
                             {chapter.isDraft ? <small className={styles.chapterDraftBadge}>DRAFT</small> : null}
                           </div>
-                          <span className={styles.chapterDate}>{chapter.date ? new Date(getTimestamp(chapter.date)).toLocaleDateString("id-ID") : ""}</span>
+                          <span className={styles.chapterDate}>{chapter.date ? new Date(getTimestamp(chapter.date)).toLocaleDateString("en-US") : ""}</span>
                           <div className={styles.rowActions}>
                             <button
                               type="button"
@@ -1753,7 +1960,6 @@ export default function AdminPage() {
               draft={draft}
               editing={Boolean(editing)}
               busy={busy}
-              coverUploadStatus={coverUploadStatus}
               coverFileInput={coverFileInput}
               onChange={updateDraftField}
               onUploadCover={() => void uploadCoverFile()}
@@ -1770,12 +1976,12 @@ export default function AdminPage() {
                   <p>List of chapter error reports from readers.</p>
                 </div>
                 <button className={styles.secondaryButton} onClick={() => void loadReports()} disabled={loadingReports}>
-                  {loadingReports ? "Memuat..." : "Refresh All Reports"}
+                  {loadingReports ? "Loading..." : "Refresh All Reports"}
                 </button>
               </div>
               {reportStatus && <p className={styles.inlineStatus}>{reportStatus}</p>}
-              {loadingReports ? <p className={styles.emptyState}>Memuat laporan...</p> : reportList.length === 0 ? (
-                <p className={styles.emptyState}>Tidak ada laporan pending.</p>
+              {loadingReports ? <p className={styles.emptyState}>Loading reports...</p> : reportList.length === 0 ? (
+                <p className={styles.emptyState}>There are no pending reports.</p>
               ) : (
                 <div className={styles.tableWrap}>
                   <table className={styles.mangaTable}>
@@ -1783,12 +1989,12 @@ export default function AdminPage() {
                     <tbody>
                       {reportList.map((report) => (
                         <tr key={report.id}>
-                          <td>{getTimestamp(report.createdAt) ? new Date(getTimestamp(report.createdAt)).toLocaleString("id-ID") : "—"}</td>
+                          <td>{getTimestamp(report.createdAt) ? new Date(getTimestamp(report.createdAt)).toLocaleString("en-US") : "—"}</td>
                           <td>{report.slug}</td>
                           <td>{report.chapter}</td>
                           <td>{report.type}</td>
                           <td className={styles.reportReason}>{report.reason}</td>
-                          <td>{report.url ? <a className={styles.reportLink} href={report.url} target="_blank" rel="noreferrer">Buka ↗</a> : "—"}</td>
+                          <td>{report.url ? <a className={styles.reportLink} href={report.url} target="_blank" rel="noreferrer">Open ↗</a> : "—"}</td>
                           <td><button className={styles.resolveButton} onClick={() => void resolveReport(report)} disabled={busy}>Mark Resolved</button></td>
                         </tr>
                       ))}
@@ -1801,26 +2007,26 @@ export default function AdminPage() {
 
           {activeSection === "genres" && (
             <section className={styles.panel}>
-              <div className={styles.panelHeading}><div><h2>Genres &amp; Tags</h2><p>Genre dan tag yang digunakan pada katalog manga.</p></div></div>
+              <div className={styles.panelHeading}><div><h2>Genres &amp; Tags</h2><p>Genres and tags used in the manga catalog.</p></div></div>
               <div className={styles.genreSummary}>
                 <span><strong>{new Set(manga.flatMap((item) => item.genres)).size}</strong> genres</span>
                 <span><strong>{new Set(manga.flatMap((item) => item.tags)).size}</strong> tags</span>
               </div>
-              <p className={styles.emptyState}>Daftar genre dikelola melalui metadata setiap manga.</p>
+              <p className={styles.emptyState}>Manage genres through each manga's metadata.</p>
             </section>
           )}
 
           {activeSection === "settings" && (
             <section className={styles.panel}>
-              <div className={styles.panelHeading}><div><h2>Settings</h2><p>Ringkasan katalog dan backup Firestore.</p></div></div>
+              <div className={styles.panelHeading}><div><h2>Settings</h2><p>Catalog summary and Firestore backups.</p></div></div>
               <div className={styles.settingsSection}>
                 <h3>Manga Summary Document</h3>
-                <p>Dashboard dan Manga List menggunakan dokumen <code>meta/mangaSummary</code>. Rebuild jika ringkasan terlihat tidak sinkron.</p>
+                <p>The Dashboard and Manga List use <code>meta/mangaSummary</code>. Rebuild it if the summary looks out of sync.</p>
                 <button className={styles.secondaryButton} onClick={() => void rebuildSummary()} disabled={busy}>Rebuild Summary Document</button>
               </div>
               <div className={styles.settingsSection}>
                 <h3>Backup Firestore</h3>
-                <p>Unduh backup semua manga, dengan opsi menyertakan seluruh chapter.</p>
+                <p>Download a backup of all manga, with an option to include every chapter.</p>
                 <div className={styles.panelActions}>
                   <button className={styles.secondaryButton} onClick={() => void backupFirestore(false)} disabled={busy}>Backup Manga</button>
                   <button className={styles.primaryButton} onClick={() => void backupFirestore(true)} disabled={busy}>Full Backup</button>
@@ -1844,12 +2050,50 @@ export default function AdminPage() {
         </button>
       </div>
 
+      {uploadNotice && (
+        <div
+          className={styles.uploadNoticeBackdrop}
+          role={uploadNotice.status === "error" ? "alert" : "status"}
+          aria-live={uploadNotice.status === "error" ? "assertive" : "polite"}
+        >
+          <div className={styles.uploadNoticeCard} data-status={uploadNotice.status}>
+            {uploadNotice.status === "uploading" ? (
+              <span className={styles.uploadNoticeSpinner} aria-hidden="true" />
+            ) : (
+              <span className={styles.uploadNoticeIcon} aria-hidden="true">
+                {uploadNotice.status === "success" ? "✓" : "!"}
+              </span>
+            )}
+            <div className={styles.uploadNoticeContent}>
+              <strong>
+                {uploadNotice.status === "uploading"
+                  ? "Uploading..."
+                  : uploadNotice.status === "success"
+                    ? "Upload complete"
+                    : "Upload failed"}
+              </strong>
+              <p>{uploadNotice.message}</p>
+            </div>
+            {uploadNotice.status !== "uploading" && (
+              <button
+                className={styles.uploadNoticeClose}
+                type="button"
+                aria-label="Dismiss upload message"
+                onClick={() => setUploadNotice(null)}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {chapterModalOpen && (
         <div className={styles.modalBackdrop} onMouseDown={(event) => {
           if (event.target === event.currentTarget) setChapterModalOpen(false);
         }}>
           <form className={styles.chapterModal} onSubmit={saveChapter}>
-            <button type="button" className={styles.modalClose} onClick={() => setChapterModalOpen(false)} aria-label="Tutup">×</button>
+            <button type="button" className={styles.modalClose} onClick={() => setChapterModalOpen(false)} aria-label="Close">×</button>
             <h2>{editingChapterNumber ? `Edit Chapter ${editingChapterNumber}` : "Upload Chapter"}</h2>
             {selectedManga && chapterDraft.mangaSlug === selectedManga.slug ? (
               <div className={styles.selectedMangaLabel}>
@@ -1880,7 +2124,7 @@ export default function AdminPage() {
               )}
             </div>
             <div className={`${styles.field} ${styles.chapterImagesField}`}>
-              <span>Upload Gambar Chapter</span>
+              <span>Upload Chapter Images</span>
               <div className={styles.fileUploadRow}>
                 <input ref={chapterFilesInput} type="file" accept="image/*" multiple />
                 <button type="button" className={styles.secondaryButton} onClick={() => void uploadChapterFiles()} disabled={busy}>Upload All</button>
@@ -1889,9 +2133,8 @@ export default function AdminPage() {
               <div className={styles.imageListToolbar}>
                 <button type="button" className={styles.secondaryButton} onClick={addChapterImageUrls}>＋ Add to List</button>
                 <button type="button" className={styles.secondaryButton} onClick={sortChapterImages}>⇅ Sort by Name</button>
-                <span>{chapterImageUrls.length ? `${chapterImageUrls.length} gambar` : ""}</span>
+                <span>{chapterImageUrls.length ? `${chapterImageUrls.length} images` : ""}</span>
               </div>
-              {chapterUploadStatus && <small className={styles.uploadStatus}>{chapterUploadStatus}</small>}
               <div className={styles.uploadedImageGrid}>
                 {chapterImageUrls.map((url, index) => (
                   <div
@@ -1928,13 +2171,13 @@ export default function AdminPage() {
             </div>
             <div className={styles.chapterContentField}>
               <label className={styles.field}>
-                <span>Konten Teks (opsional, untuk novel)</span>
+                <span>Text Content (optional, for novels)</span>
                 <RichTextEditor kind="chapter" value={chapterDraft.content} onChange={(content) => setChapterDraft((current) => ({ ...current, content }))} />
               </label>
             </div>
             <label className={styles.checkboxField}><input type="checkbox" checked={chapterDraft.isDraft} onChange={(event) => setChapterDraft((current) => ({ ...current, isDraft: event.target.checked }))} /><span>Save as Draft</span></label>
             {chapterError && <p className={styles.error}>{chapterError}</p>}
-            <div className={styles.formActions}><button className={styles.primaryButton} disabled={busy}>{busy ? "Menyimpan..." : "Save Chapter"}</button><button type="button" className={styles.secondaryButton} onClick={() => setChapterModalOpen(false)}>Cancel</button></div>
+            <div className={styles.formActions}><button className={styles.primaryButton} disabled={busy}>{busy ? "Saving..." : "Save Chapter"}</button><button type="button" className={styles.secondaryButton} onClick={() => setChapterModalOpen(false)}>Cancel</button></div>
           </form>
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { createElement, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import CommunityWidgets from "../community-widgets";
+import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { isNovelSeries } from "../../lib/reader-kind";
 
 type Manga = {
@@ -212,18 +213,6 @@ function resolveCover(value: unknown): string {
   if (!cover) return "";
   if (/^https?:\/\//i.test(cover)) return cover;
   return `${GITHUB_RAW_BASE}${cover.replace(/^\//, "")}`;
-}
-
-function resizeCover(value: string, width: number): string {
-  if (!value) return "";
-  if (value.includes("res.cloudinary.com")) {
-    return value.replace("/upload/", `/upload/w_${width},h_${Math.round(width * 1.45)},c_fill,q_auto,f_auto/`);
-  }
-  if (/blogger\.googleusercontent\.com|lh3\.googleusercontent\.com/.test(value) ||
-      /\/s\d+(-c)?\//.test(value)) {
-    return value.replace(/\/s\d+(-c)?\//, `/s${width}/`);
-  }
-  return value;
 }
 
 function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): Manga {
@@ -670,6 +659,7 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 
 export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
+  const cover = useCoverImageSource(manga?.img || manga?.cover || "", 400);
   const [state, setState] = useState<DetailState>("loading");
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
@@ -999,7 +989,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     );
   }
 
-  const cover = resizeCover(manga.img || manga.cover || "", 200);
   const status = (manga.status || "UNKNOWN").toUpperCase();
   const demographics = asStringList(manga.demographic);
   const femaleTags = asStringList(manga.femaleTags);
@@ -1016,7 +1005,12 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             <div className="main">
               <div className="left-column">
                 <div className="cover">
-                  <img src={cover || "/assets/icons/favicon.ico"} alt={`${manga.title} cover`} onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} />
+                  <CoverImage
+                    src={manga.img || manga.cover || "/assets/icons/favicon.ico"}
+                    alt={`${manga.title} cover`}
+                    loading="eager"
+                    onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
+                  />
                 </div>
                 <div className="rating" id="ratingBox">
                   <div className="stars" aria-label={`Rating ${ratingValue === undefined ? "N/A" : ratingValue}`}>
