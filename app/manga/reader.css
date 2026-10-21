@@ -722,11 +722,19 @@ html.dark .reader-images { background: #0a0a0c; }
 .reader-bottom-menu-heading button {
   width: 28px;
   height: 28px;
+  flex: 0 0 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
   border: 0;
   border-radius: 8px;
   background: rgba(128, 128, 140, .1);
   color: inherit;
-  font-size: 19px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -948,38 +956,71 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
 
   .reader-settings-backdrop { align-items: flex-end; justify-content: center; padding: 12px; }
   .reader-settings-panel { width: min(100%, 480px); max-height: min(76vh, 640px); border-radius: 18px; }
+  /* Mobile: satu baris sejajar, icon saja */
   .reader-bottom-nav {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
     padding: 10px;
   }
   .reader-bottom-chapters {
     grid-column: auto;
     grid-row: auto;
+    display: flex;
+    justify-content: center;
   }
   .reader-bottom-list {
-    width: auto;
+    width: 100%;
     min-width: 0;
     min-height: 48px;
     justify-content: center;
-    padding: 6px 10px;
+    padding: 0;
   }
   .reader-bottom-previous,
   .reader-bottom-next {
     grid-column: auto;
     grid-row: auto;
-  }
-  .reader-bottom-button {
+    width: 100%;
     min-height: 48px;
-    gap: 6px;
-    padding: 6px 8px;
+    justify-content: center;
+    padding: 0;
+    gap: 0;
   }
-  .reader-bottom-button strong { font-size: 11px; }
-  .reader-bottom-button small { font-size: 9px; }
-  .reader-bottom-button > i:first-child {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
+  .reader-bottom-next {
+    justify-content: center;
+    text-align: center;
+  }
+  /* Sembunyikan semua teks di mobile */
+  .reader-bottom-button > span,
+  .reader-bottom-button .reader-bottom-chevron {
+    display: none !important;
+  }
+  .reader-bottom-button > i:first-child,
+  .reader-bottom-next > i {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto;
+    font-size: 14px;
+    flex: 0 0 auto;
+  }
+  /* Next: ikon arrow di kanan HTML — pastikan tetap terlihat & center */
+  .reader-bottom-next > i.fa-arrow-right {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--reader-accent) 9%, transparent);
+    color: var(--reader-accent-bright);
+  }
+  .reader-bottom-list > i.fa-list {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin: 0 auto;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--reader-accent) 9%, transparent);
+    color: var(--reader-accent-bright);
   }
 }
 
@@ -989,3 +1030,5 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
   .reader-page-select select { max-width: 76px; padding: 5px; }
   .reader-floating-controls { right: 10px; left: auto; bottom: 12px; }
 }
+
+

@@ -566,22 +566,32 @@ html.light .detail-route .demographic-tag {
 
 .detail-route .server-number {
   position: absolute;
-  top: -7px;
-  right: -8px;
-  min-width: 11px;
-  height: 11px;
-  padding: 1px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #0f0f1e;
-  color: #fff;
+  top: -4px;
+  right: -4px;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  display: block;
+  border-radius: 0;
+  background: transparent;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  text-shadow: none;
+  color: inherit;
   font-size: 8px;
   font-weight: 800;
   line-height: 1;
   box-sizing: border-box;
 }
+
+/* Angka server mengikuti warna tombol (biru/kuning) */
+.detail-route #sourceSv1Btn .server-number { color: #1d4ed8; }
+.detail-route #sourceSv1Btn.active .server-number { color: #fff; }
+.detail-route #sourceSv2Btn .server-number { color: #b45309; }
+.detail-route #sourceSv2Btn.active .server-number { color: #fff; }
+.detail-route #sourceEsBtn .server-number { color: #b91c1c; }
+.detail-route #sourceEsBtn.active .server-number { color: #fff; }
 
 .detail-route .view-btn {
   width: 38px;
@@ -685,9 +695,11 @@ html.light .detail-route .demographic-tag {
    ========================================================= */
 .detail-route .chapter-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 0 20px 30px;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  justify-content: stretch;
+  align-content: start;
+  gap: 8px;
+  padding: 0 16px 30px;
 }
 
 .detail-route .chapter-grid.chapter-loading,
@@ -723,13 +735,22 @@ html.light .detail-route .demographic-tag {
   background: rgba(0, 0, 0, 0.2);
   position: relative;
   aspect-ratio: 1 / 1;
+  width: 100%;
+  min-width: 0;
 }
 
 .detail-route .chapter-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: inherit;
+  position: absolute;
+  inset: 0;
 }
 
 .detail-route .chapter-label {
@@ -777,6 +798,7 @@ html.light .detail-route .demographic-tag {
 }
 
 .detail-route .chapter-item.read::after {
+  z-index: 6;
   content: "";
   position: absolute;
   top: 4px;
@@ -791,6 +813,7 @@ html.light .detail-route .demographic-tag {
 }
 
 .detail-route .chapter-item::after {
+  z-index: 6;
   content: "";
   position: absolute;
   top: 4px;
@@ -815,6 +838,12 @@ html.light .detail-route .demographic-tag {
   position: relative;
   aspect-ratio: 1 / 1;
   cursor: pointer;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.25);
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease,
@@ -830,34 +859,49 @@ html.light .detail-route .demographic-tag {
   transform: scale(0.97);
 }
 
-/* Source badge */
+/* Source badge — angka/teks saja, tanpa lingkaran/bg hitam */
 .detail-route .chapter-source-badge {
   position: absolute;
-  top: 26px;
+  top: 22px; /* di bawah ikon mata (read/unread) top:4px + 16px */
   right: 4px;
-  z-index: 4;
+  z-index: 5;
   pointer-events: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0.1px;
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
   line-height: 1;
   text-transform: uppercase;
-  background: none;
-  border: none;
-  padding: 0;
-  box-shadow: none;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  -webkit-text-stroke: 0;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
-/* Mobile lebih kecil lagi */
+.detail-route .chapter-source-badge::before,
+.detail-route .chapter-source-badge::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Mobile */
 @media (max-width: 480px) {
   .detail-route .chapter-source-badge {
-    top: 22px;
+    top: 20px;
     right: 3px;
-    font-size: 6px;
-    gap: 1px;
+    font-size: 8px;
   }
 }
 
@@ -938,7 +982,9 @@ html.light .detail-route .chapter-grid.list-mode .chapter-date {
    ========================================================= */
 .detail-route .chapter-grid.text-grid-mode {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  justify-content: stretch;
+  align-content: start;
   gap: 10px;
 }
 
@@ -1138,14 +1184,16 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
   }
 
   .detail-route .chapter-grid {
-    grid-template-columns: repeat(auto-fill, minmax(118px, 118px));
-    justify-content: start;
-    gap: 16px;
-    padding: 0 30px 40px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    justify-content: stretch;
+    align-content: start;
+    gap: 10px;
+    padding: 0 24px 40px;
   }
 
   .detail-route .chapter-grid.text-grid-mode {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
   }
 }
 
@@ -1205,13 +1253,16 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
   }
 
   .detail-route .chapter-grid {
-    justify-content: center;
-    gap: 18px;
-    padding: 0 40px 50px;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    justify-content: stretch;
+    align-content: start;
+    gap: 10px;
+    padding: 0 32px 50px;
   }
 
   .detail-route .chapter-grid.text-grid-mode {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
   }
 }
 

@@ -26,6 +26,11 @@ const nextConfig: NextConfig = {
         destination: "/manga/:slug/:chapter",
         permanent: true,
       },
+      {
+        source: "/detail/:slug",
+        destination: "/series/:slug",
+        permanent: true,
+      },
       { source: "/favicon-16x16.png", destination: "/assets/icons/favicon-16x16.png", permanent: true },
       { source: "/favicon-32x32.png", destination: "/assets/icons/favicon-32x32.png", permanent: true },
       { source: "/favicon.ico", destination: "/assets/icons/favicon.ico", permanent: true },

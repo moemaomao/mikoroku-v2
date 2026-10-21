@@ -1,7 +1,7 @@
 "use client";
 
 import JSZip from "jszip";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CommunityWidgets from "../community-widgets";
 import SiteChrome from "../site-chrome";
 import { isNovelSeries } from "../../lib/reader-kind";
@@ -405,6 +405,20 @@ export default function ReaderPage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [chapterListOpen, setChapterListOpen] = useState(false);
   const [bottomChapterListOpen, setBottomChapterListOpen] = useState(false);
+  const bottomChaptersRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!bottomChapterListOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const root = bottomChaptersRef.current;
+      if (!root) return;
+      if (event.target instanceof Node && !root.contains(event.target)) {
+        setBottomChapterListOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [bottomChapterListOpen]);
+
   const [dataSaver, setDataSaver] = useState(false);
   const [imageQuality, setImageQuality] = useState(600);
   const [readerProgress, setReaderProgress] = useState(0);
@@ -851,7 +865,7 @@ export default function ReaderPage({
         <button className="reader-bottom-button reader-bottom-previous" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0}>
           <i className="fas fa-arrow-left" aria-hidden="true" /><span><small>Previous chapter</small><strong>{chapterIndex > 0 ? `Chapter ${data.chapters[chapterIndex - 1]}` : "Unavailable"}</strong></span>
         </button>
-        <div className="reader-bottom-chapters">
+        <div className="reader-bottom-chapters" ref={bottomChaptersRef}>
           <button className={`reader-bottom-button reader-bottom-list ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
             <i className="fas fa-list" aria-hidden="true" /><span><small>Browse</small><strong>Chapter list</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
           </button>
