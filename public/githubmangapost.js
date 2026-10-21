@@ -953,12 +953,15 @@
       }
 
       try {
-        const [list, fsMeta] = await Promise.all([
-          loadGithubList(forceGithub),
-          loadFirestoreMeta(forceFs)
-        ]);
+        const fsMetaPromise = loadFirestoreMeta(forceFs);
+        const list = await loadGithubList(forceGithub);
 
         window.githubMangaList = list || [];
+        if (!renderedFromCache) {
+          renderList(window.githubMangaList, false);
+        }
+
+        const fsMeta = await fsMetaPromise;
         if (!metaIndex && fsMeta) metaIndex = buildMetaIndex(fsMeta);
 
         const newHash = simpleHash(JSON.stringify(list) + JSON.stringify(

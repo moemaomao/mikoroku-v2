@@ -1,24 +1,5 @@
 import HomepageIntegrations from "./homepage-integrations";
 
-const adFrameDocument = `<!DOCTYPE html>
-<html>
-  <head>
-    <style>body{margin:0;padding:0;display:flex;justify-content:center;}</style>
-  </head>
-  <body>
-    <script>
-      (function(settings){
-        var script = document.createElement("script");
-        script.settings = settings || {};
-        script.src = "//gummy-debt.com/b/XwVes.dqGml/0/YyWrcj/OeUmG9yuTZZUYlmkuPzTHcozVNEjfQPz-MXj-EotbNjznMk2dNKD/M/yQN/QU";
-        script.async = true;
-        script.referrerPolicy = "no-referrer-when-downgrade";
-        document.body.appendChild(script);
-      })({});
-    </script>
-  </body>
-</html>`;
-
 export default function HomePage() {
   return (
     <>
@@ -54,17 +35,7 @@ export default function HomePage() {
 
           <aside className="sidebar" aria-label="Komunitas dan dukungan">
             <div id="popular-widget" />
-            <div className="home-ad">
-              <iframe
-                title="Advertisement"
-                srcDoc={adFrameDocument}
-                width="100%"
-                height="250"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-              />
-            </div>
+            <div className="home-ad" id="home-ad" />
           </aside>
         </div>
       </main>
