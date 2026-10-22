@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 type CurrentManga = {
   slug: string;
   title: string;
+  img?: string;
+  cover?: string;
   genres?: string[];
   info?: Record<string, unknown>;
 };
@@ -421,7 +423,10 @@ export default function RecommendationSidebar({
                 No recommendations available
               </p>
             )}
-            {recommendations.map((item, index) => (
+            {recommendations.map((item, index) => {
+              const itemCover = item.img || item.cover || "";
+              const itemThumb = thumbnailUrl(itemCover);
+              return (
               <Link
                 href={`/series/${encodeURIComponent(item.slug || normalizeSlug(item.title))}`}
                 key={`${item.slug}-${item.title}`}
@@ -433,14 +438,30 @@ export default function RecommendationSidebar({
                     console.warn("Manga rekomendasi tidak dapat disimpan sebelum navigasi.", error);
                   }
                 }}
-                className={`flex h-[82px] min-h-[82px] w-full shrink-0 items-center gap-[9px] overflow-hidden rounded-lg border border-black/10 bg-black/[0.035] p-[5px] text-inherit no-underline transition hover:translate-x-0.5 hover:border-violet-400/50 hover:bg-black/[0.06] dark:border-white/[0.08] dark:bg-white/[0.06] dark:hover:bg-white/10${index >= 5 ? " max-[767px]:hidden" : ""}`}
+                className={`relative flex h-[78px] min-h-[78px] w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-xl border border-black/[0.06] p-1.5 text-inherit no-underline transition hover:border-violet-400/40 hover:brightness-[1.03] dark:border-white/[0.08]${index >= 5 ? " max-[767px]:hidden" : ""}`}
               >
-                <span className="h-[70px] w-12 shrink-0 overflow-hidden rounded bg-zinc-900">
-                  {/* The legacy series stylesheet constrains all images inside this route. */}
+                {itemCover ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-0"
+                  >
+                    <span
+                      className="absolute inset-0 bg-cover bg-center"
+                      style={{ backgroundImage: `url("${itemThumb}")` }}
+                    />
+                    <span className="absolute inset-0 bg-gradient-to-r from-white/70 via-white/45 to-white/20 dark:from-black/75 dark:via-black/50 dark:to-black/25" />
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-0 bg-black/[0.035] dark:bg-white/[0.06]"
+                  />
+                )}
+                <span className="relative z-10 h-[66px] w-[46px] shrink-0 overflow-hidden rounded-lg bg-zinc-900 shadow-sm ring-1 ring-black/10 dark:ring-white/10">
                   <img
-                    src={thumbnailUrl(item.img || item.cover)}
+                    src={itemThumb}
                     loading="lazy"
-                    alt={item.title}
+                    alt=""
                     onError={(event) => {
                       event.currentTarget.onerror = null;
                       event.currentTarget.src = NO_COVER;
@@ -448,11 +469,12 @@ export default function RecommendationSidebar({
                     className="!block !h-full !w-full !max-w-none !object-cover"
                   />
                 </span>
-                <span className="line-clamp-2 min-w-0 overflow-hidden p-1 text-left text-xs font-semibold leading-[1.35] text-zinc-900 dark:text-white">
+                <span className="relative z-10 line-clamp-2 min-w-0 flex-1 overflow-hidden pr-1 text-left text-[12px] font-semibold leading-[1.35] text-zinc-900 drop-shadow-sm dark:text-white">
                   {item.title}
                 </span>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
       </aside>

@@ -1023,7 +1023,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   return (
     <>
       <SiteHeader />
-      <main className="detail-route">
+      <main className="detail-route" style={detailLayoutStyle}>
         <div className="container">
           <div id="bgLayer" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
           <div className="content">
