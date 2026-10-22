@@ -57,6 +57,7 @@ export function createMikorokuOgImage({
             zIndex: 1,
           }}
         >
+          
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
               src={FAVICON_URL}
@@ -89,7 +90,6 @@ export function createMikorokuOgImage({
             </div>
           </div>
 
-          {/* title block */}
           <div
             style={{
               display: "flex",
@@ -165,7 +165,6 @@ export function createMikorokuOgImage({
               justifyContent: "center",
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={coverUrl!}
               width={230}
@@ -178,8 +177,8 @@ export function createMikorokuOgImage({
       </div>
     ),
     {
-      width: 500,
-      height: 220,
+      width: 800,
+      height: 420,
       headers: {
         "Cache-Control":
           "public, s-maxage=86400, stale-while-revalidate=604800",
