@@ -719,14 +719,14 @@ function HeaderContents() {
               <path className={`origin-center transition-transform duration-300 ${sidebarOpen ? "translate-y-[7px]" : ""}`} d="M8 42h48c0 6-10 10-24 10S8 48 8 42z" />
             </svg>
           </button>
-          <Link
+          <a
             id="headerLogo"
             href="/"
             aria-label="Mikoroku home"
             className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-10 shrink-0 items-center`}
           >
             <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto object-contain" />
-          </Link>
+          </a>
         </div>
 
         <div className="mx-2 min-w-0 flex-1 sm:mx-[15px] sm:max-w-[600px]" ref={searchArea}>
@@ -949,9 +949,9 @@ function HeaderContents() {
         className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto border-r border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.74)_0%,rgba(248,250,252,0.96)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[18px_14px] text-indigo-950 transition-transform duration-300 ease-in-out dark:border-white/15 dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] ${sidebarOpen ? "translate-x-0 min-[769px]:z-[9990]" : "-translate-x-full"}`}
       >
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5 pb-[18px] pt-1">
-          <Link href="/" aria-label="Mikoroku home" onClick={() => mobile && closeSidebar()} className="flex h-[42px] shrink-0 items-center">
+          <a href="/" aria-label="Mikoroku home" onClick={() => mobile && closeSidebar()} className="flex h-[42px] shrink-0 items-center">
             <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto object-contain" />
-          </Link>
+          </a>
           <button
             type="button"
             id="sidebarClose"
