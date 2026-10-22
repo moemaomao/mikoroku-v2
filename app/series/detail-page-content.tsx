@@ -3,6 +3,7 @@
 import { createElement, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import CommunityWidgets from "../community-widgets";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
+import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { isNovelSeries } from "../../lib/reader-kind";
 import RecommendationSidebar from "./recommendation-sidebar";
 import SiteFooter from "../site-footer";
@@ -458,7 +459,7 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
     const chapterText = data.content || data.text || data.html;
     collectionChapters.push({
       id: document.id,
-      num: asString(data.num, document.id),
+      num: chapterNumberFromRecord(data, document.id),
       title: asString(data.title, `Chapter ${document.id}`),
       thumbnail: asString(data.thumbnail),
       images: chapterImages,
@@ -500,7 +501,7 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
     const chapterText = data.content || data.text || data.html;
     return [{
       id,
-      num: asString(data.num, id),
+      num: chapterNumberFromRecord(data, id),
       title: asString(data.title, `Chapter ${id}`),
       thumbnail: asString(data.thumbnail),
       images: chapterImages,
@@ -946,7 +947,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     if (!isNovel && !images.length && chapter.source === "firestore") {
       try {
         const response = await fetch(
-          `${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(String(chapter.num))}`,
+          `${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapter.id || String(chapter.num))}`,
         );
         if (response.ok) {
           const document = await response.json() as { fields?: Record<string, unknown> };
@@ -962,6 +963,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     images = [...new Set(images.map((image) => image.replace(/\/s\d+(-c)?\//, "/s0/")))];
     localStorage.setItem("currentChapter", JSON.stringify({
       slug,
+      id: chapter.id,
       num: chapter.num,
       title: manga.title,
       label: chapterName,
@@ -971,7 +973,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       source: chapter.source,
       isNovel,
     }));
-    const readerRoute = isNovel ? "/read" : "/reader";
+    const readerRoute = isNovel ? "/novel" : "/manga";
     window.location.href = `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(String(chapter.num))}`;
   }, [manga, slug]);
 

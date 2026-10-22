@@ -4,11 +4,13 @@ import JSZip from "jszip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CommunityWidgets from "../community-widgets";
 import SiteChrome from "../site-chrome";
+import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { isNovelSeries } from "../../lib/reader-kind";
 import "./reader.css";
 
 type ReaderKind = "manga" | "novel";
 type ChapterRecord = {
+  id?: string;
   num?: string | number;
   title?: string;
   label?: string;
@@ -25,6 +27,7 @@ type ChapterRecord = {
 
 type ReaderData = {
   kind: ReaderKind;
+  id?: string;
   title: string;
   cover: string;
   chapterTitle: string;
@@ -360,11 +363,37 @@ async function loadReaderData(
   const targetChapter = chapter || String(cachedCurrent?.num || "1");
   let manga: Record<string, unknown> | null = null;
   let chapterData: Record<string, unknown> | null = null;
-
-  const cachedMatch = cachedChapters.find((item) => String(item.num) === targetChapter);
+  const cachedMatch = cachedChapters.find((item) =>
+    chapterNumberFromRecord(item, item.id || "") === targetChapter,
+  );
+  let chapterDocumentId = cachedMatch?.id ||
+    (cachedCurrent && String(cachedCurrent.num) === targetChapter ? cachedCurrent.id : undefined) ||
+    targetChapter;
+  let readerDocuments: Array<{ id: string; data: Record<string, unknown> }> | undefined;
+  let chapterListAttempted = false;
+  let chapterListError: unknown;
   if (cachedMatch) chapterData = cachedMatch as Record<string, unknown>;
-  if (cachedCurrent && String(cachedCurrent.num) === targetChapter) {
-    chapterData = { ...(chapterData || {}), ...cachedCurrent };
+
+  if (!cachedMatch?.id) {
+    chapterListAttempted = true;
+    try {
+      readerDocuments = await getReaderChapterDocuments(slug, signal);
+      const current = readerDocuments.find(({ id, data }) =>
+        chapterNumberFromRecord(data, id) === targetChapter,
+      ) || readerDocuments.find(({ id }) => id === targetChapter);
+      if (current) {
+        chapterData = current.data;
+        chapterDocumentId = current.id;
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      chapterListError = error;
+      console.warn("The Firestore chapter list failed; trying the requested chapter document.", error);
+    }
+  }
+  if (!chapterData && cachedCurrent && String(cachedCurrent.num) === targetChapter) {
+    chapterData = cachedCurrent;
+    chapterDocumentId = cachedCurrent.id || targetChapter;
   }
 
   try {
@@ -386,6 +415,7 @@ async function loadReaderData(
       text: "",
       chapters: [targetChapter],
       chapter: targetChapter,
+      id: chapterDocumentId,
       source: String(chapterData?.source || cachedCurrent?.source || ""),
     };
   }
@@ -407,7 +437,7 @@ async function loadReaderData(
     !imageList(chapterData?.content || chapterData?.html).length) {
     try {
       const storedChapter = await getFirestoreDocument(
-        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(targetChapter)}`,
+        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
         signal,
       );
       if (storedChapter &&
@@ -422,7 +452,7 @@ async function loadReaderData(
   } else if (resolvedKind === "novel" &&
     (typeof cachedContent !== "string" || !cachedContent.trim())) {
     chapterData = await getFirestoreDocument(
-      `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(targetChapter)}`,
+      `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
       signal,
     ) || chapterData;
   }
@@ -436,27 +466,33 @@ async function loadReaderData(
     }
   }
 
-  let chapters = cachedChapters.map((item) => String(item.num ?? item.order ?? "")).filter(Boolean);
+  let chapters = cachedChapters
+    .map((item) => chapterNumberFromRecord(item, item.id || ""))
+    .filter(Boolean);
   if (!chapters.length ||
     (resolvedKind === "manga" &&
       !imageList(chapterData?.images || chapterData?.pages, true).length &&
       !imageList(chapterData?.content || chapterData?.html).length)) {
     try {
-      const documents = await getReaderChapterDocuments(slug, signal);
+      if (!chapterListAttempted) {
+        chapterListAttempted = true;
+        readerDocuments = await getReaderChapterDocuments(slug, signal);
+      }
+      if (!readerDocuments && chapterListError) throw chapterListError;
+      const documents = readerDocuments || [];
       const fetchedChapters = documents
-        .map(({ id, data }) => String(data.num ?? data.order ?? id))
+        .map(({ id, data }) => chapterNumberFromRecord(data, id))
         .filter(Boolean);
       if (!chapters.length) chapters = fetchedChapters;
       const current = documents.find(({ id, data }) =>
-        id === targetChapter ||
-        String(data.num ?? "") === targetChapter ||
-        String(data.order ?? "") === targetChapter,
-      );
+        chapterNumberFromRecord(data, id) === targetChapter,
+      ) || documents.find(({ id }) => id === targetChapter);
       if (current) {
         const currentImages = imageList(current.data.images || current.data.pages, true);
         const currentContent = current.data.content || current.data.text || current.data.html;
         if (currentImages.length || imageList(currentContent).length || !chapterData) {
           chapterData = current.data;
+          chapterDocumentId = current.id;
         }
       }
     } catch (error) {
@@ -465,7 +501,8 @@ async function loadReaderData(
       console.warn("The Firestore chapter list failed; using the cached chapter.", error);
     }
   }
-  if (!chapters.includes(targetChapter)) chapters.push(targetChapter);
+  const resolvedChapter = chapterNumberFromRecord(chapterData || {}, targetChapter);
+  if (!chapters.includes(resolvedChapter)) chapters.push(resolvedChapter);
   chapters = [...new Set(chapters)].sort((a, b) => chapterValue(a) - chapterValue(b));
 
   if (!chapterData) {
@@ -492,13 +529,14 @@ async function loadReaderData(
 
   return {
     kind: resolvedKind,
+    id: chapterDocumentId,
     title,
     cover: String(manga?.img || manga?.cover || ""),
     chapterTitle: String(chapterData.label || chapterData.chapterTitle || chapterData.title || `Chapter ${targetChapter}`),
     images,
     text,
     chapters,
-    chapter: targetChapter,
+    chapter: resolvedChapter,
     source: typeof chapterData.source === "string" ? chapterData.source : undefined,
   };
 }
@@ -606,8 +644,14 @@ export default function ReaderPage({
       .then((result) => {
         if (controller.signal.aborted) return;
         if (result.kind !== kind) {
-          const route = result.kind === "novel" ? "/read" : "/reader";
+          const route = result.kind === "novel" ? "/novel" : "/manga";
           window.location.replace(`${route}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`);
+          return;
+        }
+        const readerRoute = result.kind === "novel" ? "/novel" : "/manga";
+        const canonicalPath = `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`;
+        if (window.location.pathname !== canonicalPath) {
+          window.location.replace(canonicalPath);
           return;
         }
         setData(result);
@@ -615,6 +659,7 @@ export default function ReaderPage({
         localStorage.setItem("currentChapter", JSON.stringify({
           ...getCurrentChapterCache(slug),
           slug,
+          id: result.id,
           num: result.chapter,
           title: result.title,
           cover: result.cover,
@@ -622,7 +667,6 @@ export default function ReaderPage({
           images: result.images,
           source: result.source || "firestore",
         }));
-        const readerRoute = result.kind === "novel" ? "/read" : "/reader";
         const historyItem = {
           series: result.title,
           title: result.title,
@@ -677,7 +721,7 @@ export default function ReaderPage({
   );
 
   const changeChapter = useCallback((target: string) => {
-    const path = activeKind === "novel" ? "/read" : "/reader";
+    const path = activeKind === "novel" ? "/novel" : "/manga";
     window.location.href = `${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`;
   }, [activeKind, slug]);
 
