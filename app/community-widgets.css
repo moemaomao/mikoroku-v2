@@ -63,3 +63,78 @@ html.dark .community-widget-error {
 #user-profile-modal:not([style*="display: flex"]):not([style*="display:flex"]) {
   display: none !important;
 }
+
+
+.community-reactions .reaction,
+#emoji-widget .reaction,
+#emoji-reaction-widget {
+  display: flex !important;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 25px 0;
+  text-align: center;
+}
+
+.community-reactions .reaction button,
+#emoji-widget .reaction button,
+#emoji-reaction-widget button {
+  width: 45px !important;
+  height: 45px !important;
+  min-width: 45px;
+  min-height: 45px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  flex: 0 0 45px;
+}
+
+.community-reactions .reaction button img,
+.community-reactions .reaction button svg,
+#emoji-widget .reaction button img,
+#emoji-widget .reaction button svg,
+#emoji-reaction-widget button img,
+#emoji-reaction-widget button svg {
+  width: 45px !important;
+  height: 45px !important;
+  max-width: 45px !important;
+  max-height: 45px !important;
+  min-width: 45px !important;
+  min-height: 45px !important;
+  object-fit: contain !important;
+  display: block !important;
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+}
+
+.community-reactions .reaction span.count,
+#emoji-widget .reaction span.count,
+#emoji-reaction-widget span.count {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  background: #ff4081;
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 999px;
+  min-width: 22px;
+  z-index: 3;
+  line-height: 1;
+}
+
+.community-reactions .reaction small,
+#emoji-widget .reaction small,
+#emoji-reaction-widget small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #a1a1a1;
+  user-select: none;
+  white-space: nowrap;
+}
