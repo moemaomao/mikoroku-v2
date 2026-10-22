@@ -79,7 +79,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body suppressHydrationWarning className="pt-14!">
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var isDark=localStorage.getItem("darkMode")==="true";var roots=[document.documentElement,document.body];roots.forEach(function(root){root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark)})})();`,
+            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var roots=[document.documentElement,document.body];roots.forEach(function(root){root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark)})})();`,
           }}
         />
         {children}

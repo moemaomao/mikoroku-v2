@@ -197,6 +197,8 @@ function Icon({ name, className = "h-6 w-6" }: { name: string; className?: strin
       return <svg {...common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
     case "bell":
       return <svg {...common}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>;
+    case "megaphone":
+      return <svg {...common}><path d="M3 11v3a1 1 0 0 0 1 1h3l11 4V5L7 10H4a1 1 0 0 0-1 1Z" /><path d="m7 15 2 6h4l-2-5" /><path d="m21 9 2-1m-2 4h2m-2 4 2 1" /></svg>;
     case "user":
       return <svg {...common}><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" /></svg>;
     case "message":
@@ -908,7 +910,7 @@ function HeaderContents() {
             title="Announcements"
           >
             <span className="sr-only">Announcements</span>
-            <Icon name="bell" />
+            <Icon name="megaphone" />
             {unreadAnnouncements > 0 && (
               <span className="absolute right-0 top-0 min-w-4 rounded-full border-2 border-white bg-red-600 px-1 text-center text-[9px] font-bold leading-3 text-white dark:border-zinc-950" aria-label={`${unreadAnnouncements} unread announcements`}>
                 {unreadAnnouncements > 99 ? "99+" : unreadAnnouncements}

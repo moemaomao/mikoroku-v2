@@ -28,7 +28,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import "quill/dist/quill.snow.css";
 import styles from "./admin.module.css";
 import { CoverImage } from "../lib/cover-image";
@@ -60,6 +60,8 @@ type MangaRecord = {
   title: string;
   altTitle: string;
   cover: string;
+  covers?: string[];
+  coverNumbers?: Record<string, string>;
   desc: string;
   type: string;
   status: string;
@@ -265,6 +267,10 @@ function fromFirestore(slug: string, data: Record<string, unknown>): MangaRecord
     title: text(data.title) || slug,
     altTitle: text(data.altTitle),
     cover: text(data.cover) || text(data.img),
+    covers: stringList(data.covers),
+    coverNumbers: data.coverNumbers && typeof data.coverNumbers === "object"
+      ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, text(number)]))
+      : {},
     desc: text(data.desc),
     type: text(data.type) || "manga",
     status: text(data.status) || "unknown",
@@ -532,6 +538,10 @@ function mapGithubRecord(raw: Record<string, unknown>): MangaRecord | null {
     title: title || slug,
     altTitle: text(raw.altTitle) || text(raw.alternative) || text(raw.alt_title),
     cover: text(raw.cover) || text(raw.img),
+    covers: stringList(raw.covers),
+    coverNumbers: raw.coverNumbers && typeof raw.coverNumbers === "object"
+      ? Object.fromEntries(Object.entries(raw.coverNumbers).map(([url, number]) => [url, text(number)]))
+      : {},
     desc:
       text(raw.desc) ||
       text(raw.description) ||
@@ -622,7 +632,8 @@ export default function AdminPage() {
   const [editing, setEditing] = useState<MangaRecord | null>(null);
   const [draft, setDraft] = useState<MangaDraft>({ ...emptyDraft });
   const [selectedManga, setSelectedManga] = useState<MangaRecord | null>(null);
-  const [detailTab, setDetailTab] = useState<"info" | "chapters">("chapters");
+  const [savedCoverOrder, setSavedCoverOrder] = useState<string[]>([]);
+  const [detailTab, setDetailTab] = useState<"info" | "chapters" | "covers">("chapters");
   const [chapters, setChapters] = useState<AdminChapter[]>([]);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [message, setMessage] = useState("");
@@ -644,7 +655,10 @@ export default function AdminPage() {
   const [announcementPublished, setAnnouncementPublished] = useState(true);
   const [settingsStatus, setSettingsStatus] = useState("");
   const [uploadNotice, setUploadNotice] = useState<UploadNotice | null>(null);
+  const [draggingCoverUrl, setDraggingCoverUrl] = useState<string | null>(null);
+  const coverPointerDrag = useRef<{ pointerId: number; url: string } | null>(null);
   const coverFileInput = useRef<HTMLInputElement>(null);
+  const coverGalleryFilesInput = useRef<HTMLInputElement>(null);
   const thumbnailFileInput = useRef<HTMLInputElement>(null);
   const chapterFilesInput = useRef<HTMLInputElement>(null);
   const loadingMangaRef = useRef(false);
@@ -901,10 +915,27 @@ export default function AdminPage() {
             editing.source === "github" ||
             editing.githubSlug),
       );
+      const mainCover = draft.cover.trim();
+      const existingVolumes = selectedManga?.slug === slug
+        ? selectedManga.covers || []
+        : editing?.covers || [];
+      const existingVolumeNumbers = selectedManga?.slug === slug
+        ? selectedManga.coverNumbers || {}
+        : editing?.coverNumbers || {};
+      const covers = mainCover
+        ? [mainCover, ...existingVolumes.filter((volume) => volume !== mainCover)]
+        : existingVolumes;
+      const coverNumbers = Object.fromEntries(
+        covers
+          .filter((volume) => existingVolumeNumbers[volume]?.trim())
+          .map((volume) => [volume, existingVolumeNumbers[volume].trim()]),
+      );
       const data = {
         title: draft.title.trim(),
         altTitle: draft.altTitle.trim(),
-        cover: draft.cover.trim(),
+        cover: mainCover,
+        covers,
+        coverNumbers,
         desc: draft.desc.trim(),
         type: draft.type,
         status: draft.status,
@@ -1308,6 +1339,164 @@ export default function AdminPage() {
     }
   }
 
+  async function saveMangaCoverList(covers: string[], coverNumbers = selectedManga?.coverNumbers || {}) {
+    if (!selectedManga) throw new Error("Choose a manga before managing its covers.");
+    const nextCovers = [...new Set(covers.filter((url) => /^https?:\/\//i.test(url)))];
+    const nextCoverNumbers = Object.fromEntries(
+      nextCovers
+        .filter((url) => coverNumbers[url]?.trim())
+        .map((url) => [url, coverNumbers[url].trim()]),
+    );
+    const { firestore } = getAdminFirebase();
+    await setDoc(
+      doc(firestore, "manga", selectedManga.slug),
+      {
+        slug: selectedManga.slug,
+        title: selectedManga.title,
+        cover: nextCovers[nextCovers.length - 1] || selectedManga.cover,
+        covers: nextCovers,
+        coverNumbers: nextCoverNumbers,
+      },
+      { merge: true },
+    );
+    const updatedManga = {
+      ...selectedManga,
+      cover: nextCovers[nextCovers.length - 1] || selectedManga.cover,
+      covers: nextCovers,
+      coverNumbers: nextCoverNumbers,
+    };
+    setSelectedManga(updatedManga);
+    setSavedCoverOrder(nextCovers);
+    const updatedCatalog = manga.map((item) => item.slug === updatedManga.slug ? updatedManga : item);
+    setManga(updatedCatalog);
+    writeAdminMangaCache(updatedCatalog);
+  }
+
+  async function uploadAdditionalCovers() {
+    const files = Array.from(coverGalleryFilesInput.current?.files || []);
+    if (coverGalleryFilesInput.current) coverGalleryFilesInput.current.value = "";
+    if (!selectedManga || !files.length) {
+      setUploadNotice({ status: "error", message: "Choose one or more cover images first." });
+      return;
+    }
+    setBusy(true);
+    const uploaded: string[] = [];
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        setUploadNotice({
+          status: "uploading",
+          message: `Uploading cover ${index + 1} of ${files.length}...`,
+        });
+        uploaded.push(await uploadToImgBB(files[index]));
+      }
+      await saveMangaCoverList([...(selectedManga.covers || []), ...uploaded]);
+      setUploadNotice({
+        status: "success",
+        message: `${uploaded.length} cover${uploaded.length === 1 ? "" : "s"} uploaded and saved.`,
+      });
+    } catch (error) {
+      console.error(`Failed to save additional covers for ${selectedManga.slug}.`, error);
+      setUploadNotice({
+        status: "error",
+        message: `Cover upload or save failed: ${getErrorMessage(error)}${uploaded.length ? " Some uploaded images may not have been added to the gallery." : ""}`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeAdditionalCover(url: string) {
+    if (!selectedManga || busy) return;
+    if (!window.confirm("Remove this cover from the series gallery?")) return;
+    setBusy(true);
+    setUploadNotice({ status: "uploading", message: "Removing cover..." });
+    try {
+      const nextCovers = (selectedManga.covers || []).filter((cover) => cover !== url);
+      const nextCoverNumbers = { ...selectedManga.coverNumbers };
+      delete nextCoverNumbers[url];
+      await saveMangaCoverList(nextCovers, nextCoverNumbers);
+      setUploadNotice({ status: "success", message: "Cover removed from the series gallery." });
+    } catch (error) {
+      console.error(`Failed to remove a cover from ${selectedManga.slug}.`, error);
+      setUploadNotice({ status: "error", message: `Could not remove cover: ${getErrorMessage(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function reorderCoverInMemory(fromUrl: string, toIndex: number): string[] | null {
+    const covers = [...(selectedManga?.covers || [])];
+    const fromIndex = covers.indexOf(fromUrl);
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= covers.length || fromIndex === toIndex) return null;
+    [covers[fromIndex], covers[toIndex]] = [covers[toIndex], covers[fromIndex]];
+    setSelectedManga((current) => {
+      if (!current || current.slug !== selectedManga?.slug) return current;
+      return { ...current, cover: covers[covers.length - 1] || current.cover, covers };
+    });
+    return covers;
+  }
+
+  function handleCoverPointerDown(event: PointerEvent<HTMLElement>, url: string) {
+    if (busy || event.button !== 0 || !selectedManga) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggingCoverUrl(url);
+    coverPointerDrag.current = {
+      pointerId: event.pointerId,
+      url,
+    };
+  }
+
+  function handleCoverPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const drag = coverPointerDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-volume-index]");
+    if (!target) return;
+    const targetIndex = Number(target.dataset.volumeIndex);
+    reorderCoverInMemory(drag.url, targetIndex);
+  }
+
+  function handleCoverPointerUp(event: PointerEvent<HTMLDivElement>) {
+    const drag = coverPointerDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    coverPointerDrag.current = null;
+    setDraggingCoverUrl(null);
+  }
+
+  async function saveCoverOrder() {
+    if (!selectedManga || busy) return;
+    setBusy(true);
+    setUploadNotice({ status: "uploading", message: "Saving volume order..." });
+    try {
+      await saveMangaCoverList(selectedManga.covers || []);
+      setUploadNotice({ status: "success", message: "Volume order saved." });
+    } catch (error) {
+      console.error(`Failed to reorder volumes for ${selectedManga.slug}.`, error);
+      setUploadNotice({ status: "error", message: `Could not save volume order: ${getErrorMessage(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const currentCoverOrder = selectedManga?.covers || [];
+  const coverOrderChanged = currentCoverOrder.length !== savedCoverOrder.length ||
+    currentCoverOrder.some((url, index) => url !== savedCoverOrder[index]);
+
+  async function saveCoverNumber(url: string, number: string) {
+    if (!selectedManga || busy) return;
+    const coverNumbers = { ...selectedManga.coverNumbers, [url]: number };
+    setSelectedManga({ ...selectedManga, coverNumbers });
+    setBusy(true);
+    try {
+      await saveMangaCoverList(selectedManga.covers || [], coverNumbers);
+    } catch (error) {
+      console.error(`Failed to save volume number for ${selectedManga.slug}.`, error);
+      setUploadNotice({ status: "error", message: `Could not save volume number: ${getErrorMessage(error)}` });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function uploadThumbnailFile() {
     const file = thumbnailFileInput.current?.files?.[0];
     if (!file) {
@@ -1409,7 +1598,9 @@ export default function AdminPage() {
   }
 
   async function openMangaChapters(item: MangaRecord) {
-    setSelectedManga(item);
+    const initialVolumes = item.covers?.length ? item.covers : [item.cover].filter(Boolean);
+    setSelectedManga({ ...item, cover: initialVolumes[initialVolumes.length - 1] || item.cover, covers: initialVolumes });
+    setSavedCoverOrder(initialVolumes);
     setDetailTab("chapters");
     setActiveSection("manga-detail");
     setLoadingChapters(true);
@@ -1419,6 +1610,17 @@ export default function AdminPage() {
       const snapshot = await getDocs(
         collection(firestore, "manga", item.slug, "chapters"),
       );
+      const mangaSnapshot = await getDoc(doc(firestore, "manga", item.slug));
+      const savedVolumes = mangaSnapshot.exists() ? stringList(mangaSnapshot.data().covers) : [];
+      const savedVolumeNumbers = mangaSnapshot.exists() && mangaSnapshot.data().coverNumbers &&
+        typeof mangaSnapshot.data().coverNumbers === "object"
+        ? Object.fromEntries(Object.entries(mangaSnapshot.data().coverNumbers).map(([url, number]) => [url, text(number)]))
+        : {};
+      const volumes = savedVolumes.length ? savedVolumes : [item.cover].filter(Boolean);
+      setSavedCoverOrder(volumes);
+      setSelectedManga((current) => current?.slug === item.slug
+        ? { ...current, cover: volumes[volumes.length - 1] || current.cover, covers: volumes, coverNumbers: savedVolumeNumbers }
+        : current);
       const loaded = snapshot.docs
         .map((chapter) => {
           const data = chapter.data();
@@ -2054,6 +2256,12 @@ export default function AdminPage() {
                   className={detailTab === "chapters" ? styles.activeDetailTab : ""}
                   onClick={() => setDetailTab("chapters")}
                 >▤ Chapters</button>
+                <button
+                  role="tab"
+                  aria-selected={detailTab === "covers"}
+                  className={detailTab === "covers" ? styles.activeDetailTab : ""}
+                  onClick={() => setDetailTab("covers")}
+                >▧ Volumes</button>
               </div>
               {detailTab === "info" ? (
                 <MangaMetadataEditor
@@ -2066,6 +2274,97 @@ export default function AdminPage() {
                   onSubmit={handleSaveManga}
                   onCancel={() => setDetailTab("chapters")}
                 />
+              ) : detailTab === "covers" ? (
+                <section className={styles.coverGalleryPanel} aria-label="Series volumes">
+                  <div className={styles.panelHeading}>
+                    <div>
+                      <h2>Series volumes</h2>
+                      <p>Upload and arrange volumes shown in the series detail page.</p>
+                    </div>
+                    <div className={styles.volumeHeaderActions}>
+                      <button
+                        className={styles.primaryButton}
+                        type="button"
+                        onClick={() => coverGalleryFilesInput.current?.click()}
+                        disabled={busy}
+                      >＋ Add volumes</button>
+                      <button
+                        className={styles.primaryButton}
+                        type="button"
+                        onClick={() => void saveCoverOrder()}
+                        disabled={busy || !coverOrderChanged}
+                      >Save order</button>
+                    </div>
+                    <input
+                      ref={coverGalleryFilesInput}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={() => void uploadAdditionalCovers()}
+                      style={{ display: "none" }}
+                    />
+                  </div>
+                  <p className={styles.coverGalleryHint}>Drag with a mouse or touch to reorder volumes, then select Save order. The last volume becomes the main cover.</p>
+                  {selectedManga.covers?.length ? (
+                    <div
+                      className={styles.coverGalleryGrid}
+                      onPointerMove={handleCoverPointerMove}
+                      onPointerUp={(event) => void handleCoverPointerUp(event)}
+                      onPointerCancel={(event) => void handleCoverPointerUp(event)}
+                    >
+                      {selectedManga.covers.map((coverUrl, index) => (
+                        <article
+                          className={`${styles.coverGalleryItem} ${draggingCoverUrl === coverUrl ? styles.coverGalleryItemDragging : ""}`}
+                          key={coverUrl}
+                          data-volume-index={index}
+                        >
+                          <div
+                            className={styles.coverGalleryImage}
+                            onPointerDown={(event) => handleCoverPointerDown(event, coverUrl)}
+                            title="Drag to reorder"
+                          >
+                            <CoverImage src={coverUrl} alt={`${selectedManga.title} volume ${selectedManga.coverNumbers?.[coverUrl] || index + 1}`} loading="lazy" />
+                            <span className={styles.coverDragHint}>Drag</span>
+                          </div>
+                          <div className={styles.coverGalleryActions}>
+                            <label className={styles.volumeNumberField}>
+                              <span>Vol.</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={selectedManga.coverNumbers?.[coverUrl] || ""}
+                                placeholder={String(index + 1)}
+                                aria-label={`Volume number, current position ${index + 1}`}
+                                disabled={busy}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(event) => {
+                                  const number = event.currentTarget.value;
+                                  setSelectedManga((current) => current
+                                    ? { ...current, coverNumbers: { ...current.coverNumbers, [coverUrl]: number } }
+                                    : current);
+                                }}
+                                onBlur={(event) => void saveCoverNumber(coverUrl, event.currentTarget.value)}
+                              />
+                            </label>
+                            <button
+                              className={styles.deleteButton}
+                              type="button"
+                              onClick={() => void removeAdditionalCover(coverUrl)}
+                              disabled={busy || (selectedManga.covers?.length ?? 0) <= 1}
+                              aria-label={`Remove volume ${index + 1}`}
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                            >Remove</button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={styles.emptyState}>No volumes uploaded yet.</p>
+                  )}
+                </section>
               ) : (
                 <>
                   {message && <p className={styles.notice}>{message}</p>}

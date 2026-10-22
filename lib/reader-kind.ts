@@ -8,6 +8,8 @@ export function isNovelSeries(value: Record<string, unknown> | null | undefined)
     info.type, info.format, info.contentType, info.category, info.genres,
   ].some((item) => {
     const labels = Array.isArray(item) ? item : [item];
-    return labels.some((label) => typeof label === "string" && /\bnovel\b/i.test(label));
+    return labels.some((label) =>
+      typeof label === "string" && /\bnovel\b/i.test(label.replace(/[_-]+/g, " ")),
+    );
   });
 }

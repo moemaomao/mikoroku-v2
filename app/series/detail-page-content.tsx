@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import CommunityWidgets from "../community-widgets";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
@@ -15,6 +15,8 @@ type Manga = {
   title: string;
   img?: string;
   cover?: string;
+  covers?: string[];
+  coverNumbers?: Record<string, string>;
   desc?: string;
   genres?: string[];
   rating?: number | string | null;
@@ -235,6 +237,10 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     title: rawTitle,
     img: cover,
     cover,
+    covers: asStringList(value.covers).map(resolveCover).filter(Boolean),
+    coverNumbers: value.coverNumbers && typeof value.coverNumbers === "object"
+      ? Object.fromEntries(Object.entries(value.coverNumbers).map(([url, number]) => [url, asString(number)]))
+      : {},
     desc: asString(value.desc || value.description || value.synopsis || value.sinopsis),
     genres: Array.isArray(genres) ? genres.map((genre) => asString(genre)) : asStringList(genres),
     rating: (value.rating ?? info.rating) as number | string | null | undefined,
@@ -256,6 +262,65 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     latestUpdate: asString(value.latestUpdate || value.updatedAt || info.latestUpdate || info.updatedAt || info.date),
     info,
   };
+}
+
+const SERIES_COVER_PREFERENCE_DB = "mikoroku-series-cover-preferences";
+const SERIES_COVER_PREFERENCE_STORE = "selections";
+
+type SeriesCoverPreference = { slug: string; url: string };
+
+function openSeriesCoverPreferences(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SERIES_COVER_PREFERENCE_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(SERIES_COVER_PREFERENCE_STORE)) {
+        request.result.createObjectStore(SERIES_COVER_PREFERENCE_STORE, { keyPath: "slug" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Could not open series cover preferences."));
+    request.onblocked = () => reject(new Error("Series cover preferences are blocked by another browser tab."));
+  });
+}
+
+async function readSeriesCoverPreference(slug: string): Promise<string | null> {
+  const database = await openSeriesCoverPreferences();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(SERIES_COVER_PREFERENCE_STORE, "readonly");
+    const request = transaction.objectStore(SERIES_COVER_PREFERENCE_STORE).get(slug);
+    request.onsuccess = () => {
+      resolve((request.result as SeriesCoverPreference | undefined)?.url || null);
+      database.close();
+    };
+    request.onerror = () => {
+      database.close();
+      reject(request.error ?? new Error("Could not read the selected series cover."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Reading the selected series cover was aborted."));
+    };
+  });
+}
+
+async function writeSeriesCoverPreference(slug: string, url: string): Promise<void> {
+  const database = await openSeriesCoverPreferences();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(SERIES_COVER_PREFERENCE_STORE, "readwrite");
+    transaction.objectStore(SERIES_COVER_PREFERENCE_STORE).put({ slug, url } satisfies SeriesCoverPreference);
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not save the selected series cover."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Saving the selected series cover was aborted."));
+    };
+  });
 }
 
 function getBloggerChapterNumber(title: string, url: string): string {
@@ -348,8 +413,11 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     }),
   ]);
 
-  const matched = responses.find((result) => result.status === "fulfilled" && result.value);
-  const manga = matched?.status === "fulfilled" ? matched.value : null;
+  const githubManga = responses[0].status === "fulfilled" ? responses[0].value : null;
+  const firestoreManga = responses[1].status === "fulfilled" ? responses[1].value : null;
+  const manga = githubManga && firestoreManga
+    ? { ...githubManga, covers: firestoreManga.covers, coverNumbers: firestoreManga.coverNumbers }
+    : githubManga || firestoreManga;
   for (const [index, result] of responses.entries()) {
     if (result.status === "rejected" && !signal.aborted) {
       console.warn(
@@ -654,8 +722,8 @@ function extractChapterImages(raw: unknown): string[] {
 }
 
 const detailPageClasses = `
-  relative min-h-screen bg-white text-[#050000] [--detail-overlay:rgba(126,125,125,0.103)] dark:bg-[#0b0b0b] dark:text-white dark:[--detail-overlay:rgba(15,15,30,0.514)]
-  [&_#bgLayer]:absolute [&_#bgLayer]:inset-0 [&_#bgLayer]:z-[1] [&_#bgLayer]:scale-[1.05] [&_#bgLayer]:bg-cover [&_#bgLayer]:bg-center [&_#bgLayer]:bg-no-repeat [&_#bgLayer]:opacity-[0.22] [&_#bgLayer]:blur-[4px] [&_#bgLayer]:transition-[background-image,opacity] [&_#bgLayer]:duration-500 dark:[&_#bgLayer]:opacity-100
+  relative isolate min-h-screen bg-transparent text-[#050000] dark:text-white
+  [&_#bgLayer]:fixed [&_#bgLayer]:inset-0 [&_#bgLayer]:z-0 [&_#bgLayer]:scale-[1.05] [&_#bgLayer]:bg-cover [&_#bgLayer]:bg-center [&_#bgLayer]:bg-no-repeat [&_#bgLayer]:opacity-[0.22] [&_#bgLayer]:blur-[4px] [&_#bgLayer]:transition-[background-image,opacity] [&_#bgLayer]:duration-500 dark:[&_#bgLayer]:opacity-100
   [&_.content]:relative [&_.content]:z-[3]
   [&_img]:block [&_img]:h-auto [&_img]:max-w-full
   [&_.main]:flex [&_.main]:items-start [&_.main]:gap-[14px] [&_.main]:p-[18px_14px_14px]
@@ -663,14 +731,14 @@ const detailPageClasses = `
   [&_.cover]:h-[130px] [&_.cover]:w-[90px] [&_.cover]:overflow-hidden [&_.cover]:rounded-xl
   [&_.cover_img]:h-full [&_.cover_img]:w-full [&_.cover_img]:object-cover
   [&_.info]:min-w-0 [&_.info]:flex-1
-  [&_.info_h1]:!mb-0 [&_.info_h1]:!max-w-full [&_.info_h1]:!break-words [&_.info_h1]:!text-left [&_.info_h1]:!text-sm [&_.info_h1]:!font-bold [&_.info_h1]:!leading-[1.25] dark:[&_.info_h1]:!text-white
+  [&_.info_h1]:!mb-0 [&_.info_h1]:!max-w-full [&_.info_h1]:!break-words [&_.info_h1]:!text-left [&_.info_h1]:!text-sm [&_.info_h1]:!font-bold [&_.info_h1]:!leading-[1.25] [&_.info_h1]:!text-[#050000] [&_.info_h1]:![text-shadow:none] dark:[&_.info_h1]:!text-white
   [&_.alt-title]:mt-1 [&_.alt-title]:text-[11px] [&_.alt-title]:text-[#444] [&_.alt-title]:opacity-90 dark:[&_.alt-title]:text-[#ddd]
   [&_.title-divider]:my-[6px] [&_.title-divider]:h-px [&_.title-divider]:w-full [&_.title-divider]:rounded-sm [&_.title-divider]:bg-[rgba(0,0,0,0.1)] dark:[&_.title-divider]:bg-[rgba(255,255,255,0.35)]
   [&_.rating]:mt-1 [&_.rating]:flex [&_.rating]:items-center [&_.rating]:justify-center [&_.rating]:gap-px
   [&_.stars]:inline-flex [&_.stars]:items-center [&_.stars]:gap-0.5 [&_.stars]:text-[11px] [&_.stars]:tracking-[1px] [&_.stars]:text-[#ffd54a]
   [&_.stars_i]:leading-none [&_.rating-number]:mt-0 [&_.rating-number]:text-xs [&_.rating-number]:text-[#444] dark:[&_.rating-number]:text-[#ddd]
   [&_.latest-update]:!mb-3 [&_.latest-update]:text-[#019219] dark:[&_.latest-update]:text-[#30c430]
-  [&_.bookmark-btn]:inline-flex [&_.bookmark-btn]:w-20 [&_.bookmark-btn]:cursor-pointer [&_.bookmark-btn]:items-center [&_.bookmark-btn]:justify-center [&_.bookmark-btn]:gap-1.5 [&_.bookmark-btn]:rounded-lg [&_.bookmark-btn]:border-2 [&_.bookmark-btn]:border-[rgba(0,0,0,0.15)] [&_.bookmark-btn]:bg-[rgba(80,78,78,0.04)] [&_.bookmark-btn]:px-[5px] [&_.bookmark-btn]:py-[3px] [&_.bookmark-btn]:text-[10px] [&_.bookmark-btn]:font-semibold [&_.bookmark-btn]:text-[#050000] [&_.bookmark-btn]:transition-all [&_.bookmark-btn]:duration-300 dark:[&_.bookmark-btn]:border-[rgba(255,255,255,0.18)] dark:[&_.bookmark-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.bookmark-btn]:text-white [&_.bookmark-btn:hover]:border-[rgba(0,0,0,0.1)] [&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.06)] dark:[&_.bookmark-btn:hover]:border-[rgba(255,255,255,0.08)] dark:[&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.35)] [&_.bookmark-btn.bookmarked]:border-[#ffcc00] [&_.bookmark-btn.bookmarked]:bg-[#ffcc00] [&_.bookmark-btn.bookmarked]:text-black
+  [&_.bookmark-btn]:inline-flex [&_.bookmark-btn]:w-full [&_.bookmark-btn]:cursor-pointer [&_.bookmark-btn]:items-center [&_.bookmark-btn]:justify-center [&_.bookmark-btn]:gap-1.5 [&_.bookmark-btn]:rounded-lg [&_.bookmark-btn]:border-2 [&_.bookmark-btn]:border-[rgba(0,0,0,0.15)] [&_.bookmark-btn]:bg-[rgba(80,78,78,0.04)] [&_.bookmark-btn]:px-[5px] [&_.bookmark-btn]:py-[3px] [&_.bookmark-btn]:text-[10px] [&_.bookmark-btn]:font-semibold [&_.bookmark-btn]:text-[#050000] [&_.bookmark-btn]:transition-all [&_.bookmark-btn]:duration-300 dark:[&_.bookmark-btn]:border-[rgba(255,255,255,0.18)] dark:[&_.bookmark-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.bookmark-btn]:text-white [&_.bookmark-btn:hover]:border-[rgba(0,0,0,0.1)] [&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.06)] dark:[&_.bookmark-btn:hover]:border-[rgba(255,255,255,0.08)] dark:[&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.35)] [&_.bookmark-btn.bookmarked]:border-[#ffcc00] [&_.bookmark-btn.bookmarked]:bg-[#ffcc00] [&_.bookmark-btn.bookmarked]:text-black
   [&_.status]:mb-[6px] [&_.status]:flex [&_.status]:items-center [&_.status]:gap-2 [&_.status]:font-semibold [&_.status]:text-[violet] [&_.status_span]:font-bold [&_.status.ongoing_span]:text-green-500 [&_.status.completed_span]:text-sky-300 [&_.status.hiatus_span]:text-yellow-100 [&_.status.dropped_span]:text-[orangered] [&_.status.canceled_span]:text-orange-600 [&_.status.unknown_span]:text-gray-400
   [&_.detail-item]:mb-[5px] [&_.detail-item]:flex [&_.detail-item]:items-center [&_.detail-item]:gap-[3px] [&_.detail-item]:text-[11px] [&_.detail-item]:text-[#050000] dark:[&_.detail-item]:text-white [&_.detail-item_i]:w-5 [&_.detail-item_i]:text-center [&_.detail-item_i]:text-[#444] dark:[&_.detail-item_i]:text-[#ddd]
   [&_.genres]:grid [&_.genres]:grid-cols-4 [&_.genres]:gap-2 [&_.genres]:rounded-[14px] [&_.genres]:px-[14px] [&_.genres]:py-[15px]
@@ -702,17 +770,25 @@ const detailPageClasses = `
   max-[330px]:[&_.chapter-header]:px-2 max-[330px]:[&_.chapter-header-right]:gap-1 max-[330px]:[&_.source-toggle]:gap-[3px] max-[330px]:[&_.view-toggle]:gap-[3px] max-[330px]:[&_.view-btn]:h-[31px] max-[330px]:[&_.view-btn]:w-[31px] max-[330px]:[&_.view-btn]:min-w-[31px] max-[330px]:[&_.view-btn]:rounded-[7px]
   max-[767px]:[&_.source-toggle]:min-w-0 max-[767px]:[&_.source-toggle]:shrink-0 max-[767px]:[&_.source-toggle]:gap-[6px] max-[767px]:[&_.view-toggle]:min-w-0 max-[767px]:[&_.view-toggle]:shrink-0 max-[767px]:[&_.view-toggle]:gap-[6px] max-[767px]:[&_.view-btn]:h-9 max-[767px]:[&_.view-btn]:w-9 max-[767px]:[&_.view-btn]:min-w-9 max-[767px]:[&_.view-btn]:rounded-[9px]
   md:[&_.container]:my-5 md:[&_.container]:max-w-[720px] md:[&_.container]:rounded-[20px]
-  md:[&_.main]:gap-[30px] md:[&_.main]:px-[30px] md:[&_.main]:pt-[35px] md:[&_.main]:pb-[25px] md:[&_.left-column]:w-[200px] md:[&_.cover]:h-[280px] md:[&_.cover]:w-[200px] md:[&_.info_h1]:text-lg md:[&_.bookmark-btn]:w-[140px] md:[&_.bookmark-btn]:px-6 md:[&_.bookmark-btn]:py-[10px] md:[&_.bookmark-btn]:text-sm
-  md:[&_.genres]:grid-cols-[repeat(auto-fit,minmax(110px,1fr))] md:[&_.genres]:mx-[30px] md:[&_.genres]:w-[calc(100%-60px)] md:[&_.genres]:gap-[10px] md:[&_.genres]:px-px md:[&_.genres]:py-[15px] md:[&_.synopsis]:mx-[30px] md:[&_.synopsis]:mb-[30px] md:[&_.detail-extra-tags]:mx-[30px] md:[&_.detail-extra-tags]:mb-[30px] md:[&_.chapter-header]:px-[30px]
-  md:[&_.chapter-grid]:grid-cols-[repeat(6,minmax(0,1fr))] md:[&_.chapter-grid]:gap-[10px] md:[&_.chapter-grid]:px-6 md:[&_.chapter-grid]:pb-10
+  md:[&_.main]:gap-[30px] md:[&_.main]:px-[30px] md:[&_.main]:pt-[35px] md:[&_.main]:pb-[25px] md:[&_.left-column]:w-[200px] md:[&_.cover]:h-[280px] md:[&_.cover]:w-[200px] md:[&_.info_h1]:!text-2xl md:[&_.bookmark-btn]:px-6 md:[&_.bookmark-btn]:py-[10px] md:[&_.bookmark-btn]:text-sm
+  md:[&_.genres]:grid-cols-[repeat(auto-fit,minmax(110px,1fr))] md:[&_.genres]:mx-0 md:[&_.genres]:w-auto md:[&_.genres]:gap-[10px] md:[&_.genres]:px-0 md:[&_.genres]:py-2 md:[&_.synopsis]:mx-0 md:[&_.synopsis]:mb-6 md:[&_.detail-extra-tags]:mx-0 md:[&_.detail-extra-tags]:mb-4 md:[&_.chapter-header]:px-0
+  md:[&_.chapter-grid]:grid-cols-[repeat(6,minmax(0,1fr))] md:[&_.chapter-grid]:gap-[10px] md:[&_.chapter-grid]:px-0 md:[&_.chapter-grid]:pb-10
+  md:[&_.content]:grid md:[&_.content]:grid-cols-[200px_minmax(0,1fr)] md:[&_.content]:gap-x-[30px] md:[&_.content]:px-[30px] md:[&_.content]:pt-[35px] md:[&_.main]:contents
+  md:[&_.left-column]:col-start-1 md:[&_.left-column]:row-start-1 md:[&_.left-column]:row-span-7 md:[&_.left-column]:self-start md:[&_.left-column]:pt-0
+  md:[&_.info]:col-start-2 md:[&_.info]:row-start-1 md:[&_.info]:px-0 md:[&_.info]:pt-0
+  md:[&_.genres]:col-start-2 md:[&_.detail-extra-tags]:col-start-2 md:[&_.detail-extra-tags]:px-4 md:[&_.detail-extra-tags]:py-3
+  md:[&_.detail-tabs]:col-start-2 md:[&_.detail-tabs]:mx-0 md:[&_.detail-tabs]:mb-4
+  md:[&_.chapters]:col-start-2 md:[&_.chapters]:mx-0 md:[&_.chapters]:px-0 md:[&_.synopsis]:col-start-2
+  md:[&_.chapter-search]:mx-0 md:[&_.chapter-search]:mb-3
+  md:[&_.detail-tab-comments]:col-start-2 md:[&_.detail-tab-comments]:my-0 md:[&_.detail-tab-comments]:w-full
   lg:[&_.container]:my-[30px] lg:[&_.container]:max-w-[var(--detail-max-width)] lg:[&_.container]:rounded-3xl lg:[&_.container]:ml-[var(--detail-content-left)] lg:[&_.container]:mr-0 lg:[&_.container]:w-[var(--detail-content-width)]
-  lg:[&_.main]:gap-10 lg:[&_.main]:px-10 lg:[&_.main]:pt-10 lg:[&_.main]:pb-[30px] lg:[&_.left-column]:w-[240px] lg:[&_.cover]:h-[340px] lg:[&_.cover]:w-[240px] lg:[&_.info_h1]:text-xl lg:[&_.detail-item]:text-sm lg:[&_.detail-item_i]:w-[22px] lg:[&_.detail-item_i]:text-sm lg:[&_.status]:text-[15px]
-  lg:[&_.genres]:mx-10 lg:[&_.genres]:w-auto lg:[&_.genres]:py-[15px] lg:[&_.genres]:px-0 lg:[&_.synopsis]:mx-10 lg:[&_.synopsis]:mb-10 lg:[&_.detail-extra-tags]:mx-10 lg:[&_.detail-extra-tags]:mb-10 lg:[&_.chapter-header]:px-10
-  lg:[&_.chapter-grid]:grid-cols-[repeat(8,minmax(0,1fr))] lg:[&_.chapter-grid]:gap-[10px] lg:[&_.chapter-grid]:px-8 lg:[&_.chapter-grid]:pb-[50px]
-  [&_.detail-widgets]:mx-auto [&_.detail-widgets]:my-6 [&_.detail-widgets]:w-[min(100%-24px,1150px)] lg:[&_.detail-widgets]:my-6 lg:[&_.detail-widgets]:mr-0 lg:[&_.detail-widgets]:ml-[var(--detail-content-left)] lg:[&_.detail-widgets]:w-[var(--detail-content-width)] lg:[&_.detail-widgets]:max-w-[var(--detail-max-width)]
+  lg:[&_.main]:gap-10 lg:[&_.main]:px-10 lg:[&_.main]:pt-10 lg:[&_.main]:pb-[30px] lg:[&_.left-column]:w-[240px] lg:[&_.cover]:h-[340px] lg:[&_.cover]:w-[240px] lg:[&_.info_h1]:!text-[28px] lg:[&_.detail-item]:text-sm lg:[&_.detail-item_i]:w-[22px] lg:[&_.detail-item_i]:text-sm lg:[&_.status]:text-[15px]
+  lg:[&_.genres]:py-[15px] lg:[&_.synopsis]:mb-10 lg:[&_.detail-extra-tags]:mb-4
+  lg:[&_.chapter-grid]:grid-cols-[repeat(8,minmax(0,1fr))] lg:[&_.chapter-grid]:gap-[10px] lg:[&_.chapter-grid]:px-0 lg:[&_.chapter-grid]:pb-[50px]
   [&_.detail-route-message]:mx-auto [&_.detail-route-message]:my-8 [&_.detail-route-message]:max-w-[1150px] [&_.detail-route-message]:p-5 [&_.detail-route-message]:text-center
   [&_.detail-route-loading]:grid [&_.detail-route-loading]:min-h-screen [&_.detail-route-loading]:place-items-center
   [&_.detail-route-spinner]:h-[42px] [&_.detail-route-spinner]:w-[42px] [&_.detail-route-spinner]:animate-spin [&_.detail-route-spinner]:rounded-full [&_.detail-route-spinner]:border-4 [&_.detail-route-spinner]:border-[rgba(128,128,128,0.25)] [&_.detail-route-spinner]:border-t-current
+  lg:[&_.content]:grid-cols-[240px_minmax(0,1fr)] lg:[&_.content]:gap-x-10 lg:[&_.content]:px-10 lg:[&_.content]:pt-10 lg:[&_.left-column]:pt-0 lg:[&_.info]:pt-0
 `;
 
 function MetaTag({ label, value, icon }: { label: string; value?: string; icon: string }) {
@@ -727,7 +803,18 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 
 export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
-  const cover = useCoverImageSource(manga?.img || manga?.cover || "", 400);
+  const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
+  const [coverPreferenceError, setCoverPreferenceError] = useState("");
+  const baseCoverUrl = manga?.covers?.length
+    ? manga.covers[manga.covers.length - 1]
+    : manga?.img || manga?.cover || "";
+  const coverOptions = useMemo(
+    () => [...new Set([...(manga?.covers || []), baseCoverUrl].filter(Boolean))],
+    [baseCoverUrl, manga?.covers],
+  );
+  const coverOptionsRef = useRef(coverOptions);
+  const activeCoverUrl = coverOptions.includes(selectedCoverUrl) ? selectedCoverUrl : baseCoverUrl;
+  const cover = useCoverImageSource(activeCoverUrl, 1200);
   const [state, setState] = useState<DetailState>("loading");
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
@@ -737,10 +824,38 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [chapterRetry, setChapterRetry] = useState(0);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("grid");
+  const [detailTab, setDetailTab] = useState<"chapters" | "synopsis" | "covers" | "discussion">("chapters");
+  const [chapterSearch, setChapterSearch] = useState("");
   const [bookmarked, setBookmarked] = useState(false);
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [recommendationsHidden, setRecommendationsHidden] = useState(false);
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
+  const mangaSlug = manga?.slug;
+
+  useEffect(() => {
+    coverOptionsRef.current = coverOptions;
+  }, [coverOptions]);
+
+  useEffect(() => {
+    if (!mangaSlug) return;
+    let active = true;
+    setSelectedCoverUrl("");
+    setCoverPreferenceError("");
+    if (!("indexedDB" in window)) {
+      setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
+      return;
+    }
+    void readSeriesCoverPreference(mangaSlug).then((savedUrl) => {
+      if (!active || !savedUrl || !coverOptionsRef.current.includes(savedUrl)) return;
+      setSelectedCoverUrl(savedUrl);
+    }).catch((error: unknown) => {
+      console.error(`Could not load the selected cover for ${mangaSlug}.`, error);
+      if (active) setCoverPreferenceError("Could not load the saved cover selection.");
+    });
+    return () => {
+      active = false;
+    };
+  }, [mangaSlug]);
 
   useEffect(() => {
     const updateSidebarState = () => setSiteSidebarOpen(document.body.classList.contains("sidebar-open"));
@@ -819,6 +934,23 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         const snapshot = await window.fs.getDoc(reference);
         if (!snapshot.exists() || controller.signal.aborted) return;
         const data = snapshot.data();
+        const firestoreCovers = asStringList(data.covers).map(resolveCover).filter(Boolean);
+        if (firestoreCovers.length || data.coverNumbers) {
+          const coverNumbers = data.coverNumbers && typeof data.coverNumbers === "object"
+            ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, asString(number)]))
+            : {};
+          setManga((current) => {
+            if (current?.slug !== slug) return current;
+            if (firestoreCovers.length === (current.covers || []).length &&
+              firestoreCovers.every((cover, index) => cover === current.covers?.[index]) &&
+              Object.keys(coverNumbers).every((url) => current.coverNumbers?.[url] === coverNumbers[url])) return current;
+            return {
+              ...current,
+              ...(firestoreCovers.length ? { covers: firestoreCovers } : {}),
+              coverNumbers,
+            };
+          });
+        }
         const latest = data.latestUpdate || data.updatedAt;
         if (latest) setFirestoreLatestUpdate(firestoreDate(latest));
       } catch (error) {
@@ -942,10 +1074,32 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       .filter((genre) => !/^(shounen|seinen|shoujo|josei|kodomo|hentai)$/i.test(genre)))],
     [manga?.genres],
   );
-  const visibleChapters = useMemo(() => [...chapters].sort((left, right) => {
-    const order = chapterNumber(left.num) - chapterNumber(right.num);
-    return sort === "newest" ? -order : order;
-  }), [chapters, sort]);
+  const visibleChapters = useMemo(() => [...chapters]
+    .filter((chapter) => {
+      const query = chapterSearch.trim().toLowerCase();
+      return !query || `chapter ${chapter.num} ${chapter.title || ""}`.toLowerCase().includes(query);
+    })
+    .sort((left, right) => {
+      const order = chapterNumber(left.num) - chapterNumber(right.num);
+      return sort === "newest" ? -order : order;
+    }), [chapterSearch, chapters, sort]);
+  function selectDetailCover(url: string) {
+    setSelectedCoverUrl(url);
+    setCoverPreferenceError("");
+    if (!manga || !("indexedDB" in window)) {
+      setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
+      return;
+    }
+    void writeSeriesCoverPreference(manga.slug, url).catch((error: unknown) => {
+      console.error(`Could not save the selected cover for ${manga.slug}.`, error);
+      setCoverPreferenceError("Cover changed for this visit, but could not be saved in this browser.");
+    });
+  }
+  const latestChapter = useMemo(
+    () => chapters.reduce<Chapter | undefined>((latest, chapter) =>
+      !latest || chapterNumber(chapter.num) > chapterNumber(latest.num) ? chapter : latest, undefined),
+    [chapters],
+  );
   const rating = Number.parseFloat(String(manga?.rating ?? ""));
   const ratingFromGenres = manga?.genres?.map((genre) => Number.parseFloat(genre))
     .find((value) => Number.isFinite(value) && value >= 0 && value <= 10);
@@ -1101,14 +1255,18 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     <>
       <SiteHeader />
       <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
-        <div className="container relative mx-auto my-0 min-h-screen w-full max-w-[480px] overflow-hidden rounded-2xl bg-[#ffffffbd] text-[#050000] transition-[margin-left,width,max-width,background,color] duration-300 after:absolute after:inset-0 after:z-[2] after:bg-[var(--detail-overlay)] after:content-[''] after:transition-colors dark:bg-[#0f0f1e] dark:text-white md:my-5 md:max-w-[720px] md:rounded-[20px] lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)] lg:rounded-3xl">
-          <div className="absolute inset-0 z-[1] scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[4px] transition-[background-image,opacity] duration-500 dark:opacity-100" id="bgLayer" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
+        <div className="pointer-events-none" id="bgLayer" aria-hidden="true" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
+        <div
+          className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.62)_0%,rgba(5,5,10,0.44)_48%,rgba(15,5,12,0.62)_100%)]"
+          aria-hidden="true"
+        />
+        <div className="container relative z-[2] mx-auto my-0 min-h-screen w-full max-w-[480px] text-[#171717] transition-[margin-left,width,max-width,color] duration-300 dark:text-white md:my-5 md:max-w-[720px] lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)]">
           <div className="content">
             <div className="main">
               <div className="left-column">
                 <div className="cover">
                   <CoverImage
-                    src={manga.img || manga.cover || "/assets/icons/favicon.ico"}
+                    src={activeCoverUrl || "/assets/icons/favicon.ico"}
                     alt={`${manga.title} cover`}
                     loading="eager"
                     onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
@@ -1128,12 +1286,19 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   </div>
                   <div className="rating-number">{ratingValue === undefined ? "N/A" : ratingValue.toFixed(1)}</div>
                 </div>
+                <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#e59a00] bg-[#e59a00] px-1 py-2 text-[10px] font-semibold text-black transition hover:bg-[#f0aa18] disabled:cursor-not-allowed disabled:opacity-50 lg:px-3 lg:text-sm" type="button" onClick={() => {
+                  if (latestChapter) void openChapter(latestChapter);
+                }} disabled={!latestChapter || chapterState !== "ready"}>
+                  <i className="fas fa-book-open" aria-hidden="true" />
+                  <span>{chapterState === "loading" ? "Loading..." : "Read now"}</span>
+                </button>
                 <button className={`bookmark-btn${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
                   <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
                   <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
                 </button>
               </div>
               <div className="info">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#777] dark:text-white/55">Series details</p>
                 <h1 className="title">{manga.title}</h1>
                 <div className="title-divider" />
                 {manga.altTitle && <div className="alt-title">{manga.altTitle}</div>}
@@ -1194,15 +1359,81 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 )}
               </section>
             )}
-            <section className="synopsis">
+            <nav className="detail-tabs mx-3 flex w-[calc(100%-24px)] border-b border-black/15 text-sm dark:border-white/15 md:mx-[30px] md:w-auto lg:mx-10" role="tablist" aria-label="Series details">
+              {([
+                ["chapters", "Chapters"],
+                ["synopsis", "Synopsis"],
+                ["covers", "Volumes"],
+                ["discussion", "Discussion"],
+              ] as const).map(([tab, label]) => (
+                <button
+                  className={`relative min-h-12 min-w-0 flex-1 border-b-2 px-2 text-[11px] font-medium transition-colors md:flex-none md:px-4 md:text-sm ${detailTab === tab ? "border-[#d99000] text-[#171717] dark:text-white" : "border-transparent text-[#666] hover:text-[#171717] dark:text-white/60 dark:hover:text-white"}`}
+                  type="button"
+                  key={tab}
+                  id={`detail-tab-${tab}`}
+                  role="tab"
+                  aria-selected={detailTab === tab}
+                  onClick={() => setDetailTab(tab)}
+                >
+                  {label}{tab === "chapters" && <span className="ml-2 text-xs opacity-65">{chapters.length}</span>}
+                </button>
+              ))}
+            </nav>
+
+            {detailTab === "synopsis" && <section className="synopsis" role="tabpanel" aria-labelledby="detail-tab-synopsis">
               <h2>Synopsis</h2>
               {manga.desc
                 ? <div className="synopsis-content">{renderSynopsisNodes(parseSynopsis(manga.desc))}</div>
                 : <p>Synopsis tidak tersedia.</p>}
-            </section>
-            <div id="announcement-widget" />
+            </section>}
 
-            <section className="chapters">
+            {detailTab === "covers" && <section className="series-covers mx-3 my-4 md:mx-[30px] lg:mx-10" role="tabpanel" aria-labelledby="detail-tab-covers">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="m-0 text-base font-semibold">Choose a volume cover</h2>
+                  <p className="mt-1 text-xs text-[#666] dark:text-white/60">Your selection is saved in this browser.</p>
+                </div>
+                <span className="text-xs text-[#666] dark:text-white/60">{coverOptions.length} volumes</span>
+              </div>
+              {coverPreferenceError && <p className="mb-3 text-sm text-red-600 dark:text-red-300" role="status">{coverPreferenceError}</p>}
+              {coverOptions.length ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
+                  {coverOptions.map((coverUrl, index) => (
+                    <button
+                      className={`group relative overflow-hidden rounded-xl border-2 bg-black/5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white/5 ${activeCoverUrl === coverUrl ? "border-[#e59a00] shadow-[0_0_0_2px_rgba(229,154,0,0.2)]" : "border-black/10 dark:border-white/10"}`}
+                      type="button"
+                      key={coverUrl}
+                      onClick={() => selectDetailCover(coverUrl)}
+                      aria-pressed={activeCoverUrl === coverUrl}
+                      aria-label={`Use volume ${index + 1} cover`}
+                    >
+                      <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizeWidth={240} />
+                      <span className="block truncate px-2 py-2 text-xs font-medium">Volume {manga.coverNumbers?.[coverUrl] || index + 1}</span>
+                      {activeCoverUrl === coverUrl && <span className="absolute right-2 top-2 rounded-full bg-[#e59a00] px-2 py-1 text-[10px] font-bold text-black">Selected</span>}
+                    </button>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-[#666] dark:text-white/60">No volume covers have been added yet.</p>}
+            </section>}
+
+            {detailTab === "discussion" && <div className="detail-tab-comments mx-3 my-4 w-[calc(100%-24px)] md:mx-[30px] md:w-[calc(100%-60px)]" role="tabpanel" aria-labelledby="detail-tab-discussion">
+              <CommunityWidgets pageId={`detail_${slug}`} />
+            </div>}
+
+            {detailTab === "chapters" && <>
+            <div id="announcement-widget" />
+            <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
+              <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 md:mx-[30px]">
+                <i className="fas fa-search text-xs" aria-hidden="true" />
+                <input
+                  className="min-w-0 flex-1 bg-transparent text-sm text-inherit outline-none placeholder:text-inherit"
+                  type="search"
+                  value={chapterSearch}
+                  onChange={(event) => setChapterSearch(event.target.value)}
+                  placeholder="Search chapter number or title"
+                  aria-label="Search chapters"
+                />
+              </label>
               <div className="chapter-header">
                 <h2 className="section-title">Chapters</h2>
                 <div className="chapter-header-right">
@@ -1284,7 +1515,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 )}
                 {chapterState === "ready" && visibleChapters.length === 0 && (
                   <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
-                    Belum ada chapter.
+                    {chapterSearch.trim() ? "No matching chapters." : "Belum ada chapter."}
                   </div>
                 )}
                 {chapterState === "ready" && visibleChapters.map((chapter, index) => {
@@ -1354,10 +1585,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 })}
               </div>
             </section>
+            </>}
           </div>
         </div>
         <RecommendationSidebar manga={manga} onVisibilityChange={(visible) => setRecommendationsHidden(!visible)} />
-        <CommunityWidgets className="detail-widgets" pageId={`detail_${slug}`} />
       </main>
       <SiteFooter />
       <RouteIntegrations />

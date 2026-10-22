@@ -680,6 +680,14 @@
   margin-bottom: 16px;
 }
 
+.volumeHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .panelHeading p {
   margin: 6px 0 0;
 }
@@ -736,6 +744,122 @@
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.coverGalleryPanel {
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.coverGalleryHint {
+  margin: 0 0 14px;
+  color: #9aa8c7;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.coverGalleryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.coverGalleryItem {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+  background: rgb(10 15 29 / 55%);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.coverGalleryItemDragging {
+  z-index: 2;
+  transform: translateY(-10px) scale(1.04);
+  border-color: rgb(125 164 255 / 90%);
+  box-shadow: 0 16px 34px rgb(0 0 0 / 45%), 0 0 0 2px rgb(107 155 255 / 35%);
+  will-change: transform;
+}
+
+.coverGalleryItem > img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.coverGalleryImage {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.coverGalleryImage:active {
+  cursor: grabbing;
+}
+
+.coverGalleryImage > img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.coverDragHint {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: white;
+  background: rgb(0 0 0 / 65%);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.coverGalleryActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+}
+
+.volumeNumberField {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: #bac5dc;
+  font-size: 11px;
+}
+
+.volumeNumberField > input {
+  width: 56px;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 6px;
+  color: #eef2ff;
+  background: rgb(10 15 29 / 65%);
+  font: inherit;
+}
+
+.volumeNumberField > input:focus {
+  border-color: #6b9bff;
+  outline: 2px solid rgb(107 155 255 / 25%);
+}
+
+.coverGalleryActions > .deleteButton {
+  min-height: 30px;
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  font-size: 11px;
 }
 
 .chapterTools {
@@ -1771,6 +1895,22 @@
 
 .lightMode .detailTabs button {
   color: #58647c;
+}
+
+.lightMode .coverGalleryHint,
+.lightMode .volumeNumberField {
+  color: #58647c;
+}
+
+.lightMode .coverGalleryItem {
+  border-color: rgb(20 29 55 / 13%);
+  background: #f1f3f8;
+}
+
+.lightMode .volumeNumberField > input {
+  border-color: rgb(20 29 55 / 15%);
+  color: #182033;
+  background: #fff;
 }
 
 .lightMode .detailTabs .activeDetailTab {

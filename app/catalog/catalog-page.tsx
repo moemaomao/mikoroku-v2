@@ -29,6 +29,7 @@ type Manga = {
   firestore?: boolean;
   source?: string;
   origin?: string;
+  managedByAdmin?: boolean;
   isDraft?: boolean;
 };
 
@@ -81,8 +82,11 @@ function normalizeCover(value?: string): string {
 }
 
 function updateTime(manga: Manga): number {
-  const values = [manga.updatedAt, manga.latestUpdate, manga.published, manga.updated,
-    manga.createdAt, manga.timestamp, manga.lastUpdate, manga.date];
+  const isManaged = manga.firestore === true || manga.managedByAdmin === true ||
+    manga.source === "firestore" || manga.source === "hybrid" || manga.origin === "github";
+  if (!isManaged) return 0;
+
+  const values = [manga.updatedAt, manga.latestUpdate];
   for (const value of values) {
     if (value === undefined || value === null || value === "") continue;
     const time = typeof value === "number"
@@ -182,7 +186,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
   }, [kind]);
 
   useEffect(() => {
-    if (kind !== "hentai") return;
+    if (kind !== "manga" && kind !== "hentai") return;
     let mounted = true;
     const addFirestoreManga = () => {
       const mangaData = (window as MangaDataWindow).mangaData;

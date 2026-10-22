@@ -378,7 +378,7 @@ export default function RecommendationSidebar({
       <aside
         id="rec-sidebar-root"
         aria-label="Manga recommendations"
-        className={`relative mx-auto mb-2 mt-6 w-[calc(100%-24px)] max-w-[720px] overflow-visible font-[Kodchasan,sans-serif] text-zinc-900 lg:absolute lg:right-5 lg:top-[30px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[var(--sidebar-width,280px)] lg:max-w-none dark:text-white${visible ? "" : " hidden"}`}
+        className={`relative z-10 mx-auto mb-2 mt-6 w-[calc(100%-24px)] max-w-[720px] overflow-visible font-[Kodchasan,sans-serif] text-zinc-900 lg:absolute lg:right-5 lg:top-[30px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[var(--sidebar-width,280px)] lg:max-w-none dark:text-white${visible ? "" : " hidden"}`}
       >
         <div className="overflow-hidden py-[14px] lg:flex lg:h-full lg:flex-col lg:py-0">
           <h2 className="mb-3 flex items-center justify-between gap-2 px-[14px] text-[15px] font-bold lg:px-0 lg:text-base">
