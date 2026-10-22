@@ -1,5 +1,5 @@
 import { getSeriesSeoData } from "../../../../lib/seo-metadata";
-import { createMikorokuOgImage } from "../../../../lib/og-image";
+import { createMikorokuOgImage, fetchCoverAsDataUrl } from "../../../../lib/og-image";
 
 export async function GET(
   _request: Request,
@@ -8,11 +8,13 @@ export async function GET(
   try {
     const { slug } = await params;
     const series = await getSeriesSeoData(slug);
+    const coverDataUrl = await fetchCoverAsDataUrl(series.image);
 
     return createMikorokuOgImage({
       title: series.title,
       description: series.description,
       label: "Manga & Series",
+      coverDataUrl,
     });
   } catch (error) {
     console.error("[OG series]", error);
@@ -20,6 +22,7 @@ export async function GET(
       title: "Mikoroku",
       description: "Platform baca manga bahasa Indonesia.",
       label: "Manga & Series",
+      coverDataUrl: null,
     });
   }
 }

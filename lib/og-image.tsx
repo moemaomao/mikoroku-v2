@@ -4,11 +4,12 @@ export function createMikorokuOgImage({
   title,
   description,
   label,
+  coverDataUrl,
 }: {
   title: string;
   description: string;
   label: string;
-  image?: string | null;
+  coverDataUrl?: string | null;
 }) {
   const safeTitle = (title || "Mikoroku").slice(0, 90);
   const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 110);
@@ -25,9 +26,9 @@ export function createMikorokuOgImage({
           fontFamily: "Arial, sans-serif",
           padding: "48px 56px",
           position: "relative",
+          overflow: "hidden",
         }}
       >
-        {/* bar kiri */}
         <div
           style={{
             position: "absolute",
@@ -44,11 +45,11 @@ export function createMikorokuOgImage({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: "100%",
+            width: coverDataUrl ? 680 : "100%",
             height: "100%",
+            zIndex: 1,
           }}
         >
-          {/* header */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div
               style={{
@@ -74,8 +75,7 @@ export function createMikorokuOgImage({
             </div>
           </div>
 
-          {/* konten */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 1000 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 640 }}>
             <div
               style={{
                 alignSelf: "flex-start",
@@ -93,7 +93,7 @@ export function createMikorokuOgImage({
 
             <div
               style={{
-                fontSize: 44,
+                fontSize: 40,
                 fontWeight: 800,
                 lineHeight: 1.15,
                 letterSpacing: -0.5,
@@ -105,7 +105,7 @@ export function createMikorokuOgImage({
 
             <div
               style={{
-                fontSize: 20,
+                fontSize: 18,
                 lineHeight: 1.4,
                 color: "#c8c5cc",
               }}
@@ -114,13 +114,44 @@ export function createMikorokuOgImage({
             </div>
           </div>
 
-          {/* footer */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#999", fontSize: 16 }}>
             <span style={{ color: "#ff6476", fontWeight: 700 }}>mikoroku.top</span>
             <span>·</span>
             <span>Manga, manhwa & more</span>
           </div>
         </div>
+
+        {coverDataUrl ? (
+          <div
+            style={{
+              position: "absolute",
+              top: 50,
+              right: 56,
+              width: 340,
+              height: 500,
+              borderRadius: 18,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.2)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+              background: "#24232a",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <img
+              src={coverDataUrl}
+              width={340}
+              height={500}
+              alt=""
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     ),
     {
@@ -128,4 +159,40 @@ export function createMikorokuOgImage({
       height: 630,
     },
   );
+}
+
+export async function fetchCoverAsDataUrl(url?: string | null): Promise<string | null> {
+  if (!url || !url.startsWith("http")) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "MikorokuOG/1.0",
+        Accept: "image/*",
+      },
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) return null;
+
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength > 2_500_000) return null;
+
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return `data:${contentType};base64,${base64}`;
+  } catch {
+    return null;
+  }
 }
