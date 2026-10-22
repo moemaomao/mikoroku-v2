@@ -4,7 +4,7 @@
   place-items: center;
   padding: 24px;
   box-sizing: border-box;
-  color: var(--text, #1e293b);
+  color: #1e293b;
   background: radial-gradient(ellipse at top, rgba(217, 70, 239, .12), transparent 50%),
     radial-gradient(ellipse at bottom right, rgba(244, 63, 94, .1), transparent 40%);
 }
@@ -14,7 +14,7 @@
   padding: 36px 32px;
   border: 1px solid rgba(128, 128, 128, .25);
   border-radius: 20px;
-  background: var(--card, #fff);
+  background: #fff;
   box-shadow: 0 20px 50px rgba(0, 0, 0, .12);
 }
 
@@ -31,7 +31,7 @@
 
 .commission-card > header p,
 .commission-payment p {
-  color: var(--text-soft, #64748b);
+  color: #64748b;
 }
 
 .commission-price {
@@ -74,6 +74,18 @@
   color: inherit;
   font: inherit;
   font-weight: 400;
+}
+
+.commission-card input::placeholder,
+.commission-card textarea::placeholder {
+  color: #94a3b8;
+}
+
+.commission-card input:focus,
+.commission-card textarea:focus {
+  border-color: #d946ef;
+  outline: 2px solid rgba(217, 70, 239, .2);
+  outline-offset: 1px;
 }
 
 .commission-card textarea {
@@ -143,8 +155,76 @@
 
 .commission-faq p {
   margin-bottom: 0;
-  color: var(--text-soft, #64748b);
+  color: #64748b;
   font-size: .85rem;
+}
+
+html.dark .commission-page {
+  color: #e2e8f0;
+  background:
+    radial-gradient(ellipse at top, rgba(217, 70, 239, .14), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(244, 63, 94, .12), transparent 42%),
+    #0b0b0b;
+}
+
+html.dark .commission-card {
+  border-color: rgba(203, 213, 225, .16);
+  background: #171725;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .38);
+}
+
+html.dark .commission-card h1 {
+  color: #e879f9;
+}
+
+html.dark .commission-card > header p,
+html.dark .commission-payment p,
+html.dark .commission-faq p {
+  color: #b6c0d4;
+}
+
+html.dark .commission-price {
+  border-color: rgba(232, 121, 249, .32);
+  color: #f0abfc;
+  background: rgba(217, 70, 239, .08);
+}
+
+html.dark .commission-card input,
+html.dark .commission-card textarea {
+  border-color: rgba(203, 213, 225, .22);
+  color: #f1f5f9;
+  background: rgba(8, 10, 20, .55);
+}
+
+html.dark .commission-card input::placeholder,
+html.dark .commission-card textarea::placeholder {
+  color: #8591a8;
+}
+
+html.dark .commission-card input:focus,
+html.dark .commission-card textarea:focus {
+  border-color: #e879f9;
+  outline-color: rgba(232, 121, 249, .24);
+}
+
+html.dark .commission-total,
+html.dark .commission-payment {
+  border-color: rgba(232, 121, 249, .25);
+  background: rgba(217, 70, 239, .1);
+}
+
+html.dark .commission-total strong,
+html.dark .commission-faq h2 {
+  color: #e879f9;
+}
+
+html.dark .commission-faq {
+  border-top-color: rgba(203, 213, 225, .24);
+}
+
+html.dark .commission-faq > div {
+  border-color: rgba(203, 213, 225, .15);
+  background: rgba(255, 255, 255, .025);
 }
 
 @media (max-width: 480px) {

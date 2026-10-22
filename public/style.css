@@ -30,10 +30,6 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-body {
-  padding-top: 50px;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;

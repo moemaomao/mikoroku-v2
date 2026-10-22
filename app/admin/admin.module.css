@@ -826,21 +826,55 @@
 }
 
 .chapterCard .rowActions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
   margin-top: auto;
 }
 
 .chapterCard .rowActions button {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-weight: 700;
+  display: grid;
+  width: 34px;
+  height: 32px;
+  flex: 0 0 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(107 155 255 / 25%);
+  border-radius: 8px;
+  color: #bed0ff;
+  background: rgb(107 155 255 / 8%);
+  cursor: pointer;
+}
+
+.chapterCard .rowActions button:hover {
+  border-color: rgb(107 155 255 / 55%);
+  background: rgb(107 155 255 / 18%);
+}
+
+.chapterCard .rowActions .deleteButton {
+  border-color: rgb(248 113 113 / 30%);
+  color: #ffaaaa;
+  background: rgb(248 113 113 / 8%);
+}
+
+.chapterCard .rowActions .deleteButton:hover {
+  border-color: rgb(248 113 113 / 60%);
+  background: rgb(248 113 113 / 17%);
+}
+
+.chapterCard .rowActions button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.chapterCard .rowActions button:focus-visible {
+  outline: 2px solid #82a7ff;
+  outline-offset: 2px;
 }
 
 .deleteButton {
@@ -1171,13 +1205,37 @@
 .fileUploadRow input[type="file"] {
   flex: 1;
   min-width: 160px;
-  padding: 8px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 8px;
+  min-height: 42px;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 10px;
   color: #c7d0e2;
-  background: rgb(10 15 29 / 55%);
+  background: rgb(10 15 29 / 72%);
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
+}
+
+.fileUploadRow input[type="file"]::file-selector-button {
+  min-height: 30px;
+  margin-right: 10px;
+  padding: 5px 11px;
+  border: 1px solid rgb(107 155 255 / 38%);
+  border-radius: 7px;
+  color: #eaf0ff;
+  background: rgb(107 155 255 / 17%);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fileUploadRow input[type="file"]::file-selector-button:hover {
+  border-color: rgb(107 155 255 / 70%);
+  background: rgb(107 155 255 / 28%);
+}
+
+.fileUploadRow input[type="file"]:focus-visible {
+  outline: 2px solid #82a7ff;
+  outline-offset: 2px;
 }
 
 .coverPreview {
@@ -1557,7 +1615,15 @@
 
 .lightMode {
   color: #22283b;
-  background: #eef1f7;
+  background:
+    radial-gradient(ellipse 72% 42% at 12% 0%, rgb(113 142 209 / 12%), transparent 70%),
+    radial-gradient(ellipse 58% 38% at 100% 30%, rgb(157 139 211 / 10%), transparent 72%),
+    linear-gradient(145deg, #e9edf6, #f0f2f8 54%, #e8edf6);
+}
+
+.lightMode .workspace {
+  background:
+    radial-gradient(ellipse 80% 40% at 45% 0%, rgb(255 255 255 / 48%), transparent 74%);
 }
 
 .lightMode .sidebar {
@@ -1597,7 +1663,8 @@
 .lightMode .statCard {
   border-color: rgb(20 29 55 / 12%);
   color: #252c40;
-  background: #fff;
+  background: #f8f9fd;
+  box-shadow: 0 5px 18px rgb(33 48 82 / 5%);
 }
 
 .lightMode .topbar h1,
@@ -1716,9 +1783,14 @@
 }
 
 .lightMode .chapterCard {
-  border-color: rgb(20 29 55 / 16%);
-  background: #fff;
-  box-shadow: 0 2px 7px rgb(24 37 70 / 6%);
+  border-color: rgb(62 79 120 / 17%);
+  background: #f1f4fa;
+  box-shadow: 0 2px 8px rgb(24 37 70 / 7%);
+}
+
+.lightMode .chapterCard:hover {
+  border-color: rgb(65 104 200 / 38%);
+  background: #edf1fa;
 }
 
 .lightMode .chapterCardHeading small {
@@ -1735,6 +1807,22 @@
   background: #f2f5fc;
 }
 
+.lightMode .chapterCard .rowActions button:not(.deleteButton):hover {
+  border-color: rgb(57 89 163 / 42%);
+  background: #e6ecf9;
+}
+
+.lightMode .chapterCard .rowActions .deleteButton {
+  border-color: rgb(190 46 64 / 26%);
+  color: #a5293c;
+  background: rgb(190 46 64 / 6%);
+}
+
+.lightMode .chapterCard .rowActions .deleteButton:hover {
+  border-color: rgb(190 46 64 / 42%);
+  background: rgb(190 46 64 / 11%);
+}
+
 .lightMode .deleteButton {
   border-color: rgb(190 46 64 / 26%);
   color: #a5293c;
@@ -1744,7 +1832,7 @@
 .lightMode .chapterModal {
   border-color: rgb(20 29 55 / 14%);
   color: #252c40;
-  background: #fff;
+  background: #f8f9fd;
 }
 
 .lightMode .chapterModal .field {
@@ -1761,6 +1849,17 @@
   border-color: #c8d0e0;
   color: #1a2035;
   background: #f0f3f8;
+}
+
+.lightMode .fileUploadRow input[type="file"]::file-selector-button {
+  border-color: #bdc9e2;
+  color: #28467f;
+  background: #e5ebf8;
+}
+
+.lightMode .fileUploadRow input[type="file"]::file-selector-button:hover {
+  border-color: #829bcf;
+  background: #dce5f7;
 }
 
 .lightMode .imageIndex {
@@ -2444,7 +2543,9 @@
 
 .lightMode .workspace,
 :global(body.adminPageBody.adminLight) .workspace {
-  background: #eef1f7 !important;
+  background:
+    radial-gradient(ellipse 80% 40% at 45% 0%, rgb(255 255 255 / 48%), transparent 74%),
+    linear-gradient(145deg, #e9edf6, #f0f2f8 54%, #e8edf6) !important;
 }
 
 .adminShell {
@@ -2455,15 +2556,21 @@
 
 .lightMode.adminShell,
 .adminShell.lightMode {
-  background: #eef1f7 !important;
+  background:
+    radial-gradient(ellipse 72% 42% at 12% 0%, rgb(113 142 209 / 12%), transparent 70%),
+    radial-gradient(ellipse 58% 38% at 100% 30%, rgb(157 139 211 / 10%), transparent 72%),
+    linear-gradient(145deg, #e9edf6, #f0f2f8 54%, #e8edf6) !important;
 }
 
 :global(body.adminPageBody.adminLight) {
-  background: #eef1f7 !important;
+  background:
+    radial-gradient(ellipse 72% 42% at 12% 0%, rgb(113 142 209 / 12%), transparent 70%),
+    radial-gradient(ellipse 58% 38% at 100% 30%, rgb(157 139 211 / 10%), transparent 72%),
+    linear-gradient(145deg, #e9edf6, #f0f2f8 54%, #e8edf6) !important;
 }
 
 :global(html) {
-  background: #eef1f7;
+  background: #e9edf6;
 }
 
 :global(body.adminPageBody:not(.adminLight)),

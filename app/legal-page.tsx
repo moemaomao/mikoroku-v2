@@ -1,5 +1,4 @@
 import SiteChrome from "./site-chrome";
-import "./legal.css";
 
 type LegalKind = "about" | "privacy" | "terms" | "dmca";
 
@@ -50,12 +49,25 @@ const content: Record<LegalKind, { title: string; children: React.ReactNode }> =
       <p>All manga featured on this website are the property of their publishers. The translation is made by a fan and is intended as a preview. If any file violates the copyright content, or if you want the file to be removed, please direct your complaint to the responsible party <a href="mailto:mikorokuscan@gmail.com">mikorokuscan@gmail.com</a></p>
       <p><strong>Postscript</strong></p>
       <ol><li>We respect the author by not damaging their work such as placing a watermark.</li><li>If a series we are working on is already official in our language, we will remove that series from our site.</li><li>The series that we translate do not intend for us to trade.</li></ol>
-      <p className="legal-thanks">Terima kasih atas pengertian dan dukungan Anda.<br />Mikoroku Scan Team</p>
+      <p className="mt-[50px] text-center text-sm text-[#888] max-[600px]:text-[14px] dark:text-[#a1a1aa]">
+        Terima kasih atas pengertian dan dukungan Anda.<br />Mikoroku Scan Team
+      </p>
     </>,
   },
 };
 
 export default function LegalPage({ kind }: { kind: LegalKind }) {
   const page = content[kind];
-  return <><SiteChrome showFooter={false} /><main className="legal-page"><article><h1>{page.title}</h1>{page.children}</article></main><SiteChrome showChrome={false} /></>;
+  return (
+    <>
+      <SiteChrome showFooter={false} />
+      <main className="min-h-[calc(100vh-70px)] px-4 pt-px pb-10 text-[#1f2937] dark:text-slate-200">
+        <article className="mx-auto my-[30px] max-w-[850px] rounded-xl border border-[rgba(15,23,42,0.08)] bg-[rgba(255,255,255,0.86)] p-5 leading-[1.8] shadow-[0_4px_20px_rgba(0,0,0,0.18)] max-[600px]:my-[15px] max-[600px]:p-[15px] dark:border-[rgba(203,213,225,0.12)] dark:bg-[rgba(20,20,24,0.82)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.32)] [&_h1]:mt-0 [&_h1]:mb-[30px] [&_h1]:text-center max-[600px]:[&_h1]:text-[22px] [&_h2]:mt-[25px] [&_h3]:mt-5 [&_p]:text-[15px] [&_li]:text-[15px] max-[600px]:[&_p]:text-[14px] max-[600px]:[&_li]:text-[14px] [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:font-semibold [&_a]:text-[#ff4d4f] dark:[&_h1]:text-slate-50 dark:[&_h2]:text-slate-50 dark:[&_h3]:text-slate-50 dark:[&_strong]:text-slate-50 dark:[&_a]:text-[#fb7185]">
+          <h1>{page.title}</h1>
+          {page.children}
+        </article>
+      </main>
+      <SiteChrome showChrome={false} />
+    </>
+  );
 }

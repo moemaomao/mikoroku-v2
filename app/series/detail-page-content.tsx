@@ -653,6 +653,68 @@ function extractChapterImages(raw: unknown): string[] {
   return input.match(/https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?[^\s"'<>]*)?/gi) || [];
 }
 
+const detailPageClasses = `
+  relative min-h-screen bg-white text-[#050000] [--detail-overlay:rgba(126,125,125,0.103)] dark:bg-[#0b0b0b] dark:text-white dark:[--detail-overlay:rgba(15,15,30,0.514)]
+  [&_#bgLayer]:absolute [&_#bgLayer]:inset-0 [&_#bgLayer]:z-[1] [&_#bgLayer]:scale-[1.05] [&_#bgLayer]:bg-cover [&_#bgLayer]:bg-center [&_#bgLayer]:bg-no-repeat [&_#bgLayer]:opacity-[0.22] [&_#bgLayer]:blur-[4px] [&_#bgLayer]:transition-[background-image,opacity] [&_#bgLayer]:duration-500 dark:[&_#bgLayer]:opacity-100
+  [&_.content]:relative [&_.content]:z-[3]
+  [&_img]:block [&_img]:h-auto [&_img]:max-w-full
+  [&_.main]:flex [&_.main]:items-start [&_.main]:gap-[14px] [&_.main]:p-[18px_14px_14px]
+  [&_.left-column]:flex [&_.left-column]:w-[95px] [&_.left-column]:shrink-0 [&_.left-column]:flex-col [&_.left-column]:items-center [&_.left-column]:gap-3
+  [&_.cover]:h-[130px] [&_.cover]:w-[90px] [&_.cover]:overflow-hidden [&_.cover]:rounded-xl
+  [&_.cover_img]:h-full [&_.cover_img]:w-full [&_.cover_img]:object-cover
+  [&_.info]:min-w-0 [&_.info]:flex-1
+  [&_.info_h1]:!mb-0 [&_.info_h1]:!max-w-full [&_.info_h1]:!break-words [&_.info_h1]:!text-left [&_.info_h1]:!text-sm [&_.info_h1]:!font-bold [&_.info_h1]:!leading-[1.25] dark:[&_.info_h1]:!text-white
+  [&_.alt-title]:mt-1 [&_.alt-title]:text-[11px] [&_.alt-title]:text-[#444] [&_.alt-title]:opacity-90 dark:[&_.alt-title]:text-[#ddd]
+  [&_.title-divider]:my-[6px] [&_.title-divider]:h-px [&_.title-divider]:w-full [&_.title-divider]:rounded-sm [&_.title-divider]:bg-[rgba(0,0,0,0.1)] dark:[&_.title-divider]:bg-[rgba(255,255,255,0.35)]
+  [&_.rating]:mt-1 [&_.rating]:flex [&_.rating]:items-center [&_.rating]:justify-center [&_.rating]:gap-px
+  [&_.stars]:inline-flex [&_.stars]:items-center [&_.stars]:gap-0.5 [&_.stars]:text-[11px] [&_.stars]:tracking-[1px] [&_.stars]:text-[#ffd54a]
+  [&_.stars_i]:leading-none [&_.rating-number]:mt-0 [&_.rating-number]:text-xs [&_.rating-number]:text-[#444] dark:[&_.rating-number]:text-[#ddd]
+  [&_.latest-update]:!mb-3 [&_.latest-update]:text-[#019219] dark:[&_.latest-update]:text-[#30c430]
+  [&_.bookmark-btn]:inline-flex [&_.bookmark-btn]:w-20 [&_.bookmark-btn]:cursor-pointer [&_.bookmark-btn]:items-center [&_.bookmark-btn]:justify-center [&_.bookmark-btn]:gap-1.5 [&_.bookmark-btn]:rounded-lg [&_.bookmark-btn]:border-2 [&_.bookmark-btn]:border-[rgba(0,0,0,0.15)] [&_.bookmark-btn]:bg-[rgba(80,78,78,0.04)] [&_.bookmark-btn]:px-[5px] [&_.bookmark-btn]:py-[3px] [&_.bookmark-btn]:text-[10px] [&_.bookmark-btn]:font-semibold [&_.bookmark-btn]:text-[#050000] [&_.bookmark-btn]:transition-all [&_.bookmark-btn]:duration-300 dark:[&_.bookmark-btn]:border-[rgba(255,255,255,0.18)] dark:[&_.bookmark-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.bookmark-btn]:text-white [&_.bookmark-btn:hover]:border-[rgba(0,0,0,0.1)] [&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.06)] dark:[&_.bookmark-btn:hover]:border-[rgba(255,255,255,0.08)] dark:[&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.35)] [&_.bookmark-btn.bookmarked]:border-[#ffcc00] [&_.bookmark-btn.bookmarked]:bg-[#ffcc00] [&_.bookmark-btn.bookmarked]:text-black
+  [&_.status]:mb-[6px] [&_.status]:flex [&_.status]:items-center [&_.status]:gap-2 [&_.status]:font-semibold [&_.status]:text-[violet] [&_.status_span]:font-bold [&_.status.ongoing_span]:text-green-500 [&_.status.completed_span]:text-sky-300 [&_.status.hiatus_span]:text-yellow-100 [&_.status.dropped_span]:text-[orangered] [&_.status.canceled_span]:text-orange-600 [&_.status.unknown_span]:text-gray-400
+  [&_.detail-item]:mb-[5px] [&_.detail-item]:flex [&_.detail-item]:items-center [&_.detail-item]:gap-[3px] [&_.detail-item]:text-[11px] [&_.detail-item]:text-[#050000] dark:[&_.detail-item]:text-white [&_.detail-item_i]:w-5 [&_.detail-item_i]:text-center [&_.detail-item_i]:text-[#444] dark:[&_.detail-item_i]:text-[#ddd]
+  [&_.genres]:grid [&_.genres]:grid-cols-4 [&_.genres]:gap-2 [&_.genres]:rounded-[14px] [&_.genres]:px-[14px] [&_.genres]:py-[15px]
+  [&_.genre]:block [&_.genre]:overflow-hidden [&_.genre]:truncate [&_.genre]:whitespace-nowrap [&_.genre]:rounded-lg [&_.genre]:border [&_.genre]:border-[rgba(0,0,0,0.1)] [&_.genre]:bg-[rgba(0,0,0,0.06)] [&_.genre]:px-2 [&_.genre]:py-[6px] [&_.genre]:text-center [&_.genre]:text-[11px] [&_.genre]:text-[#050000] [&_.genre]:no-underline [&_.genre]:backdrop-blur [&_.genre]:transition-[background,border-color,transform] [&_.genre]:duration-200 dark:[&_.genre]:border-[rgba(255,255,255,0.08)] dark:[&_.genre]:bg-[rgba(0,0,0,0.35)] dark:[&_.genre]:text-white [&_.genre:hover]:-translate-y-px [&_.genre:hover]:bg-[rgba(80,78,78,0.04)]
+  [&_.detail-extra-tags]:mx-3 [&_.detail-extra-tags]:mb-5 [&_.detail-extra-tags]:rounded-[14px] [&_.detail-extra-tags]:border [&_.detail-extra-tags]:border-[rgba(0,0,0,0.1)] [&_.detail-extra-tags]:bg-[rgba(184,174,174,0.329)] [&_.detail-extra-tags]:px-4 [&_.detail-extra-tags]:py-[18px] dark:[&_.detail-extra-tags]:border-[rgba(255,255,255,0.08)] dark:[&_.detail-extra-tags]:bg-[rgba(26,26,46,0.35)]
+  [&_.detail-tag-row+_.detail-tag-row]:mt-[18px] [&_.detail-tag-label]:mb-2 [&_.detail-tag-label]:flex [&_.detail-tag-label]:items-center [&_.detail-tag-label]:gap-2 [&_.detail-tag-label]:pl-0.5 [&_.detail-tag-label]:text-[14.5px] [&_.detail-tag-label]:font-semibold [&_.detail-tag-label]:text-[#050000] dark:[&_.detail-tag-label]:text-white [&_.detail-tag-label_i]:w-4 [&_.detail-tag-label_i]:text-center
+  [&_.detail-tag-list]:flex [&_.detail-tag-list]:flex-wrap [&_.detail-tag-list]:justify-start [&_.detail-tag-list]:gap-1.5 [&_.detail-tag-list]:pl-0.5
+  [&_.detail-gender-tag]:inline-flex [&_.detail-gender-tag]:cursor-pointer [&_.detail-gender-tag]:items-center [&_.detail-gender-tag]:whitespace-nowrap [&_.detail-gender-tag]:rounded-lg [&_.detail-gender-tag]:px-[11px] [&_.detail-gender-tag]:py-[5px] [&_.detail-gender-tag]:text-[11.5px] [&_.detail-gender-tag]:font-semibold [&_.detail-gender-tag]:no-underline [&_.detail-gender-tag]:transition-[background,border-color,transform] [&_.detail-gender-tag]:duration-200 [&_.detail-gender-tag:hover]:-translate-y-px [&_.detail-gender-tag:hover]:brightness-115
+  [&_.female-tag]:border [&_.female-tag]:border-[rgba(216,27,96,0.3)] [&_.female-tag]:bg-[rgba(255,77,141,0.12)] [&_.female-tag]:text-[#d81b60] dark:[&_.female-tag]:border-[rgba(255,77,141,0.5)] dark:[&_.female-tag]:bg-[rgba(255,77,141,0.28)] dark:[&_.female-tag]:text-[#ffb2ce] [&_.male-tag]:border [&_.male-tag]:border-[rgba(37,99,235,0.3)] [&_.male-tag]:bg-[rgba(77,125,255,0.12)] [&_.male-tag]:text-[#2563eb] dark:[&_.male-tag]:border-[rgba(77,125,255,0.5)] dark:[&_.male-tag]:bg-[rgba(77,125,255,0.28)] dark:[&_.male-tag]:text-[#b5c9ff]
+  [&_.demographic-item]:mt-[-5px] [&_.demographic-item]:flex-wrap [&_.demographic-item]:items-start [&_.demographic-item]:!gap-1 [&_.demographic-item_strong]:mt-px [&_.demographic-item_strong]:whitespace-nowrap
+  [&_.demographic-tags]:mt-[-2px] [&_.demographic-tags]:flex [&_.demographic-tags]:flex-1 [&_.demographic-tags]:flex-wrap [&_.demographic-tags]:gap-1.5
+  [&_.demographic-tag]:inline-flex [&_.demographic-tag]:cursor-pointer [&_.demographic-tag]:items-center [&_.demographic-tag]:whitespace-nowrap [&_.demographic-tag]:rounded-lg [&_.demographic-tag]:border [&_.demographic-tag]:border-[rgba(220,38,38,0.25)] [&_.demographic-tag]:bg-[rgba(220,38,38,0.1)] [&_.demographic-tag]:px-[10px] [&_.demographic-tag]:py-1 [&_.demographic-tag]:text-[10px] [&_.demographic-tag]:font-bold [&_.demographic-tag]:capitalize [&_.demographic-tag]:text-[#dc2626] [&_.demographic-tag]:no-underline [&_.demographic-tag]:transition-[background,border-color,transform] [&_.demographic-tag]:duration-200 [&_.demographic-tag:hover]:-translate-y-px [&_.demographic-tag:hover]:brightness-115 dark:[&_.demographic-tag]:border-[rgba(255,80,80,0.35)] dark:[&_.demographic-tag]:bg-[rgba(255,0,0,0.18)] dark:[&_.demographic-tag]:text-[#ffb3b3]
+  [&_.synopsis]:mx-3 [&_.synopsis]:mb-[15px] [&_.synopsis]:rounded-[14px] [&_.synopsis]:border [&_.synopsis]:border-[rgba(0,0,0,0.1)] [&_.synopsis]:bg-[rgba(184,174,174,0.329)] [&_.synopsis]:px-[14px] [&_.synopsis]:py-[15px] [&_.synopsis]:text-[13px] [&_.synopsis]:text-[#050000] dark:[&_.synopsis]:border-[rgba(255,255,255,0.08)] dark:[&_.synopsis]:bg-[rgba(26,26,46,0.35)] dark:[&_.synopsis]:text-white
+  [&_.synopsis_h2]:mb-[14px] [&_.synopsis_h2]:text-lg [&_.synopsis_h2]:text-[#050000] dark:[&_.synopsis_h2]:text-white [&_.synopsis-content_p]:mb-[10px] [&_.synopsis-content_p:last-child]:mb-0 [&_.synopsis-content_ul]:mb-[10px] [&_.synopsis-content_ul]:pl-6 [&_.synopsis-content_ol]:mb-[10px] [&_.synopsis-content_ol]:pl-6 [&_.synopsis-content_a]:text-blue-400 [&_.synopsis-content_a]:underline
+  [&_.section-title]:my-[25px] [&_.section-title]:mb-[15px] [&_.section-title]:pl-0 [&_.section-title]:text-xl
+  [&_.chapter-header]:box-border [&_.chapter-header]:flex [&_.chapter-header]:w-full [&_.chapter-header]:flex-wrap [&_.chapter-header]:items-center [&_.chapter-header]:gap-0 [&_.chapter-header]:px-[14px]
+  [&_.chapter-header_.section-title]:order-2 [&_.chapter-header_.section-title]:my-[8px] [&_.chapter-header_.section-title]:mb-3 [&_.chapter-header_.section-title]:w-full [&_.chapter-header_.section-title]:basis-full [&_.chapter-header_.section-title]:p-0 [&_.chapter-header_.section-title]:text-center
+  [&_.chapter-header-right]:order-1 [&_.chapter-header-right]:my-5 [&_.chapter-header-right]:flex [&_.chapter-header-right]:w-full [&_.chapter-header-right]:basis-full [&_.chapter-header-right]:min-w-0 [&_.chapter-header-right]:items-center [&_.chapter-header-right]:justify-between [&_.chapter-header-right]:gap-2 [&_.chapter-header-right]:[box-sizing:border-box]
+  [&_.source-toggle]:flex [&_.source-toggle]:shrink-0 [&_.source-toggle]:items-center [&_.source-toggle]:gap-2 [&_.view-toggle]:flex [&_.view-toggle]:shrink-0 [&_.view-toggle]:items-center [&_.view-toggle]:gap-2
+  [&_.server-btn]:relative [&_.server-btn]:shrink-0
+  [&_.server-icon-wrap]:relative [&_.server-icon-wrap]:inline-flex [&_.server-icon-wrap]:h-[18px] [&_.server-icon-wrap]:w-[18px] [&_.server-icon-wrap]:items-center [&_.server-icon-wrap]:justify-center [&_.server-icon-wrap_svg]:block
+  [&_.server-number]:absolute [&_.server-number]:-top-1 [&_.server-number]:-right-1 [&_.server-number]:block [&_.server-number]:min-w-0 [&_.server-number]:border-0 [&_.server-number]:bg-transparent [&_.server-number]:p-0 [&_.server-number]:text-[8px] [&_.server-number]:font-extrabold [&_.server-number]:leading-none [&_.server-number]:text-[#1d4ed8] [&_#sourceSv1Btn.active_.server-number]:text-white [&_#sourceSv2Btn_.server-number]:text-[#b45309] [&_#sourceSv2Btn.active_.server-number]:text-white [&_#sourceEsBtn_.server-number]:text-[#b91c1c] [&_#sourceEsBtn.active_.server-number]:text-white
+  [&_.view-btn]:box-border [&_.view-btn]:inline-flex [&_.view-btn]:h-[38px] [&_.view-btn]:w-[38px] [&_.view-btn]:min-w-[38px] [&_.view-btn]:shrink-0 [&_.view-btn]:items-center [&_.view-btn]:justify-center [&_.view-btn]:cursor-pointer [&_.view-btn]:rounded-[10px] [&_.view-btn]:border [&_.view-btn]:border-[rgba(0,0,0,0.1)] [&_.view-btn]:bg-[rgba(80,78,78,0.04)] [&_.view-btn]:p-0 [&_.view-btn]:text-[#050000] [&_.view-btn]:transition-[background,border-color,transform] [&_.view-btn]:duration-[250ms] dark:[&_.view-btn]:border-[rgba(255,255,255,0.08)] dark:[&_.view-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.view-btn]:text-white [&_.view-btn:hover]:bg-[rgba(0,0,0,0.06)] [&_.view-btn:active]:scale-[0.94]
+  [&_#sourceSv1Btn]:border-[rgba(96,165,250,0.35)] [&_#sourceSv1Btn]:text-[#60a5fa] [&_#sourceSv2Btn]:border-[rgba(251,191,36,0.35)] [&_#sourceSv2Btn]:text-[#fbbf24] [&_#sourceEsBtn]:border-[rgba(239,68,68,0.35)] [&_#sourceEsBtn]:text-[#f87171] [&_#sourceEsBtn_svg]:shrink-0
+  [&_#sourceSv1Btn.active]:border-[#3b82f6] [&_#sourceSv1Btn.active]:bg-[#3b82f6] [&_#sourceSv1Btn.active]:text-white [&_#sourceSv2Btn.active]:border-[#f59e0b] [&_#sourceSv2Btn.active]:bg-[#f59e0b] [&_#sourceSv2Btn.active]:text-white [&_#sourceEsBtn.active]:border-[#ef4444] [&_#sourceEsBtn.active]:bg-[#ef4444] [&_#sourceEsBtn.active]:text-white
+  [&_#gridViewBtn.active]:border-[#ef4444] [&_#gridViewBtn.active]:bg-[#ef4444] [&_#gridViewBtn.active]:text-white [&_#textGridViewBtn.active]:border-[#3b82f6] [&_#textGridViewBtn.active]:bg-[#3b82f6] [&_#textGridViewBtn.active]:text-white [&_#listViewBtn.active]:border-[#22c55e] [&_#listViewBtn.active]:bg-[#22c55e] [&_#listViewBtn.active]:text-white
+  [&_#sortChapterBtn.active-newest]:border-[#fd6dfd] [&_#sortChapterBtn.active-newest]:bg-[#ed74f8] [&_#sortChapterBtn.active-newest]:text-white [&_#sortChapterBtn.active-oldest]:border-[#f59e0b] [&_#sortChapterBtn.active-oldest]:bg-[#f59e0b] [&_#sortChapterBtn.active-oldest]:text-white
+  max-[380px]:[&_.chapter-header]:px-[10px] max-[380px]:[&_.chapter-header_.section-title]:mt-px max-[380px]:[&_.chapter-header_.section-title]:mb-3 max-[380px]:[&_.chapter-header-right]:gap-[5px] max-[380px]:[&_.chapter-header-right]:mb-[13px] max-[380px]:[&_.source-toggle]:gap-1 max-[380px]:[&_.view-toggle]:gap-1 max-[380px]:[&_.view-btn]:h-[33px] max-[380px]:[&_.view-btn]:w-[33px] max-[380px]:[&_.view-btn]:min-w-[33px] max-[380px]:[&_.view-btn]:rounded-lg
+  max-[330px]:[&_.chapter-header]:px-2 max-[330px]:[&_.chapter-header-right]:gap-1 max-[330px]:[&_.source-toggle]:gap-[3px] max-[330px]:[&_.view-toggle]:gap-[3px] max-[330px]:[&_.view-btn]:h-[31px] max-[330px]:[&_.view-btn]:w-[31px] max-[330px]:[&_.view-btn]:min-w-[31px] max-[330px]:[&_.view-btn]:rounded-[7px]
+  max-[767px]:[&_.source-toggle]:min-w-0 max-[767px]:[&_.source-toggle]:shrink-0 max-[767px]:[&_.source-toggle]:gap-[6px] max-[767px]:[&_.view-toggle]:min-w-0 max-[767px]:[&_.view-toggle]:shrink-0 max-[767px]:[&_.view-toggle]:gap-[6px] max-[767px]:[&_.view-btn]:h-9 max-[767px]:[&_.view-btn]:w-9 max-[767px]:[&_.view-btn]:min-w-9 max-[767px]:[&_.view-btn]:rounded-[9px]
+  md:[&_.container]:my-5 md:[&_.container]:max-w-[720px] md:[&_.container]:rounded-[20px]
+  md:[&_.main]:gap-[30px] md:[&_.main]:px-[30px] md:[&_.main]:pt-[35px] md:[&_.main]:pb-[25px] md:[&_.left-column]:w-[200px] md:[&_.cover]:h-[280px] md:[&_.cover]:w-[200px] md:[&_.info_h1]:text-lg md:[&_.bookmark-btn]:w-[140px] md:[&_.bookmark-btn]:px-6 md:[&_.bookmark-btn]:py-[10px] md:[&_.bookmark-btn]:text-sm
+  md:[&_.genres]:grid-cols-[repeat(auto-fit,minmax(110px,1fr))] md:[&_.genres]:mx-[30px] md:[&_.genres]:w-[calc(100%-60px)] md:[&_.genres]:gap-[10px] md:[&_.genres]:px-px md:[&_.genres]:py-[15px] md:[&_.synopsis]:mx-[30px] md:[&_.synopsis]:mb-[30px] md:[&_.detail-extra-tags]:mx-[30px] md:[&_.detail-extra-tags]:mb-[30px] md:[&_.chapter-header]:px-[30px]
+  md:[&_.chapter-grid]:grid-cols-[repeat(6,minmax(0,1fr))] md:[&_.chapter-grid]:gap-[10px] md:[&_.chapter-grid]:px-6 md:[&_.chapter-grid]:pb-10
+  lg:[&_.container]:my-[30px] lg:[&_.container]:max-w-[var(--detail-max-width)] lg:[&_.container]:rounded-3xl lg:[&_.container]:ml-[var(--detail-content-left)] lg:[&_.container]:mr-0 lg:[&_.container]:w-[var(--detail-content-width)]
+  lg:[&_.main]:gap-10 lg:[&_.main]:px-10 lg:[&_.main]:pt-10 lg:[&_.main]:pb-[30px] lg:[&_.left-column]:w-[240px] lg:[&_.cover]:h-[340px] lg:[&_.cover]:w-[240px] lg:[&_.info_h1]:text-xl lg:[&_.detail-item]:text-sm lg:[&_.detail-item_i]:w-[22px] lg:[&_.detail-item_i]:text-sm lg:[&_.status]:text-[15px]
+  lg:[&_.genres]:mx-10 lg:[&_.genres]:w-auto lg:[&_.genres]:py-[15px] lg:[&_.genres]:px-0 lg:[&_.synopsis]:mx-10 lg:[&_.synopsis]:mb-10 lg:[&_.detail-extra-tags]:mx-10 lg:[&_.detail-extra-tags]:mb-10 lg:[&_.chapter-header]:px-10
+  lg:[&_.chapter-grid]:grid-cols-[repeat(8,minmax(0,1fr))] lg:[&_.chapter-grid]:gap-[10px] lg:[&_.chapter-grid]:px-8 lg:[&_.chapter-grid]:pb-[50px]
+  [&_.detail-widgets]:mx-auto [&_.detail-widgets]:my-6 [&_.detail-widgets]:w-[min(100%-24px,1150px)] lg:[&_.detail-widgets]:my-6 lg:[&_.detail-widgets]:mr-0 lg:[&_.detail-widgets]:ml-[var(--detail-content-left)] lg:[&_.detail-widgets]:w-[var(--detail-content-width)] lg:[&_.detail-widgets]:max-w-[var(--detail-max-width)]
+  [&_.detail-route-message]:mx-auto [&_.detail-route-message]:my-8 [&_.detail-route-message]:max-w-[1150px] [&_.detail-route-message]:p-5 [&_.detail-route-message]:text-center
+  [&_.detail-route-loading]:grid [&_.detail-route-loading]:min-h-screen [&_.detail-route-loading]:place-items-center
+  [&_.detail-route-spinner]:h-[42px] [&_.detail-route-spinner]:w-[42px] [&_.detail-route-spinner]:animate-spin [&_.detail-route-spinner]:rounded-full [&_.detail-route-spinner]:border-4 [&_.detail-route-spinner]:border-[rgba(128,128,128,0.25)] [&_.detail-route-spinner]:border-t-current
+`;
+
 function MetaTag({ label, value, icon }: { label: string; value?: string; icon: string }) {
   if (!value || value === "-" || value.toLowerCase() === "unknown") return null;
   return (
@@ -688,16 +750,28 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return () => observer.disconnect();
   }, []);
 
-  const detailLayoutStyle = recommendationsHidden
-    ? {
-      "--detail-content-width": siteSidebarOpen
-        ? "min(var(--detail-max-width), calc(100% - var(--sidebar-width) - (var(--detail-gutter) * 2)))"
-        : "min(var(--detail-max-width), calc(100% - (var(--detail-gutter) * 2)))",
-      "--detail-content-left": siteSidebarOpen
-        ? "calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2)))"
-        : "max(var(--detail-gutter), calc((100% - var(--detail-max-width)) / 2))",
-    } as CSSProperties
-    : undefined;
+  const detailRecSpace = recommendationsHidden ? "0px" : "calc(var(--sidebar-width) + 40px)";
+  const detailContentWidth = recommendationsHidden
+    ? siteSidebarOpen
+      ? "min(var(--detail-max-width), calc(100% - var(--sidebar-width) - (var(--detail-gutter) * 2)))"
+      : "min(var(--detail-max-width), calc(100% - (var(--detail-gutter) * 2)))"
+    : siteSidebarOpen
+      ? "min(var(--detail-max-width), calc(100% - var(--sidebar-width) - var(--detail-rec-space) - (var(--detail-gutter) * 2)))"
+      : "min(var(--detail-max-width), calc(100% - var(--detail-rec-space) - (var(--detail-gutter) * 2)))";
+  const detailContentLeft = recommendationsHidden
+    ? siteSidebarOpen
+      ? "calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2)))"
+      : "max(var(--detail-gutter), calc((100% - var(--detail-max-width)) / 2))"
+    : siteSidebarOpen
+      ? "calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-rec-space) - var(--detail-max-width)) / 2)))"
+      : "max(var(--detail-gutter), calc((100% - var(--detail-rec-space) - var(--detail-max-width)) / 2))";
+  const detailLayoutStyle = {
+    "--detail-gutter": "32px",
+    "--detail-max-width": "1250px",
+    "--detail-rec-space": detailRecSpace,
+    "--detail-content-width": detailContentWidth,
+    "--detail-content-left": detailContentLeft,
+  } as CSSProperties;
 
   useEffect(() => {
     const sourcePreference = localStorage.getItem("chapterSourceMode");
@@ -982,7 +1056,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return (
       <>
         <SiteHeader />
-        <main className="detail-route">
+        <main className={`detail-route ${detailPageClasses}`}>
           <div className="detail-route-loading" role="status" aria-label="Memuat detail manga">
             <span className="detail-route-spinner" aria-hidden="true" />
           </div>
@@ -996,7 +1070,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return (
       <>
         <SiteHeader />
-        <main className="detail-route" style={detailLayoutStyle}>
+        <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
           <p className="detail-route-message" role="status">Manga tidak ditemukan.</p>
         </main>
         <SiteFooter />
@@ -1008,7 +1082,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return (
       <>
         <SiteHeader />
-        <main className="detail-route">
+        <main className={`detail-route ${detailPageClasses}`}>
           <p className="detail-route-message" role="alert">Detail manga gagal dimuat. Coba muat ulang halaman.</p>
         </main>
         <SiteFooter />
@@ -1026,9 +1100,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   return (
     <>
       <SiteHeader />
-      <main className="detail-route" style={detailLayoutStyle}>
-        <div className="container">
-          <div id="bgLayer" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
+      <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
+        <div className="container relative mx-auto my-0 min-h-screen w-full max-w-[480px] overflow-hidden rounded-2xl bg-[#ffffffbd] text-[#050000] transition-[margin-left,width,max-width,background,color] duration-300 after:absolute after:inset-0 after:z-[2] after:bg-[var(--detail-overlay)] after:content-[''] after:transition-colors dark:bg-[#0f0f1e] dark:text-white md:my-5 md:max-w-[720px] md:rounded-[20px] lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)] lg:rounded-3xl">
+          <div className="absolute inset-0 z-[1] scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[4px] transition-[background-image,opacity] duration-500 dark:opacity-100" id="bgLayer" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
           <div className="content">
             <div className="main">
               <div className="left-column">
@@ -1183,34 +1257,101 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   </div>
                 </div>
               </div>
-              <div className={`chapter-grid${chapterState === "loading" ? " chapter-loading" : ""}${view === "list" ? " list-mode" : view === "text-grid" ? " text-grid-mode" : ""}`} aria-busy={chapterState === "loading"}>
-                {chapterState === "loading" && <div className="chapter-loading-inner"><i className="fas fa-spinner fa-spin fa-2x" aria-hidden="true" /><span>Loading chapters...</span></div>}
+              <div
+                className={`chapter-grid grid grid-cols-[repeat(4,minmax(0,1fr))] content-start justify-stretch gap-2 px-4 pt-0 pb-[30px] md:grid-cols-[repeat(6,minmax(0,1fr))] md:gap-[10px] md:px-6 md:pb-10 lg:grid-cols-[repeat(8,minmax(0,1fr))] lg:px-8 lg:pb-[50px] ${
+                  chapterState === "loading"
+                    ? "!flex min-h-[220px] !grid-cols-none flex-col items-center justify-center gap-3"
+                    : view === "list"
+                      ? "list-mode !flex flex-col !gap-[10px]"
+                      : view === "text-grid"
+                        ? "text-grid-mode !grid-cols-[repeat(auto-fill,minmax(120px,1fr))] !gap-[10px] max-[767px]:!grid-cols-3 max-[767px]:!gap-2 md:!grid-cols-[repeat(auto-fill,minmax(160px,1fr))] lg:!grid-cols-[repeat(auto-fill,minmax(170px,1fr))]"
+                        : ""
+                }`}
+                aria-busy={chapterState === "loading"}
+              >
+                {chapterState === "loading" && (
+                  <div className="chapter-loading-inner flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
+                    <i className="fas fa-spinner fa-spin fa-2x mb-3" aria-hidden="true" />
+                    <span>Loading chapters...</span>
+                  </div>
+                )}
                 {chapterState === "error" && (
-                  <div className="chapter-empty-inner">
+                  <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
                     <p>Chapter gagal dimuat.</p>
                     {chapterError && <p>{chapterError}</p>}
                     <button type="button" onClick={() => setChapterRetry((attempt) => attempt + 1)}>Coba lagi</button>
                   </div>
                 )}
-                {chapterState === "ready" && visibleChapters.length === 0 && <div className="chapter-empty-inner">Belum ada chapter.</div>}
-                {chapterState === "ready" && visibleChapters.map((chapter, index) => (
-                  <button
-                    className={`chapter-item${readChapters.includes(String(chapter.num).match(/(\d+(?:\.\d+)?)/)?.[0] || "") ? " read" : ""}`}
+                {chapterState === "ready" && visibleChapters.length === 0 && (
+                  <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
+                    Belum ada chapter.
+                  </div>
+                )}
+                {chapterState === "ready" && visibleChapters.map((chapter, index) => {
+                  const isRead = readChapters.includes(String(chapter.num).match(/(\d+(?:\.\d+)?)/)?.[0] || "");
+                  return (
+                    <button
+                    className={`chapter-item relative aspect-square w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] border-0 bg-[rgba(0,0,0,0.25)] p-0 transition-[transform,box-shadow,filter] duration-200 hover:z-[2] hover:scale-105 active:scale-[0.97]${isRead ? " read" : ""} ${
+                      view === "list"
+                        ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(80,78,78,0.04)] ![aspect-ratio:unset] dark:!bg-[rgba(156,7,7,0.06)]${isRead ? " !bg-[rgba(0,0,0,0.5)] dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
+                        : view === "text-grid"
+                          ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(156,7,7,0.06)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
+                          : ""
+                    }`}
                     data-index={index}
                     key={`${chapter.source}-${chapter.num}-${chapter.url || chapter.id || index}`}
                     onClick={() => openChapter(chapter)}
                     type="button"
                   >
-                    {view !== "text-grid" && <img alt="" loading="lazy" src={chapter.thumbnail || cover || "/assets/icons/favicon.ico"} />}
-                    <span className={`chapter-source-badge ${chapter.source === "blogger" ? "source-sv1" : chapter.source === "blogger2" ? "source-sv2" : "source-es"}`}>
-                      {chapter.source === "blogger" ? "SV1" : chapter.source === "blogger2" ? "SV2" : "ES"}
+                    {view !== "text-grid" && (
+                      <img
+                        className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
+                        alt=""
+                        loading="lazy"
+                        src={chapter.thumbnail || cover || "/assets/icons/favicon.ico"}
+                      />
+                    )}
+                    {isRead && (
+                      <span
+                        className="pointer-events-none absolute inset-0 z-[1] bg-[rgba(0,0,0,0.22)]"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span
+                      className={`pointer-events-none absolute z-[6] flex flex-col items-end gap-1 ${
+                        view === "list"
+                          ? "right-[10px] top-1/2 -translate-y-1/2"
+                          : view === "text-grid"
+                            ? "right-2 top-2"
+                            : "right-1 top-1"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <span className={`text-[13px] ${isRead ? "text-[#22c55e]" : "text-[#f59e0b]"}`}>
+                        <i className={`fas ${isRead ? "fa-eye" : "fa-eye-slash"}`} />
+                      </span>
+                      <span className={`chapter-source-badge text-[9px] font-extrabold uppercase leading-none tracking-[0.2px] [text-shadow:0_0_2px_rgba(0,0,0,0.9),0_1px_2px_rgba(0,0,0,0.85)] max-[480px]:text-[8px] ${chapter.source === "blogger" ? "text-[#60a5fa]" : chapter.source === "blogger2" ? "text-[#fbbf24]" : "text-[#ef4444]"} ${view === "list" ? "text-[10px] [text-shadow:none]" : ""}`}
+                      >
+                        {chapter.source === "blogger" ? "SV1" : chapter.source === "blogger2" ? "SV2" : "ES"}
+                      </span>
                     </span>
-                    <span className="chapter-label">
-                      <span className="chapter-title">Chapter {chapter.num}</span>
-                      <span className="chapter-date">{formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}</span>
+                    <span className={`chapter-label absolute right-0 bottom-0 left-0 z-[2] flex flex-col items-center gap-1 bg-[rgba(0,0,0,0.85)] px-[3px] pt-1 pb-[3px] text-center text-[9px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.5)] ${
+                      view === "list"
+                        ? "!static !min-w-0 !flex-1 !items-start !justify-center !gap-[5px] !bg-transparent !px-[14px] !py-3 !pr-12 !text-left !text-inherit"
+                        : view === "text-grid"
+                          ? "!static !items-start !gap-[5px] !bg-transparent !p-0 !pr-8 !text-left !text-inherit ![text-shadow:none]"
+                          : ""
+                    }`}>
+                      <span className={`chapter-title block text-[9px] font-bold leading-[1.15] ${view === "list" ? `text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : view === "text-grid" ? `text-[10px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : ""}`}>
+                        Chapter {chapter.num}
+                      </span>
+                      <span className={`chapter-date mt-0 block text-[7px] opacity-80 ${view === "list" ? `text-[11px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}` : view === "text-grid" ? `text-[9px] opacity-70 ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}` : ""}`}>
+                        {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
+                      </span>
                     </span>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </section>
           </div>

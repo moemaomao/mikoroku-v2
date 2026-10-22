@@ -50,7 +50,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="id" suppressHydrationWarning className="overflow-y-scroll">
       <head>
         <meta name="author" content="Mikoroku" />
         <meta name="theme-color" content="#7A0000" />
@@ -76,7 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         />
         <link rel="stylesheet" href="/style.css" data-main-style="true" />
       </head>
-      <body suppressHydrationWarning>
+      <body suppressHydrationWarning className="pt-14!">
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var isDark=localStorage.getItem("darkMode")==="true";var roots=[document.documentElement,document.body];roots.forEach(function(root){root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark)})})();`,

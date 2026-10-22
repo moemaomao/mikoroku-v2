@@ -305,6 +305,41 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function extractChapterImageUrls(content: string): string[] {
+  const normalized = content
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;|&apos;|&#x27;/gi, "'")
+    .replace(/&quot;|&#34;|&#x22;/gi, '"');
+  const candidates: string[] = [];
+  const imageTags = normalized.match(/<img\b[^>]*>/gi) || [];
+
+  for (const tag of imageTags) {
+    const attributes = [...tag.matchAll(/\b(src|data-src|data-original|data-lazy-src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)];
+    for (const attribute of attributes) {
+      const value = attribute[2] || attribute[3] || attribute[4] || "";
+      if (attribute[1].toLowerCase() === "srcset") {
+        candidates.push(...value.split(",").map((item) => item.trim().split(/\s+/)[0]));
+      } else {
+        candidates.push(value);
+      }
+    }
+  }
+
+  if (!candidates.length) {
+    candidates.push(...(normalized.match(/https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|gif|webp|bmp|svg)(?:\?[^\s"'<>]*)?/gi) || []));
+  }
+  if (!candidates.length) {
+    candidates.push(...(normalized.match(/https?:\/\/[^\s"'<>]+/gi) || []));
+  }
+
+  return [...new Set(candidates
+    .map((value) => value.replace(/["'<>),;}\]]+$/, "").trim())
+    .filter((value) => /^https?:\/\//i.test(value))
+    .map((value) => value
+      .replace(/\/s\d+\//i, "/s800/")
+      .replace(/\/w\d+-h\d+(?:-[a-z0-9-]+)?/i, "/s500")))];
+}
+
 async function uploadToImgBB(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) {
     throw new Error(`${file.name} is not an image file.`);
@@ -614,7 +649,7 @@ export default function AdminPage() {
   const chapterFilesInput = useRef<HTMLInputElement>(null);
   const loadingMangaRef = useRef(false);
   const chapterImageUrls = useMemo(
-    () => chapterDraft.images.split(/\r?\n/).map((url) => url.trim()).filter(Boolean),
+    () => extractChapterImageUrls(chapterDraft.images),
     [chapterDraft.images],
   );
 
@@ -1339,11 +1374,7 @@ export default function AdminPage() {
   }
 
   function addChapterImageUrls() {
-    const urls = chapterDraft.images
-      .split(/\r?\n/)
-      .map((url) => url.trim())
-      .filter(Boolean);
-    const uniqueUrls = [...new Set(urls)];
+    const uniqueUrls = extractChapterImageUrls(chapterDraft.images);
     setChapterDraft((current) => ({
       ...current,
       images: uniqueUrls.join("\n"),
@@ -1526,10 +1557,7 @@ export default function AdminPage() {
       setChapterError("Manga and chapter number are required.");
       return;
     }
-    const typedImages = chapterDraft.images
-      .split(/\r?\n/)
-      .map((image) => image.trim())
-      .filter(Boolean);
+    const typedImages = extractChapterImageUrls(chapterDraft.images);
     const chapterContentDocument = new DOMParser().parseFromString(
       chapterDraft.content,
       "text/html",
@@ -2089,7 +2117,10 @@ export default function AdminPage() {
                               aria-label={`Edit chapter ${chapter.num}`}
                               onClick={() => openChapterEditor(chapter)}
                             >
-                              Edit
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                              </svg>
                             </button>
                             <button
                               type="button"
@@ -2098,7 +2129,12 @@ export default function AdminPage() {
                               onClick={() => void deleteChapter(chapter)}
                               disabled={busy}
                             >
-                              Delete
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="m19 6-1 14H6L5 6" />
+                                <path d="M10 11v5M14 11v5" />
+                              </svg>
                             </button>
                           </div>
                         </article>

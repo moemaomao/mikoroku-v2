@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import "../series.css";
 import DetailPageContent from "../detail-page-content";
 import { getSeriesSeoData } from "../../../lib/seo-metadata";
 

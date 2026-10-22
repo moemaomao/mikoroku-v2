@@ -60,6 +60,7 @@ const DEFAULT_THUMB = "https://mikoroku.com/default-thumb.jpg";
 const DISPLAY_NAME_KEY = "commentWidget_displayName";
 const AVATAR_KEY = "commentWidget_avatar";
 const SIDEBAR_PREF_KEY = "mk_sidebar_open";
+let desktopSidebarPreference: boolean | null = null;
 const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const ANNOUNCEMENT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87WhV3FagJZSy_uhuoI",
@@ -247,7 +248,7 @@ function SidebarLink({
 }
 
 function HeaderContents() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => desktopSidebarPreference ?? false);
   const [mobile, setMobile] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
   const [dark, setDark] = useState(false);
@@ -287,6 +288,7 @@ function HeaderContents() {
       setMobile(!desktop);
       if (desktop) {
         setSearchExpanded(false);
+        setHeaderHidden(false);
       }
       if (!desktop) {
         setSidebarOpen(false);
@@ -302,6 +304,7 @@ function HeaderContents() {
       } catch (error) {
         console.warn("Preferensi sidebar tidak dapat dibaca.", error);
       }
+      desktopSidebarPreference = preferOpen;
       setSidebarOpen(preferOpen);
       document.body.classList.toggle("sidebar-open", preferOpen);
       document.body.classList.toggle("left-sidebar-closed", !preferOpen);
@@ -312,7 +315,7 @@ function HeaderContents() {
     let lastScroll = window.scrollY;
     const handleScroll = () => {
       const current = window.scrollY;
-      setHeaderHidden(current >= 50 && current > lastScroll);
+      setHeaderHidden(!query.matches && current >= 50 && current > lastScroll);
       lastScroll = current;
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -323,8 +326,19 @@ function HeaderContents() {
         setSearchExpanded(false);
         setBookmarksOpen(false);
         setAuthOpen(false);
-        document.body.classList.remove("sidebar-open");
-        document.body.style.overflow = "";
+        if (query.matches) {
+          desktopSidebarPreference = false;
+          document.body.classList.add("left-sidebar-closed");
+          document.body.classList.remove("sidebar-open");
+          try {
+            localStorage.setItem(SIDEBAR_PREF_KEY, "0");
+          } catch (error) {
+            console.warn("Preferensi sidebar tidak dapat disimpan.", error);
+          }
+        } else {
+          document.body.classList.remove("sidebar-open");
+          document.body.style.overflow = "";
+        }
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -354,8 +368,10 @@ function HeaderContents() {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("bookmarkUpdated", handleBookmarkUpdate);
       window.removeEventListener("mangaDataReady", handleMangaDataReady);
-      document.body.classList.remove("sidebar-open");
-      document.body.style.overflow = "";
+      if (!query.matches) {
+        document.body.classList.remove("sidebar-open");
+        document.body.style.overflow = "";
+      }
     };
   }, []);
 
@@ -386,6 +402,7 @@ function HeaderContents() {
     setSidebarOpen(true);
     document.body.classList.remove("left-sidebar-closed");
     if (isDesktop()) {
+      desktopSidebarPreference = true;
       document.body.classList.add("sidebar-open");
       document.body.style.overflow = "";
       try {
@@ -403,6 +420,7 @@ function HeaderContents() {
     setSidebarOpen(false);
     document.body.style.overflow = "";
     if (isDesktop()) {
+      desktopSidebarPreference = false;
       document.body.classList.add("left-sidebar-closed");
       document.body.classList.remove("sidebar-open");
       try {
@@ -751,9 +769,9 @@ function HeaderContents() {
   const classButton =
     "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 dark:text-white dark:hover:bg-white/10";
   const mainHeaderClass = [
-    "fixed left-0 right-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-300 bg-white/80 px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-[transform,left,width] duration-300 sm:px-5 dark:border-zinc-700 dark:bg-zinc-950/75 dark:text-white",
+    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-300 bg-white/80 px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-zinc-950/75 dark:text-white",
+    !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
     headerHidden ? "-translate-y-full" : "translate-y-0",
-    !mobile && sidebarOpen ? "min-[769px]:left-[var(--sidebar-width)] min-[769px]:w-[calc(100%-var(--sidebar-width))]" : "",
   ].join(" ");
 
   return (
@@ -1048,7 +1066,7 @@ function HeaderContents() {
         aria-hidden={!sidebarOpen}
         inert={!sidebarOpen}
         aria-label="Navigation menu"
-        className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto border-r border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.74)_0%,rgba(248,250,252,0.96)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[18px_14px] text-indigo-950 transition-transform duration-300 ease-in-out dark:border-white/15 dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] ${sidebarOpen ? "translate-x-0 min-[769px]:z-[9990]" : "-translate-x-full"}`}
+        className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto border-r border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.74)_0%,rgba(248,250,252,0.96)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[18px_14px] text-indigo-950 transition-transform duration-300 ease-in-out dark:border-white/15 dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] min-[769px]:transition-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5 pb-[18px] pt-1">
           <a href="/" aria-label="Mikoroku home" onClick={() => mobile && closeSidebar()} className="flex h-[42px] shrink-0 items-center">
