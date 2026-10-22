@@ -18,11 +18,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug, chapter } = await params;
   const article = await getChapterSeoTitle(slug, chapter);
+
   const url = `https://mikoroku.top/manga/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
-  const image = {
-    url: `https://mikoroku.top/og/chapter/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`,
-    alt: article.title,
-  };
+
+  const imageUrl =
+    article.image && article.image.startsWith("http")
+      ? article.image
+      : "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
 
   return {
     title: article.title,
@@ -33,13 +35,13 @@ export async function generateMetadata({
       description: article.description,
       type: "article",
       url,
-      images: [image],
+      images: [{ url: imageUrl, alt: article.title }],
     },
     twitter: {
       card: "summary_large_image",
       title: article.title,
       description: article.description,
-      images: [image.url],
+      images: [imageUrl],
     },
   };
 }
