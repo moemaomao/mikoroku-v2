@@ -4,6 +4,7 @@ import { createElement, useCallback, useEffect, useMemo, useState, type CSSPrope
 import CommunityWidgets from "../community-widgets";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
+import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 import RecommendationSidebar from "./recommendation-sidebar";
 import SiteFooter from "../site-footer";
@@ -960,7 +961,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         console.error("Gambar chapter gagal dimuat dari Firestore.", error);
       }
     }
-    images = [...new Set(images.map((image) => image.replace(/\/s\d+(-c)?\//, "/s0/")))];
+    images = [...new Set(images.map(originalReaderImageUrl))];
     localStorage.setItem("currentChapter", JSON.stringify({
       slug,
       id: chapter.id,

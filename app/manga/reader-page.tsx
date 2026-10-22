@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CommunityWidgets from "../community-widgets";
 import SiteChrome from "../site-chrome";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
+import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 import "./reader.css";
 
@@ -135,14 +136,16 @@ function chapterValue(value: string | number): number {
 }
 
 function imageWithQuality(url: string, quality: number): string {
+  const originalUrl = originalReaderImageUrl(url);
   if (/blogger\.googleusercontent\.com|lh3\.googleusercontent\.com/i.test(url)) {
-    return url.replace(/\/s\d+(-c)?\//, `/s${quality}$1/`);
+    return originalUrl.replace(/\/s\d+(?:-c)?\//, `/s${quality}/`)
+      .replace(/=s0(?=$|[?#])/, `=s${quality}`);
   }
-  return url;
+  return originalUrl;
 }
 
 function readerImageUrl(url: string, dataSaver: boolean, quality: number): string {
-  return dataSaver ? imageWithQuality(url, quality) : url;
+  return dataSaver ? imageWithQuality(url, quality) : originalReaderImageUrl(url);
 }
 
 function isAbortError(error: unknown): boolean {
