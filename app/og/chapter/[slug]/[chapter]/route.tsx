@@ -1,4 +1,4 @@
-import { getChapterSeoTitle } from "../../../../../lib/seo-metadata";
+import { getSeriesSeoData } from "../../../../../lib/seo-metadata";
 import { createMikorokuOgImage } from "../../../../../lib/og-image";
 
 export async function GET(
@@ -7,25 +7,22 @@ export async function GET(
 ) {
   try {
     const { slug, chapter } = await params;
-    const article = await getChapterSeoTitle(slug, chapter);
+    const series = await getSeriesSeoData(slug);
 
-    try {
-      return createMikorokuOgImage({
-        title: article.title,
-        description: article.description,
-        label: "Manga Chapter",
-        coverUrl: article.image,
-      });
-    } catch {
-      return createMikorokuOgImage({
-        title: article.title,
-        description: article.description,
-        label: "Manga Chapter",
-        coverUrl: null,
-      });
-    }
+    const title = `Chapter ${chapter} - ${series.title}`;
+    const description =
+      series.description ||
+      `Baca Chapter ${chapter} ${series.title} di Mikoroku.`;
+
+    return createMikorokuOgImage({
+      title,
+      description,
+      label: "Manga Chapter",
+      coverUrl: series.image,
+    });
   } catch (error) {
     console.error("[OG chapter]", error);
+
     return createMikorokuOgImage({
       title: "Chapter - Mikoroku",
       description: "Baca manga di Mikoroku.",
