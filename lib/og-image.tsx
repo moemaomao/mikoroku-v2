@@ -131,7 +131,7 @@ export function createMikorokuOgImage({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#a9a9b1", fontSize: 16 }}>
-            <span style={{ color: "#ff6476", fontWeight: 700 }}>mikoroku.com</span>
+            <span style={{ color: "#ff6476", fontWeight: 700 }}>mikoroku.top</span>
             <span>·</span>
             <span>Manga, manhwa &amp; more</span>
           </div>

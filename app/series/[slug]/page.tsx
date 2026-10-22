@@ -13,7 +13,7 @@ export async function generateMetadata({
   const title = `${manga.title} - Mikoroku`;
   const description = manga.description;
   const image = {
-    url: `https://mikoroku.com/og/series/${encodeURIComponent(slug)}`,
+    url: `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`,
     alt: `${manga.title} - Mikoroku`,
   };
 
@@ -21,13 +21,13 @@ export async function generateMetadata({
     title,
     description,
     alternates: {
-      canonical: `https://mikoroku.com/series/${encodeURIComponent(slug)}`,
+      canonical: `https://mikoroku.top/series/${encodeURIComponent(slug)}`,
     },
     openGraph: {
       title,
       description,
       type: "article",
-      url: `https://mikoroku.com/series/${encodeURIComponent(slug)}`,
+      url: `https://mikoroku.top/series/${encodeURIComponent(slug)}`,
       images: [image],
     },
     twitter: {

@@ -18,9 +18,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug, chapter } = await params;
   const article = await getChapterSeoTitle(slug, chapter);
-  const url = `https://mikoroku.com/novel/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
+  const url = `https://mikoroku.top/novel/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
   const image = {
-    url: `https://mikoroku.com/og/chapter/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`,
+    url: `https://mikoroku.top/og/chapter/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`,
     alt: article.title,
   };
 

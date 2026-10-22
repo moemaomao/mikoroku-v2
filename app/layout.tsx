@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://mikoroku.com"),
+  metadataBase: new URL("https://mikoroku.top"),
   title: "Mikoroku - Borderline H scans",
   description: "Mikoroku - Platform baca manga bahasa Indonesia.",
   keywords: [
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     title: "Mikoroku - Baca Manga Gratis",
     description: "Platform baca manga bahasa Indonesia terlengkap",
     type: "website",
-    url: "https://mikoroku.com/",
+    url: "https://mikoroku.top/",
     siteName: "Mikoroku",
     images: [
       {
