@@ -211,6 +211,13 @@ function Icon({ name, className = "h-6 w-6" }: { name: string; className?: strin
       return <svg {...common}><path d="m10 17 5-5-5-5m5 5H3m18 7V5a2 2 0 0 0-2-2h-6" /></svg>;
     case "sun":
       return <svg {...common}><circle cx="12" cy="12" r="5" /><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>;
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+      );
     default:
       return <svg {...common}><circle cx="12" cy="12" r="9" /></svg>;
   }
@@ -246,6 +253,7 @@ function HeaderContents() {
   const [dark, setDark] = useState(false);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [mangaRevision, setMangaRevision] = useState(0);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<HeaderBookmark[]>([]);
@@ -277,6 +285,9 @@ function HeaderContents() {
     const applySidebarPreference = () => {
       const desktop = query.matches;
       setMobile(!desktop);
+      if (desktop) {
+        setSearchExpanded(false);
+      }
       if (!desktop) {
         setSidebarOpen(false);
         document.body.classList.remove("sidebar-open");
@@ -309,6 +320,7 @@ function HeaderContents() {
       if (event.key === "Escape") {
         setSidebarOpen(false);
         setSearchOpen(false);
+        setSearchExpanded(false);
         setBookmarksOpen(false);
         setAuthOpen(false);
         document.body.classList.remove("sidebar-open");
@@ -351,13 +363,16 @@ function HeaderContents() {
     const closeOutside = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (!searchArea.current?.contains(target)) setSearchOpen(false);
+      if (!searchArea.current?.contains(target)) {
+        setSearchOpen(false);
+        if (!search.trim()) setSearchExpanded(false);
+      }
       if (!bookmarkArea.current?.contains(target)) setBookmarksOpen(false);
       if (!authArea.current?.contains(target)) setAuthOpen(false);
     };
     document.addEventListener("mousedown", closeOutside);
     return () => document.removeEventListener("mousedown", closeOutside);
-  }, []);
+  }, [search]);
 
   const applyTheme = useCallback((isDark: boolean) => {
     [document.documentElement, document.body].forEach((root) => {
@@ -643,8 +658,24 @@ function HeaderContents() {
 
   const selectManga = (title: string) => {
     setSearchOpen(false);
+    setSearchExpanded(false);
     setSearch("");
     navigateToManga(title);
+  };
+
+  const openMobileSearch = () => {
+    setSearchExpanded(true);
+    setBookmarksOpen(false);
+    setAuthOpen(false);
+    requestAnimationFrame(() => {
+      document.getElementById("searchManga")?.focus();
+    });
+  };
+
+  const closeMobileSearch = () => {
+    setSearchExpanded(false);
+    setSearchOpen(false);
+    setSearch("");
   };
 
   const toggleAuth = () => {
@@ -661,7 +692,6 @@ function HeaderContents() {
 
   const handleNotifications = () => {
     closeAuth();
-    // Use comment-widget API so list is filled; never force a blank overlay open.
     if (typeof window.showReplyNotifications === "function") {
       window.showReplyNotifications();
       return;
@@ -690,11 +720,9 @@ function HeaderContents() {
 
   const handleLogout = () => {
     closeAuth();
-    // Update UI immediately so the dropdown does not stay stuck on a logged-in state
     setUser(null);
     setDisplayName("User");
 
-    // Compat Auth instance is wider than the project's Window.firebase typing
     type CompatAuth = {
       signOut: () => Promise<void>;
       currentUser: HeaderUser | null;
@@ -710,7 +738,6 @@ function HeaderContents() {
       return;
     }
 
-    // Call as method on auth — extracting signOut unbound loses `this`
     void auth.signOut()
       .then(() => {
         setUser(null);
@@ -732,7 +759,11 @@ function HeaderContents() {
   return (
     <>
       <header id="mainHeader" className={mainHeaderClass}>
-        <div className="flex shrink-0 items-center gap-1">
+        <div
+          className={`flex shrink-0 items-center gap-1 ${
+            mobile && searchExpanded ? "hidden" : ""
+          }`}
+        >
           <button
             id="sidebarToggle"
             type="button"
@@ -756,14 +787,34 @@ function HeaderContents() {
             id="headerLogo"
             href="/"
             aria-label="Mikoroku home"
-            className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-10 shrink-0 items-center`}
+            className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-9 max-w-[120px] shrink-0 items-center sm:h-10 sm:max-w-none`}
           >
-            <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto object-contain" />
+            <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto max-w-full object-contain" />
           </a>
         </div>
 
-        <div className="mx-2 min-w-0 flex-1 sm:mx-[15px] sm:max-w-[600px]" ref={searchArea}>
-          <div className="relative flex min-h-10 w-full items-center">
+        {/* Search: always visible on desktop; on mobile only when expanded, or icon in actions */}
+        <div
+          className={
+            mobile
+              ? searchExpanded
+                ? "mx-1 min-w-0 flex-1"
+                : "hidden"
+              : "mx-2 min-w-0 flex-1 sm:mx-[15px] sm:max-w-[600px]"
+          }
+          ref={searchArea}
+        >
+          <div className="relative flex min-h-10 w-full items-center gap-1">
+            {mobile && searchExpanded && (
+              <button
+                type="button"
+                aria-label="Tutup pencarian"
+                onClick={closeMobileSearch}
+                className={classButton}
+              >
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+            )}
             <input
               type="search"
               id="searchManga"
@@ -775,12 +826,12 @@ function HeaderContents() {
                 setSearchOpen(Boolean(event.target.value.trim()));
               }}
               onFocus={() => setSearchOpen(Boolean(search.trim()))}
-              className="h-[30px] w-full appearance-none rounded-3xl border border-zinc-300 bg-black/[0.07] px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-500 focus:border-violet-500 dark:border-zinc-600 dark:bg-black/35 dark:text-white dark:placeholder:text-zinc-400"
+              className="h-[34px] min-w-0 w-full appearance-none rounded-3xl border border-zinc-300 bg-black/[0.07] px-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-500 focus:border-violet-500 sm:h-[30px] sm:px-4 dark:border-zinc-600 dark:bg-black/35 dark:text-white dark:placeholder:text-zinc-400"
             />
             {searchOpen && search.trim() && (
               <div
                 id="searchResults"
-                className="absolute left-0 top-full z-[10000] max-h-[300px] w-full overflow-y-auto rounded-xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-lg dark:border-white/10 dark:bg-zinc-950/90"
+                className="absolute left-0 top-full z-[10000] max-h-[min(60vh,320px)] w-full min-w-[min(100vw-1rem,320px)] overflow-y-auto rounded-xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-lg dark:border-white/10 dark:bg-zinc-950/90"
               >
                 {!Object.keys(window.mangaData || {}).length ? (
                   <div className="px-3 py-3 text-sm text-zinc-500">Data sedang dimuat...</div>
@@ -812,7 +863,25 @@ function HeaderContents() {
           </div>
         </div>
 
-        <div className="relative flex h-10 shrink-0 items-center justify-end gap-0.5 sm:gap-2">
+        {/* Right actions — hidden while mobile search expanded */}
+        <div
+          className={`relative flex h-10 shrink-0 items-center justify-end gap-0 sm:gap-2 ${
+            mobile && searchExpanded ? "hidden" : ""
+          }`}
+        >
+          {/* Mobile search toggle */}
+          {mobile && (
+            <button
+              type="button"
+              id="mobileSearchToggle"
+              aria-label="Cari manga"
+              title="Search"
+              onClick={openMobileSearch}
+              className={classButton}
+            >
+              <Icon name="search" />
+            </button>
+          )}
           <Link
             id="announcementLink"
             className={`${classButton} relative no-underline`}
@@ -867,7 +936,7 @@ function HeaderContents() {
             {bookmarksOpen && (
               <div
                 id="bookmarkContent"
-                className="absolute right-0 top-full z-[10000] mt-2 max-h-[min(70vh,480px)] min-w-[200px] overflow-y-auto rounded-lg border border-black/[0.06] bg-white/95 py-1.5 shadow-lg backdrop-blur-xl dark:border-white/[0.08] dark:bg-black/90"
+                className="absolute right-0 top-full z-[10000] mt-2 max-h-[min(70vh,480px)] w-[min(calc(100vw-1rem),280px)] min-w-[200px] overflow-y-auto rounded-lg border border-black/[0.06] bg-white/95 py-1.5 shadow-lg backdrop-blur-xl dark:border-white/[0.08] dark:bg-black/90"
               >
                 {bookmarks.length === 0 ? (
                   <div className="px-4 py-3 text-center text-[13px] text-zinc-600 dark:text-zinc-300">You have no bookmarks yet!</div>
