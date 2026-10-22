@@ -1,9 +1,12 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import CommunityWidgets from "../community-widgets";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { isNovelSeries } from "../../lib/reader-kind";
+import RecommendationSidebar from "./recommendation-sidebar";
+import SiteFooter from "../site-footer";
+import SiteHeader from "../site-header";
 
 type Manga = {
   slug: string;
@@ -61,7 +64,6 @@ type BloggerEntry = {
 declare global {
   interface Window {
     mangaData?: Record<string, unknown>;
-    initSiteHeader?: () => void;
     firestore?: unknown;
     fs?: {
       collection?: (...args: unknown[]) => unknown;
@@ -673,6 +675,27 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [view, setView] = useState<"grid" | "list" | "text-grid">("grid");
   const [bookmarked, setBookmarked] = useState(false);
   const [readChapters, setReadChapters] = useState<string[]>([]);
+  const [recommendationsHidden, setRecommendationsHidden] = useState(false);
+  const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const updateSidebarState = () => setSiteSidebarOpen(document.body.classList.contains("sidebar-open"));
+    const observer = new MutationObserver(updateSidebarState);
+    updateSidebarState();
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  const detailLayoutStyle = recommendationsHidden
+    ? {
+      "--detail-content-width": siteSidebarOpen
+        ? "min(var(--detail-max-width), calc(100% - var(--sidebar-width) - (var(--detail-gutter) * 2)))"
+        : "min(var(--detail-max-width), calc(100% - (var(--detail-gutter) * 2)))",
+      "--detail-content-left": siteSidebarOpen
+        ? "calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2)))"
+        : "max(var(--detail-gutter), calc((100% - var(--detail-max-width)) / 2))",
+    } as CSSProperties
+    : undefined;
 
   useEffect(() => {
     const sourcePreference = localStorage.getItem("chapterSourceMode");
@@ -955,13 +978,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   if (state === "loading") {
     return (
       <>
-        <div id="site-header" />
+        <SiteHeader />
         <main className="detail-route">
           <div className="detail-route-loading" role="status" aria-label="Memuat detail manga">
             <span className="detail-route-spinner" aria-hidden="true" />
           </div>
         </main>
-        <div id="site-footer" />
+        <SiteFooter />
         <RouteIntegrations />
       </>
     );
@@ -969,11 +992,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   if (state === "not-found") {
     return (
       <>
-        <div id="site-header" />
-        <main className="detail-route">
+        <SiteHeader />
+        <main className="detail-route" style={detailLayoutStyle}>
           <p className="detail-route-message" role="status">Manga tidak ditemukan.</p>
         </main>
-        <div id="site-footer" />
+        <SiteFooter />
         <RouteIntegrations />
       </>
     );
@@ -981,11 +1004,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   if (state === "error" || !manga) {
     return (
       <>
-        <div id="site-header" />
+        <SiteHeader />
         <main className="detail-route">
           <p className="detail-route-message" role="alert">Detail manga gagal dimuat. Coba muat ulang halaman.</p>
         </main>
-        <div id="site-footer" />
+        <SiteFooter />
         <RouteIntegrations />
       </>
     );
@@ -999,7 +1022,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
   return (
     <>
-      <div id="site-header" />
+      <SiteHeader />
       <main className="detail-route">
         <div className="container">
           <div id="bgLayer" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
@@ -1189,10 +1212,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             </section>
           </div>
         </div>
+        <RecommendationSidebar manga={manga} onVisibilityChange={(visible) => setRecommendationsHidden(!visible)} />
         <CommunityWidgets className="detail-widgets" pageId={`detail_${slug}`} />
-        <div id="rec-recommend-grid" />
       </main>
-      <div id="site-footer" />
+      <SiteFooter />
       <RouteIntegrations />
     </>
   );
@@ -1220,7 +1243,6 @@ function RouteIntegrations() {
       document.body.appendChild(script);
     });
 
-    void load("/header.js", true).then(() => window.initSiteHeader?.());
     void load("/manga-data.js", true).then(() => {
       const notifySearchReady = () => {
         if (Object.keys(window.mangaData || {}).length <= 5) return false;
@@ -1248,21 +1270,13 @@ function RouteIntegrations() {
       document.head.appendChild(firebaseInit);
       await load("/auth-loader.js");
       await load("/user-modals.js");
-      await load("/footer.js");
       await load("/announcement.js");
-      await load("/recommendation-sidebar.js");
     })();
 
     return () => {
       if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
       if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
-      window.dispatchEvent(new Event("mikoroku:cleanup-recommendations"));
       for (const script of added) script.remove();
-      document.getElementById("site-header")?.replaceChildren();
-      document.getElementById("site-footer")?.replaceChildren();
-      document.getElementById("rec-recommend-grid")?.replaceChildren();
-      document.getElementById("rec-sidebar-root")?.remove();
-      document.getElementById("rec-sidebar-show-button")?.remove();
     };
   }, []);
 

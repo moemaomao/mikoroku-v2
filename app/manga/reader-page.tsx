@@ -133,14 +133,13 @@ function chapterValue(value: string | number): number {
 
 function imageWithQuality(url: string, quality: number): string {
   if (/blogger\.googleusercontent\.com|lh3\.googleusercontent\.com/i.test(url)) {
-    return url.replace(/\/s\d+(-c)?\//, `/s${quality}/`);
+    return url.replace(/\/s\d+(-c)?\//, `/s${quality}$1/`);
   }
   return url;
 }
 
-function adaptiveImageWidth(): number {
-  if (typeof window === "undefined") return 1600;
-  return Math.max(800, Math.min(2000, Math.round(window.innerWidth * (window.devicePixelRatio || 1))));
+function readerImageUrl(url: string, dataSaver: boolean, quality: number): string {
+  return dataSaver ? imageWithQuality(url, quality) : url;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -696,7 +695,7 @@ export default function ReaderPage({
     data.images.slice(start, start + 4).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
-      image.src = imageWithQuality(src, dataSaver ? imageQuality : adaptiveImageWidth());
+      image.src = readerImageUrl(src, dataSaver, imageQuality);
     });
   }, [data, dataSaver, imageQuality, kind, mode, page]);
 
@@ -923,7 +922,7 @@ export default function ReaderPage({
         while (nextIndex < data.images.length) {
           const index = nextIndex++;
           const imageUrl = data.images[index];
-          const readerUrl = imageWithQuality(imageUrl, dataSaver ? imageQuality : adaptiveImageWidth());
+          const readerUrl = readerImageUrl(imageUrl, dataSaver, imageQuality);
           const candidates = [
             readerUrl,
             imageUrl,
@@ -1073,11 +1072,11 @@ export default function ReaderPage({
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode}`}>
             {mode === "long-strip" ? data.images.map((image, index) => (
-              <img key={`${image}:${index}`} src={imageWithQuality(image, dataSaver ? imageQuality : adaptiveImageWidth())} alt={`Page ${index + 1}`} loading={index < 2 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "auto"} decoding="async" onError={handleImageError} />
+              <img key={`${image}:${index}`} src={readerImageUrl(image, dataSaver, imageQuality)} alt={`Page ${index + 1}`} loading={index < 2 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "auto"} decoding="async" onError={handleImageError} />
             )) : (
               <>
                 <div className="reader-single-page-frame">
-                  <img src={imageWithQuality(data.images[page - 1], dataSaver ? imageQuality : adaptiveImageWidth())} alt={`Page ${page}`} fetchPriority="high" decoding="async" onError={handleImageError} />
+                  <img src={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)} alt={`Page ${page}`} fetchPriority="high" decoding="async" onError={handleImageError} />
                   <button className="reader-image-nav reader-image-nav-previous" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
                     <i className="fas fa-chevron-left" aria-hidden="true" />
                   </button>

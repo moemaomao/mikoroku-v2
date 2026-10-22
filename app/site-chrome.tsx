@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import SiteFooter from "./site-footer";
+import SiteHeader from "./site-header";
 
 function alreadyInitialized(src: string): boolean {
   if (src.includes("firebase-app-compat.js")) return !!window.firebase?.initializeApp;
@@ -10,8 +12,6 @@ function alreadyInitialized(src: string): boolean {
   if (src === "/manga-data.js") return !!window.__mangaDataLoaded;
   if (src === "/auth-loader.js") return !!window.__authListenerAttached || !!window.triggerLogin;
   if (src === "/user-modals.js") return !!window.showHistory;
-  if (src === "/header.js") return !!window.initSiteHeader;
-  if (src === "/footer.js") return !!window.initSiteFooter;
   return false;
 }
 
@@ -45,22 +45,8 @@ function loadScript(src: string, type = "text/javascript"): Promise<void> {
   });
 }
 
-async function initializeSiteChrome(showChrome: boolean, showFooter: boolean): Promise<void> {
-  if (!showChrome) {
-    if (showFooter) {
-      await loadScript("/footer.js");
-      window.initSiteFooter?.();
-    }
-    return;
-  }
-
-  const headerPromise = showChrome
-    ? loadScript("/header.js")
-        .then(() => window.initSiteHeader?.())
-        .catch((error: unknown) => {
-          console.error("Header dan sidebar gagal dimuat.", error);
-        })
-    : Promise.resolve();
+async function initializeSiteChrome(showChrome: boolean): Promise<void> {
+  if (!showChrome) return;
 
   try {
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
@@ -92,15 +78,12 @@ async function initializeSiteChrome(showChrome: boolean, showFooter: boolean): P
 
   const scripts = [
     ...(showChrome && window.firebase ? ["/auth-loader.js", "/user-modals.js"] : []),
-    ...(showFooter ? ["/footer.js"] : []),
   ];
   for (const src of scripts) {
     await loadScript(src).catch((error: unknown) => {
       console.error(`Integrasi situs gagal dimuat: ${src}`, error);
     });
   }
-  await headerPromise;
-  if (showFooter) window.initSiteFooter?.();
 }
 
 export default function SiteChrome({
@@ -111,19 +94,15 @@ export default function SiteChrome({
   showFooter?: boolean;
 }) {
   useEffect(() => {
-    void initializeSiteChrome(showChrome, showFooter).catch((error: unknown) => {
+    void initializeSiteChrome(showChrome).catch((error: unknown) => {
       console.error("Header dan footer gagal dimuat.", error);
     });
-    return () => {
-      if (showChrome) document.getElementById("site-header")?.replaceChildren();
-      if (showFooter) document.getElementById("site-footer")?.replaceChildren();
-    };
-  }, [showChrome, showFooter]);
+  }, [showChrome]);
 
   return showChrome || showFooter ? (
     <>
-      {showChrome && <div id="site-header" />}
-      {showFooter && <div id="site-footer" />}
+      {showChrome && <SiteHeader />}
+      {showFooter && <SiteFooter />}
     </>
   ) : null;
 }

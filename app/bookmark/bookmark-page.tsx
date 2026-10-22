@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
+import SiteFooter from "../site-footer";
+import SiteHeader from "../site-header";
 
 type Bookmark = {
   title: string;
@@ -14,6 +16,7 @@ type Bookmark = {
 type AuthUser = {
   uid: string;
   displayName?: string | null;
+  email?: string | null;
   photoURL?: string | null;
 };
 
@@ -49,14 +52,22 @@ type FirestoreCollection = {
   orderBy: (field: string, direction: "desc") => {
     get: () => Promise<FirestoreSnapshot>;
   };
+  where: (field: string, operator: string, value: unknown) => {
+    get: () => Promise<{ docs: Array<{ id: string }> }>;
+  };
   limit: (count: number) => {
     get: () => Promise<FirestoreSnapshot>;
   };
 };
 
+type FirebaseCompatApp = {
+  name?: string;
+  firestore?: () => unknown;
+};
+
 type FirebaseCompat = {
-  apps: unknown[];
-  initializeApp: (config: Record<string, string>) => void;
+  apps: FirebaseCompatApp[];
+  initializeApp: (config: Record<string, string>, name?: string) => FirebaseCompatApp;
   auth: () => {
     currentUser: AuthUser | null;
     onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
@@ -104,8 +115,6 @@ declare global {
     currentUser?: AuthUser | null;
     userStatsCache?: Record<string, Record<string, unknown>>;
     triggerLogin?: (provider?: string) => Promise<void>;
-    initSiteHeader?: () => void;
-    initSiteFooter?: () => void;
   }
 }
 
@@ -182,8 +191,6 @@ function scriptAlreadyExecuted(src: string): boolean {
   if (src === "/manga-data.js") return !!window.__mangaDataLoaded;
   if (src === "/auth-loader.js") return !!window.__authListenerAttached;
   if (src === "/user-modals.js") return !!window.showHistory;
-  if (src === "/header.js") return !!window.initSiteHeader;
-  if (src === "/footer.js") return !!window.initSiteFooter;
   return false;
 }
 
@@ -219,12 +226,6 @@ function loadScript(src: string, type = "text/javascript"): Promise<void> {
 }
 
 async function initializeBookmarkIntegrations(): Promise<void> {
-  const headerPromise = loadScript("/header.js")
-    .then(() => window.initSiteHeader?.())
-    .catch((error: unknown) => {
-      console.error("Header dan sidebar bookmark gagal dimuat.", error);
-    });
-
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
@@ -233,11 +234,9 @@ async function initializeBookmarkIntegrations(): Promise<void> {
 
   await loadScript("/manga-data.js");
   await loadScript("/firebase.js", "module");
-  for (const src of ["/auth-loader.js", "/user-modals.js", "/footer.js"]) {
+  for (const src of ["/auth-loader.js", "/user-modals.js"]) {
     await loadScript(src);
   }
-  await headerPromise;
-  window.initSiteFooter?.();
 }
 
 function bookmarkFromFirestore(document: {
@@ -412,8 +411,6 @@ export default function BookmarkPage() {
       active = false;
       if (authTimeout !== undefined) window.clearTimeout(authTimeout);
       unsubscribe?.();
-      document.getElementById("site-header")?.replaceChildren();
-      document.getElementById("site-footer")?.replaceChildren();
     };
   }, [refreshLocalBookmarks]);
 
@@ -496,7 +493,7 @@ export default function BookmarkPage() {
 
   return (
     <>
-      <div id="site-header" />
+      <SiteHeader />
       <main className="bookmark-route">
         <section className="bookmark-container" aria-labelledby="bookmark-title">
           <header className="bookmark-header">
@@ -556,7 +553,7 @@ export default function BookmarkPage() {
           )}
         </section>
       </main>
-      <div id="site-footer" />
+      <SiteFooter />
     </>
   );
 }

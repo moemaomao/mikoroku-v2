@@ -1,9 +1,11 @@
 import HomepageIntegrations from "./homepage-integrations";
+import SiteFooter from "./site-footer";
+import SiteHeader from "./site-header";
 
 export default function HomePage() {
   return (
     <>
-      <div id="site-header" />
+      <SiteHeader />
       <main>
         <div id="heroSection" />
 
@@ -38,7 +40,7 @@ export default function HomePage() {
           </aside>
         </div>
       </main>
-      <div id="site-footer" />
+      <SiteFooter />
       <HomepageIntegrations />
     </>
   );

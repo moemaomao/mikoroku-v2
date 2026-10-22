@@ -1362,31 +1362,6 @@ html.light .detail-route .chapter-grid.text-grid-mode .chapter-date {
     );
   }
 
-  .detail-route.recommendations-hidden {
-    --detail-content-width: min(
-      var(--detail-max-width),
-      calc(100% - (var(--detail-gutter) * 2))
-    );
-    --detail-content-left: max(
-      var(--detail-gutter),
-      calc((100% - var(--detail-max-width)) / 2)
-    );
-  }
-
-  body.sidebar-open .detail-route.recommendations-hidden {
-    --detail-content-width: min(
-      var(--detail-max-width),
-      calc(100% - var(--sidebar-width) - (var(--detail-gutter) * 2))
-    );
-    --detail-content-left: calc(
-      var(--sidebar-width)
-      + max(
-        var(--detail-gutter),
-        calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2)
-      )
-    );
-  }
-
   .detail-route .container,
   .detail-route .detail-widgets {
     width: var(--detail-content-width);

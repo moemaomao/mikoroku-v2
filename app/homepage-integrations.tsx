@@ -9,7 +9,6 @@ type ScriptSource = {
 };
 
 const scripts: ScriptSource[] = [
-  { src: "/header.js" },
   { src: "/manga-data.js" },
   { src: "/githubmangapost.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js" },
@@ -23,7 +22,6 @@ const scripts: ScriptSource[] = [
   { src: "/firebase.js", type: "module" },
   { src: "/firebasepost.js" },
   { src: "/widget.js" },
-  { src: "/footer.js" },
 ];
 
 const adFrameDocument = `<!DOCTYPE html>
