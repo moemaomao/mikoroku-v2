@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 
+const FAVICON_URL = "https://mikoroku.top/assets/icons/apple-touch-icon.png";
+
 export function createMikorokuOgImage({
   title,
   description,
@@ -56,24 +58,22 @@ export function createMikorokuOgImage({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
+            <img
+              src={FAVICON_URL}
+              width={34}
+              height={34}
+              alt=""
               style={{
                 width: 34,
                 height: 34,
                 borderRadius: 9,
-                background: "#d8374b",
-                color: "white",
-                fontSize: 17,
-                fontWeight: 800,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                objectFit: "cover",
               }}
-            >
-              M
-            </div>
+            />
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: 1.5 }}>
+              <span
+                style={{ fontSize: 15, fontWeight: 800, letterSpacing: 1.5 }}
+              >
                 MIKOROKU
               </span>
               <span
@@ -89,6 +89,7 @@ export function createMikorokuOgImage({
             </div>
           </div>
 
+          {/* title block */}
           <div
             style={{
               display: "flex",
@@ -138,7 +139,9 @@ export function createMikorokuOgImage({
               fontSize: 12,
             }}
           >
-            <span style={{ color: "#ff6476", fontWeight: 700 }}>mikoroku.top</span>
+            <span style={{ color: "#ff6476", fontWeight: 700 }}>
+              mikoroku.top
+            </span>
             <span>·</span>
             <span>Manga, manhwa & more</span>
           </div>
@@ -175,10 +178,11 @@ export function createMikorokuOgImage({
       </div>
     ),
     {
-      width: 800,
-      height: 420,
+      width: 500,
+      height: 220,
       headers: {
-        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+        "Cache-Control":
+          "public, s-maxage=86400, stale-while-revalidate=604800",
       },
     },
   );
