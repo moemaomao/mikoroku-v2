@@ -54,3 +54,12 @@ html.dark .community-widget-error {
 #user-profile-modal {
   z-index: 100000 !important;
 }
+
+#email-auth-modal:not([style*="display: flex"]):not([style*="display:flex"]),
+#user-settings-modal:not([style*="display: flex"]):not([style*="display:flex"]),
+#dm-modal:not([style*="display: flex"]):not([style*="display:flex"]),
+#report-modal:not([style*="display: flex"]):not([style*="display:flex"]),
+#reply-notif-overlay:not([style*="display: flex"]):not([style*="display:flex"]),
+#user-profile-modal:not([style*="display: flex"]):not([style*="display:flex"]) {
+  display: none !important;
+}

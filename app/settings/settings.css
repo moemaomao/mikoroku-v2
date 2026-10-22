@@ -249,21 +249,171 @@ html.dark .settings-page {
 }
 
 .settings-badge-option.badge-none { background: #2a2a2a; color: #ddd; }
-.settings-badge-option.badge-milf { background: linear-gradient(45deg, #ff4d6d, #ff8fab); color: #fff; }
-.settings-badge-option.badge-horny { background: linear-gradient(45deg, #ff7b00, #ffcc00); color: #111; }
-.settings-badge-option.badge-night-owl { background: linear-gradient(90deg, #2a1b4a, #6b46c1); color: #e0bbff; }
-.settings-badge-option.badge-chaos-entity { background: linear-gradient(45deg, #ff0066, #8b00ff, #ff00cc); color: #fff; }
-.settings-badge-option.badge-yandere-energy { background: linear-gradient(90deg, #ff1493, #ff69b4); color: #fff; }
-.settings-badge-option.badge-cultured { background: linear-gradient(90deg, #d4af37, #ffd700); color: #2c1e0f; }
-.settings-badge-option.badge-npc { border-color: #00ff00; background: #555; color: #aaffaa; }
-.settings-badge-option.badge-lore-master { background: linear-gradient(90deg, #4a2c0b, #8b5a2b); color: #ffdd88; }
-.settings-badge-option.badge-touch-grass { background: linear-gradient(90deg, #228b22, #32cd32); color: #fff; }
-.settings-badge-option.badge-gremlin { background: linear-gradient(45deg, #00ff66, #39ff14); color: #000; }
-.settings-badge-option.badge-certified-degenerate { background: linear-gradient(90deg, #8b0000, #ff4500); color: #ff0; }
-.settings-badge-option.badge-waifu-collector { background: linear-gradient(45deg, #ff69b4, #ff1493, #db7093); color: #fff; }
-.settings-badge-option.badge-manga-addict { background: linear-gradient(90deg, #9b59b6, #8e44ad); color: #fff; }
-.settings-badge-option.badge-sleep-deprived { background: linear-gradient(90deg, #191970, #4169e1); color: #acf; }
-.settings-badge-option.badge-horny-jail-escapee { background: linear-gradient(45deg, #f0a, #f08); color: #fff; }
+.settings-badge-option.badge-milf { background: linear-gradient(45deg,#ff4d6d,#ff8fab); color: #fff; }
+.settings-badge-option.badge-horny { background: linear-gradient(45deg,#ff7b00,#ffcc00); color: #111; }
+.settings-badge-option.badge-night-owl { background: linear-gradient(90deg,#2a1b4a,#6b46c1); color: #e0bbff; }
+.settings-badge-option.badge-chaos-entity { background: linear-gradient(45deg,#ff0066,#8b00ff,#ff00cc); color: #fff; }
+.settings-badge-option.badge-yandere-energy { background: linear-gradient(90deg,#ff1493,#ff69b4); color: #fff; }
+.settings-badge-option.badge-cultured { background: linear-gradient(90deg,#d4af37,#ffd700); color: #2c1e0f; }
+.settings-badge-option.badge-npc { background: #555555; color: #aaffaa; border: 1px solid #00ff00; }
+.settings-badge-option.badge-lore-master { background: linear-gradient(90deg,#4a2c0b,#8b5a2b); color: #ffdd88; }
+.settings-badge-option.badge-touch-grass { background: linear-gradient(90deg,#228b22,#32cd32); color: #fff; }
+.settings-badge-option.badge-gremlin { background: linear-gradient(45deg,#00ff66,#39ff14); color: #000; }
+.settings-badge-option.badge-certified-degenerate { background: linear-gradient(90deg,#8b0000,#ff4500); color: #ffff00; }
+.settings-badge-option.badge-waifu-collector { background: linear-gradient(45deg,#ff69b4,#ff1493,#db7093); color: #fff; }
+.settings-badge-option.badge-manga-addict { background: linear-gradient(90deg,#9b59b6,#8e44ad); color: #fff; }
+.settings-badge-option.badge-sleep-deprived { background: linear-gradient(90deg,#191970,#4169e1); color: #aaccff; }
+.settings-badge-option.badge-horny-jail-escapee { background: linear-gradient(45deg,#ff00aa,#ff0088); color: #fff; }
+.settings-badge-option.badge-elite-reader { background: linear-gradient(90deg,#00bfff,#1e90ff); color: #fff; }
+.settings-badge-option.badge-keyboard-warrior { background: linear-gradient(90deg,#ff4500,#ff8c00); color: #fff; }
+.settings-badge-option.badge-dungeon-master { background: linear-gradient(45deg,#4b0082,#8a2be2); color: #e0b0ff; }
+.settings-badge-option.badge-gacha-victim { background: linear-gradient(90deg,#ff00ff,#00ffff,#ffff00); color: #000; }
+.settings-badge-option.badge-onee-san-hunter { background: linear-gradient(90deg,#ff69b4,#ff1493); color: #fff; }
+.settings-badge-option.badge-tsundere { background: linear-gradient(90deg,#ff3333,#ff9999); color: #fff; }
+.settings-badge-option.badge-baka-squad { background: linear-gradient(45deg,#ffcc00,#ff8800); color: #000; }
+.settings-badge-option.badge-void-walker { background: linear-gradient(90deg,#1a0033,#4b0082); color: #bb99ff; }
+.settings-badge-option.badge-brain-not-found { background: #111111; color: #ff3366; border: 1px dashed #ff3366; }
+.settings-badge-option.badge-professional-lurker { background: linear-gradient(90deg,#2f2f2f,#555555); color: #aaaaaa; }
+.settings-badge-option.badge-cosmic-simp { background: linear-gradient(45deg,#00ffff,#ff00ff,#ffff00); color: #000; }
+.settings-badge-option.badge-schizo-poster { background: linear-gradient(45deg,#6b21a8,#a855f7,#c026d3); color: #fff; }
+.settings-badge-option.badge-doomer { background: linear-gradient(90deg,#1e2937,#334155); color: #94a3b8; border: 1px dashed #64748b; }
+.settings-badge-option.badge-coomer { background: linear-gradient(45deg,#db2777,#f472b6); color: #fff; }
+.settings-badge-option.badge-terminally-online { background: linear-gradient(90deg,#1f2937,#4b5563); color: #e2e8f0; }
+.settings-badge-option.badge-egirl-hunter { background: linear-gradient(45deg,#ec4899,#f472b6,#db2777); color: #fff; }
+.settings-badge-option.badge-chuuni { background: linear-gradient(135deg,#7c3aed,#a855f7,#c084fc); color: #fff; }
+.settings-badge-option.badge-neet-lord { background: linear-gradient(90deg,#334155,#475569); color: #cbd5e1; border: 1px solid #64748b; }
+.settings-badge-option.badge-incognito-degen { background: linear-gradient(45deg,#4f46e5,#6366f1); color: #fff; }
+.settings-badge-option.badge-rage-baiter { background: linear-gradient(90deg,#b91c1c,#ef4444); color: #fff; }
+.settings-badge-option.badge-shipper-supreme { background: linear-gradient(45deg,#ec4899,#8b5cf6); color: #fff; }
+.settings-badge-option.badge-lurker-god { background: linear-gradient(90deg,#1e2937,#334155,#475569); color: #94a3b8; }
+.settings-badge-option.badge-menhera { background: linear-gradient(45deg,#db2777,#e11d48); color: #fff; }
+.settings-badge-option.badge-power-bottom { background: linear-gradient(45deg,#7e22ce,#a855f7); color: #fff; }
+.settings-badge-option.badge-salaryman-slave { background: linear-gradient(90deg,#374151,#4b5563); color: #9ca3af; }
+.settings-badge-option.badge-isekai-protagonist { background: linear-gradient(45deg,#eab308,#f59e0b); color: #1f2937; }
+.settings-badge-option.badge-trash-taste { background: linear-gradient(90deg,#854d0e,#b45309); color: #fef3c7; }
+.settings-badge-option.badge-paradox-simp { background: linear-gradient(45deg,#ec4899,#6366f1); color: #fff; }
+.settings-badge-option.badge-fourchan-refugee { background: linear-gradient(90deg,#111827,#1f2937); color: #9ca3af; border: 1px dashed #6b7280; }
+.settings-badge-option.badge-cope-enjoyer { background: linear-gradient(45deg,#854d0e,#b45309); color: #fef3c7; }
+.settings-badge-option.badge-seethe-lord { background: linear-gradient(90deg,#b91c1c,#ef4444); color: #fff; }
+.settings-badge-option.badge-ratio-touch-grass { background: linear-gradient(90deg,#166534,#4ade80); color: #052e16; }
+.settings-badge-option.badge-based-department { background: linear-gradient(45deg,#15803d,#22c55e); color: #fff; }
+.settings-badge-option.badge-cringe-overlord { background: linear-gradient(90deg,#7f1d1d,#ef4444); color: #fecaca; }
+.settings-badge-option.badge-malding-champion { background: linear-gradient(45deg,#991b1b,#f87171); color: #fff; }
+.settings-badge-option.badge-hikikomori-emperor { background: linear-gradient(90deg,#1e2937,#334155); color: #cbd5e1; border: 1px dashed #64748b; }
+.settings-badge-option.badge-yabai-energy { background: linear-gradient(45deg,#c026d3,#db2777); color: #fff; }
+.settings-badge-option.badge-sugoi-desu { background: linear-gradient(90deg,#ec4899,#f472b6); color: #fff; }
+.settings-badge-option.badge-ara-ara-enjoyer { background: linear-gradient(45deg,#9f1239,#e11d48); color: #fff; }
+.settings-badge-option.badge-onii-chan-protector { background: linear-gradient(90deg,#7e22ce,#a855f7); color: #fff; }
+.settings-badge-option.badge-imouto-collector { background: linear-gradient(45deg,#db2777,#f472b6); color: #fff; }
+.settings-badge-option.badge-genshin-addict { background: linear-gradient(90deg,#854d0e,#eab308); color: #451a03; }
+.settings-badge-option.badge-fomo-victim { background: linear-gradient(45deg,#4338ca,#6366f1); color: #fff; }
+.settings-badge-option.badge-doom-scroller { background: linear-gradient(90deg,#1e2937,#334155); color: #94a3b8; }
+.settings-badge-option.badge-reply-guy { background: linear-gradient(45deg,#854d0e,#ca8a04); color: #fff; }
+.settings-badge-option.badge-main-character-syndrome { background: linear-gradient(90deg,#7c3aed,#a855f7); color: #fff; }
+.settings-badge-option.badge-final-boss-of-simping { background: linear-gradient(45deg,#9f1239,#ec4899,#db2777); color: #fff; }
+.settings-badge-option.badge-weeb-supreme { background: linear-gradient(45deg,#ff00ff,#00ffff,#ffff00); color: #000; }
+.settings-badge-option.badge-otaku-overlord { background: linear-gradient(90deg,#6b46c1,#9f7aea,#c4b5fd); color: #fff; }
+.settings-badge-option.badge-waifu-defender { background: linear-gradient(45deg,#ff69b4,#ff1493,#db2777); color: #fff; }
+.settings-badge-option.badge-two-d-only { background: #1a0033; color: #bb99ff; border: 2px dashed #c084fc; }
+.settings-badge-option.badge-isekai-veteran { background: linear-gradient(45deg,#eab308,#f59e0b,#fcd34d); color: #1f2937; }
+.settings-badge-option.badge-senpai-noticer { background: linear-gradient(90deg,#ff3366,#ff6699); color: #fff; }
+.settings-badge-option.badge-ara-ara-collector { background: linear-gradient(45deg,#9f1239,#e11d48); color: #fff; }
+.settings-badge-option.badge-light-novel-degen { background: linear-gradient(90deg,#4a2c0b,#8b5a2b); color: #ffdd88; }
+.settings-badge-option.badge-chuuni-lord { background: linear-gradient(135deg,#7c3aed,#a855f7,#c026d3); color: #fff; }
+.settings-badge-option.badge-trap-connoisseur { background: linear-gradient(45deg,#ff00aa,#ff66cc); color: #fff; }
+.settings-badge-option.badge-yuri-enjoyer { background: linear-gradient(90deg,#db2777,#f472b6); color: #fff; }
+.settings-badge-option.badge-kawaii-overlord { background: linear-gradient(45deg,#ff99cc,#ff66aa); color: #000; }
+.settings-badge-option.badge-hololive-simp { background: linear-gradient(45deg,#22d3ee,#67e8f9); color: #000; }
+.settings-badge-option.badge-visual-novel-addict { background: linear-gradient(45deg,#7c3aed,#c084fc); color: #fff; }
+.settings-badge-option.badge-mecha-pilot { background: linear-gradient(90deg,#0f172a,#334155,#64748b); color: #e2e8f0; }
+.settings-badge-option.badge-figurine-hoarder { background: linear-gradient(45deg,#f59e0b,#fcd34d,#fde68a); color: #422006; }
+.settings-badge-option.badge-anime-onahole { background: linear-gradient(45deg,#db2777,#ff66cc,#f9a8d4); color: #fff; }
+.settings-badge-option.badge-raid-boss { background: linear-gradient(45deg,#991b1b,#dc2626,#f87171); color: #fff; }
+.settings-badge-option.badge-anime-speedrunner { background: linear-gradient(90deg,#2563eb,#38bdf8); color: #fff; }
+.settings-badge-option.badge-isekai-truck-victim { background: linear-gradient(45deg,#f59e0b,#facc15,#fde047); color: #111; }
+.settings-badge-option.badge-vtuber-rabbit-hole { background: linear-gradient(45deg,#ec4899,#8b5cf6,#22d3ee); color: #fff; }
+.settings-badge-option.badge-wifi-warrior { background: linear-gradient(90deg,#0f172a,#2563eb); color: #dbeafe; }
+.settings-badge-option.badge-ranked-demon { background: linear-gradient(45deg,#7f1d1d,#dc2626,#f87171); color: #fff; }
+.settings-badge-option.badge-afk-legend { background: linear-gradient(90deg,#374151,#6b7280); color: #f3f4f6; }
+.settings-badge-option.badge-loot-goblin { background: linear-gradient(45deg,#22c55e,#84cc16,#facc15); color: #111; }
+.settings-badge-option.badge-fps-sweat { background: linear-gradient(90deg,#111827,#1d4ed8); color: #dbeafe; }
+.settings-badge-option.badge-combo-dropper { background: linear-gradient(45deg,#f97316,#fb7185); color: #fff; }
+.settings-badge-option.badge-maid-cafe-regular { background: linear-gradient(45deg,#f9a8d4,#f472b6,#ec4899); color: #fff; }
+.settings-badge-option.badge-goblin-mode { background: linear-gradient(45deg,#166534,#22c55e,#4ade80); color: #fff; }
+.settings-badge-option.badge-anime-marathoner { background: linear-gradient(90deg,#7c3aed,#c084fc); color: #fff; }
+.settings-badge-option.badge-patch-note-reader { background: linear-gradient(90deg,#0f172a,#334155,#475569); color: #e2e8f0; }
+.settings-badge-option.badge-boss-music-enjoyer { background: linear-gradient(45deg,#7e22ce,#c026d3,#ec4899); color: #fff; }
+.settings-badge-option.badge-daily-quest-slave { background: linear-gradient(90deg,#92400e,#ca8a04,#facc15); color: #111; }
+.settings-badge-option.badge-ping-999 { background: linear-gradient(90deg,#991b1b,#ef4444); color: #fff; }
+.settings-badge-option.badge-anime-ending-destroyed-me { background: linear-gradient(45deg,#4338ca,#7c3aed,#c084fc); color: #fff; }
+.settings-badge-option.badge-waifu-meta-abuser { background: linear-gradient(45deg,#ff1493,#ec4899,#f472b6); color: #fff; }
+.settings-badge-option.badge-controller-thrower { background: linear-gradient(90deg,#7f1d1d,#dc2626); color: #fff; }
+.settings-badge-option.badge-opening-skipper { background: linear-gradient(90deg,#334155,#64748b); color: #f8fafc; }
+.settings-badge-option.badge-ending-enjoyer { background: linear-gradient(45deg,#1d4ed8,#7c3aed,#ec4899); color: #fff; }
+.settings-badge-option.badge-gacha-god { background: linear-gradient(45deg,#facc15,#22d3ee,#ec4899,#facc15); color: #111; }
+.settings-badge-option.badge-skill-issue { background: linear-gradient(90deg,#111827,#ef4444); color: #fff; }
+.settings-badge-option.badge-anime-ost-addict { background: linear-gradient(45deg,#4f46e5,#9333ea,#ec4899); color: #fff; }
+.settings-badge-option.badge-last-online-3am { background: linear-gradient(90deg,#0f172a,#312e81); color: #c7d2fe; }
+.settings-badge-option.badge-npc-dialogue-skipper { background: linear-gradient(90deg,#4b5563,#9ca3af); color: #111; }
+.settings-badge-option.badge-cutscene-enjoyer { background: linear-gradient(45deg,#2563eb,#7c3aed); color: #fff; }
+.settings-badge-option.badge-voice-actor-enjoyer { background: linear-gradient(45deg,#db2777,#8b5cf6); color: #fff; }
+.settings-badge-option.badge-achaaan { background: linear-gradient(45deg,#f9a8d4,#f472b6,#fbcfe8); color: #111; }
+.settings-badge-option.badge-white-hair-enjoyer { background: linear-gradient(45deg,#dbeafe,#cbd5e1,#f8fafc); color: #111; }
+.settings-badge-option.badge-silver-hair-simp { background: linear-gradient(45deg,#94a3b8,#e2e8f0,#cbd5e1); color: #111; }
+.settings-badge-option.badge-twin-tail-lover { background: linear-gradient(45deg,#ec4899,#f472b6,#f9a8d4); color: #fff; }
+.settings-badge-option.badge-kuudere-enjoyer { background: linear-gradient(90deg,#60a5fa,#2563eb); color: #fff; }
+.settings-badge-option.badge-gyaru-enjoyer { background: linear-gradient(45deg,#fb7185,#f59e0b,#fde047); color: #111; }
+.settings-badge-option.badge-glasses-supremacy { background: linear-gradient(90deg,#334155,#64748b); color: #f8fafc; }
+.settings-badge-option.badge-short-hair-propaganda { background: linear-gradient(45deg,#7c3aed,#a855f7); color: #fff; }
+.settings-badge-option.badge-long-hair-cult { background: linear-gradient(45deg,#4338ca,#7c3aed,#c084fc); color: #fff; }
+.settings-badge-option.badge-catgirl-enjoyer { background: linear-gradient(45deg,#f472b6,#ec4899,#db2777); color: #fff; }
+.settings-badge-option.badge-fox-girl-follower { background: linear-gradient(45deg,#f97316,#fb923c,#fdba74); color: #111; }
+.settings-badge-option.badge-maid-enjoyer { background: linear-gradient(45deg,#111827,#374151,#9ca3af); color: #fff; }
+.settings-badge-option.badge-goth-girl-enjoyer { background: linear-gradient(45deg,#111827,#4c1d95,#7c3aed); color: #e9d5ff; }
+.settings-badge-option.badge-muscle-waifu-appreciator { background: linear-gradient(45deg,#b91c1c,#ef4444,#f87171); color: #fff; }
+.settings-badge-option.badge-hoodie-waifu-enjoyer { background: linear-gradient(90deg,#1e2937,#475569); color: #f1f5f9; }
+.settings-badge-option.badge-fang-lover { background: linear-gradient(45deg,#ec4899,#ef4444); color: #fff; }
+.settings-badge-option.badge-thigh-high-supremacy { background: linear-gradient(45deg,#7c3aed,#ec4899); color: #fff; }
+.settings-badge-option.badge-office-lady-enjoyer { background: linear-gradient(45deg,#374151,#6b7280,#9ca3af); color: #fff; }
+.settings-badge-option.badge-dark-elf-believer { background: linear-gradient(45deg,#166534,#7c3aed,#111827); color: #f8fafc; }
+.settings-badge-option.badge-school-uniform-lover { background: linear-gradient(45deg,#2563eb,#60a5fa,#dbeafe); color: #111; }
+.settings-badge-option.badge-red-eyes-enjoyer { background: linear-gradient(45deg,#7f1d1d,#dc2626,#f87171); color: #fff; }
+.settings-badge-option.badge-flat-is-justice { background: linear-gradient(45deg,#60a5fa,#a5b4fc,#c4b5fd); color: #111; }
+.settings-badge-option.badge-medium-is-premium { background: linear-gradient(45deg,#f472b6,#fb7185,#fda4af); color: #fff; }
+.settings-badge-option.badge-oppai-enjoyer { background: linear-gradient(45deg,#ec4899,#db2777,#be185d); color: #fff; }
+.settings-badge-option.badge-boing-boing-energy { background: linear-gradient(45deg,#f59e0b,#f97316,#ef4444); color: #fff; }
+.settings-badge-option.badge-petite-supremacy { background: linear-gradient(45deg,#67e8f9,#a5f3fc,#dbeafe); color: #111; }
+.settings-badge-option.badge-balanced-build { background: linear-gradient(45deg,#8b5cf6,#c084fc,#e9d5ff); color: #111; }
+.settings-badge-option.badge-anime-physics-believer { background: linear-gradient(45deg,#f43f5e,#ec4899,#8b5cf6); color: #fff; }
+.settings-badge-option.badge-isekai-enjoyer { background: linear-gradient(45deg,#f59e0b,#fde047,#facc15); color: #111; }
+.settings-badge-option.badge-romcom-addict { background: linear-gradient(45deg,#ec4899,#f472b6,#f9a8d4); color: #fff; }
+.settings-badge-option.badge-slice-of-life-soul { background: linear-gradient(45deg,#60a5fa,#93c5fd,#dbeafe); color: #111; }
+.settings-badge-option.badge-psychological-damage { background: linear-gradient(45deg,#4c1d95,#7c3aed,#c084fc); color: #fff; }
+.settings-badge-option.badge-mecha-enjoyer { background: linear-gradient(45deg,#334155,#64748b,#94a3b8); color: #fff; }
+.settings-badge-option.badge-dark-fantasy-cult { background: linear-gradient(45deg,#111827,#4c1d95,#7f1d1d); color: #fff; }
+.settings-badge-option.badge-shounen-bloodline { background: linear-gradient(45deg,#dc2626,#f97316,#facc15); color: #fff; }
+.settings-badge-option.badge-seinen-enjoyer { background: linear-gradient(45deg,#1e2937,#475569,#64748b); color: #f8fafc; }
+.settings-badge-option.badge-yuri-propaganda { background: linear-gradient(45deg,#db2777,#f472b6,#f9a8d4); color: #fff; }
+.settings-badge-option.badge-horror-route { background: linear-gradient(45deg,#111827,#7f1d1d,#dc2626); color: #fff; }
+.settings-badge-option.badge-fantasy-guild-member { background: linear-gradient(45deg,#166534,#22c55e,#4ade80); color: #111; }
+.settings-badge-option.badge-cyberpunk-mindset { background: linear-gradient(45deg,#06b6d4,#8b5cf6,#ec4899); color: #fff; }
+.settings-badge-option.badge-school-festival-arc { background: linear-gradient(45deg,#fb7185,#f472b6,#f9a8d4); color: #fff; }
+.settings-badge-option.badge-sports-anime-energy { background: linear-gradient(45deg,#2563eb,#22c55e,#facc15); color: #fff; }
+.settings-badge-option.badge-idol-hell { background: linear-gradient(45deg,#ec4899,#8b5cf6,#22d3ee); color: #fff; }
+.settings-badge-option.badge-visual-novel-route { background: linear-gradient(45deg,#7c3aed,#c084fc,#f9a8d4); color: #fff; }
+.settings-badge-option.badge-gacha-lore-reader { background: linear-gradient(45deg,#facc15,#f97316,#ef4444); color: #fff; }
+.settings-badge-option.badge-post-apocalyptic-vibes { background: linear-gradient(45deg,#374151,#6b7280,#9ca3af); color: #fff; }
+.settings-badge-option.badge-cute-girls-doing-things { background: linear-gradient(45deg,#f9a8d4,#fbcfe8,#fdf2f8); color: #111; }
+.settings-badge-option.badge-villainess-route { background: linear-gradient(45deg,#7c3aed,#ec4899,#f43f5e); color: #fff; }
+.settings-badge-option.badge-drama-victim { background: linear-gradient(45deg,#7f1d1d,#b91c1c,#ef4444); color: #fff; }
+.settings-badge-option.badge-emotional-damage { background: linear-gradient(45deg,#4338ca,#7c3aed,#c084fc); color: #fff; }
+.settings-badge-option.badge-toxic-romance-reader { background: linear-gradient(45deg,#be123c,#ec4899,#f472b6); color: #fff; }
+.settings-badge-option.badge-pain-arc-enjoyer { background: linear-gradient(45deg,#111827,#4b5563,#7c3aed); color: #fff; }
+.settings-badge-option.badge-betrayal-route { background: linear-gradient(45deg,#991b1b,#dc2626,#f87171); color: #fff; }
+.settings-badge-option.badge-red-flag-collector { background: linear-gradient(45deg,#b91c1c,#ef4444,#fb7185); color: #fff; }
+.settings-badge-option.badge-copium-inhaler { background: linear-gradient(45deg,#2563eb,#60a5fa,#93c5fd); color: #111; }
+.settings-badge-option.badge-suffering-build { background: linear-gradient(45deg,#1e2937,#374151,#6b7280); color: #fff; }
+.settings-badge-option.badge-ntr-enjoyer { background: linear-gradient(45deg,#1e293b,#7f1d1d,#dc2626); color: #fff; }
 
 .settings-expand {
   width: 100%;

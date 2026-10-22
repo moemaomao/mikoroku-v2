@@ -7,6 +7,9 @@ declare global {
   interface Window {
     DOMPurify?: unknown;
     md5?: unknown;
+    showReplyNotifications?: () => void;
+    closeReplyNotifications?: () => void;
+    loadUserNotifications?: () => void;
   }
 }
 
@@ -29,21 +32,21 @@ const PORTAL_MODAL_IDS = [
   "user-profile-modal",
 ];
 
-function sanitizeWidgetHtml(raw: string): string {
+const STYLE_ATTR = "data-mikoroku-widget-style";
+
+function parseWidgetHtml(raw: string): { bodyHtml: string; styleHtml: string } {
   const bodyMatch = raw.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   let bodyHtml = bodyMatch ? bodyMatch[1] : raw;
 
+  let styleHtml = "";
   const headMatch = raw.match(/<head[^>]*>([\s\S]*)<\/head>/i);
-  let headAssets = "";
   if (headMatch) {
     const head = headMatch[1]
       .replace(/<title[\s\S]*?<\/title>/gi, "")
       .replace(/<meta[\s\S]*?>/gi, "");
     const styles = head.match(/<style[\s\S]*?<\/style>/gi) || [];
     const links = head.match(/<link[^>]*>/gi) || [];
-    headAssets = [...styles, ...links].join("\n");
-  } else {
-    bodyHtml = bodyHtml.replace(/<title[\s\S]*?<\/title>/gi, "");
+    styleHtml = [...styles, ...links].join("\n");
   }
 
   bodyHtml = bodyHtml
@@ -51,17 +54,64 @@ function sanitizeWidgetHtml(raw: string): string {
     .replace(/<\/?html[^>]*>/gi, "")
     .replace(/<\/?head[^>]*>/gi, "")
     .replace(/<\/?body[^>]*>/gi, "")
-    .replace(/<title[\s\S]*?<\/title>/gi, "");
+    .replace(/<title[\s\S]*?<\/title>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<link[^>]*>/gi, "");
 
-  return `${headAssets}\n${bodyHtml}`;
+  return { bodyHtml, styleHtml };
+}
+
+function injectWidgetStyles(styleHtml: string, owner: string) {
+  if (!styleHtml.trim()) return;
+  if (document.head.querySelector(`[${STYLE_ATTR}="${owner}"]`)) return;
+
+  const wrap = document.createElement("div");
+  wrap.innerHTML = styleHtml;
+  [...wrap.childNodes].forEach((node) => {
+    if (node.nodeType !== 1) return;
+    const el = node as HTMLElement;
+    el.setAttribute(STYLE_ATTR, owner);
+    document.head.appendChild(el);
+  });
 }
 
 function portalModalsToBody() {
   for (const id of PORTAL_MODAL_IDS) {
     const el = document.getElementById(id);
-    if (el && el.parentElement !== document.body) {
+    if (!el) continue;
+    if (el.parentElement !== document.body) {
       document.body.appendChild(el);
     }
+    el.style.display = "none";
+  }
+}
+
+function forceClosePortaledModals() {
+  for (const id of PORTAL_MODAL_IDS) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  }
+}
+
+function removePortaledModals() {
+  for (const id of PORTAL_MODAL_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.parentElement === document.body) {
+      el.remove();
+    }
+  }
+}
+
+function bridgeNotificationApi() {
+  const g = window as unknown as Record<string, unknown>;
+  if (typeof g.showReplyNotifications === "function") {
+    window.showReplyNotifications = g.showReplyNotifications as () => void;
+  }
+  if (typeof g.closeReplyNotifications === "function") {
+    window.closeReplyNotifications = g.closeReplyNotifications as () => void;
+  }
+  if (typeof g.loadUserNotifications === "function") {
+    window.loadUserNotifications = g.loadUserNotifications as () => void;
   }
 }
 
@@ -88,10 +138,12 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
           if (!response.ok) throw new Error(`Widget ${widget.id} returned HTTP ${response.status}.`);
 
           const raw = await response.text();
-          const html = sanitizeWidgetHtml(raw);
+          const { bodyHtml, styleHtml } = parseWidgetHtml(raw);
+
+          injectWidgetStyles(styleHtml, widget.id);
 
           const template = document.createElement("template");
-          template.innerHTML = html;
+          template.innerHTML = bodyHtml;
           const scripts = [...template.content.querySelectorAll("script")];
           scripts.forEach((script) => script.remove());
           template.content.querySelectorAll("title").forEach((t) => t.remove());
@@ -123,7 +175,10 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
           }
 
           if (widget.id === "custom-comment-widget") {
-            requestAnimationFrame(() => portalModalsToBody());
+            requestAnimationFrame(() => {
+              portalModalsToBody();
+              bridgeNotificationApi();
+            });
           }
         }
       } catch (error) {
@@ -136,6 +191,8 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
     void loadWidgets();
     return () => {
       cancelled = true;
+      forceClosePortaledModals();
+      removePortaledModals();
       if (document.documentElement.dataset.communityPageId === communityPageId) {
         delete document.documentElement.dataset.communityPageId;
       }

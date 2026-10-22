@@ -201,7 +201,12 @@ function Icon({ name, className = "h-6 w-6" }: { name: string; className?: strin
     case "message":
       return <svg {...common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
     case "settings":
-      return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1a2 2 0 1 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4v.2a2 2 0 1 1-4 0v-.2a2 2 0 0 0-3.4-1.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A2 2 0 0 0 1.6 12h-.2a2 2 0 1 1 0-4h.2A2 2 0 0 0 3 4.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a2 2 0 0 0 3.4-1.4v-.2a2 2 0 1 1 4 0v.2a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A2 2 0 0 0 20.8 8h.2a2 2 0 1 1 0 4h-.2a2 2 0 0 0-1.4 3z" /></svg>;
+      return (
+        <svg {...common}>
+          <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+        </svg>
+      );
     case "logout":
       return <svg {...common}><path d="m10 17 5-5-5-5m5 5H3m18 7V5a2 2 0 0 0-2-2h-6" /></svg>;
     case "sun":
@@ -685,19 +690,35 @@ function HeaderContents() {
 
   const handleLogout = () => {
     closeAuth();
-    const auth = window.firebase?.auth?.();
-    if (!auth) {
-      console.error("Firebase Auth tidak tersedia untuk logout.");
+    // Update UI immediately so the dropdown does not stay stuck on a logged-in state
+    setUser(null);
+    setDisplayName("User");
+
+    // Compat Auth instance is wider than the project's Window.firebase typing
+    type CompatAuth = {
+      signOut: () => Promise<void>;
+      currentUser: HeaderUser | null;
+    };
+    const auth = window.firebase?.auth?.() as CompatAuth | undefined;
+    if (!auth || typeof auth.signOut !== "function") {
+      console.error("Firebase Auth is not available for logout.");
+      try {
+        Object.keys(localStorage)
+          .filter((key) => /firebase:authUser/.test(key))
+          .forEach((key) => localStorage.removeItem(key));
+      } catch { /* ignore */ }
       return;
     }
-      const signOut = (auth as typeof auth & { signOut?: () => Promise<void> }).signOut;
-      if (!signOut) {
-        console.error("Firebase Auth tidak menyediakan fungsi logout.");
-        return;
-      }
-      void signOut().catch((error: unknown) => {
-      console.error("Logout gagal.", error);
-    });
+
+    // Call as method on auth — extracting signOut unbound loses `this`
+    void auth.signOut()
+      .then(() => {
+        setUser(null);
+        setDisplayName("User");
+      })
+      .catch((error: unknown) => {
+        console.error("Logout failed.", error);
+      });
   };
 
   const classButton =

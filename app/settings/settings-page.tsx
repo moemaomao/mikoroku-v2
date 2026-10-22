@@ -156,59 +156,105 @@ export default function SettingsPage() {
     let active = true;
     let unsubscribe: (() => void) | undefined;
     let attempts = 0;
-    const poll = window.setInterval(() => {
-      attempts += 1;
-      if (!window.firebase?.auth) {
-        if (attempts >= 100 && active) {
-          window.clearInterval(poll);
-          setStatus("error");
-          setMessage("Authentication service is unavailable.");
+
+    const applyUser = async (user: Account & { photoURL?: string | null }) => {
+      setAccount(user);
+
+      // Optimistic UI from local cache so the page is usable immediately
+      try {
+        const cached = localStorage.getItem("userSettingsPreview");
+        if (cached) {
+          const parsed = JSON.parse(cached) as Partial<Settings>;
+          setSettings({
+            ...initialSettings,
+            ...parsed,
+            displayName: String(parsed.displayName || user.displayName || ""),
+            avatar: String(parsed.avatar || user.photoURL || anonymousAvatar),
+            gameRoles: Array.isArray(parsed.gameRoles) ? parsed.gameRoles.map(String) : [],
+            disableAnimations: parsed.disableAnimations === true ||
+              localStorage.getItem("commentWidget_disableAnimations") === "true",
+          });
+          setStatus("ready");
         }
-        return;
+      } catch { /* ignore bad cache */ }
+
+      try {
+        const snapshot = await window.firebase!.firestore().collection("userStats").doc(user.uid).get();
+        const data = snapshot.exists ? snapshot.data() || {} : {};
+        if (!active) return;
+        setSettings({
+          ...initialSettings,
+          displayName: String(data.displayName || user.displayName || ""),
+          username: String(data.username || ""),
+          bio: String(data.bio || ""),
+          avatar: String(data.avatar || user.photoURL || anonymousAvatar),
+          customBadge: String(data.customBadge || ""),
+          customAvatarFrame: String(data.customAvatarFrame || ""),
+          customFontStyle: String(data.customFontStyle || ""),
+          customBorder: String(data.customBorder || ""),
+          customShape: String(data.customShape || ""),
+          customCommentBg: String(data.customCommentBg || ""),
+          gameRoles: Array.isArray(data.gameRoles) ? data.gameRoles.map(String) : [],
+          disableAnimations: data.disableAnimations === true ||
+            localStorage.getItem("commentWidget_disableAnimations") === "true",
+        });
+        setStatus("ready");
+      } catch (error) {
+        console.error("User settings failed to load.", error);
+        // Only surface error if we never managed to show cached/ready UI
+        if (active) {
+          setStatus((prev) => {
+            if (prev === "ready") return prev;
+            setMessage("Your settings could not be loaded. Check your connection and try again.");
+            return "error";
+          });
+        }
       }
-      window.clearInterval(poll);
-      unsubscribe = window.firebase.auth().onAuthStateChanged(async (user) => {
+    };
+
+    const attach = () => {
+      if (!window.firebase?.auth) return false;
+      const auth = window.firebase.auth();
+      // Use currentUser immediately if already signed in (no wait for first event)
+      const current = auth.currentUser as (Account & { photoURL?: string | null }) | null;
+      if (current) void applyUser(current);
+
+      unsubscribe = auth.onAuthStateChanged((user) => {
         if (!active) return;
         if (!user) {
           setAccount(null);
           setStatus("guest");
           return;
         }
-        setAccount(user);
-        try {
-          const snapshot = await window.firebase!.firestore().collection("userStats").doc(user.uid).get();
-          const data = snapshot.exists ? snapshot.data() || {} : {};
-          if (!active) return;
-          setSettings({
-            ...initialSettings,
-            displayName: String(data.displayName || user.displayName || ""),
-            username: String(data.username || ""),
-            bio: String(data.bio || ""),
-            avatar: String(data.avatar || user.photoURL || anonymousAvatar),
-            customBadge: String(data.customBadge || ""),
-            customAvatarFrame: String(data.customAvatarFrame || ""),
-            customFontStyle: String(data.customFontStyle || ""),
-            customBorder: String(data.customBorder || ""),
-            customShape: String(data.customShape || ""),
-            customCommentBg: String(data.customCommentBg || ""),
-            gameRoles: Array.isArray(data.gameRoles) ? data.gameRoles.map(String) : [],
-            disableAnimations: data.disableAnimations === true ||
-              localStorage.getItem("commentWidget_disableAnimations") === "true",
-          });
-          setStatus("ready");
-        } catch (error) {
-          console.error("User settings failed to load.", error);
-          if (active) {
-            setStatus("error");
-            setMessage("Your settings could not be loaded. Check your connection and try again.");
-          }
-        }
+        void applyUser(user as Account & { photoURL?: string | null });
       });
-    }, 100);
+      return true;
+    };
+
+    if (!attach()) {
+      const poll = window.setInterval(() => {
+        attempts += 1;
+        if (attach()) {
+          window.clearInterval(poll);
+          return;
+        }
+        if (attempts >= 50 && active) {
+          // ~5s max wait instead of 10s
+          window.clearInterval(poll);
+          setStatus("error");
+          setMessage("Authentication service is unavailable.");
+        }
+      }, 100);
+
+      return () => {
+        active = false;
+        window.clearInterval(poll);
+        unsubscribe?.();
+      };
+    }
 
     return () => {
       active = false;
-      window.clearInterval(poll);
       unsubscribe?.();
     };
   }, []);
