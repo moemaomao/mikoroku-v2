@@ -11,8 +11,8 @@ export function createMikorokuOgImage({
   label: string;
   coverUrl?: string | null;
 }) {
-  const safeTitle = (title || "Mikoroku").slice(0, 85);
-  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 110);
+  const safeTitle = (title || "Mikoroku").slice(0, 70);
+  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 90);
   const hasCover =
     typeof coverUrl === "string" &&
     coverUrl.startsWith("http") &&
@@ -29,7 +29,7 @@ export function createMikorokuOgImage({
             "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
           color: "#f5f5f5",
           fontFamily: "Arial, sans-serif",
-          padding: "44px 52px",
+          padding: "28px 34px",
           position: "relative",
           overflow: "hidden",
         }}
@@ -40,7 +40,7 @@ export function createMikorokuOgImage({
             left: 0,
             top: 0,
             bottom: 0,
-            width: 10,
+            width: 7,
             background: "linear-gradient(180deg, #ff4d5e, #a52335)",
           }}
         />
@@ -50,20 +50,20 @@ export function createMikorokuOgImage({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: hasCover ? 680 : "100%",
+            width: hasCover ? 460 : "100%",
             height: "100%",
             zIndex: 1,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 12,
+                width: 34,
+                height: 34,
+                borderRadius: 9,
                 background: "#d8374b",
                 color: "white",
-                fontSize: 24,
+                fontSize: 17,
                 fontWeight: 800,
                 display: "flex",
                 alignItems: "center",
@@ -73,15 +73,15 @@ export function createMikorokuOgImage({
               M
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: 2 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: 1.5 }}>
                 MIKOROKU
               </span>
               <span
                 style={{
-                  fontSize: 12,
+                  fontSize: 10,
                   color: "#a9a9b1",
-                  letterSpacing: 1.5,
-                  marginTop: 3,
+                  letterSpacing: 1.2,
+                  marginTop: 2,
                 }}
               >
                 READ YOUR NEXT STORY
@@ -93,8 +93,8 @@ export function createMikorokuOgImage({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 14,
-              maxWidth: 640,
+              gap: 10,
+              maxWidth: 430,
             }}
           >
             <div
@@ -102,11 +102,11 @@ export function createMikorokuOgImage({
                 alignSelf: "flex-start",
                 border: "1px solid rgba(255,255,255,0.18)",
                 borderRadius: 999,
-                padding: "6px 14px",
+                padding: "4px 10px",
                 color: "#ff8290",
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: 700,
-                letterSpacing: 1.4,
+                letterSpacing: 1.2,
               }}
             >
               {(label || "MANGA").toUpperCase()}
@@ -114,17 +114,17 @@ export function createMikorokuOgImage({
 
             <div
               style={{
-                fontSize: 40,
+                fontSize: 28,
                 fontWeight: 800,
                 lineHeight: 1.15,
-                letterSpacing: -0.5,
+                letterSpacing: -0.4,
                 color: "#fff",
               }}
             >
               {safeTitle}
             </div>
 
-            <div style={{ fontSize: 18, lineHeight: 1.4, color: "#c3c1c8" }}>
+            <div style={{ fontSize: 14, lineHeight: 1.35, color: "#c3c1c8" }}>
               {safeDesc}
             </div>
           </div>
@@ -133,9 +133,9 @@ export function createMikorokuOgImage({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
+              gap: 6,
               color: "#999",
-              fontSize: 15,
+              fontSize: 12,
             }}
           >
             <span style={{ color: "#ff6476", fontWeight: 700 }}>mikoroku.top</span>
@@ -148,14 +148,14 @@ export function createMikorokuOgImage({
           <div
             style={{
               position: "absolute",
-              top: 48,
-              right: 52,
-              width: 340,
-              height: 500,
-              borderRadius: 18,
+              top: 30,
+              right: 34,
+              width: 230,
+              height: 340,
+              borderRadius: 12,
               overflow: "hidden",
               border: "1px solid rgba(255,255,255,0.18)",
-              boxShadow: "0 22px 60px rgba(0,0,0,0.55)",
+              boxShadow: "0 14px 40px rgba(0,0,0,0.5)",
               background: "#24232a",
               display: "flex",
               alignItems: "center",
@@ -165,8 +165,8 @@ export function createMikorokuOgImage({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={coverUrl!}
-              width={340}
-              height={500}
+              width={230}
+              height={340}
               alt=""
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
@@ -174,6 +174,12 @@ export function createMikorokuOgImage({
         ) : null}
       </div>
     ),
-    { width: 1200, height: 630 },
+    {
+      width: 800,
+      height: 420,
+      headers: {
+        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+      },
+    },
   );
 }
