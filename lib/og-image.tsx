@@ -1,5 +1,8 @@
 import { ImageResponse } from "next/og";
 
+const DEFAULT_COVER =
+  "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
+
 export function createMikorokuOgImage({
   title,
   description,
@@ -8,9 +11,17 @@ export function createMikorokuOgImage({
 }: {
   title: string;
   description: string;
-  image: string;
+  image?: string | null;
   label: string;
 }) {
+  const cover =
+    image &&
+    typeof image === "string" &&
+    image.startsWith("http") &&
+    !image.includes("undefined")
+      ? image
+      : DEFAULT_COVER;
+
   return new ImageResponse(
     (
       <div
@@ -26,6 +37,7 @@ export function createMikorokuOgImage({
           fontFamily: "Arial, sans-serif",
         }}
       >
+        {/* left accent bar */}
         <div
           style={{
             display: "flex",
@@ -37,6 +49,8 @@ export function createMikorokuOgImage({
             background: "linear-gradient(180deg, #ff4d5e 0%, #a52335 100%)",
           }}
         />
+
+        {/* right fade */}
         <div
           style={{
             display: "flex",
@@ -48,6 +62,8 @@ export function createMikorokuOgImage({
             background: "linear-gradient(90deg, #19141b 0%, rgba(25,20,27,0.25) 100%)",
           }}
         />
+
+        {/* left content */}
         <div
           style={{
             display: "flex",
@@ -107,13 +123,13 @@ export function createMikorokuOgImage({
                 maxHeight: 150,
                 overflow: "hidden",
                 color: "#fff",
-                fontSize: 46,
+                fontSize: 42,
                 fontWeight: 800,
                 lineHeight: 1.12,
                 letterSpacing: -1,
               }}
             >
-              {title}
+              {title.length > 90 ? `${title.slice(0, 90)}…` : title}
             </div>
             <div
               style={{
@@ -122,11 +138,11 @@ export function createMikorokuOgImage({
                 maxHeight: 76,
                 overflow: "hidden",
                 color: "#c3c1c8",
-                fontSize: 19,
+                fontSize: 18,
                 lineHeight: 1.4,
               }}
             >
-              {description.length > 105 ? `${description.slice(0, 105).trimEnd()}…` : description}
+              {description.length > 100 ? `${description.slice(0, 100).trimEnd()}…` : description}
             </div>
           </div>
 
@@ -137,6 +153,7 @@ export function createMikorokuOgImage({
           </div>
         </div>
 
+        {/* cover */}
         <div
           style={{
             display: "flex",
@@ -154,8 +171,9 @@ export function createMikorokuOgImage({
             boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
           }}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={image}
+            src={cover}
             alt=""
             width={350}
             height={514}
@@ -164,6 +182,12 @@ export function createMikorokuOgImage({
         </div>
       </div>
     ),
-    { width: 1200, height: 630 },
+    {
+      width: 1200,
+      height: 630,
+      headers: {
+        "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+      },
+    },
   );
 }
