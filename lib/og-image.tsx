@@ -162,36 +162,39 @@ export function createMikorokuOgImage({
 }
 
 export async function fetchCoverAsDataUrl(url?: string | null): Promise<string | null> {
-  if (!url || !url.startsWith("http")) return null;
+  if (!url || typeof url !== "string" || !url.startsWith("http")) return null;
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), 2500);
 
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "MikorokuOG/1.0",
-        Accept: "image/*",
+        "User-Agent": "Mozilla/5.0 (compatible; MikorokuOG/1.0)",
+        Accept: "image/jpeg,image/png,image/webp,image/*",
       },
-    });
+      cf: { cacheTtl: 3600, cacheEverything: true },
+    } as RequestInit);
+
     clearTimeout(timer);
 
     if (!res.ok) return null;
 
-    const contentType = res.headers.get("content-type") || "image/jpeg";
+    const contentType = (res.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
     if (!contentType.startsWith("image/")) return null;
 
     const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > 2_500_000) return null;
+    if (buffer.byteLength < 1000 || buffer.byteLength > 800_000) return null;
 
     const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
     let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
     }
-    const base64 = btoa(binary);
-    return `data:${contentType};base64,${base64}`;
+    return `data:${contentType};base64,${btoa(binary)}`;
   } catch {
     return null;
   }
