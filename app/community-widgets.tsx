@@ -38,16 +38,9 @@ function parseWidgetHtml(raw: string): { bodyHtml: string; styleHtml: string } {
   const bodyMatch = raw.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   let bodyHtml = bodyMatch ? bodyMatch[1] : raw;
 
-  let styleHtml = "";
-  const headMatch = raw.match(/<head[^>]*>([\s\S]*)<\/head>/i);
-  if (headMatch) {
-    const head = headMatch[1]
-      .replace(/<title[\s\S]*?<\/title>/gi, "")
-      .replace(/<meta[\s\S]*?>/gi, "");
-    const styles = head.match(/<style[\s\S]*?<\/style>/gi) || [];
-    const links = head.match(/<link[^>]*>/gi) || [];
-    styleHtml = [...styles, ...links].join("\n");
-  }
+  const styles = raw.match(/<style[\s\S]*?<\/style>/gi) || [];
+  const links = raw.match(/<link[^>]*>/gi) || [];
+  const styleHtml = [...styles, ...links].join("\n");
 
   bodyHtml = bodyHtml
     .replace(/<!DOCTYPE[\s\S]*?>/i, "")
