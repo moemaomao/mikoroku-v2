@@ -249,10 +249,10 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
           <h1 id="catalog-title">{title}</h1>
           {kind === "genre" && (
             <>
-              <p className="catalog-subtitle">Pilih genre untuk menjelajahi judul.</p>
-              <div className="catalog-genres" aria-label="Pilih genre">
+              <p className="catalog-subtitle">Pick a genre to browse titles.</p>
+              <div className="catalog-genres" aria-label="Filter by genre">
                 <button type="button" className={activeGenre === "all" ? "active" : ""} onClick={() => setActiveGenre("all")}>
-                  Semua
+                  All
                 </button>
                 {genreCounts.map(([genre, count]) => (
                   <button type="button" key={genre} className={activeGenre === genre ? "active" : ""}
@@ -265,37 +265,52 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
           )}
           <div className="catalog-toolbar">
             <label className="catalog-search">
-              <span className="sr-only">Filter judul manga</span>
+              <span className="sr-only">Search titles</span>
               <svg className="catalog-search-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
                 <circle cx="10.8" cy="10.8" r="6.8" />
                 <path d="m16 16 4.2 4.2" />
               </svg>
-              <input type="search" placeholder="Cari judul..." value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input type="search" placeholder="Search titles..." value={query} onChange={(event) => setQuery(event.target.value)} />
               {query && (
-                <button className="catalog-search-clear" type="button" onClick={() => setQuery("")} aria-label="Hapus pencarian">
+                <button className="catalog-search-clear" type="button" onClick={() => setQuery("")} aria-label="Clear search">
                   <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
                     <path d="m5 5 10 10M15 5 5 15" />
                   </svg>
                 </button>
               )}
             </label>
-            <label className="catalog-sort">
-              <span className="sr-only">Urutkan katalog</span>
-              <select value={sort} onChange={(event) => changeSort(event.target.value as SortOrder)}>
-                <option value="latest">Update terbaru</option>
-                <option value="az">A → Z</option>
-                <option value="za">Z → A</option>
-              </select>
-            </label>
+            <div className="catalog-sort" role="group" aria-label="Sort catalog">
+              <button
+                type="button"
+                className={`catalog-sort-btn${sort === "latest" ? " is-active" : ""}`}
+                onClick={() => changeSort("latest")}
+              >
+                Latest
+              </button>
+              <button
+                type="button"
+                className={`catalog-sort-btn${sort === "az" ? " is-active" : ""}`}
+                onClick={() => changeSort("az")}
+              >
+                A–Z
+              </button>
+              <button
+                type="button"
+                className={`catalog-sort-btn${sort === "za" ? " is-active" : ""}`}
+                onClick={() => changeSort("za")}
+              >
+                Z–A
+              </button>
+            </div>
           </div>
           <p className="catalog-count" aria-live="polite" role="status">
-            {loading ? "Memuat katalog..." : `${visibleManga.length} judul`}
+            {loading ? "Loading catalog..." : `${visibleManga.length} titles`}
           </p>
-          {error && allManga.length > 0 && <p className="catalog-stale" role="status">Tidak dapat memperbarui katalog; menampilkan data cache.</p>}
+          {error && allManga.length > 0 && <p className="catalog-stale" role="status">Could not refresh catalog; showing cached data.</p>}
           {error && allManga.length === 0 ? (
             <div className="catalog-message" role="alert">
-              <p>Data katalog tidak dapat dimuat.</p><small>{error}</small>
-              <button type="button" onClick={() => window.location.reload()}>Coba lagi</button>
+              <p>Catalog data could not be loaded.</p><small>{error}</small>
+              <button type="button" onClick={() => window.location.reload()}>Try again</button>
             </div>
           ) : visibleManga.length ? (
             <div className="catalog-grid">
@@ -306,7 +321,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
                 return (
                   <a className="catalog-card" href={`/series/${encodeURIComponent(slug)}`} key={`${slug}:${titleValue}`}>
                     <span className="catalog-cover">
-                      {cover ? <CoverImage src={cover} alt="" onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">Tidak ada sampul</span>}
+                      {cover ? <CoverImage src={cover} alt="" onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">No cover</span>}
                     </span>
                     <span className="catalog-card-title">{titleValue}</span>
                   </a>
@@ -314,7 +329,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
               })}
             </div>
           ) : (
-            !loading && <div className="catalog-message">{query ? "Tidak ada judul yang cocok." : kind === "genre" && activeGenre === "all" ? "Pilih genre untuk menampilkan manga." : "Tidak ada judul tersedia."}</div>
+            !loading && <div className="catalog-message">{query ? "No matching titles." : kind === "genre" && activeGenre === "all" ? "Select a genre to show manga." : "No titles available."}</div>
           )}
         </section>
       </main>
