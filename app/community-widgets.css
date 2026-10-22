@@ -7,7 +7,7 @@
 
 .community-widgets .community-reactions {
   position: relative;
-  z-index: 4;
+  z-index: 2;
   min-height: 60px;
 }
 
@@ -15,6 +15,7 @@
   position: relative;
   z-index: 1;
   min-width: 0;
+  isolation: auto;
 }
 
 .community-widgets .community-reactions .reaction {
@@ -43,4 +44,13 @@
 
 html.dark .community-widget-error {
   color: #ff8e8e;
+}
+
+#user-settings-modal,
+#email-auth-modal,
+#dm-modal,
+#report-modal,
+#reply-notif-overlay,
+#user-profile-modal {
+  z-index: 100000 !important;
 }

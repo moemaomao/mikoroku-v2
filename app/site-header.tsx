@@ -42,6 +42,8 @@ declare global {
     showHistory?: () => void;
     showUserProfile?: (uid: string) => void;
     loadUserNotifications?: () => void;
+    showReplyNotifications?: () => void;
+    closeReplyNotifications?: () => void;
     loadDmInbox?: () => void;
     openBookmark?: (title: string) => void;
     updateHeaderAuth?: () => Promise<void>;
@@ -654,9 +656,19 @@ function HeaderContents() {
 
   const handleNotifications = () => {
     closeAuth();
+    // Use comment-widget API so list is filled; never force a blank overlay open.
+    if (typeof window.showReplyNotifications === "function") {
+      window.showReplyNotifications();
+      return;
+    }
     window.loadUserNotifications?.();
     const overlay = document.getElementById("reply-notif-overlay");
-    if (overlay) overlay.style.display = "flex";
+    if (!overlay) return;
+    const list = document.getElementById("reply-notif-list");
+    if (list && !list.innerHTML.trim()) {
+      list.innerHTML = '<p style="text-align:center;color:#ccc;">Tidak ada notifikasi</p>';
+    }
+    overlay.style.display = "flex";
   };
 
   const handleMessages = () => {

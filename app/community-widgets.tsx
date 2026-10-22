@@ -20,6 +20,51 @@ const widgets = [
   { id: "custom-comment-widget", path: "/Features/Hakoroku/comment.html" },
 ];
 
+const PORTAL_MODAL_IDS = [
+  "user-settings-modal",
+  "email-auth-modal",
+  "dm-modal",
+  "report-modal",
+  "reply-notif-overlay",
+  "user-profile-modal",
+];
+
+function sanitizeWidgetHtml(raw: string): string {
+  const bodyMatch = raw.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  let bodyHtml = bodyMatch ? bodyMatch[1] : raw;
+
+  const headMatch = raw.match(/<head[^>]*>([\s\S]*)<\/head>/i);
+  let headAssets = "";
+  if (headMatch) {
+    const head = headMatch[1]
+      .replace(/<title[\s\S]*?<\/title>/gi, "")
+      .replace(/<meta[\s\S]*?>/gi, "");
+    const styles = head.match(/<style[\s\S]*?<\/style>/gi) || [];
+    const links = head.match(/<link[^>]*>/gi) || [];
+    headAssets = [...styles, ...links].join("\n");
+  } else {
+    bodyHtml = bodyHtml.replace(/<title[\s\S]*?<\/title>/gi, "");
+  }
+
+  bodyHtml = bodyHtml
+    .replace(/<!DOCTYPE[\s\S]*?>/i, "")
+    .replace(/<\/?html[^>]*>/gi, "")
+    .replace(/<\/?head[^>]*>/gi, "")
+    .replace(/<\/?body[^>]*>/gi, "")
+    .replace(/<title[\s\S]*?<\/title>/gi, "");
+
+  return `${headAssets}\n${bodyHtml}`;
+}
+
+function portalModalsToBody() {
+  for (const id of PORTAL_MODAL_IDS) {
+    const el = document.getElementById(id);
+    if (el && el.parentElement !== document.body) {
+      document.body.appendChild(el);
+    }
+  }
+}
+
 export default function CommunityWidgets({ pageId, className = "" }: CommunityWidgetsProps) {
   const [widgetError, setWidgetError] = useState("");
   const communityPageId = pageId.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -42,11 +87,19 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
           const response = await fetch(widget.path);
           if (!response.ok) throw new Error(`Widget ${widget.id} returned HTTP ${response.status}.`);
 
+          const raw = await response.text();
+          const html = sanitizeWidgetHtml(raw);
+
           const template = document.createElement("template");
-          template.innerHTML = await response.text();
+          template.innerHTML = html;
           const scripts = [...template.content.querySelectorAll("script")];
           scripts.forEach((script) => script.remove());
+          template.content.querySelectorAll("title").forEach((t) => t.remove());
           container.replaceChildren(template.content);
+
+          if (widget.id === "custom-comment-widget") {
+            portalModalsToBody();
+          }
 
           for (const original of scripts) {
             if (cancelled) return;
@@ -67,6 +120,10 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
                 script.addEventListener("error", () => reject(new Error(`Failed to load ${original.src}`)), { once: true });
               });
             }
+          }
+
+          if (widget.id === "custom-comment-widget") {
+            requestAnimationFrame(() => portalModalsToBody());
           }
         }
       } catch (error) {

@@ -631,7 +631,6 @@ html.dark .reader-images { background: #0a0a0c; }
   box-shadow: 0 12px 36px rgba(0, 0, 0, .06);
 }
 
-/* ===== Bottom nav: Next / Prev jelas + compact mobile ===== */
 .reader-bottom-nav {
   position: fixed;
   left: 50%;
@@ -950,8 +949,13 @@ html.dark .reader-bottom-nav .reader-bottom-button > i:first-child {
   justify-content: flex-end;
   align-items: flex-end;
   padding: 18px 76px 18px 18px;
-  background: rgba(10, 12, 18, .18);
-  backdrop-filter: blur(2px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+.reader-settings-backdrop .reader-settings-panel {
+  pointer-events: auto;
 }
 
 .reader-settings-panel {
@@ -1247,8 +1251,6 @@ html.dark .reader-setting-block small { color: #a6a8b1; }
   .reader-bottom-nav { bottom: calc(8px + env(safe-area-inset-bottom)); }
 }
 
-
-/* ===== Bottom nav: kolom sama + Page sejajar horizontal ===== */
 .reader-bottom-nav {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -1264,7 +1266,6 @@ html.dark .reader-bottom-nav {
   box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
 }
 
-/* Jika struktur HTML: prev | middle(chapters+pages) | next → pakai 3 kolom equal */
 .reader-bottom-nav:has(.reader-bottom-middle) {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr) !important;
 }
@@ -1370,7 +1371,6 @@ html.dark .reader-bottom-nav {
   line-height: 1;
 }
 
-/* Label: horizontal, bukan stack */
 .reader-bottom-nav .reader-bottom-button > span.reader-bottom-label,
 .reader-bottom-nav .reader-bottom-page-count > span.reader-bottom-label {
   display: inline-flex !important;
@@ -1409,7 +1409,6 @@ html.dark .reader-bottom-nav {
   white-space: nowrap;
 }
 
-/* Page count button: satu baris "Page 1/11" */
 .reader-bottom-nav .reader-bottom-page-count {
   display: inline-flex !important;
   flex-direction: row !important;
@@ -1459,7 +1458,6 @@ html.dark .reader-bottom-nav {
     gap: 4px !important;
   }
 
-  /* Mobile: sembunyikan label prev/next dan Page; chapter + hitungan tetap terlihat */
   .reader-bottom-previous .reader-bottom-label,
   .reader-bottom-next .reader-bottom-label {
     display: none !important;
