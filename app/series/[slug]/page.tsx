@@ -24,7 +24,7 @@ export async function generateMetadata({
       description,
       type: "article",
       url,
-      images: [{ url: imageUrl, width: 800, height: 420, alt: title }],
+      images: [{ url: imageUrl, width: 600, height: 315, alt: title }],
     },
     twitter: {
       card: "summary_large_image",

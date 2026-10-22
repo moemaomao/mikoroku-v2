@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-const FAVICON_URL = "https://mikoroku.top/assets/icons/apple-touch-icon.png";
+const FAVICON_URL = "https://i.ibb.co/B5g000HF/apple-touch-icon.png";
 
 export function createMikorokuOgImage({
   title,
@@ -13,8 +13,8 @@ export function createMikorokuOgImage({
   label: string;
   coverUrl?: string | null;
 }) {
-  const safeTitle = (title || "Mikoroku").slice(0, 70);
-  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 90);
+  const safeTitle = (title || "Mikoroku").slice(0, 60);
+  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 75);
   const hasCover =
     typeof coverUrl === "string" &&
     coverUrl.startsWith("http") &&
@@ -31,7 +31,7 @@ export function createMikorokuOgImage({
             "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
           color: "#f5f5f5",
           fontFamily: "Arial, sans-serif",
-          padding: "28px 34px",
+          padding: "20px 24px",
           position: "relative",
           overflow: "hidden",
         }}
@@ -42,7 +42,7 @@ export function createMikorokuOgImage({
             left: 0,
             top: 0,
             bottom: 0,
-            width: 7,
+            width: 5,
             background: "linear-gradient(180deg, #ff4d5e, #a52335)",
           }}
         />
@@ -52,37 +52,36 @@ export function createMikorokuOgImage({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: hasCover ? 460 : "100%",
+            width: hasCover ? 340 : "100%",
             height: "100%",
             zIndex: 1,
           }}
         >
-          
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img
               src={FAVICON_URL}
-              width={34}
-              height={34}
+              width={26}
+              height={26}
               alt=""
               style={{
-                width: 34,
-                height: 34,
-                borderRadius: 9,
+                width: 26,
+                height: 26,
+                borderRadius: 7,
                 objectFit: "cover",
               }}
             />
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span
-                style={{ fontSize: 15, fontWeight: 800, letterSpacing: 1.5 }}
+                style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2 }}
               >
                 MIKOROKU
               </span>
               <span
                 style={{
-                  fontSize: 10,
+                  fontSize: 8,
                   color: "#a9a9b1",
-                  letterSpacing: 1.2,
-                  marginTop: 2,
+                  letterSpacing: 1,
+                  marginTop: 1,
                 }}
               >
                 READ YOUR NEXT STORY
@@ -94,8 +93,8 @@ export function createMikorokuOgImage({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 10,
-              maxWidth: 430,
+              gap: 8,
+              maxWidth: 320,
             }}
           >
             <div
@@ -103,11 +102,11 @@ export function createMikorokuOgImage({
                 alignSelf: "flex-start",
                 border: "1px solid rgba(255,255,255,0.18)",
                 borderRadius: 999,
-                padding: "4px 10px",
+                padding: "3px 8px",
                 color: "#ff8290",
-                fontSize: 11,
+                fontSize: 9,
                 fontWeight: 700,
-                letterSpacing: 1.2,
+                letterSpacing: 1,
               }}
             >
               {(label || "MANGA").toUpperCase()}
@@ -115,17 +114,17 @@ export function createMikorokuOgImage({
 
             <div
               style={{
-                fontSize: 28,
+                fontSize: 22,
                 fontWeight: 800,
                 lineHeight: 1.15,
-                letterSpacing: -0.4,
+                letterSpacing: -0.3,
                 color: "#fff",
               }}
             >
               {safeTitle}
             </div>
 
-            <div style={{ fontSize: 14, lineHeight: 1.35, color: "#c3c1c8" }}>
+            <div style={{ fontSize: 11, lineHeight: 1.35, color: "#c3c1c8" }}>
               {safeDesc}
             </div>
           </div>
@@ -134,9 +133,9 @@ export function createMikorokuOgImage({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              gap: 5,
               color: "#999",
-              fontSize: 12,
+              fontSize: 10,
             }}
           >
             <span style={{ color: "#ff6476", fontWeight: 700 }}>
@@ -151,14 +150,14 @@ export function createMikorokuOgImage({
           <div
             style={{
               position: "absolute",
-              top: 30,
-              right: 34,
-              width: 230,
-              height: 340,
-              borderRadius: 12,
+              top: 22,
+              right: 24,
+              width: 172,
+              height: 255,
+              borderRadius: 10,
               overflow: "hidden",
               border: "1px solid rgba(255,255,255,0.18)",
-              boxShadow: "0 14px 40px rgba(0,0,0,0.5)",
+              boxShadow: "0 10px 28px rgba(0,0,0,0.5)",
               background: "#24232a",
               display: "flex",
               alignItems: "center",
@@ -167,8 +166,8 @@ export function createMikorokuOgImage({
           >
             <img
               src={coverUrl!}
-              width={230}
-              height={340}
+              width={172}
+              height={255}
               alt=""
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
@@ -177,8 +176,8 @@ export function createMikorokuOgImage({
       </div>
     ),
     {
-      width: 800,
-      height: 420,
+      width: 600,
+      height: 315,
       headers: {
         "Cache-Control":
           "public, s-maxage=86400, stale-while-revalidate=604800",
