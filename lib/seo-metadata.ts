@@ -2,6 +2,8 @@ const MANGA_DATA_URL =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
 const FIRESTORE_DOCUMENTS_URL =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
+const COVER_BASE =
+  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const DEFAULT_IMAGE =
   "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
 
@@ -32,9 +34,14 @@ function decodeFirestoreValue(value: unknown): unknown {
   return record;
 }
 
-function decodeFirestoreDocument(document: { fields?: Record<string, unknown> }): Record<string, unknown> {
+function decodeFirestoreDocument(document: {
+  fields?: Record<string, unknown>;
+}): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(document.fields || {}).map(([key, value]) => [key, decodeFirestoreValue(value)]),
+    Object.entries(document.fields || {}).map(([key, value]) => [
+      key,
+      decodeFirestoreValue(value),
+    ]),
   );
 }
 
@@ -45,7 +52,23 @@ function asText(value: unknown): string {
 function safeImageUrl(value: unknown): string | undefined {
   const image = asText(value);
   if (!image) return undefined;
+
   try {
+    if (/^https?:\/\//i.test(image)) {
+      return new URL(image).href;
+    }
+
+    if (image.startsWith("cover/") || image.startsWith("/cover/")) {
+      const path = image.replace(/^\/+/, "");
+      const parts = path.split("/");
+      const encoded = parts
+        .map((part, index) =>
+          index === parts.length - 1 ? encodeURIComponent(part) : part,
+        )
+        .join("/");
+      return new URL(encoded, COVER_BASE).href;
+    }
+
     return new URL(image, "https://mikoroku.top").href;
   } catch {
     return undefined;
@@ -66,20 +89,37 @@ function normalizeSeries(
   value: Record<string, unknown> | null | undefined,
   slug: string,
 ): SeriesSeoData {
-  const title = asText(value?.title) || asText(value?.name) || fallbackTitle(slug);
-  const description = asText(value?.desc) || asText(value?.description) ||
+  const title =
+    asText(value?.title) || asText(value?.name) || fallbackTitle(slug);
+  const description =
+    asText(value?.desc) ||
+    asText(value?.description) ||
     `Baca manga ${title} di Mikoroku.`;
-  const image = safeImageUrl(value?.img) || safeImageUrl(value?.cover) ||
-    safeImageUrl(value?.thumbnail) || DEFAULT_IMAGE;
-  return { title, description: description.slice(0, 300), image };
+
+  const image =
+    safeImageUrl(value?.img) ||
+    safeImageUrl(value?.cover) ||
+    safeImageUrl(value?.thumbnail) ||
+    safeImageUrl(value?.image) ||
+    DEFAULT_IMAGE;
+
+  return {
+    title,
+    description: description.slice(0, 300),
+    image,
+  };
 }
 
-async function getFirestoreDocument(path: string): Promise<Record<string, unknown> | null> {
+async function getFirestoreDocument(
+  path: string,
+): Promise<Record<string, unknown> | null> {
   const response = await fetch(`${FIRESTORE_DOCUMENTS_URL}/${path}`, {
     next: { revalidate: 900 },
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Firestore metadata request returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    throw new Error(`Firestore metadata request returned HTTP ${response.status}.`);
+  }
   return decodeFirestoreDocument(await response.json());
 }
 
@@ -89,11 +129,14 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 
   try {
     const response = await fetch(MANGA_DATA_URL, { next: { revalidate: 900 } });
-    if (!response.ok) throw new Error(`Manga dataset returned HTTP ${response.status}.`);
-    const mangaList = await response.json() as Array<Record<string, unknown>>;
-    const manga = mangaList.find((item) =>
-      asText(item.slug) === slug ||
-      slugKey(asText(item.title)) === slugKey(slug),
+    if (!response.ok) {
+      throw new Error(`Manga dataset returned HTTP ${response.status}.`);
+    }
+    const mangaList = (await response.json()) as Array<Record<string, unknown>>;
+    const manga = mangaList.find(
+      (item) =>
+        asText(item.slug) === slug ||
+        slugKey(asText(item.title)) === slugKey(slug),
     );
     if (manga) return normalizeSeries(manga, slug);
   } catch (error) {
@@ -101,13 +144,17 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
   }
 
   try {
-    const document = await getFirestoreDocument(`manga/${encodeURIComponent(slug)}`);
+    const document = await getFirestoreDocument(
+      `manga/${encodeURIComponent(slug)}`,
+    );
     if (document) return normalizeSeries(document, slug);
   } catch (error) {
     console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
   }
 
-  if (datasetError) console.error("Metadata seri tidak dapat diambil dari dataset.", datasetError);
+  if (datasetError) {
+    console.error("Metadata seri tidak dapat diambil dari dataset.", datasetError);
+  }
   return normalizeSeries({ title }, slug);
 }
 
@@ -123,8 +170,13 @@ export async function getChapterSeoTitle(
     const document = await getFirestoreDocument(
       `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapter)}`,
     );
-    const label = asText(document?.label) || asText(document?.chapterTitle) || asText(document?.title);
-    if (label && slugKey(label) !== slugKey(series.title)) chapterTitle = label;
+    const label =
+      asText(document?.label) ||
+      asText(document?.chapterTitle) ||
+      asText(document?.title);
+    if (label && slugKey(label) !== slugKey(series.title)) {
+      chapterTitle = label;
+    }
     const text = asText(document?.desc) || asText(document?.description);
     if (text) description = text;
   } catch (error) {
