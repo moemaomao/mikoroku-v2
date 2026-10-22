@@ -1,62 +1,22 @@
 import { ImageResponse } from "next/og";
 
-const DEFAULT_COVER =
-  "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
-
-export async function fetchCoverAsDataUrl(
-  url?: string | null,
-): Promise<string | null> {
-  if (!url || typeof url !== "string" || !url.startsWith("http")) return null;
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; MikorokuOG/1.0)",
-        Accept: "image/jpeg,image/png,image/webp,image/*",
-      },
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) return null;
-
-    const contentType = (res.headers.get("content-type") || "image/jpeg")
-      .split(";")[0]
-      .trim();
-    if (!contentType.startsWith("image/")) return null;
-
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength < 1000 || buffer.byteLength > 900_000) return null;
-
-    const bytes = new Uint8Array(buffer);
-    const chunkSize = 0x8000;
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-    }
-    return `data:${contentType};base64,${btoa(binary)}`;
-  } catch {
-    return null;
-  }
-}
-
 export function createMikorokuOgImage({
   title,
   description,
   label,
-  coverDataUrl,
+  coverUrl,
 }: {
   title: string;
   description: string;
   label: string;
-  coverDataUrl?: string | null;
+  coverUrl?: string | null;
 }) {
   const safeTitle = (title || "Mikoroku").slice(0, 85);
   const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 110);
-  const cover = coverDataUrl || null;
+  const hasCover =
+    typeof coverUrl === "string" &&
+    coverUrl.startsWith("http") &&
+    !coverUrl.includes("MIKOROKU.png");
 
   return new ImageResponse(
     (
@@ -65,7 +25,8 @@ export function createMikorokuOgImage({
           display: "flex",
           width: "100%",
           height: "100%",
-          background: "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
+          background:
+            "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
           color: "#f5f5f5",
           fontFamily: "Arial, sans-serif",
           padding: "44px 52px",
@@ -89,7 +50,7 @@ export function createMikorokuOgImage({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: cover ? 680 : "100%",
+            width: hasCover ? 680 : "100%",
             height: "100%",
             zIndex: 1,
           }}
@@ -128,7 +89,14 @@ export function createMikorokuOgImage({
             </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 640 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              maxWidth: 640,
+            }}
+          >
             <div
               style={{
                 alignSelf: "flex-start",
@@ -156,13 +124,7 @@ export function createMikorokuOgImage({
               {safeTitle}
             </div>
 
-            <div
-              style={{
-                fontSize: 18,
-                lineHeight: 1.4,
-                color: "#c3c1c8",
-              }}
-            >
+            <div style={{ fontSize: 18, lineHeight: 1.4, color: "#c3c1c8" }}>
               {safeDesc}
             </div>
           </div>
@@ -182,7 +144,7 @@ export function createMikorokuOgImage({
           </div>
         </div>
 
-        {cover ? (
+        {hasCover ? (
           <div
             style={{
               position: "absolute",
@@ -200,24 +162,18 @@ export function createMikorokuOgImage({
               justifyContent: "center",
             }}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={cover}
+              src={coverUrl!}
               width={340}
               height={500}
               alt=""
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           </div>
         ) : null}
       </div>
     ),
-    {
-      width: 1200,
-      height: 630,
-    },
+    { width: 1200, height: 630 },
   );
 }
