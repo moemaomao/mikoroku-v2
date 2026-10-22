@@ -1,5 +1,8 @@
 import { getChapterSeoTitle } from "../../../../../lib/seo-metadata";
-import { createMikorokuOgImage, fetchCoverAsDataUrl } from "../../../../../lib/og-image";
+import {
+  createMikorokuOgImage,
+  fetchCoverAsDataUrl,
+} from "../../../../../lib/og-image";
 
 export async function GET(
   _request: Request,

@@ -13,11 +13,7 @@ export async function generateMetadata({
   const title = `${manga.title} - Mikoroku`;
   const description = manga.description;
   const url = `https://mikoroku.top/series/${encodeURIComponent(slug)}`;
-
-  const imageUrl =
-    manga.image && manga.image.startsWith("http")
-      ? manga.image
-      : "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
+  const imageUrl = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
 
   return {
     title,
@@ -28,7 +24,7 @@ export async function generateMetadata({
       description,
       type: "article",
       url,
-      images: [{ url: imageUrl, alt: title }],
+      images: [{ url: imageUrl, width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: "summary_large_image",

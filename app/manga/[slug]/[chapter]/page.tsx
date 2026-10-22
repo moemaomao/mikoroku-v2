@@ -20,11 +20,7 @@ export async function generateMetadata({
   const article = await getChapterSeoTitle(slug, chapter);
 
   const url = `https://mikoroku.top/manga/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
-
-  const imageUrl =
-    article.image && article.image.startsWith("http")
-      ? article.image
-      : "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
+  const imageUrl = `https://mikoroku.top/og/chapter/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
 
   return {
     title: article.title,
@@ -35,7 +31,7 @@ export async function generateMetadata({
       description: article.description,
       type: "article",
       url,
-      images: [{ url: imageUrl, alt: article.title }],
+      images: [{ url: imageUrl, width: 1200, height: 630, alt: article.title }],
     },
     twitter: {
       card: "summary_large_image",
