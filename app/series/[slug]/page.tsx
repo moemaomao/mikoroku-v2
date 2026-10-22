@@ -12,7 +12,10 @@ export async function generateMetadata({
   const manga = await getSeriesSeoData(slug);
   const title = `${manga.title} - Mikoroku`;
   const description = manga.description;
-  const image = { url: manga.image, alt: manga.title };
+  const image = {
+    url: `https://mikoroku.com/og/series/${encodeURIComponent(slug)}`,
+    alt: `${manga.title} - Mikoroku`,
+  };
 
   return {
     title,
