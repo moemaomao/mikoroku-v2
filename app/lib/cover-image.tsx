@@ -61,24 +61,88 @@ function openCoverCache(): Promise<IDBDatabase> {
   });
 }
 
+export async function getCoverImageCacheBytes(): Promise<number> {
+  if (!("indexedDB" in window)) return 0;
+  const database = await openCoverCache();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(COVER_CACHE_STORE, "readonly");
+    const request = transaction.objectStore(COVER_CACHE_STORE).openCursor();
+    let bytes = 0;
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const record = cursor.value as CachedCover;
+      bytes += record.blob?.size || 0;
+      cursor.continue();
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve(bytes);
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not estimate the cover image cache."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Estimating the cover image cache was aborted."));
+    };
+  });
+}
+
+export async function clearCoverImageCache(): Promise<void> {
+  if (!("indexedDB" in window)) return;
+  const database = await openCoverCache();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(COVER_CACHE_STORE, "readwrite");
+    transaction.objectStore(COVER_CACHE_STORE).clear();
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not clear the cover image cache."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Clearing the cover image cache was aborted."));
+    };
+  });
+}
+
 async function getCachedCover(url: string): Promise<Blob | null> {
   const database = await openCoverCache();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(COVER_CACHE_STORE, "readwrite");
     const store = transaction.objectStore(COVER_CACHE_STORE);
     const request = store.get(url);
+    let blob: Blob | null = null;
     request.onsuccess = () => {
       const record = request.result as CachedCover | undefined;
       if (!record) {
-        resolve(null);
         return;
       }
       record.lastUsedAt = Date.now();
       store.put(record);
-      resolve(record.blob);
+      blob = record.blob;
     };
-    request.onerror = () => reject(request.error ?? new Error("Could not read the cover image cache."));
-    transaction.onabort = () => reject(transaction.error ?? new Error("The cover image cache read was aborted."));
+    request.onerror = () => {
+      database.close();
+      reject(request.error ?? new Error("Could not read the cover image cache."));
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not read the cover image cache."));
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve(blob);
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("The cover image cache read was aborted."));
+    };
   });
 }
 
@@ -107,14 +171,18 @@ async function trimCoverCache(database: IDBDatabase): Promise<void> {
 
 async function cacheCover(url: string, blob: Blob): Promise<void> {
   const database = await openCoverCache();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(COVER_CACHE_STORE, "readwrite");
-    transaction.objectStore(COVER_CACHE_STORE).put({ url, blob, lastUsedAt: Date.now() } satisfies CachedCover);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error ?? new Error("Could not save the cover image cache."));
-    transaction.onabort = () => reject(transaction.error ?? new Error("The cover image cache write was aborted."));
-  });
-  await trimCoverCache(database);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(COVER_CACHE_STORE, "readwrite");
+      transaction.objectStore(COVER_CACHE_STORE).put({ url, blob, lastUsedAt: Date.now() } satisfies CachedCover);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error ?? new Error("Could not save the cover image cache."));
+      transaction.onabort = () => reject(transaction.error ?? new Error("The cover image cache write was aborted."));
+    });
+    await trimCoverCache(database);
+  } finally {
+    database.close();
+  }
 }
 
 async function fetchCover(url: string): Promise<Blob> {

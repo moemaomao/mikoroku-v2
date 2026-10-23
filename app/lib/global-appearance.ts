@@ -599,6 +599,7 @@ export function saveGlobalAppearance(settings: GlobalAppearanceSettings): void {
 
 export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void {
   currentAppearance = settings;
+  document.documentElement.dataset.cardDisplay = settings.cardDisplay;
   const accent = settings.accentColor;
   const rootStyle = document.documentElement.style;
   const setAccentVariable = (name: string, customValue: string | null, defaultValue: string) => {

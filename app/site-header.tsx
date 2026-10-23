@@ -1108,7 +1108,6 @@ function HeaderContents() {
           <SidebarLink href="/hentai-list" icon="book" onClick={() => mobile && closeSidebar()}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={() => mobile && closeSidebar()}>Genre List</SidebarLink>
           <SidebarLink href="/bookmark" icon="bookmark" onClick={() => mobile && closeSidebar()}>Bookmark</SidebarLink>
-          <SidebarLink href="/global-settings" icon="settings" onClick={() => mobile && closeSidebar()}>Global Settings</SidebarLink>
           <button
             type="button"
             onClick={() => {
@@ -1120,6 +1119,7 @@ function HeaderContents() {
             <Icon name="history" className="h-5 w-5 shrink-0" />History
           </button>
           <SidebarLink href="/commission" icon="commission" onClick={() => mobile && closeSidebar()}>Commission</SidebarLink>
+          <SidebarLink href="/global-settings" icon="settings" onClick={() => mobile && closeSidebar()}>Global Settings</SidebarLink>
           <div className="my-3 h-px bg-gradient-to-r from-transparent via-black/15 to-transparent dark:via-white/15" />
           <SidebarLink href="https://discord.gg/kkt669knaG" icon="discord" external>Discord</SidebarLink>
           <SidebarLink href="https://trakteer.id/mikorokuscan" icon="donation" external>Donation</SidebarLink>

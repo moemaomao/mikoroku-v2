@@ -13,6 +13,9 @@ import {
   catalogGridClass,
   chapterBadgeClass,
   homepageLoadMoreClass,
+  skeletonListCardClass,
+  skeletonListContentClass,
+  skeletonListCoverClass,
   statusBadgeClass,
   statusBadgeColors,
   typeBadgeClass,
@@ -464,8 +467,14 @@ function MangaCard({ item, metadata, priority, index }: {
 
 function SkeletonCard() {
   return (
-    <div className={`${cardClass} overflow-hidden rounded-lg`}>
-      <div className="aspect-[2/3] w-full animate-pulse bg-gradient-to-r from-[#eee] via-[#f5f5f5] to-[#eee] dark:from-[#2a2a2a] dark:via-[#333] dark:to-[#2a2a2a]" />
+    <div className={`${cardClass} skeleton-card overflow-hidden rounded-lg ${skeletonListCardClass}`}>
+      <div className={`${cardCoverClass} skeleton-thumb animate-pulse bg-gradient-to-r from-[#eee] via-[#f5f5f5] to-[#eee] dark:from-[#2a2a2a] dark:via-[#333] dark:to-[#2a2a2a] ${skeletonListCoverClass}`} />
+      <div className={`hidden flex-1 flex-col justify-center gap-2 p-3 ${skeletonListContentClass}`}>
+        <div className="h-3 w-3/4 animate-pulse rounded bg-slate-300/70 dark:bg-slate-600/70" />
+        <div className="h-4 w-full animate-pulse rounded bg-slate-200/80 dark:bg-slate-700/70" />
+        <div className="h-4 w-5/6 animate-pulse rounded bg-slate-200/80 dark:bg-slate-700/70" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200/80 dark:bg-slate-700/70" />
+      </div>
     </div>
   );
 }

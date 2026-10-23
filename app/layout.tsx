@@ -78,7 +78,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body suppressHydrationWarning className="m-0 min-h-dvh overflow-x-clip bg-[#f8f9fa] pt-14! font-['Kodchasan',Arial,sans-serif] leading-[1.4] text-[#333] antialiased [text-rendering:optimizeLegibility] dark:bg-[#0b0b0b] dark:text-white">
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var roots=[document.documentElement,document.body];roots.forEach(function(root){root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark)})})();`,
+            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;var roots=[root,document.body];roots.forEach(function(element){element.classList.toggle("dark",isDark);element.classList.toggle("light",!isDark)});try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}})();`,
           }}
         />
         {children}

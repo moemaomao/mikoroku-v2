@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant list-mode (&:where(html[data-card-display="list"] *));
 
 @theme {
   --animate-fade-in-up: fade-in-up 0.35s ease both;

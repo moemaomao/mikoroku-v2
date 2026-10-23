@@ -7,6 +7,7 @@ import type { Database } from "firebase/database";
 import {
   addDoc,
   collection,
+  clearIndexedDbPersistence,
   doc,
   getDoc,
   getDocs,
@@ -20,6 +21,7 @@ import {
   persistentMultipleTabManager,
   query,
   serverTimestamp,
+  terminate,
   where,
 } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
@@ -42,6 +44,7 @@ export function initializeFirebaseClient(): FirebaseClient {
   if (typeof window === "undefined") {
     throw new Error("Firebase client can only be initialized in a browser.");
   }
+
   if (initializedClient) return initializedClient;
 
   const app = getApps().some((registeredApp) => registeredApp.name === "[DEFAULT]")
@@ -109,4 +112,10 @@ export function initializeFirebaseClient(): FirebaseClient {
 
   initializedClient = { app, db, firestore };
   return initializedClient;
+}
+
+export async function clearFirestoreOfflineCache(): Promise<void> {
+  const { firestore } = initializeFirebaseClient();
+  await terminate(firestore);
+  await clearIndexedDbPersistence(firestore);
 }

@@ -5,10 +5,19 @@ export const loadMoreClass =
   "mx-auto my-5 block cursor-pointer rounded-[20px] border-0 bg-[#8b0000] px-5 py-2 text-[13px] font-semibold text-white transition-[opacity,background,transform] duration-200 hover:bg-[#a0152a] hover:opacity-95 active:scale-[0.96] disabled:cursor-not-allowed disabled:bg-[#555] disabled:opacity-45";
 
 export const catalogGridClass =
-  "grid w-full min-w-0 grid-cols-3 gap-3 p-[15px] min-[640px]:grid-cols-4 min-[900px]:grid-cols-5 min-[1100px]:grid-cols-6 min-[1300px]:grid-cols-7 min-[1500px]:mx-auto min-[1500px]:max-w-[1280px] min-[1500px]:grid-cols-8 min-[769px]:grid-cols-[repeat(auto-fill,minmax(130px,1fr))] max-[600px]:gap-1 max-[600px]:p-0";
+  "grid w-full min-w-0 grid-cols-3 gap-3 p-[15px] min-[640px]:grid-cols-4 min-[900px]:grid-cols-5 min-[1100px]:grid-cols-6 min-[1300px]:grid-cols-7 min-[1500px]:mx-auto min-[1500px]:max-w-[1280px] min-[1500px]:grid-cols-8 min-[769px]:grid-cols-[repeat(auto-fill,minmax(130px,1fr))] max-[600px]:gap-1 max-[600px]:p-0 list-mode:!grid-cols-1 list-mode:!gap-1.5 list-mode:!p-1.5 min-[769px]:list-mode:!grid-cols-4 min-[769px]:list-mode:!gap-2 min-[769px]:list-mode:!p-2";
 
 export const cardClass =
   "card group/card relative block w-full overflow-hidden rounded-[10px] bg-white dark:bg-[#1f1f1f] animate-fade-in-up";
+
+export const skeletonListCardClass =
+  "list-mode:!flex list-mode:!flex-row list-mode:!items-stretch list-mode:!gap-0 list-mode:!overflow-hidden list-mode:!rounded-xl list-mode:!border list-mode:!border-black/10 list-mode:!p-0 dark:list-mode:!border-white/10";
+
+export const skeletonListCoverClass =
+  "list-mode:!h-auto list-mode:!w-[28%] list-mode:!shrink-0 list-mode:!aspect-[3/4] list-mode:!rounded-l-xl list-mode:!rounded-r-none md:list-mode:!w-[32%] md:list-mode:!aspect-[2/3]";
+
+export const skeletonListContentClass =
+  "list-mode:!flex md:list-mode:!gap-3 md:list-mode:!p-4";
 
 export const cardCoverClass =
   "thumb relative aspect-[2/3] w-full overflow-hidden rounded-[10px] bg-[#f0f0f0] dark:bg-[#111]";
