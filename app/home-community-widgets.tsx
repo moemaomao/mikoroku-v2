@@ -79,14 +79,14 @@ export default function HomeCommunityWidgets() {
   return (
     <section id="popular-widget" ref={containerRef} aria-label="Community widgets">
       <div className="mb-7 last:mb-0">
-        <div className="mb-[14px] flex w-full items-center justify-center text-center text-sm font-semibold text-white before:h-px before:flex-1 before:bg-[#aaa] before:content-[''] after:h-px after:flex-1 after:bg-[#aaa] after:content-[''] [.light_&]:before:bg-black/15 [.light_&]:after:bg-black/15">
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.61] bg-[#1a1a1a] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-white [.light_&]:border-black/15 [.light_&]:bg-[#f0f0f0] [.light_&]:text-[#111]">💬 Group Chat</span>
+        <div className="mb-[14px] flex w-full items-center justify-center text-center text-sm font-semibold text-white before:h-px before:flex-1 before:bg-[var(--mikoroku-home-section-accent,#aaa)] before:content-[''] after:h-px after:flex-1 after:bg-[var(--mikoroku-home-section-accent,#aaa)] after:content-[''] [.light_&]:before:bg-[var(--mikoroku-home-section-accent,#aaa)] [.light_&]:after:bg-[var(--mikoroku-home-section-accent,#aaa)]">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--mikoroku-home-section-accent,#aaa)] bg-[#1a1a1a] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-[var(--mikoroku-home-section-text,currentColor)] [.light_&]:border-[var(--mikoroku-home-section-accent,#aaa)] [.light_&]:bg-[#f0f0f0] [.light_&]:text-[var(--mikoroku-home-section-text,#111)]">💬 Group Chat</span>
         </div>
         <div id="chatango-container" ref={chatContainerRef} className="relative h-[620px] min-h-[520px] w-full overflow-hidden rounded-xl bg-black min-[769px]:max-[1100px]:h-[480px] min-[769px]:max-[1100px]:min-h-[480px] max-[768px]:h-[420px] max-[768px]:min-h-[420px] max-[480px]:h-[380px] max-[480px]:min-h-[380px]" />
       </div>
       <div className="mb-7 last:mb-0">
-        <div className="mb-[14px] flex w-full items-center justify-center text-center text-sm font-semibold text-white before:h-px before:flex-1 before:bg-[#aaa] before:content-[''] after:h-px after:flex-1 after:bg-[#aaa] after:content-[''] dark:before:bg-[#aaa] dark:after:bg-[#aaa]">
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.61] bg-[#1a1a1a] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-white [.light_&]:border-black/15 [.light_&]:bg-[#f0f0f0] [.light_&]:text-[#111]">🌟 Discord Server</span>
+        <div className="mb-[14px] flex w-full items-center justify-center text-center text-sm font-semibold text-white before:h-px before:flex-1 before:bg-[var(--mikoroku-home-section-accent,#aaa)] before:content-[''] after:h-px after:flex-1 after:bg-[var(--mikoroku-home-section-accent,#aaa)] after:content-[''] dark:before:bg-[var(--mikoroku-home-section-accent,#aaa)] dark:after:bg-[var(--mikoroku-home-section-accent,#aaa)]">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--mikoroku-home-section-accent,#aaa)] bg-[#1a1a1a] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-[var(--mikoroku-home-section-text,currentColor)] [.light_&]:border-[var(--mikoroku-home-section-accent,#aaa)] [.light_&]:bg-[#f0f0f0] [.light_&]:text-[var(--mikoroku-home-section-text,#111)]">🌟 Discord Server</span>
         </div>
         <div id="discord-container" className="min-h-[400px]">
           {nearViewport && (
@@ -104,8 +104,8 @@ export default function HomeCommunityWidgets() {
         </div>
       </div>
       <div className="mb-7 last:mb-0">
-        <div className="mb-[14px] flex w-full items-center justify-center text-center text-sm font-semibold text-white before:h-px before:flex-1 before:bg-[#aaa] before:content-[''] after:h-px after:flex-1 after:bg-[#aaa] after:content-[''] [.light_&]:before:bg-black/15 [.light_&]:after:bg-black/15">
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.61] bg-[#1a1a1a] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-white [.light_&]:border-black/15 [.light_&]:bg-[#f0f0f0] [.light_&]:text-[#111]">❤️ Top Supporter</span>
+        <div className="mb-[14px] flex w-full items-center justify-center text-center text-sm font-semibold text-white before:h-px before:flex-1 before:bg-[var(--mikoroku-home-section-accent,#aaa)] before:content-[''] after:h-px after:flex-1 after:bg-[var(--mikoroku-home-section-accent,#aaa)] after:content-[''] [.light_&]:before:bg-[var(--mikoroku-home-section-accent,#aaa)] [.light_&]:after:bg-[var(--mikoroku-home-section-accent,#aaa)]">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--mikoroku-home-section-accent,#aaa)] bg-[#1a1a1a] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-[var(--mikoroku-home-section-text,currentColor)] [.light_&]:border-[var(--mikoroku-home-section-accent,#aaa)] [.light_&]:bg-[#f0f0f0] [.light_&]:text-[var(--mikoroku-home-section-text,#111)]">❤️ Top Supporter</span>
         </div>
         <div id="trakteer-container" className="min-h-[400px]">
           {nearViewport && (

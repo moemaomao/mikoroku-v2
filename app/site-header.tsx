@@ -788,7 +788,7 @@ function HeaderContents() {
   };
 
   const classButton =
-    "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 dark:text-white dark:hover:bg-white/10";
+    "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:text-white dark:hover:bg-white/10";
   const mainHeaderClass = [
     "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-300 bg-white/80 px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-zinc-950/75 dark:text-white",
     !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
@@ -865,7 +865,7 @@ function HeaderContents() {
                 setSearchOpen(Boolean(event.target.value.trim()));
               }}
               onFocus={() => setSearchOpen(Boolean(search.trim()))}
-              className="h-[34px] min-w-0 w-full appearance-none rounded-3xl border border-zinc-300 bg-black/[0.07] px-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-500 focus:border-violet-500 sm:h-[30px] sm:px-4 dark:border-zinc-600 dark:bg-black/35 dark:text-white dark:placeholder:text-zinc-400"
+              className="h-[34px] min-w-0 w-full appearance-none rounded-3xl border border-zinc-300 bg-black/[0.07] px-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-500 focus:border-[var(--mikoroku-accent)] sm:h-[30px] sm:px-4 dark:border-zinc-600 dark:bg-black/35 dark:text-white dark:placeholder:text-zinc-400"
             />
             {searchOpen && search.trim() && (
               <div
@@ -1098,7 +1098,7 @@ function HeaderContents() {
             id="sidebarClose"
             aria-label="Close menu"
             onClick={closeSidebar}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.04] text-slate-800 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-600 dark:border-white/15 dark:bg-white/[0.06] dark:text-indigo-50 dark:hover:text-red-400"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.04] text-slate-800 transition hover:border-[var(--mikoroku-accent)]/40 hover:bg-[var(--mikoroku-accent-soft)] hover:text-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/[0.06] dark:text-indigo-50 dark:hover:text-[var(--mikoroku-accent)]"
           >
             <Icon name="close" className="h-[22px] w-[22px]" />
           </button>

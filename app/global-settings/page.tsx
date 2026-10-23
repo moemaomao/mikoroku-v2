@@ -3,7 +3,7 @@ import GlobalSettingsPage from "./settings-page";
 
 export const metadata: Metadata = {
   title: "Global Settings - Mikoroku",
-  description: "Atur tampilan katalog Mikoroku.",
+  description: "Configure Mikoroku catalog layout and display options.",
   robots: { index: false, follow: false },
 };
 

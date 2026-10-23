@@ -36,7 +36,7 @@ type StorageReport = {
 };
 
 function formatBytes(bytes: number | null): string {
-  if (bytes === null) return "Tidak tersedia";
+  if (bytes === null) return "Unavailable";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -99,10 +99,10 @@ const appearanceOptions: Array<{
   title: string;
   description: string;
 }> = [
-  { key: "hideHero", title: "Hide hero", description: "Sembunyikan banner hero di halaman utama." },
-  { key: "hideStatusBadge", title: "Hide status badge", description: "Sembunyikan badge status seperti ongoing atau completed." },
-  { key: "hideTypeBadge", title: "Hide type badge", description: "Sembunyikan badge jenis konten seperti manga atau manhwa." },
-  { key: "hideChapterBadge", title: "Hide chapter badge", description: "Sembunyikan badge jumlah chapter pada kartu manga." },
+  { key: "hideHero", title: "Hide hero", description: "Hide the hero banner on the home page." },
+  { key: "hideStatusBadge", title: "Hide status badge", description: "Hide status badges such as ongoing or completed." },
+  { key: "hideTypeBadge", title: "Hide type badge", description: "Hide content type badges such as manga or manhwa." },
+  { key: "hideChapterBadge", title: "Hide chapter badge", description: "Hide the chapter count badge on manga cards." },
 ];
 
 function AppearanceToggle({
@@ -136,6 +136,211 @@ function AppearanceToggle({
   );
 }
 
+
+function hexToHsv(hex: string): { h: number; s: number; v: number } {
+  const normalized = hex.replace("#", "");
+  const full = normalized.length === 3
+    ? normalized.split("").map((c) => c + c).join("")
+    : normalized.padEnd(6, "0").slice(0, 6);
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return { h: h * 360, s, v: max };
+}
+
+function hsvToHex(h: number, s: number, v: number): string {
+  const hh = ((h % 360) + 360) % 360 / 60;
+  const c = v * s;
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (hh < 1) [r, g, b] = [c, x, 0];
+  else if (hh < 2) [r, g, b] = [x, c, 0];
+  else if (hh < 3) [r, g, b] = [0, c, x];
+  else if (hh < 4) [r, g, b] = [0, x, c];
+  else if (hh < 5) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function AccentColorWheel({
+  value,
+  onChange,
+  onReset,
+}: {
+  value: string | null;
+  onChange: (hex: string) => void;
+  onReset: () => void;
+}) {
+  const size = 148;
+  const radius = size / 2;
+  const innerR = 42;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragging = useRef(false);
+  const hsv = hexToHsv(value || "#7c3aed");
+  const [hue, setHue] = useState(hsv.h);
+  const [sat, setSat] = useState(Math.max(hsv.s, 0.55));
+  const [val, setVal] = useState(Math.max(hsv.v, 0.75));
+
+  useEffect(() => {
+    const next = hexToHsv(value || "#7c3aed");
+    setHue(next.h);
+    setSat(Math.max(next.s, 0.15));
+    setVal(Math.max(next.v, 0.35));
+  }, [value]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+
+    for (let angle = 0; angle < 360; angle += 0.5) {
+      const start = ((angle - 0.6) * Math.PI) / 180;
+      const end = ((angle + 0.6) * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.moveTo(radius + Math.cos(start) * innerR, radius + Math.sin(start) * innerR);
+      ctx.arc(radius, radius, radius - 2, start, end);
+      ctx.arc(radius, radius, innerR, end, start, true);
+      ctx.closePath();
+      ctx.fillStyle = `hsl(${angle}, 100%, 50%)`;
+      ctx.fill();
+    }
+
+    // indicator on ring
+    const rad = (hue * Math.PI) / 180;
+    const markerR = (innerR + radius - 2) / 2;
+    const mx = radius + Math.cos(rad) * markerR;
+    const my = radius + Math.sin(rad) * markerR;
+    ctx.beginPath();
+    ctx.arc(mx, my, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(mx, my, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = hsvToHex(hue, 1, 1);
+    ctx.fill();
+  }, [hue]);
+
+  function pickFromEvent(clientX: number, clientY: number) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left - radius;
+    const y = clientY - rect.top - radius;
+    const dist = Math.sqrt(x * x + y * y);
+    if (dist < innerR - 4 || dist > radius) return;
+    let angle = (Math.atan2(y, x) * 180) / Math.PI;
+    if (angle < 0) angle += 360;
+    setHue(angle);
+    onChange(hsvToHex(angle, sat, val));
+  }
+
+  const preview = hsvToHex(hue, sat, val);
+
+  return (
+    <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-end">
+      <div className="relative" style={{ width: size, height: size }}>
+        <canvas
+          ref={canvasRef}
+          width={size}
+          height={size}
+          className="cursor-crosshair touch-none rounded-full"
+          style={{ width: size, height: size }}
+          aria-label="Accent color wheel"
+          onPointerDown={(event) => {
+            dragging.current = true;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            pickFromEvent(event.clientX, event.clientY);
+          }}
+          onPointerMove={(event) => {
+            if (!dragging.current) return;
+            pickFromEvent(event.clientX, event.clientY);
+          }}
+          onPointerUp={() => {
+            dragging.current = false;
+          }}
+          onPointerCancel={() => {
+            dragging.current = false;
+          }}
+        />
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 flex size-[72px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-black/10 shadow-inner dark:border-white/15"
+          style={{ background: preview }}
+          aria-hidden="true"
+        />
+      </div>
+      <div className="flex w-full min-w-[10rem] flex-col gap-2 sm:w-auto">
+        <label className="text-xs text-slate-600 dark:text-slate-400">
+          Saturation
+          <input
+            type="range"
+            min={0.15}
+            max={1}
+            step={0.01}
+            value={sat}
+            onChange={(event) => {
+              const next = Number(event.currentTarget.value);
+              setSat(next);
+              onChange(hsvToHex(hue, next, val));
+            }}
+            className="mt-1 w-full accent-[var(--mikoroku-accent)]"
+          />
+        </label>
+        <label className="text-xs text-slate-600 dark:text-slate-400">
+          Brightness
+          <input
+            type="range"
+            min={0.25}
+            max={1}
+            step={0.01}
+            value={val}
+            onChange={(event) => {
+              const next = Number(event.currentTarget.value);
+              setVal(next);
+              onChange(hsvToHex(hue, sat, next));
+            }}
+            className="mt-1 w-full accent-[var(--mikoroku-accent)]"
+          />
+        </label>
+        <div className="flex items-center gap-2">
+          <span className="min-w-16 font-mono text-xs uppercase text-slate-600 dark:text-slate-300">
+            {value || "Default"}
+          </span>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={value === null}
+            className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-semibold transition hover:border-[var(--mikoroku-accent)] disabled:opacity-40 dark:border-white/15"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function GlobalSettingsPage() {
   const [settings, setSettings] = useState(defaultGlobalAppearance);
   const [notice, setNotice] = useState("");
@@ -161,14 +366,14 @@ export default function GlobalSettingsPage() {
         if (key.startsWith("chapters_")) chapterCacheBytes += bytes;
       }
     } catch (error) {
-      console.warn("Ukuran localStorage tidak dapat dihitung.", error);
+      console.warn("Could not measure localStorage size.", error);
     }
 
     let coverImageCacheBytes = 0;
     try {
       coverImageCacheBytes = await getCoverImageCacheBytes();
     } catch (error) {
-      console.error("Ukuran cache gambar tidak dapat dihitung.", error);
+      console.error("Could not measure cover image cache size.", error);
     }
 
     let originUsageBytes: number | null = null;
@@ -178,7 +383,7 @@ export default function GlobalSettingsPage() {
       originUsageBytes = typeof estimate?.usage === "number" ? estimate.usage : null;
       originQuotaBytes = typeof estimate?.quota === "number" ? estimate.quota : null;
     } catch (error) {
-      console.warn("Estimasi storage browser tidak tersedia.", error);
+      console.warn("Browser storage estimate is unavailable.", error);
     }
 
     setStorageReport({
@@ -206,25 +411,25 @@ export default function GlobalSettingsPage() {
       link.download = `mikoroku-data-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      setNotice("Bookmark dan riwayat berhasil diekspor.");
+      setNotice("Bookmarks and reading history exported successfully.");
     } catch (error) {
-      console.error("Data bookmark dan riwayat gagal diekspor.", error);
-      setNotice("Ekspor gagal. Periksa izin penyimpanan browser.");
+      console.error("Failed to export bookmarks and history.", error);
+      setNotice("Export failed. Check your browser storage permissions.");
     }
   }
 
   async function importUserData(file?: File) {
     if (!file) return;
     try {
-      if (file.size > 5 * 1024 * 1024) throw new Error("Ukuran file ekspor maksimal 5 MB.");
+      if (file.size > 5 * 1024 * 1024) throw new Error("Export file size must be 5 MB or less.");
       const payload: unknown = JSON.parse(await file.text());
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-        throw new Error("File JSON harus berisi objek ekspor Mikoroku.");
+        throw new Error("JSON file must contain a Mikoroku export object.");
       }
       const data = payload as Record<string, unknown>;
       if (data.format !== "mikoroku-user-data" || data.version !== 1 ||
         !Array.isArray(data.bookmarks) || !Array.isArray(data.history)) {
-        throw new Error("Format file bukan ekspor bookmark dan riwayat Mikoroku yang didukung.");
+        throw new Error("Unsupported file format. Use a Mikoroku bookmarks and history export.");
       }
 
       const incomingBookmarks = readBookmarks(data.bookmarks);
@@ -243,68 +448,70 @@ export default function GlobalSettingsPage() {
       localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
       window.dispatchEvent(new Event("bookmarkUpdated"));
-      setNotice(`${incomingBookmarks.length} bookmark dan ${incomingHistory.length} riwayat diproses; data digabung tanpa menghapus data lama.`);
+      setNotice(`${incomingBookmarks.length} bookmarks and ${incomingHistory.length} history items processed; existing local data was kept.`);
       await refreshStorageReport();
     } catch (error) {
-      console.error("Data bookmark dan riwayat gagal diimpor.", error);
-      setNotice(error instanceof Error ? error.message : "Impor gagal. Pastikan file JSON valid.");
+      console.error("Failed to import bookmarks and history.", error);
+      setNotice(error instanceof Error ? error.message : "Import failed. Make sure the JSON file is valid.");
     } finally {
       if (importFileRef.current) importFileRef.current.value = "";
     }
   }
 
   async function clearFirestoreCache() {
-    if (!window.confirm("Hapus cache offline Firestore di browser ini? Halaman akan dimuat ulang setelah cache dibersihkan.")) return;
+    if (!window.confirm("Clear Firestore offline cache in this browser? The page will reload after the cache is cleared.")) return;
     setStorageBusy(true);
-    setNotice("Menghapus cache offline Firestore...");
+    setNotice("Clearing Firestore offline cache...");
     try {
       await clearFirestoreOfflineCache();
-      setNotice("Cache Firestore dihapus. Halaman dimuat ulang...");
+      setNotice("Firestore cache cleared. Reloading page...");
       window.setTimeout(() => window.location.reload(), 900);
     } catch (error) {
-      console.error("Cache offline Firestore gagal dihapus.", error);
-      setNotice("Cache Firestore gagal dihapus. Tutup tab Mikoroku lain; halaman akan dimuat ulang agar Firestore aktif kembali.");
+      console.error("Failed to clear Firestore offline cache.", error);
+      setNotice(error instanceof Error ? error.message : "Failed to clear Firestore offline cache.");
       setStorageBusy(false);
-      window.setTimeout(() => window.location.reload(), 2500);
     }
   }
 
   async function clearLocalCaches() {
-    if (!window.confirm("Hapus cache aplikasi dari localStorage? Bookmark, riwayat, dan preferensi tidak ikut terhapus.")) return;
+    if (!window.confirm("Clear local app caches (catalog, detail, and chapter lists)? Account data will be kept.")) return;
+    setStorageBusy(true);
     try {
       const removed = clearLocalAppCaches();
-      setNotice(`${removed} cache aplikasi dihapus. Bookmark, riwayat, dan preferensi tetap tersimpan.`);
+      setNotice(`Cleared ${removed} local cache entries.`);
       await refreshStorageReport();
     } catch (error) {
-      console.error("Cache aplikasi localStorage gagal dibersihkan.", error);
-      setNotice("Cache localStorage gagal dibersihkan.");
+      console.error("Failed to clear local app caches.", error);
+      setNotice("Failed to clear local app caches.");
+    } finally {
+      setStorageBusy(false);
     }
   }
 
   async function clearImageCache() {
-    if (!window.confirm("Hapus cache gambar cover yang tersimpan di browser?")) return;
+    if (!window.confirm("Clear cached cover images? Images will be downloaded again when needed.")) return;
     setStorageBusy(true);
     try {
       await clearCoverImageCache();
-      setNotice("Cache gambar cover berhasil dihapus.");
+      setNotice("Cover image cache cleared.");
       await refreshStorageReport();
     } catch (error) {
-      console.error("Cache gambar cover gagal dibersihkan.", error);
-      setNotice("Cache gambar cover gagal dihapus.");
+      console.error("Failed to clear cover image cache.", error);
+      setNotice("Failed to clear cover image cache.");
     } finally {
       setStorageBusy(false);
     }
   }
 
   function updateAppearance(key: GlobalAppearanceToggleSetting, value: boolean) {
-    const updated = { ...settings, [key]: value };
+    const updated: GlobalAppearanceSettings = { ...settings, [key]: value };
     try {
       saveGlobalAppearance(updated);
       applyGlobalAppearance(updated);
       setSettings(updated);
       setNotice("Appearance settings saved.");
     } catch (error) {
-      console.error("Preferensi appearance global gagal disimpan.", error);
+      console.error("Failed to save global appearance preferences.", error);
       setNotice("Settings could not be saved. Check your browser storage permissions.");
     }
   }
@@ -317,7 +524,20 @@ export default function GlobalSettingsPage() {
       setSettings(updated);
       setNotice("Appearance settings saved.");
     } catch (error) {
-      console.error("Preferensi appearance global gagal disimpan.", error);
+      console.error("Failed to save global appearance preferences.", error);
+      setNotice("Settings could not be saved. Check your browser storage permissions.");
+    }
+  }
+
+  function updateCardDisplay(cardDisplay: GlobalAppearanceSettings["cardDisplay"]) {
+    const updated: GlobalAppearanceSettings = { ...settings, cardDisplay };
+    try {
+      saveGlobalAppearance(updated);
+      applyGlobalAppearance(updated);
+      setSettings(updated);
+      setNotice("Layout settings saved.");
+    } catch (error) {
+      console.error("Failed to save global appearance preferences.", error);
       setNotice("Settings could not be saved. Check your browser storage permissions.");
     }
   }
@@ -330,13 +550,85 @@ export default function GlobalSettingsPage() {
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--mikoroku-accent)]">Mikoroku</p>
             <h1 className="mt-2 text-3xl font-bold">Global Settings</h1>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Atur elemen tampilan katalog untuk perangkat dan browser ini.</p>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Configure catalog layout and display options for this device and browser.
+            </p>
           </header>
 
-          <section className="rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6" aria-labelledby="appearance-heading">
+          {/* Layout — moved to top */}
+          <section
+            className="rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
+            aria-labelledby="layout-heading"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 id="layout-heading" className="text-lg font-bold">Layout</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Choose how manga cards appear in the catalog.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Manga card display">
+              {([
+                ["default", "Default", "Standard grid layout."],
+                [
+                  "list",
+                  "List",
+                  "Four columns on desktop, with cover, title, badges, and the three latest chapters.",
+                ],
+              ] as const).map(([value, title, description]) => {
+                const selected = settings.cardDisplay === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => updateCardDisplay(value)}
+                    className={`rounded-2xl border p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] ${
+                      selected
+                        ? "border-[var(--mikoroku-accent)] text-[var(--mikoroku-accent)]"
+                        : "border-black/10 bg-white/60 hover:border-[var(--mikoroku-accent)] dark:border-white/10 dark:bg-white/[0.03]"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">{title}</span>
+                    <span className="mt-1 block text-xs text-slate-600 dark:text-slate-400">{description}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {settings.cardDisplay === "list" && (
+              <div className="mt-4">
+                <AppearanceToggle
+                  title="Cover as background"
+                  description="Use the manga cover as a faded background behind the list card content."
+                  checked={settings.listCoverBackground}
+                  onChange={(value) => {
+                    const updated = { ...settings, listCoverBackground: value };
+                    try {
+                      saveGlobalAppearance(updated);
+                      applyGlobalAppearance(updated);
+                      setSettings(updated);
+                      setNotice("Layout settings saved.");
+                    } catch (error) {
+                      console.error("Failed to save global appearance preferences.", error);
+                      setNotice("Settings could not be saved. Check your browser storage permissions.");
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* Appearance */}
+          <section
+            className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
+            aria-labelledby="appearance-heading"
+          >
             <div className="mb-4">
               <h2 id="appearance-heading" className="text-lg font-bold">Appearance</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Pilih elemen katalog yang ingin disembunyikan.</p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Choose which catalog elements to hide.
+              </p>
             </div>
             <div className="grid gap-3">
               {appearanceOptions.map((option) => (
@@ -349,44 +641,50 @@ export default function GlobalSettingsPage() {
                 />
               ))}
             </div>
-            <div className="mt-5 flex flex-col gap-3 border-t border-black/10 pt-4 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+            <div className="mt-5 border-t border-black/10 pt-4 dark:border-white/10">
+              <div className="mb-3">
                 <h3 className="text-sm font-semibold">Custom accent color</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">Pilih warna aksen untuk highlight tampilan Mikoroku.</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
+                  Drag on the color wheel to pick a hue, then fine-tune saturation and brightness.
+                </p>
               </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  aria-label="Custom accent color"
-                  value={settings.accentColor || "#9d1018"}
-                  onChange={(event) => updateAccentColor(event.currentTarget.value)}
-                  className="h-10 w-12 cursor-pointer rounded-lg border border-black/10 bg-transparent p-1 accent-[var(--mikoroku-accent)] dark:border-white/15"
-                />
-                <span className="min-w-16 font-mono text-xs uppercase text-slate-600 dark:text-slate-300">{settings.accentColor || "Default"}</span>
-                <button
-                  type="button"
-                  onClick={() => updateAccentColor(null)}
-                  disabled={settings.accentColor === null}
-                  className="rounded-lg border border-black/10 px-3 py-2 text-xs font-semibold transition hover:border-[var(--mikoroku-accent)] dark:border-white/15"
-                >
-                  Reset
-                </button>
-              </div>
+              <AccentColorWheel
+                value={settings.accentColor}
+                onChange={(hex) => updateAccentColor(hex)}
+                onReset={() => updateAccentColor(null)}
+              />
             </div>
-            <p className="mt-3 min-h-5 text-xs text-slate-500 dark:text-slate-400" role="status" aria-live="polite">{notice}</p>
+            <p className="mt-3 min-h-5 text-xs text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+              {notice}
+            </p>
           </section>
 
-          <section className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6" aria-labelledby="storage-heading">
+          {/* Data & storage tools */}
+          <section
+            className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
+            aria-labelledby="storage-heading"
+          >
             <div className="mb-4">
               <h2 id="storage-heading" className="text-lg font-bold">Data &amp; storage tools</h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Periksa dan kelola cache lokal browser. Cache offline Firestore mencakup data chapter; bookmark, riwayat, dan preferensi tidak ikut terhapus saat membersihkan cache aplikasi.</p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Inspect and manage local browser cache. Firestore offline cache includes chapter data;
+                bookmarks, history, and preferences are not removed when clearing app caches.
+              </p>
             </div>
 
             <div className="mb-5 grid gap-3 rounded-2xl bg-black/[0.03] p-4 text-sm dark:bg-white/[0.04] sm:grid-cols-2">
-              <p>localStorage: <strong>{formatBytes(storageReport?.localStorageBytes ?? null)}</strong></p>
-              <p>Cache daftar chapter: <strong>{formatBytes(storageReport?.chapterCacheBytes ?? null)}</strong></p>
-              <p>Cache gambar cover: <strong>{formatBytes(storageReport?.coverImageCacheBytes ?? null)}</strong></p>
-              <p>Seluruh storage origin (termasuk Firestore): <strong>{formatBytes(storageReport?.originUsageBytes ?? null)}</strong>
+              <p>
+                localStorage: <strong>{formatBytes(storageReport?.localStorageBytes ?? null)}</strong>
+              </p>
+              <p>
+                Chapter list cache: <strong>{formatBytes(storageReport?.chapterCacheBytes ?? null)}</strong>
+              </p>
+              <p>
+                Cover image cache: <strong>{formatBytes(storageReport?.coverImageCacheBytes ?? null)}</strong>
+              </p>
+              <p>
+                Total origin storage (including Firestore):{" "}
+                <strong>{formatBytes(storageReport?.originUsageBytes ?? null)}</strong>
                 {storageReport?.originQuotaBytes != null && <> / {formatBytes(storageReport.originQuotaBytes)}</>}
               </p>
               <button
@@ -394,79 +692,73 @@ export default function GlobalSettingsPage() {
                 onClick={() => void refreshStorageReport()}
                 className="w-fit rounded-lg border border-black/10 px-3 py-2 text-xs font-semibold transition hover:border-[var(--mikoroku-accent)] dark:border-white/15"
               >
-                Hitung ulang ukuran
+                Recalculate sizes
               </button>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <button type="button" disabled={storageBusy} onClick={() => void clearFirestoreCache()} className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-left text-sm font-semibold transition hover:bg-amber-500/20 disabled:opacity-50">
+              <button
+                type="button"
+                disabled={storageBusy}
+                onClick={() => void clearFirestoreCache()}
+                className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-left text-sm font-semibold transition hover:bg-amber-500/20 disabled:opacity-50"
+              >
                 Clear Firestore offline &amp; chapter cache
-                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">Menghapus data offline termasuk dokumen chapter. Tab Mikoroku lain mungkin perlu ditutup.</span>
+                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">
+                  Removes offline data including chapter documents. Other Mikoroku tabs may need to be closed.
+                </span>
               </button>
-              <button type="button" disabled={storageBusy} onClick={() => void clearLocalCaches()} className="rounded-xl border border-black/10 p-3 text-left text-sm font-semibold transition hover:border-[var(--mikoroku-accent)] disabled:opacity-50 dark:border-white/10">
+              <button
+                type="button"
+                disabled={storageBusy}
+                onClick={() => void clearLocalCaches()}
+                className="rounded-xl border border-black/10 p-3 text-left text-sm font-semibold transition hover:border-[var(--mikoroku-accent)] disabled:opacity-50 dark:border-white/10"
+              >
                 Clear local app caches
-                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">Bersihkan cache katalog, detail, dan daftar chapter; data akun lokal tetap disimpan.</span>
+                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">
+                  Clears catalog, detail, and chapter list caches; local account data is kept.
+                </span>
               </button>
-              <button type="button" disabled={storageBusy} onClick={() => void clearImageCache()} className="rounded-xl border border-black/10 p-3 text-left text-sm font-semibold transition hover:border-[var(--mikoroku-accent)] disabled:opacity-50 dark:border-white/10">
+              <button
+                type="button"
+                disabled={storageBusy}
+                onClick={() => void clearImageCache()}
+                className="rounded-xl border border-black/10 p-3 text-left text-sm font-semibold transition hover:border-[var(--mikoroku-accent)] disabled:opacity-50 dark:border-white/10"
+              >
                 Clear cached cover images
-                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">Menghapus cache gambar cover lokal. Gambar akan diunduh kembali saat diperlukan.</span>
+                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">
+                  Removes local cover image cache. Images will be downloaded again when needed.
+                </span>
               </button>
               <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
                 <p className="text-sm font-semibold">Bookmark &amp; reading history</p>
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Impor akan menggabungkan data dan mempertahankan item lokal yang ada.</p>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  Import merges data and keeps existing local items.
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" onClick={exportUserData} className="rounded-lg bg-[var(--mikoroku-accent)] px-3 py-2 text-xs font-semibold text-white">Export JSON</button>
-                  <button type="button" onClick={() => importFileRef.current?.click()} className="rounded-lg border border-black/10 px-3 py-2 text-xs font-semibold dark:border-white/15">Import JSON</button>
+                  <button
+                    type="button"
+                    onClick={exportUserData}
+                    className="rounded-lg bg-[var(--mikoroku-accent)] px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    Export JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => importFileRef.current?.click()}
+                    className="rounded-lg border border-black/10 px-3 py-2 text-xs font-semibold dark:border-white/15"
+                  >
+                    Import JSON
+                  </button>
                   <input
                     ref={importFileRef}
                     type="file"
                     accept="application/json,.json"
                     className="hidden"
-                    onChange={(event) => void importUserData(event.currentTarget.files?.[0])}
+                    onChange={(event) => void importUserData(event.target.files?.[0])}
                   />
                 </div>
               </div>
-            </div>
-            <p className="mt-4 min-h-5 text-xs text-slate-500 dark:text-slate-400" role="status" aria-live="polite">{notice}</p>
-          </section>
-
-          <section className="mt-5 rounded-3xl border border-dashed border-black/15 bg-white/50 p-4 dark:border-white/15 dark:bg-white/[0.02] sm:p-6" aria-labelledby="upcoming-heading">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 id="upcoming-heading" className="text-lg font-bold">More appearance options</h2>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Pilih tampilan kartu manga di katalog.</p>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label="Manga card display">
-              {([
-                ["default", "Default", "Tampilan standar."],
-                ["list", "List", "Empat kolom di desktop, dengan cover, judul, badge, dan tiga chapter terbaru."],
-              ] as const).map(([value, title, description]) => {
-                const selected = settings.cardDisplay === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => {
-                      const updated = { ...settings, cardDisplay: value };
-                      try {
-                        saveGlobalAppearance(updated);
-                        applyGlobalAppearance(updated);
-                        setSettings(updated);
-                        setNotice("Appearance settings saved.");
-                      } catch (error) {
-                        console.error("Preferensi appearance global gagal disimpan.", error);
-                        setNotice("Settings could not be saved. Check your browser storage permissions.");
-                      }
-                    }}
-                    className={`rounded-2xl border p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] ${selected ? "border-[var(--mikoroku-accent)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-white/60 hover:border-[var(--mikoroku-accent)] dark:border-white/10 dark:bg-white/[0.03]"}`}
-                  >
-                    <span className="block text-sm font-semibold">{title}</span>
-                    <span className="mt-1 block text-xs text-slate-600 dark:text-slate-400">{description}</span>
-                  </button>
-                );
-              })}
             </div>
           </section>
         </div>

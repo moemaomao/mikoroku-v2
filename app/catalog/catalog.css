@@ -112,13 +112,13 @@ body.dark .catalog-page {
 }
 
 .catalog-sort-btn.is-active {
-  background: #7157e8;
+  background: var(--mikoroku-accent, #7157e8);
   color: #fff;
   box-shadow: 0 4px 12px rgba(113, 87, 232, .28);
 }
 
 .catalog-sort-btn:focus-visible {
-  outline: 2px solid #7c5cff;
+  outline: 2px solid var(--mikoroku-accent, #7c5cff);
   outline-offset: 2px;
 }
 
@@ -205,7 +205,7 @@ body.dark .catalog-toolbar select {
 
 .catalog-toolbar input:focus-visible,
 .catalog-toolbar select:focus-visible {
-  border-color: #7c5cff;
+  border-color: var(--mikoroku-accent, #7c5cff);
   background-color: var(--catalog-surface);
   box-shadow: 0 0 0 4px rgba(124, 92, 255, .16), 0 4px 16px rgba(20, 25, 40, .08);
 }
@@ -234,13 +234,13 @@ body.dark .catalog-toolbar select {
 
 .catalog-genres button:hover {
   transform: translateY(-1px);
-  border-color: #8b76ff;
+  border-color: var(--mikoroku-accent, #8b76ff);
   color: var(--catalog-text);
 }
 
 .catalog-genres button.active {
-  border-color: #7157e8;
-  background: #7157e8;
+  border-color: var(--mikoroku-accent, #7157e8);
+  background: var(--mikoroku-accent, #7157e8);
   color: white;
   box-shadow: 0 4px 12px rgba(113, 87, 232, .25);
 }
@@ -295,7 +295,7 @@ body.dark .catalog-toolbar select {
 }
 
 .catalog-card:focus-visible {
-  outline: 2px solid #7c5cff !important;
+  outline: 2px solid var(--mikoroku-accent, #7c5cff) !important;
   outline-offset: 3px;
 }
 
@@ -372,7 +372,7 @@ body.dark .catalog-toolbar select {
   padding: 9px 16px;
   border: 0;
   border-radius: 10px;
-  background: #7157e8;
+  background: var(--mikoroku-accent, #7157e8);
   color: #fff;
   font: inherit;
   font-weight: 600;
