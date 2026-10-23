@@ -59,6 +59,15 @@ type Chapter = {
 
 type DetailState = "loading" | "ready" | "not-found" | "error";
 type ChapterSource = Chapter["source"];
+type CompatCommentCountCollection = {
+  get: () => Promise<{ forEach: (callback: (document: unknown) => void) => void }>;
+};
+
+function isCompatCommentCountCollection(value: unknown): value is CompatCommentCountCollection {
+  return typeof value === "object" && value !== null &&
+    "get" in value && typeof value.get === "function";
+}
+
 const COMMENT_COUNT_FIREBASE_APP_NAME = "mikoroku-series-comment-count";
 const COMMENT_COUNT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
@@ -872,16 +881,47 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   useEffect(() => {
     let active = true;
     setCommentCount(null);
-    void getDocs(
-      collection(getCommentCountFirestore(), "comments", `detail_${slug}`, "postComments"),
-    ).then((snapshot) => {
-      if (active) setCommentCount(snapshot.size);
-    }).catch((error: unknown) => {
-      console.error(`Gagal memuat jumlah komentar detail_${slug}.`, error);
-      if (active) setCommentCount(null);
-    });
+    const pageId = `detail_${slug}`;
+    const handleWidgetCount = (event: Event) => {
+      const detail = (event as CustomEvent<{ postId?: string; count?: number }>).detail;
+      if (detail?.postId === pageId && typeof detail.count === "number") {
+        setCommentCount(detail.count);
+      }
+    };
+    window.addEventListener("communityCommentCount", handleWidgetCount);
+
+    const loadCount = async () => {
+      try {
+        const compatFirestore = window.firebase?.firestore?.();
+        if (compatFirestore) {
+          const maybeCommentCollection: unknown = compatFirestore
+            .collection("comments")
+            .doc(pageId)
+            .collection("postComments");
+          if (!isCompatCommentCountCollection(maybeCommentCollection)) {
+            throw new Error("Firebase compat tidak menyediakan pembacaan komentar.");
+          }
+          const commentCollection = maybeCommentCollection;
+          const snapshot = await commentCollection.get();
+          let count = 0;
+          snapshot.forEach(() => { count += 1; });
+          if (active) setCommentCount(count);
+          return;
+        }
+        const snapshot = await getDocs(
+          collection(getCommentCountFirestore(), "comments", pageId, "postComments"),
+        );
+        if (active) setCommentCount(snapshot.size);
+      } catch (error) {
+        console.error(`Gagal memuat jumlah komentar ${pageId}.`, error);
+        if (active) setCommentCount(null);
+      }
+    };
+    void loadCount();
+
     return () => {
       active = false;
+      window.removeEventListener("communityCommentCount", handleWidgetCount);
     };
   }, [slug]);
 

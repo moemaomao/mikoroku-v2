@@ -291,8 +291,22 @@ function HeaderContents() {
     };
   }, [closeAuth]);
 
+  const applyTheme = useCallback((isDark: boolean) => {
+    [document.documentElement, document.body].forEach((root) => {
+      root.classList.toggle("dark", isDark);
+      root.classList.toggle("light", !isDark);
+    });
+    setDark(isDark);
+  }, []);
+
   useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
+    let prefersDark = true;
+    try {
+      prefersDark = localStorage.getItem("darkMode") !== "false";
+    } catch (error) {
+      console.warn("Preferensi tema tidak dapat dibaca.", error);
+    }
+    applyTheme(prefersDark);
     applyGlobalAppearance(readGlobalAppearance());
     const query = window.matchMedia("(min-width: 769px)");
     const applySidebarPreference = () => {
@@ -388,7 +402,7 @@ function HeaderContents() {
         document.body.style.overflow = "";
       }
     };
-  }, []);
+  }, [applyTheme]);
 
   useEffect(() => {
     const closeOutside = (event: MouseEvent) => {
@@ -404,14 +418,6 @@ function HeaderContents() {
     document.addEventListener("mousedown", closeOutside);
     return () => document.removeEventListener("mousedown", closeOutside);
   }, [search]);
-
-  const applyTheme = useCallback((isDark: boolean) => {
-    [document.documentElement, document.body].forEach((root) => {
-      root.classList.toggle("dark", isDark);
-      root.classList.toggle("light", !isDark);
-    });
-    setDark(isDark);
-  }, []);
 
   const openSidebar = useCallback(() => {
     setSidebarOpen(true);

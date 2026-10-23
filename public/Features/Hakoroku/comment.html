@@ -6388,6 +6388,12 @@ function safeUpdateCount(count) {
   requestAnimationFrame(() => {
     const el = document.getElementById("comment-count");
     if (el) el.textContent = count;
+    window.dispatchEvent(new CustomEvent("communityCommentCount", {
+      detail: {
+        postId: document.documentElement.dataset.communityPageId || "",
+        count: Number(count) || 0
+      }
+    }));
   });
 }
 
