@@ -5,15 +5,19 @@
   margin: 24px auto;
 }
 
+.community-widget-mount {
+  display: contents;
+}
+
 .community-widgets .community-reactions {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   min-height: 60px;
 }
 
 .community-widgets .community-comments {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   min-width: 0;
   isolation: auto;
 }
@@ -37,6 +41,14 @@
 }
 
 @media (max-width: 767px) {
+  .community-widgets {
+    width: calc(100% - 8px);
+  }
+
+  .community-widgets.reader-community {
+    width: calc(100% - 8px) !important;
+  }
+
   .detail-tab-comments {
     width: 100% !important;
     margin-left: 0 !important;
@@ -64,6 +76,29 @@ html.dark .community-widget-error {
 #reply-notif-overlay,
 #user-profile-modal {
   z-index: 100000 !important;
+}
+
+#user-settings-modal {
+  box-sizing: border-box !important;
+  padding: 8px !important;
+}
+
+#user-settings-box {
+  box-sizing: border-box !important;
+  width: min(100%, 520px) !important;
+  max-height: min(78dvh, 640px) !important;
+  padding: 18px !important;
+}
+
+#email-auth-modal .email-modal-card,
+#dm-modal .dm-wrapper,
+#report-modal-content,
+#user-profile-modal > :first-child,
+#reply-notif-overlay > :first-child {
+  box-sizing: border-box !important;
+  max-height: calc(100dvh - 16px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
 }
 
 #email-auth-modal:not([style*="display: flex"]):not([style*="display:flex"]),

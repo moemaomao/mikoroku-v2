@@ -164,7 +164,7 @@ export function useCoverImageSource(source: string, width = 400, enabled = true)
     setResolvedSource("");
 
     if (!("indexedDB" in window)) {
-      setResolvedSource(optimizedUrl);
+      setResolvedSource(source);
       return;
     }
 
@@ -173,8 +173,8 @@ export function useCoverImageSource(source: string, width = 400, enabled = true)
       objectUrl = URL.createObjectURL(blob);
       setResolvedSource(objectUrl);
     }).catch((error: unknown) => {
-      console.warn("Could not load the optimized cover image; using the image service URL.", error);
-      if (active) setResolvedSource(optimizedUrl);
+      console.warn("Could not load the optimized cover image; using the original cover URL.", error);
+      if (active) setResolvedSource(source);
     });
 
     return () => {
@@ -183,7 +183,7 @@ export function useCoverImageSource(source: string, width = 400, enabled = true)
     };
   }, [enabled, source, width]);
 
-  return resolvedSource;
+  return resolvedSource || (enabled ? source : "");
 }
 
 type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {

@@ -57,6 +57,15 @@ type Chapter = {
 
 type DetailState = "loading" | "ready" | "not-found" | "error";
 type ChapterSource = Chapter["source"];
+const genreAccentColors = [
+  { accent: "#72d879", lightText: "#267a31" },
+  { accent: "#82c8ff", lightText: "#236999" },
+  { accent: "#c78cff", lightText: "#713aa0" },
+  { accent: "#ff8585", lightText: "#a83b3b" },
+  { accent: "#f3c96b", lightText: "#8a6710" },
+  { accent: "#59d7cf", lightText: "#14786f" },
+] as const;
+
 type BloggerEntry = {
   title?: { $t?: string };
   link?: Array<{ rel?: string; href?: string }>;
@@ -723,8 +732,7 @@ function extractChapterImages(raw: unknown): string[] {
 }
 
 const detailPageClasses = `
-  relative isolate min-h-screen bg-transparent text-[#050000] dark:text-white
-  [&_#bgLayer]:fixed [&_#bgLayer]:inset-0 [&_#bgLayer]:z-0 [&_#bgLayer]:scale-[1.05] [&_#bgLayer]:bg-cover [&_#bgLayer]:bg-center [&_#bgLayer]:bg-no-repeat [&_#bgLayer]:opacity-[0.22] [&_#bgLayer]:blur-[4px] [&_#bgLayer]:transition-[background-image,opacity] [&_#bgLayer]:duration-500 dark:[&_#bgLayer]:opacity-100
+  relative isolate z-[2] min-h-screen bg-transparent text-[#050000] dark:text-white
   [&_.content]:relative [&_.content]:z-[3]
   [&_img]:block [&_img]:h-auto [&_img]:max-w-full
   [&_.main]:flex [&_.main]:items-start [&_.main]:gap-[14px] [&_.main]:p-[18px_14px_14px]
@@ -743,7 +751,7 @@ const detailPageClasses = `
   [&_.status]:mb-[6px] [&_.status]:flex [&_.status]:items-center [&_.status]:gap-2 [&_.status]:font-semibold [&_.status]:text-[violet] [&_.status_span]:font-bold [&_.status.ongoing_span]:text-green-500 [&_.status.completed_span]:text-sky-300 [&_.status.hiatus_span]:text-yellow-100 [&_.status.dropped_span]:text-[orangered] [&_.status.canceled_span]:text-orange-600 [&_.status.unknown_span]:text-gray-400
   [&_.detail-item]:mb-[5px] [&_.detail-item]:flex [&_.detail-item]:items-center [&_.detail-item]:gap-[3px] [&_.detail-item]:text-[11px] [&_.detail-item]:text-[#050000] dark:[&_.detail-item]:text-white [&_.detail-item_i]:w-5 [&_.detail-item_i]:text-center [&_.detail-item_i]:text-[#444] dark:[&_.detail-item_i]:text-[#ddd]
   [&_.genres]:grid [&_.genres]:grid-cols-4 [&_.genres]:gap-2 [&_.genres]:rounded-[14px] [&_.genres]:px-[14px] [&_.genres]:py-[15px]
-  [&_.genre]:block [&_.genre]:overflow-hidden [&_.genre]:truncate [&_.genre]:whitespace-nowrap [&_.genre]:rounded-lg [&_.genre]:border [&_.genre]:border-[rgba(0,0,0,0.1)] [&_.genre]:bg-[rgba(0,0,0,0.06)] [&_.genre]:px-2 [&_.genre]:py-[6px] [&_.genre]:text-center [&_.genre]:text-[11px] [&_.genre]:text-[#050000] [&_.genre]:no-underline [&_.genre]:backdrop-blur [&_.genre]:transition-[background,border-color,transform] [&_.genre]:duration-200 dark:[&_.genre]:border-[rgba(255,255,255,0.08)] dark:[&_.genre]:bg-[rgba(0,0,0,0.35)] dark:[&_.genre]:text-white [&_.genre:hover]:-translate-y-px [&_.genre:hover]:bg-[rgba(80,78,78,0.04)]
+  [&_.genre]:block [&_.genre]:overflow-hidden [&_.genre]:truncate [&_.genre]:whitespace-nowrap [&_.genre]:rounded-lg [&_.genre]:border [&_.genre]:border-[rgba(0,0,0,0.1)] [&_.genre]:bg-[rgba(0,0,0,0.06)] [&_.genre]:px-2 [&_.genre]:py-[6px] [&_.genre]:text-center [&_.genre]:text-[11px] [&_.genre]:text-[var(--genre-light-text)] [&_.genre]:no-underline [&_.genre]:backdrop-blur [&_.genre]:transition-[background,border-color,transform] [&_.genre]:duration-200 dark:[&_.genre]:border-[rgba(255,255,255,0.08)] dark:[&_.genre]:bg-[rgba(0,0,0,0.35)] dark:[&_.genre]:text-[var(--genre-accent)] [&_.genre:hover]:-translate-y-px [&_.genre:hover]:bg-[rgba(80,78,78,0.04)]
   [&_.detail-extra-tags]:mx-3 [&_.detail-extra-tags]:mb-5 [&_.detail-extra-tags]:rounded-[14px] [&_.detail-extra-tags]:border [&_.detail-extra-tags]:border-[rgba(0,0,0,0.1)] [&_.detail-extra-tags]:bg-[rgba(184,174,174,0.329)] [&_.detail-extra-tags]:px-4 [&_.detail-extra-tags]:py-[18px] dark:[&_.detail-extra-tags]:border-[rgba(255,255,255,0.08)] dark:[&_.detail-extra-tags]:bg-[rgba(26,26,46,0.35)]
   [&_.detail-tag-row+_.detail-tag-row]:mt-[18px] [&_.detail-tag-label]:mb-2 [&_.detail-tag-label]:flex [&_.detail-tag-label]:items-center [&_.detail-tag-label]:gap-2 [&_.detail-tag-label]:pl-0.5 [&_.detail-tag-label]:text-[14.5px] [&_.detail-tag-label]:font-semibold [&_.detail-tag-label]:text-[#050000] dark:[&_.detail-tag-label]:text-white [&_.detail-tag-label_i]:w-4 [&_.detail-tag-label_i]:text-center
   [&_.detail-tag-list]:flex [&_.detail-tag-list]:flex-wrap [&_.detail-tag-list]:justify-start [&_.detail-tag-list]:gap-1.5 [&_.detail-tag-list]:pl-0.5
@@ -756,8 +764,8 @@ const detailPageClasses = `
   [&_.synopsis_h2]:mb-[14px] [&_.synopsis_h2]:text-lg [&_.synopsis_h2]:text-[#050000] dark:[&_.synopsis_h2]:text-white [&_.synopsis-content_p]:mb-[10px] [&_.synopsis-content_p:last-child]:mb-0 [&_.synopsis-content_ul]:mb-[10px] [&_.synopsis-content_ul]:pl-6 [&_.synopsis-content_ol]:mb-[10px] [&_.synopsis-content_ol]:pl-6 [&_.synopsis-content_a]:text-blue-400 [&_.synopsis-content_a]:underline
   [&_.section-title]:my-[25px] [&_.section-title]:mb-[15px] [&_.section-title]:pl-0 [&_.section-title]:text-xl
   [&_.chapter-header]:box-border [&_.chapter-header]:flex [&_.chapter-header]:w-full [&_.chapter-header]:flex-wrap [&_.chapter-header]:items-center [&_.chapter-header]:gap-0 [&_.chapter-header]:px-[14px]
-  [&_.chapter-header_.section-title]:order-2 [&_.chapter-header_.section-title]:my-[8px] [&_.chapter-header_.section-title]:mb-3 [&_.chapter-header_.section-title]:w-full [&_.chapter-header_.section-title]:basis-full [&_.chapter-header_.section-title]:p-0 [&_.chapter-header_.section-title]:text-center
-  [&_.chapter-header-right]:order-1 [&_.chapter-header-right]:my-5 [&_.chapter-header-right]:flex [&_.chapter-header-right]:w-full [&_.chapter-header-right]:basis-full [&_.chapter-header-right]:min-w-0 [&_.chapter-header-right]:items-center [&_.chapter-header-right]:justify-between [&_.chapter-header-right]:gap-2 [&_.chapter-header-right]:[box-sizing:border-box]
+  [&_.chapter-header_.section-title]:order-2 [&_.chapter-header_.section-title]:my-1 [&_.chapter-header_.section-title]:mb-2 [&_.chapter-header_.section-title]:w-full [&_.chapter-header_.section-title]:basis-full [&_.chapter-header_.section-title]:p-0 [&_.chapter-header_.section-title]:text-center
+  [&_.chapter-header-right]:order-1 [&_.chapter-header-right]:my-2 [&_.chapter-header-right]:flex [&_.chapter-header-right]:w-full [&_.chapter-header-right]:basis-full [&_.chapter-header-right]:min-w-0 [&_.chapter-header-right]:items-center [&_.chapter-header-right]:justify-between [&_.chapter-header-right]:gap-2 [&_.chapter-header-right]:[box-sizing:border-box]
   [&_.source-toggle]:flex [&_.source-toggle]:shrink-0 [&_.source-toggle]:items-center [&_.source-toggle]:gap-2 [&_.view-toggle]:flex [&_.view-toggle]:shrink-0 [&_.view-toggle]:items-center [&_.view-toggle]:gap-2
   [&_.server-btn]:relative [&_.server-btn]:shrink-0
   [&_.server-icon-wrap]:relative [&_.server-icon-wrap]:inline-flex [&_.server-icon-wrap]:h-[18px] [&_.server-icon-wrap]:w-[18px] [&_.server-icon-wrap]:items-center [&_.server-icon-wrap]:justify-center [&_.server-icon-wrap_svg]:block
@@ -767,7 +775,7 @@ const detailPageClasses = `
   [&_#sourceSv1Btn.active]:border-[#3b82f6] [&_#sourceSv1Btn.active]:bg-[#3b82f6] [&_#sourceSv1Btn.active]:text-white [&_#sourceSv2Btn.active]:border-[#f59e0b] [&_#sourceSv2Btn.active]:bg-[#f59e0b] [&_#sourceSv2Btn.active]:text-white [&_#sourceEsBtn.active]:border-[#ef4444] [&_#sourceEsBtn.active]:bg-[#ef4444] [&_#sourceEsBtn.active]:text-white
   [&_#gridViewBtn.active]:border-[#ef4444] [&_#gridViewBtn.active]:bg-[#ef4444] [&_#gridViewBtn.active]:text-white [&_#textGridViewBtn.active]:border-[#3b82f6] [&_#textGridViewBtn.active]:bg-[#3b82f6] [&_#textGridViewBtn.active]:text-white [&_#listViewBtn.active]:border-[#22c55e] [&_#listViewBtn.active]:bg-[#22c55e] [&_#listViewBtn.active]:text-white
   [&_#sortChapterBtn.active-newest]:border-[#fd6dfd] [&_#sortChapterBtn.active-newest]:bg-[#ed74f8] [&_#sortChapterBtn.active-newest]:text-white [&_#sortChapterBtn.active-oldest]:border-[#f59e0b] [&_#sortChapterBtn.active-oldest]:bg-[#f59e0b] [&_#sortChapterBtn.active-oldest]:text-white
-  max-[380px]:[&_.chapter-header]:px-[10px] max-[380px]:[&_.chapter-header_.section-title]:mt-px max-[380px]:[&_.chapter-header_.section-title]:mb-3 max-[380px]:[&_.chapter-header-right]:gap-[5px] max-[380px]:[&_.chapter-header-right]:mb-[13px] max-[380px]:[&_.source-toggle]:gap-1 max-[380px]:[&_.view-toggle]:gap-1 max-[380px]:[&_.view-btn]:h-[33px] max-[380px]:[&_.view-btn]:w-[33px] max-[380px]:[&_.view-btn]:min-w-[33px] max-[380px]:[&_.view-btn]:rounded-lg
+  max-[380px]:[&_.chapter-header]:px-[10px] max-[380px]:[&_.chapter-header_.section-title]:mt-px max-[380px]:[&_.chapter-header_.section-title]:mb-2 max-[380px]:[&_.chapter-header-right]:gap-[5px] max-[380px]:[&_.chapter-header-right]:mb-2 max-[380px]:[&_.source-toggle]:gap-1 max-[380px]:[&_.view-toggle]:gap-1 max-[380px]:[&_.view-btn]:h-[33px] max-[380px]:[&_.view-btn]:w-[33px] max-[380px]:[&_.view-btn]:min-w-[33px] max-[380px]:[&_.view-btn]:rounded-lg
   max-[330px]:[&_.chapter-header]:px-2 max-[330px]:[&_.chapter-header-right]:gap-1 max-[330px]:[&_.source-toggle]:gap-[3px] max-[330px]:[&_.view-toggle]:gap-[3px] max-[330px]:[&_.view-btn]:h-[31px] max-[330px]:[&_.view-btn]:w-[31px] max-[330px]:[&_.view-btn]:min-w-[31px] max-[330px]:[&_.view-btn]:rounded-[7px]
   max-[767px]:[&_.source-toggle]:min-w-0 max-[767px]:[&_.source-toggle]:shrink-0 max-[767px]:[&_.source-toggle]:gap-[6px] max-[767px]:[&_.view-toggle]:min-w-0 max-[767px]:[&_.view-toggle]:shrink-0 max-[767px]:[&_.view-toggle]:gap-[6px] max-[767px]:[&_.view-btn]:h-9 max-[767px]:[&_.view-btn]:w-9 max-[767px]:[&_.view-btn]:min-w-9 max-[767px]:[&_.view-btn]:rounded-[9px]
   md:[&_.container]:my-5 md:[&_.container]:max-w-[720px] md:[&_.container]:rounded-[20px]
@@ -814,7 +822,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     [baseCoverUrl, manga?.covers],
   );
   const selectedCoverSlugRef = useRef("");
-  const activeCoverUrl = coverOptions.includes(selectedCoverUrl) ? selectedCoverUrl : baseCoverUrl;
+  const activeCoverUrl = selectedCoverUrl || baseCoverUrl;
   const cover = useCoverImageSource(activeCoverUrl, 1200);
   const [state, setState] = useState<DetailState>("loading");
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -847,7 +855,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     } catch (error) {
       console.warn(`Could not read the homepage cover selection for ${mangaSlug}.`, error);
     }
-    if (localPreference && coverOptions.includes(localPreference)) {
+    if (localPreference) {
       setSelectedCoverUrl(localPreference);
       return () => {
         active = false;
@@ -855,7 +863,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     }
     if (!("indexedDB" in window)) return;
     void readSeriesCoverPreference(mangaSlug).then((savedUrl) => {
-      if (!active || !savedUrl || !coverOptions.includes(savedUrl)) return;
+      if (!active || !savedUrl) return;
       setSelectedCoverUrl(savedUrl);
       try {
         localStorage.setItem(`${SERIES_COVER_PREFERENCE_STORAGE_KEY}${mangaSlug}`, savedUrl);
@@ -869,7 +877,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return () => {
       active = false;
     };
-  }, [coverOptions, mangaSlug]);
+  }, [mangaSlug]);
 
   useEffect(() => {
     const updateSidebarState = () => setSiteSidebarOpen(document.body.classList.contains("sidebar-open"));
@@ -1276,12 +1284,17 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   return (
     <>
       <SiteHeader />
+      <div
+        className="pointer-events-none fixed inset-0 z-0 scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[4px] transition-[background-image,opacity] duration-500 dark:opacity-100"
+        id="bgLayer"
+        aria-hidden="true"
+        style={{ backgroundImage: cover ? `url("${cover}")` : undefined }}
+      />
+      <div
+        className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.62)_0%,rgba(5,5,10,0.44)_48%,rgba(15,5,12,0.62)_100%)]"
+        aria-hidden="true"
+      />
       <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
-        <div className="pointer-events-none" id="bgLayer" aria-hidden="true" style={{ backgroundImage: cover ? `url("${cover}")` : undefined }} />
-        <div
-          className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.62)_0%,rgba(5,5,10,0.44)_48%,rgba(15,5,12,0.62)_100%)]"
-          aria-hidden="true"
-        />
         <div className="container relative z-[2] mx-auto my-0 min-h-screen w-full max-w-[480px] text-[#171717] transition-[margin-left,width,max-width,color] duration-300 dark:text-white md:my-5 md:max-w-[720px] lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)]">
           <div className="content">
             <div className="main">
@@ -1308,7 +1321,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   </div>
                   <div className="rating-number">{ratingValue === undefined ? "N/A" : ratingValue.toFixed(1)}</div>
                 </div>
-                <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#e59a00] bg-[#e59a00] px-1 py-2 text-[10px] font-semibold text-black transition hover:bg-[#f0aa18] disabled:cursor-not-allowed disabled:opacity-50 lg:px-3 lg:text-sm" type="button" onClick={() => {
+                <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#e59a00] bg-[#e59a00] px-1 py-2 text-[10px] font-semibold text-black transition hover:bg-[#f0aa18] disabled:cursor-not-allowed disabled:opacity-50 max-[767px]:min-h-0 max-[767px]:border-2 max-[767px]:px-[5px] max-[767px]:py-[3px] lg:px-3 lg:text-sm" type="button" onClick={() => {
                   if (latestChapter) void openChapter(latestChapter);
                 }} disabled={!latestChapter || chapterState !== "ready"}>
                   <i className="fas fa-book-open" aria-hidden="true" />
@@ -1349,9 +1362,24 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             </div>
 
             <div className="genres">
-              {genreList.map((genre) => (
-                <a className="genre" href={`/genre-list?genre=${encodeURIComponent(genre.toLowerCase())}`} key={genre}>{genre.replace(/_/g, " ")}</a>
-              ))}
+              {genreList.map((genre, index) => {
+                const { accent, lightText } = genreAccentColors[index % genreAccentColors.length];
+                return (
+                  <a
+                    className="genre transition-[background,border-color,transform] duration-200 hover:-translate-y-px hover:brightness-110"
+                    href={`/genre-list?genre=${encodeURIComponent(genre.toLowerCase())}`}
+                    key={genre}
+                    style={{
+                      borderColor: `${accent}80`,
+                      backgroundColor: `${accent}1f`,
+                      "--genre-accent": accent,
+                      "--genre-light-text": lightText,
+                    } as CSSProperties}
+                  >
+                    {genre.replace(/_/g, " ")}
+                  </a>
+                );
+              })}
             </div>
             {(femaleTags.length > 0 || maleTags.length > 0) && (
               <section className="detail-extra-tags" aria-label="Character tags">
@@ -1386,7 +1414,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 ["chapters", "Chapters"],
                 ["synopsis", "Synopsis"],
                 ["covers", "Volumes"],
-                ["discussion", "Discussion"],
+                ["discussion", "Comment"],
               ] as const).map(([tab, label]) => (
                 <button
                   className={`relative min-h-12 min-w-0 flex-1 border-b-2 px-2 text-[11px] font-medium transition-colors md:flex-none md:px-4 md:text-sm ${detailTab === tab ? "border-[#d99000] text-[#171717] dark:text-white" : "border-transparent text-[#666] hover:text-[#171717] dark:text-white/60 dark:hover:text-white"}`}
@@ -1402,7 +1430,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
               ))}
             </nav>
 
-            {detailTab === "synopsis" && <section className="synopsis" role="tabpanel" aria-labelledby="detail-tab-synopsis">
+            {detailTab === "synopsis" && <section className="synopsis max-[767px]:mt-4" role="tabpanel" aria-labelledby="detail-tab-synopsis">
               <h2>Synopsis</h2>
               {manga.desc
                 ? <div className="synopsis-content">{renderSynopsisNodes(parseSynopsis(manga.desc))}</div>
@@ -1445,7 +1473,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             {detailTab === "chapters" && <>
             <div id="announcement-widget" />
             <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
-              <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 md:mx-[30px]">
+              <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 max-[767px]:mt-3 md:mx-[30px]">
                 <i className="fas fa-search text-xs" aria-hidden="true" />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-sm text-inherit outline-none placeholder:text-inherit"
@@ -1595,7 +1623,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                           ? "!static !items-start !gap-[5px] !bg-transparent !p-0 !pr-8 !text-left !text-inherit ![text-shadow:none]"
                           : ""
                     }`}>
-                      <span className={`chapter-title block text-[9px] font-bold leading-[1.15] ${view === "list" ? `text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : view === "text-grid" ? `text-[10px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : ""}`}>
+                      <span className={`chapter-title block text-[9px] font-bold leading-[1.15] ${view === "list" ? `!text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : view === "text-grid" ? `text-[10px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : ""}`}>
                         Chapter {chapter.num}
                       </span>
                       <span className={`chapter-date mt-0 block text-[7px] opacity-80 ${view === "list" ? `text-[11px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}` : view === "text-grid" ? `text-[9px] opacity-70 ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}` : ""}`}>
@@ -1612,7 +1640,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         </div>
         <RecommendationSidebar manga={manga} onVisibilityChange={(visible) => setRecommendationsHidden(!visible)} />
       </main>
-      <SiteFooter />
+      <div className="relative z-[2]">
+        <SiteFooter />
+      </div>
       <RouteIntegrations />
     </>
   );

@@ -340,6 +340,15 @@
     }, (err) => console.warn("emoji listener:", err));
   }
 
+  window.setEmojiCommunityPageId = (communityPageId) => {
+    document.documentElement.dataset.communityPageId = communityPageId;
+    const previousPageId = pageId;
+    const nextRef = getPageRef();
+    if (pageId === previousPageId) return;
+    startListener(nextRef);
+    initData(nextRef).catch(console.error);
+  };
+
   // First load
   const firstRef = getPageRef();
   startListener(firstRef);

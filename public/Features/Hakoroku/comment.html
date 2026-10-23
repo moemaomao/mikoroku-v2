@@ -8731,6 +8731,25 @@ async function startRealtimeListener() {
   }
 }
 
+window.setCommentCommunityPageId = function(pageId) {
+  const nextPageId = String(pageId || '')
+    .replace(/^[\/]+|[\/]+$/g, '')
+    .replace(/[\/]/g, '__')
+    .replace(/\.html$/, '')
+    .replace(/[^a-zA-Z0-9-_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '') || 'home';
+  if (nextPageId === postId) return;
+
+  postId = nextPageId;
+  lastVisible = null;
+  isLoading = false;
+  noMoreData = false;
+  window.__showAllComments = false;
+  window.__commentsCache = [];
+  startRealtimeListener();
+};
+
 async function loadMoreComments() {
   window.__showAllComments = true;
   noMoreData = true;
