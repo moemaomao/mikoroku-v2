@@ -1,5 +1,6 @@
 import { normalizeChapterNumber } from "../../lib/chapter-number";
 import { initializeFirebaseClient } from "./firebase-client";
+import { compactChapterCache } from "./chapter-cache";
 
 export type GlobalAppearanceSettings = {
   hideHero: boolean;
@@ -226,7 +227,7 @@ function cacheListChapterRecords(slug: string, chapters: ListChapterRecord[]): v
   const current = readCachedChapterRecords(slug);
   const source = String(chapters[0]?.source || "blogger");
   const retained = current.filter((record) => record.source !== source && record.source !== "firestore");
-  const data = [...chapters, ...retained];
+  const data = compactChapterCache([...chapters, ...retained]);
   try {
     localStorage.setItem(`chapters_${slug}`, JSON.stringify({ time: Date.now(), data }));
     window.dispatchEvent(new Event("mikoroku:chapters-updated"));

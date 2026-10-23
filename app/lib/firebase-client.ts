@@ -13,6 +13,7 @@ import {
   getFirestore,
   initializeFirestore,
   limit,
+  memoryLocalCache,
   onSnapshot,
   orderBy,
   persistentLocalCache,
@@ -22,6 +23,7 @@ import {
   where,
 } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
+import { pruneStoredChapterCaches } from "./chapter-cache";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
@@ -46,13 +48,31 @@ export function initializeFirebaseClient(): FirebaseClient {
     ? getApp()
     : initializeApp(firebaseConfig);
   const db = getDatabase(app);
+  pruneStoredChapterCaches();
   let firestore;
+  let persistentStorageAvailable = false;
+  const storageProbeKey = `mikoroku-storage-probe-${Date.now()}`;
   try {
-    firestore = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
-    });
+    localStorage.setItem(storageProbeKey, "x".repeat(1024));
+    localStorage.removeItem(storageProbeKey);
+    persistentStorageAvailable = true;
+  } catch (error) {
+    console.warn("Browser storage quota is full; Firestore will use an in-memory cache.", error);
+    try {
+      localStorage.removeItem(storageProbeKey);
+    } catch (cleanupError) {
+      console.warn("Temporary browser storage probe could not be removed.", cleanupError);
+    }
+  }
+
+  try {
+    firestore = initializeFirestore(app, persistentStorageAvailable
+      ? {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        }
+      : { localCache: memoryLocalCache() });
   } catch (error) {
     console.warn("Persistent Firestore cache could not be initialized; using the default cache.", error);
     firestore = getFirestore(app);

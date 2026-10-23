@@ -14,6 +14,7 @@ import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient } from "../lib/firebase-client";
+import { compactChapterCache } from "../lib/chapter-cache";
 import MangaDataProvider from "../manga-data-provider";
 import UserModals from "../user-modals";
 
@@ -672,20 +673,7 @@ function cachedChapterListForSource(
 
 function cacheChapterList(slug: string, chapters: Chapter[]): void {
   const key = `chapters_${slug}`;
-  const data = chapters.map(({ id, num, title, thumbnail, isNovel, url, source, createdAt, updatedAt, date, timestamp, order }) => ({
-    id,
-    num,
-    title,
-    thumbnail,
-    isNovel,
-    url,
-    source,
-    createdAt,
-    updatedAt,
-    date,
-    timestamp,
-    order,
-  }));
+  const data = compactChapterCache(chapters);
   const value = JSON.stringify({ time: Date.now(), data });
 
   try {

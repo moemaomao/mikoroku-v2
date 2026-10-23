@@ -58,4 +58,4 @@ export const homepageSectionHeadingClass =
   `${sectionTitleClass} before:!bg-[var(--mikoroku-home-section-accent)] after:!bg-[var(--mikoroku-home-section-accent)] [&>span]:!border-[var(--mikoroku-home-section-accent)] [&>span]:!text-[var(--mikoroku-home-section-text)]`;
 
 export const homepageLoadMoreClass =
-  `${loadMoreClass} !bg-[var(--mikoroku-home-load-more)] hover:!bg-[var(--mikoroku-home-load-more-hover)] focus-visible:!outline-[var(--mikoroku-home-load-more)] min-[769px]:[body.sidebar-open_&]:relative min-[769px]:[body.sidebar-open_&]:left-[calc(var(--sidebar-width)/2)]`;
+  `${loadMoreClass} !bg-[var(--mikoroku-home-load-more)] hover:!bg-[var(--mikoroku-home-load-more-hover)] focus-visible:!outline-[var(--mikoroku-home-load-more)]`;
