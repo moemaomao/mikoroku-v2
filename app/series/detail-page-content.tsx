@@ -1,6 +1,8 @@
 "use client";
 
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { getApps, initializeApp } from "firebase/app";
+import { collection, getDocs, getFirestore } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
@@ -57,6 +59,22 @@ type Chapter = {
 
 type DetailState = "loading" | "ready" | "not-found" | "error";
 type ChapterSource = Chapter["source"];
+const COMMENT_COUNT_FIREBASE_APP_NAME = "mikoroku-series-comment-count";
+const COMMENT_COUNT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
+  authDomain: "widget-comment.firebaseapp.com",
+  projectId: "widget-comment",
+  storageBucket: "widget-comment.firebasestorage.app",
+  messagingSenderId: "249700505242",
+  appId: "1:249700505242:web:dab240af09caf30ad7f123",
+};
+
+function getCommentCountFirestore() {
+  const app = getApps().find((candidate) => candidate.name === COMMENT_COUNT_FIREBASE_APP_NAME) ??
+    initializeApp(COMMENT_COUNT_FIREBASE_CONFIG, COMMENT_COUNT_FIREBASE_APP_NAME);
+  return getFirestore(app);
+}
+
 const genreAccentColors = [
   { accent: "#72d879", lightText: "#267a31" },
   { accent: "#82c8ff", lightText: "#236999" },
@@ -90,6 +108,7 @@ declare global {
         forEach: (callback: (document: {
           id: string;
           data: () => Record<string, unknown>;
+          updateTime?: { toDate?: () => Date; seconds?: number };
         }) => void) => void;
       }>;
       addDoc?: (reference: unknown, data: Record<string, unknown>) => Promise<unknown>;
@@ -533,7 +552,8 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
   chapterSnapshot.forEach((document) => {
     const data = document.data();
     if (data.isDraft === true) return;
-    const createdAt = firestoreDate(data.createdAt || data.updatedAt || data.date);
+    const snapshotUpdateTime = document.updateTime?.toDate?.().toISOString();
+    const createdAt = firestoreDate(data.createdAt || data.updatedAt || data.date || snapshotUpdateTime);
     const chapterImages = extractChapterImages(data.images || data.content || data.html);
     const chapterText = data.content || data.text || data.html;
     collectionChapters.push({
@@ -545,8 +565,8 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
       isNovel: isNovelSeries(data) ||
         (typeof chapterText === "string" && Boolean(chapterText.trim()) && !chapterImages.length),
       createdAt,
-      updatedAt: firestoreDate(data.updatedAt),
-      date: firestoreDate(data.date || createdAt),
+      updatedAt: firestoreDate(data.updatedAt || snapshotUpdateTime),
+      date: firestoreDate(data.date || data.createdAt || data.updatedAt || snapshotUpdateTime || createdAt),
       timestamp: typeof data.timestamp === "string" || typeof data.timestamp === "number" ? data.timestamp : undefined,
       order: Number(data.order ?? document.id) || 0,
       source: "firestore",
@@ -797,6 +817,13 @@ const detailPageClasses = `
   [&_.detail-route-message]:mx-auto [&_.detail-route-message]:my-8 [&_.detail-route-message]:max-w-[1150px] [&_.detail-route-message]:p-5 [&_.detail-route-message]:text-center
   [&_.detail-route-loading]:grid [&_.detail-route-loading]:min-h-screen [&_.detail-route-loading]:place-items-center
   [&_.detail-route-spinner]:h-[42px] [&_.detail-route-spinner]:w-[42px] [&_.detail-route-spinner]:animate-spin [&_.detail-route-spinner]:rounded-full [&_.detail-route-spinner]:border-4 [&_.detail-route-spinner]:border-[rgba(128,128,128,0.25)] [&_.detail-route-spinner]:border-t-current
+  [&_.section-title]:before:!bg-[var(--mikoroku-detail-section-accent)] [&_.section-title]:after:!bg-[var(--mikoroku-detail-section-accent)] [&_.section-title>span]:!border-[var(--mikoroku-detail-section-accent)] [&_.section-title>span]:!text-[var(--mikoroku-detail-section-text)]
+  [&_.detail-tabs_button[aria-selected=true]]:!border-[var(--mikoroku-detail-tab-accent)] [&_.detail-tabs_button[aria-selected=true]]:!text-[var(--mikoroku-detail-tab-accent)]
+  [&_.view-btn.active]:!border-[var(--mikoroku-source-emergency)] [&_.view-btn.active]:!bg-[var(--mikoroku-source-emergency)] [&_.view-btn.active]:!text-white [&_.view-btn.active-oldest]:!border-[var(--mikoroku-sort-oldest)] [&_.view-btn.active-oldest]:!bg-[var(--mikoroku-sort-oldest)] [&_.view-btn.active-oldest]:!text-white [&_.view-btn.active-newest]:!border-[var(--mikoroku-sort-newest-border)] [&_.view-btn.active-newest]:!bg-[var(--mikoroku-sort-newest)] [&_.view-btn.active-newest]:!text-white
+  [&_.synopsis>h2]:!text-[var(--mikoroku-detail-tag-icon)] [&_.detail-tag-label_i]:!text-[var(--mikoroku-detail-tag-icon)] [&_.chapter-search:focus-within]:!border-[var(--mikoroku-accent)]
+  [&_.demographic-tag.female-tag]:!border-[var(--mikoroku-detail-female-border)] [&_.demographic-tag.female-tag]:!bg-[var(--mikoroku-detail-female-bg)] [&_.demographic-tag.female-tag]:!text-[var(--mikoroku-detail-female-text)] [&_.demographic-tag.male-tag]:!border-[var(--mikoroku-detail-male-border)] [&_.demographic-tag.male-tag]:!bg-[var(--mikoroku-detail-male-bg)] [&_.demographic-tag.male-tag]:!text-[var(--mikoroku-detail-male-text)]
+  [&_.bookmark-btn:not(.bookmarked)]:!border-[var(--mikoroku-detail-bookmark-border)] [&_.bookmark-btn:not(.bookmarked)]:!text-[var(--mikoroku-detail-bookmark-text)] [&_.bookmark-btn:not(.bookmarked):hover]:!bg-[var(--mikoroku-detail-bookmark-hover)] [&_.bookmark-btn:not(.bookmarked):hover]:!border-[var(--mikoroku-detail-bookmark-hover-border)]
+  [&_.chapter-item:hover]:!ring-1 [&_.chapter-item:hover]:!ring-[var(--mikoroku-detail-chapter-hover)]
   lg:[&_.content]:grid-cols-[240px_minmax(0,1fr)] lg:[&_.content]:gap-x-10 lg:[&_.content]:px-10 lg:[&_.content]:pt-10 lg:[&_.left-column]:pt-0 lg:[&_.info]:pt-0
 `;
 
@@ -826,6 +853,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const cover = useCoverImageSource(activeCoverUrl, 1200);
   const [state, setState] = useState<DetailState>("loading");
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [commentCount, setCommentCount] = useState<number | null>(null);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
   const [chapterError, setChapterError] = useState("");
   const [source, setSource] = useState<ChapterSource>("blogger");
@@ -840,6 +868,22 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [recommendationsHidden, setRecommendationsHidden] = useState(false);
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
+
+  useEffect(() => {
+    let active = true;
+    setCommentCount(null);
+    void getDocs(
+      collection(getCommentCountFirestore(), "comments", `detail_${slug}`, "postComments"),
+    ).then((snapshot) => {
+      if (active) setCommentCount(snapshot.size);
+    }).catch((error: unknown) => {
+      console.error(`Gagal memuat jumlah komentar detail_${slug}.`, error);
+      if (active) setCommentCount(null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [slug]);
 
   useEffect(() => {
     if (!mangaSlug) return;
@@ -1411,13 +1455,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             )}
             <nav className="detail-tabs mx-3 flex w-[calc(100%-24px)] border-b border-black/15 text-sm dark:border-white/15 md:mx-[30px] md:w-auto lg:mx-10" role="tablist" aria-label="Series details">
               {([
-                ["chapters", "Chapters"],
+                ["chapters", `Chapters (${chapters.length})`],
                 ["synopsis", "Synopsis"],
-                ["covers", "Volumes"],
-                ["discussion", "Comment"],
+                ["covers", `Volumes (${coverOptions.length})`],
+                ["discussion", `Comments (${commentCount ?? "…" })`],
               ] as const).map(([tab, label]) => (
                 <button
-                  className={`relative min-h-12 min-w-0 flex-1 border-b-2 px-2 text-[11px] font-medium transition-colors md:flex-none md:px-4 md:text-sm ${detailTab === tab ? "border-[#d99000] text-[#171717] dark:text-white" : "border-transparent text-[#666] hover:text-[#171717] dark:text-white/60 dark:hover:text-white"}`}
+                  className={`relative min-h-12 min-w-0 flex-1 border-b-2 px-2 text-[11px] font-medium transition-colors md:flex-none md:px-4 md:text-sm ${detailTab === tab ? "border-[var(--mikoroku-detail-tab-accent)] text-[var(--mikoroku-detail-tab-accent)]" : "border-transparent text-[#666] hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white/60 dark:hover:text-[var(--mikoroku-detail-tab-accent)]"}`}
                   type="button"
                   key={tab}
                   id={`detail-tab-${tab}`}
@@ -1425,7 +1469,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   aria-selected={detailTab === tab}
                   onClick={() => setDetailTab(tab)}
                 >
-                  {label}{tab === "chapters" && <span className="ml-2 text-xs opacity-65">{chapters.length}</span>}
+                  {label}
                 </button>
               ))}
             </nav>
@@ -1450,7 +1494,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
                   {coverOptions.map((coverUrl, index) => (
                     <button
-                      className={`group relative overflow-hidden rounded-xl border-2 bg-black/5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white/5 ${activeCoverUrl === coverUrl ? "border-[#e59a00] shadow-[0_0_0_2px_rgba(229,154,0,0.2)]" : "border-black/10 dark:border-white/10"}`}
+                      className={`group relative overflow-hidden rounded-xl border-2 bg-black/5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white/5 ${activeCoverUrl === coverUrl ? "border-[var(--mikoroku-detail-cover-accent)] shadow-[0_0_0_2px_var(--mikoroku-accent-soft)]" : "border-black/10 dark:border-white/10"}`}
                       type="button"
                       key={coverUrl}
                       onClick={() => selectDetailCover(coverUrl)}
@@ -1459,7 +1503,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     >
                       <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizeWidth={240} />
                       <span className="block truncate px-2 py-2 text-xs font-medium">Volume {manga.coverNumbers?.[coverUrl] || index + 1}</span>
-                      {activeCoverUrl === coverUrl && <span className="absolute right-2 top-2 rounded-full bg-[#e59a00] px-2 py-1 text-[10px] font-bold text-black">Selected</span>}
+                      {activeCoverUrl === coverUrl && <span className="absolute right-2 top-2 rounded-full bg-[var(--mikoroku-detail-cover-accent)] px-2 py-1 text-[10px] font-bold text-white">Selected</span>}
                     </button>
                   ))}
                 </div>

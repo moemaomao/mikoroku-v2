@@ -703,6 +703,7 @@ export default function ReaderPage({
             result.chapter,
           ]),
         ]));
+        window.dispatchEvent(new Event("mikoroku:chapter-read"));
         document.title = `${result.chapterTitle} - ${result.title} | Mikoroku`;
       })
       .catch((loadError: unknown) => {
@@ -1086,7 +1087,7 @@ export default function ReaderPage({
   return (
     <>
       <SiteChrome showChrome showFooter={false} />
-      <main className={`reader-page min-h-[calc(100vh-50px)] bg-[#f1f2f4] pb-10 text-[#22242a] dark:bg-[#111216] dark:text-[#f3f3f5] ${activeKind === "novel" ? "novel-reader" : "manga-reader"}`} style={isFullscreen ? {
+      <main className={`reader-page [--mikoroku-accent:var(--mikoroku-reader-accent)] [--mikoroku-accent-soft:var(--mikoroku-reader-accent-soft)] [--mikoroku-accent-border:var(--mikoroku-reader-accent-border)] min-h-[calc(100vh-50px)] bg-[#f1f2f4] pb-10 text-[#22242a] dark:bg-[#111216] dark:text-[#f3f3f5] ${activeKind === "novel" ? "novel-reader" : "manga-reader"}`} style={isFullscreen ? {
         boxSizing: "border-box",
         height: "100vh",
         maxHeight: "100vh",
@@ -1098,13 +1099,13 @@ export default function ReaderPage({
       } : undefined}>
       <header className="reader-toolbar relative z-[2] border-b border-black/10 bg-white text-left shadow-sm dark:border-white/10 dark:bg-[#191a20]">
         <div className="reader-heading-row mx-auto grid min-h-[62px] w-full max-w-[1000px] grid-cols-[auto_1fr_auto] items-center gap-3 px-2 py-2 sm:px-4">
-          <a className="reader-home-link inline-flex size-[42px] items-center justify-center justify-self-start rounded-[11px] border border-black/10 bg-[#f4f5f7] text-[#9d1018] transition hover:-translate-y-px hover:bg-red-500/10 dark:border-white/10 dark:bg-[#22242c] dark:text-[#ff727b]" href={`/series/${encodeURIComponent(slug)}`} aria-label="Back to series details" title="Back to series details">
+          <a className="reader-home-link inline-flex size-[42px] items-center justify-center justify-self-start rounded-[11px] border border-black/10 bg-[#f4f5f7] text-[var(--mikoroku-accent)] transition hover:-translate-y-px hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 dark:bg-[#22242c]" href={`/series/${encodeURIComponent(slug)}`} aria-label="Back to series details" title="Back to series details">
             <svg className="size-[22px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.7]" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M19 12H5m0 0 6-6m-6 6 6 6" />
             </svg>
           </a>
           <div className="reader-title-block grid min-w-0 justify-items-center text-center leading-[1.35]">
-            <span className="reader-kind-label text-[10px] font-bold uppercase tracking-[.12em] text-[#d62936] dark:text-[#ff727b]">{activeKind === "novel" ? "Novel Reader" : "Manga Reader"}</span>
+            <span className="reader-kind-label text-[10px] font-bold uppercase tracking-[.12em] text-[var(--mikoroku-accent)]">{activeKind === "novel" ? "Novel Reader" : "Manga Reader"}</span>
             <strong className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-bold sm:text-base">{data ? data.title : "Loading series..."}</strong>
             <span className="text-xs text-[#777983] dark:text-[#a5a5ad]">{data ? data.chapterTitle : `Chapter ${chapter || ""}`}</span>
           </div>
@@ -1115,9 +1116,9 @@ export default function ReaderPage({
           </span>
         </div>
       </header>
-      <div className="reader-progress-track pointer-events-none fixed left-0 top-0 z-[10000] h-[3px] w-full" aria-hidden="true"><span className="block h-full bg-gradient-to-r from-[#9d1018] to-[#ee5960] transition-[width] duration-200 dark:from-[#ff5662]" style={{ width: `${readerProgress}%` }} /></div>
+      <div className="reader-progress-track pointer-events-none fixed left-0 top-0 z-[10000] h-[3px] w-full" aria-hidden="true"><span className="block h-full bg-[var(--mikoroku-accent)] transition-[width] duration-200" style={{ width: `${readerProgress}%` }} /></div>
       {downloadStatus && !downloading && <div className="reader-download-status sticky top-[3px] z-[6] mx-auto mt-2 flex w-[calc(100%-28px)] max-w-[780px] items-center gap-2 rounded-[11px] border border-black/10 bg-white p-[10px_13px] text-xs dark:border-white/10 dark:bg-[#191a20]" role="status">
-        <i className={`text-[#d62936] dark:text-[#ff727b] fas ${downloadStatus.startsWith("ZIP ready") ? "fa-circle-check" : "fa-circle-exclamation"}`} aria-hidden="true" /><span>{downloadStatus}</span>
+        <i className={`text-[var(--mikoroku-accent)] fas ${downloadStatus.startsWith("ZIP ready") ? "fa-circle-check" : "fa-circle-exclamation"}`} aria-hidden="true" /><span>{downloadStatus}</span>
       </div>}
       {readerNotice && <p className="reader-feedback mx-auto my-3 w-[calc(100%-32px)] max-w-[800px] text-center text-[#9a6700] dark:text-[#f3c96b]" role="status">{readerNotice}</p>}
 
@@ -1131,10 +1132,10 @@ export default function ReaderPage({
               <>
                 <div className="reader-single-page-frame relative grid w-full justify-items-center">
                   <img className="w-auto max-w-full object-contain [max-height:calc(100vh-250px)]" src={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)} alt={`Page ${page}`} fetchPriority="high" decoding="async" onError={handleImageError} />
-                  <button className="reader-image-nav reader-image-nav-previous absolute left-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[#9d1018] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:left-5 dark:border-white/10 dark:bg-[#191a20]/90 dark:text-[#ff5662]" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
+                  <button className="reader-image-nav reader-image-nav-previous absolute left-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[var(--mikoroku-accent)] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:left-5 dark:border-white/10 dark:bg-[#191a20]/90" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
                     <i className="fas fa-chevron-left" aria-hidden="true" />
                   </button>
-                  <button className="reader-image-nav reader-image-nav-next absolute right-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[#9d1018] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:right-5 dark:border-white/10 dark:bg-[#191a20]/90 dark:text-[#ff5662]" type="button" disabled={page >= data.images.length} onClick={() => goToPage(page + 1)} aria-label="Next page" title="Next page">
+                  <button className="reader-image-nav reader-image-nav-next absolute right-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[var(--mikoroku-accent)] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:right-5 dark:border-white/10 dark:bg-[#191a20]/90" type="button" disabled={page >= data.images.length} onClick={() => goToPage(page + 1)} aria-label="Next page" title="Next page">
                     <i className="fas fa-chevron-right" aria-hidden="true" />
                   </button>
                 </div>
@@ -1149,29 +1150,29 @@ export default function ReaderPage({
           </article>
         )}
 
-      {data && <nav className={`reader-bottom-nav fixed bottom-[calc(8px+env(safe-area-inset-bottom))] left-1/2 z-[15] grid w-[calc(100%-8px)] -translate-x-1/2 grid-cols-[38px_minmax(0,1fr)_38px] items-stretch overflow-visible rounded-[10px] border border-black/10 bg-white shadow-lg transition-[opacity,transform,visibility] duration-200 min-[761px]:bottom-[calc(12px+env(safe-area-inset-bottom))] min-[761px]:w-[min(calc(100%-28px),1000px)] min-[761px]:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)] min-[761px]:rounded-[14px] max-[420px]:grid-cols-[38px_minmax(0,1fr)_38px] dark:border-white/10 dark:bg-[#191a20]${floatingHidden ? " invisible translate-y-3 opacity-0 pointer-events-none" : ""}`} aria-label="Chapter navigation">
+      {data && <nav className={`reader-bottom-nav fixed bottom-[calc(8px+env(safe-area-inset-bottom))] left-1/2 z-[15] grid w-[calc(100%-8px)] -translate-x-1/2 grid-cols-[64px_minmax(0,1fr)_64px] items-stretch overflow-visible rounded-[10px] border border-black/10 bg-white shadow-lg transition-[opacity,transform,visibility] duration-200 min-[761px]:bottom-[calc(12px+env(safe-area-inset-bottom))] min-[761px]:w-[min(calc(100%-28px),1000px)] min-[761px]:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)] min-[761px]:rounded-[14px] dark:border-white/10 dark:bg-[#191a20]${floatingHidden ? " invisible translate-y-3 opacity-0 pointer-events-none" : ""}`} aria-label="Chapter navigation">
         {downloading && <span className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 overflow-hidden rounded-t-[10px] bg-black/10 min-[761px]:rounded-t-[14px] dark:bg-white/10" aria-hidden="true">
-          <span className="block h-full bg-[#9d1018] transition-[width] duration-200 dark:bg-[#ff727b]" style={{ width: `${downloadProgress}%` }} />
+          <span className="block h-full bg-[var(--mikoroku-accent)] transition-[width] duration-200" style={{ width: `${downloadProgress}%` }} />
         </span>}
-        <button className="reader-bottom-button reader-bottom-previous flex min-h-10 w-[38px] min-w-0 items-center justify-center gap-1 border-r border-black/10 bg-transparent px-0 text-center text-[#d62936] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 min-[761px]:text-sm max-[420px]:w-[38px] dark:border-white/10 dark:text-[#ff727b]" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
-          <i className="fas fa-chevron-left" aria-hidden="true" /><span className="reader-bottom-label hidden min-[761px]:inline"><strong>Prev</strong></span>
+        <button className="reader-bottom-button reader-bottom-previous flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-r border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 min-[761px]:text-sm dark:border-white/10" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
+          <i className="fas fa-chevron-left" aria-hidden="true" /><span className="reader-bottom-label"><strong>Prev</strong></span>
         </button>
-        <div className={`reader-bottom-middle grid min-w-0 w-full items-stretch ${data.kind === "manga" && data.images.length > 0 ? "grid-cols-3" : "grid-cols-1"}`}>
+        <div className={`reader-bottom-middle grid min-w-0 w-full items-stretch ${data.kind === "manga" && data.images.length > 0 ? "grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] min-[761px]:grid-cols-3" : "grid-cols-1"}`}>
           <div className="reader-bottom-chapters relative z-[2] flex min-w-0 w-full border-r border-black/10 dark:border-white/10" ref={bottomChaptersRef}>
-            <button className={`reader-bottom-button reader-bottom-list flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold text-[#ff5662] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
+            <button className={`reader-bottom-button reader-bottom-list flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold text-[var(--mikoroku-accent)] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
               <span className="reader-bottom-label min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"><strong aria-label={`Chapter ${data.chapter}`}><span className="reader-bottom-chapter-prefix hidden">Chapter </span>{data.chapter}</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron hidden sm:inline`} aria-hidden="true" />
             </button>
-            {bottomChapterListOpen && <div className="reader-bottom-chapter-menu absolute bottom-[calc(100%+10px)] left-1/2 z-30 max-h-[min(58vh,440px)] w-[min(320px,calc(100vw-32px))] -translate-x-1/2 overflow-auto rounded-[15px] border border-black/10 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#191a20]" role="listbox" aria-label="Chapter list">
+            {bottomChapterListOpen && <div className="reader-bottom-chapter-menu fixed bottom-[calc(100%+10px)] left-1/2 z-30 max-h-[min(58vh,440px)] w-[min(320px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-[15px] border border-black/10 bg-white p-2 shadow-xl min-[761px]:absolute min-[761px]:w-[min(320px,calc(100vw-32px))] dark:border-white/10 dark:bg-[#191a20]" role="listbox" aria-label="Chapter list">
               <div className="reader-bottom-menu-heading sticky top-[-8px] -mx-2 -mt-2 mb-1.5 flex min-h-[42px] items-center justify-between border-b border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-[#191a20]"><strong>{data.chapters.length} chapters</strong><button className="size-7 rounded-lg bg-black/5 text-lg dark:bg-white/10" type="button" onClick={() => setBottomChapterListOpen(false)} aria-label="Close chapter list">×</button></div>
               {[...data.chapters].reverse().map((item) => (
-                <button type="button" role="option" aria-selected={item === data.chapter} key={item} className={`flex min-h-[38px] w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-red-500/10 font-bold text-[#d62936] dark:text-[#ff727b]" : ""}`} onClick={() => changeChapter(item)}>
+                <button type="button" role="option" aria-selected={item === data.chapter} key={item} className={`flex min-h-[38px] w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-[var(--mikoroku-accent-soft)] font-bold text-[var(--mikoroku-accent)]" : ""}`} onClick={() => changeChapter(item)}>
                   <span>Chapter {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
                 </button>
               ))}
             </div>}
           </div>
           {data.kind === "manga" && data.images.length > 0 && <button
-            className="flex min-h-10 min-w-0 flex-col items-center justify-center gap-0.5 border-r border-black/10 bg-transparent text-[#9d1018] hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 min-[761px]:min-h-12 dark:border-white/10 dark:text-[#ff727b] dark:hover:bg-white/5"
+            className="flex min-h-10 min-w-0 flex-col items-center justify-center gap-0.5 border-r border-black/10 bg-transparent text-[var(--mikoroku-accent)] hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 min-[761px]:min-h-12 dark:border-white/10 dark:hover:bg-white/5"
             type="button"
             onClick={() => void downloadChapter()}
             disabled={downloading || !data.images.length}
@@ -1189,7 +1190,7 @@ export default function ReaderPage({
           {data.kind === "manga" && data.images.length > 0 && (
             <div className="reader-bottom-pages relative z-[2] flex min-w-0 w-full border-r border-black/10 dark:border-white/10" ref={bottomPagesRef}>
               <button
-                className={`reader-bottom-button reader-bottom-page-count flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold tabular-nums text-[#ff727b] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomPageListOpen ? "is-active" : ""}`}
+                className={`reader-bottom-button reader-bottom-page-count flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold tabular-nums text-[var(--mikoroku-accent)] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomPageListOpen ? "is-active" : ""}`}
                 type="button"
                 aria-label={`Jump to page ${page} of ${data.images.length}`}
                 aria-haspopup="listbox"
@@ -1199,7 +1200,7 @@ export default function ReaderPage({
                 <span className="reader-bottom-label"><strong>{page} / {data.images.length}</strong></span>
                 <i className={`fas ${bottomPageListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
               </button>
-              {bottomPageListOpen && <div className="reader-bottom-page-menu absolute bottom-[calc(100%+8px)] left-1/2 z-30 max-h-[min(58vh,420px)] w-[min(280px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-xl border border-[#dc984b]/40 bg-white p-2 shadow-xl dark:bg-[#191a20]" role="listbox" aria-label="Jump to page">
+              {bottomPageListOpen && <div className="reader-bottom-page-menu fixed bottom-[calc(100%+8px)] left-1/2 z-30 max-h-[min(58vh,420px)] w-[min(280px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-xl border border-[var(--mikoroku-reader-page-soft)] bg-white p-2 shadow-xl min-[761px]:absolute dark:bg-[#191a20]" role="listbox" aria-label="Jump to page">
                 <div className="reader-bottom-menu-heading sticky top-[-8px] -mx-2 -mt-2 mb-1.5 flex min-h-[42px] items-center justify-between border-b border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-[#191a20]"><strong>Go to page</strong><button className="size-7 rounded-lg bg-black/5 text-lg dark:bg-white/10" type="button" onClick={() => setBottomPageListOpen(false)} aria-label="Close page list">×</button></div>
                 <div className="reader-bottom-page-options grid grid-cols-5 gap-1">
                   {data.images.map((_, index) => {
@@ -1210,7 +1211,7 @@ export default function ReaderPage({
                         role="option"
                         aria-selected={pageNumber === page}
                         key={pageNumber}
-                        className={`min-h-[34px] rounded-md text-xs hover:bg-[#dc984b]/10 ${pageNumber === page ? "bg-[#dc984b]/10 text-[#dc984b]" : ""}`}
+                        className={`min-h-[34px] rounded-md text-xs hover:bg-[var(--mikoroku-reader-page-soft)] ${pageNumber === page ? "bg-[var(--mikoroku-reader-page-soft)] text-[var(--mikoroku-reader-page-accent)]" : ""}`}
                         onClick={() => {
                           goToPage(pageNumber);
                           setBottomPageListOpen(false);
@@ -1225,23 +1226,23 @@ export default function ReaderPage({
             </div>
           )}
         </div>
-        <button className="reader-bottom-button reader-bottom-next flex min-h-10 w-[38px] min-w-0 items-center justify-center gap-1 border-l border-black/10 bg-transparent px-0 text-center text-[#d62936] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 max-[420px]:w-[38px] dark:border-white/10 dark:text-[#ff727b]" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
-          <span className="reader-bottom-label hidden min-[761px]:inline"><strong>Next</strong></span><i className="fas fa-chevron-right" aria-hidden="true" />
+        <button className="reader-bottom-button reader-bottom-next flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-l border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 dark:border-white/10" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
+          <span className="reader-bottom-label"><strong>Next</strong></span><i className="fas fa-chevron-right" aria-hidden="true" />
         </button>
       </nav>}
       <div className={`reader-floating-controls fixed bottom-[calc(62px+env(safe-area-inset-bottom))] right-2.5 z-[8] flex flex-col gap-2 transition-[opacity,transform,visibility] duration-200 min-[761px]:bottom-[22px] min-[761px]:right-[18px] max-[420px]:bottom-[calc(58px+env(safe-area-inset-bottom))] ${floatingHidden ? "invisible translate-y-3 opacity-0 pointer-events-none" : ""}`}>
-        <button className="grid size-[38px] place-items-center rounded-xl border border-black/10 bg-white text-[#9d1018] shadow-md transition hover:-translate-y-0.5 hover:bg-red-500/10 dark:border-white/10 dark:bg-[#191a20] dark:text-[#ff727b] min-[761px]:size-11 min-[761px]:rounded-[14px]" type="button" onClick={() => {
+        <button className="grid size-[38px] place-items-center rounded-xl border border-black/10 bg-white text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 dark:bg-[#191a20] min-[761px]:size-11 min-[761px]:rounded-[14px]" type="button" onClick={() => {
           const reader = document.querySelector<HTMLElement>(".reader-page");
           if (reader && document.fullscreenElement === reader) reader.scrollTo({ top: 0, behavior: "smooth" });
           else window.scrollTo({ top: 0, behavior: "smooth" });
         }} aria-label="Back to top" title="Back to top"><i className="fas fa-arrow-up" aria-hidden="true" /></button>
-        <button className={`grid size-[38px] place-items-center rounded-xl border border-black/10 text-[#9d1018] shadow-md transition hover:-translate-y-0.5 hover:bg-red-500/10 dark:border-white/10 dark:text-[#ff727b] min-[761px]:size-11 min-[761px]:rounded-[14px] ${settingsOpen ? "bg-black/[0.06] dark:bg-white/[0.08]" : "bg-white dark:bg-[#191a20]"}`} type="button" onClick={() => {
+        <button className={`grid size-[38px] place-items-center rounded-xl border border-black/10 text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 min-[761px]:size-11 min-[761px]:rounded-[14px] ${settingsOpen ? "bg-[var(--mikoroku-accent-soft)]" : "bg-white dark:bg-[#191a20]"}`} type="button" onClick={() => {
           setSettingsOpen((open) => !open);
           setChapterListOpen(false);
         }} aria-label="Reader settings" aria-expanded={settingsOpen} title="Reader settings">
           <i className="fas fa-sliders" aria-hidden="true" />
         </button>
-        <button className="grid size-[38px] place-items-center rounded-xl border border-black/10 bg-white text-[#9d1018] shadow-md transition hover:-translate-y-0.5 hover:bg-red-500/10 dark:border-white/10 dark:bg-[#191a20] dark:text-[#ff727b] min-[761px]:size-11 min-[761px]:rounded-[14px]" type="button" onClick={() => setReportOpen(true)} aria-label="Report chapter" title="Report chapter"><i className="fas fa-flag" aria-hidden="true" /></button>
+        <button className="grid size-[38px] place-items-center rounded-xl border border-black/10 bg-white text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 dark:bg-[#191a20] min-[761px]:size-11 min-[761px]:rounded-[14px]" type="button" onClick={() => setReportOpen(true)} aria-label="Report chapter" title="Report chapter"><i className="fas fa-flag" aria-hidden="true" /></button>
       </div>
       {settingsOpen && <div className="reader-settings-backdrop fixed inset-0 z-40 flex items-end justify-center p-3 min-[761px]:justify-end min-[761px]:p-[18px_76px_18px_18px]" onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
@@ -1251,13 +1252,13 @@ export default function ReaderPage({
       }}>
       <div className="reader-settings-panel pointer-events-auto max-h-[min(76vh,640px)] w-full max-w-[480px] overflow-auto rounded-[18px] border border-black/10 bg-white p-[18px] text-inherit shadow-2xl min-[761px]:max-h-[min(78vh,680px)] min-[761px]:max-w-[360px] min-[761px]:rounded-[20px] dark:border-white/10 dark:bg-[#191a20]" role="dialog" aria-label="Reader settings" aria-modal="true">
         <div className="reader-settings-heading mb-3.5 flex items-start justify-between">
-          <div className="grid gap-[3px]"><span className="text-[10px] font-extrabold tracking-[.12em] text-[#d62936] dark:text-[#ff727b]">READER</span><strong className="text-[17px]">Reading settings</strong></div>
+          <div className="grid gap-[3px]"><span className="text-[10px] font-extrabold tracking-[.12em] text-[var(--mikoroku-accent)]">READER</span><strong className="text-[17px]">Reading settings</strong></div>
           <button className="size-[34px] rounded-[10px] bg-black/5 text-[22px] dark:bg-white/10" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
         </div>
         {activeKind === "manga" ? <>
           <div className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <div className="grid gap-[3px]"><strong className="text-[13px]">Reading mode</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose how pages are displayed</small></div>
-            <button type="button" className="min-h-[34px] rounded-lg border border-[#9d1018]/25 bg-red-500/10 px-2.5 text-[11px] font-bold text-[#9d1018] dark:text-[#ff727b]" onClick={toggleMode}>
+            <button type="button" className="min-h-[34px] rounded-lg border border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] px-2.5 text-[11px] font-bold text-[var(--mikoroku-accent)]" onClick={toggleMode}>
               {mode === "long-strip" ? "Single page" : "Scroll"}
             </button>
           </div>
@@ -1269,16 +1270,16 @@ export default function ReaderPage({
           </label>
           <label className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <div className="grid gap-[3px]"><strong className="text-[13px]">Data saver</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Reduce image quality</small></div>
-            <input className="size-[18px] accent-[#9d1018]" type="checkbox" checked={dataSaver} onChange={toggleDataSaver} />
+            <input className="size-[18px] accent-[var(--mikoroku-accent)]" type="checkbox" checked={dataSaver} onChange={toggleDataSaver} />
           </label>
           {dataSaver && <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="grid gap-[3px]"><strong className="text-[13px]">Image quality</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{imageQuality}px</small></span>
-            <input className="w-[138px] accent-[#9d1018]" type="range" min="600" max="2000" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
+            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="600" max="2000" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
           </label>}
         </> : <>
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="grid gap-[3px]"><strong className="text-[13px]">Font size</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{fontSize}px</small></span>
-            <input className="w-[138px] accent-[#9d1018]" type="range" min="14" max="28" value={fontSize} onChange={(event) => updateFontSize(Number(event.target.value))} />
+            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="14" max="28" value={fontSize} onChange={(event) => updateFontSize(Number(event.target.value))} />
           </label>
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="text-[13px] font-semibold">Font family</span>
@@ -1304,13 +1305,13 @@ export default function ReaderPage({
           </label>
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="grid gap-[3px]"><strong className="text-[13px]">Auto-scroll speed</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{autoScrollSpeed}</small></span>
-            <input className="w-[138px] accent-[#9d1018]" type="range" min="10" max="100" value={autoScrollSpeed} onChange={(event) => updateAutoScrollSpeed(Number(event.target.value))} />
+            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="10" max="100" value={autoScrollSpeed} onChange={(event) => updateAutoScrollSpeed(Number(event.target.value))} />
           </label>
-          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left hover:text-[#d62936] dark:border-white/10 dark:hover:text-[#ff727b]" onClick={() => setAutoScrolling((active) => !active)}>
+          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left hover:text-[var(--mikoroku-accent)] dark:border-white/10" onClick={() => setAutoScrolling((active) => !active)}>
             <div className="grid gap-[3px]"><strong className="text-[13px]">{autoScrolling ? "Stop auto-scroll" : "Start auto-scroll"}</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Scroll through the text automatically</small></div>
             <i className={`fas ${autoScrolling ? "fa-pause" : "fa-play"}`} aria-hidden="true" />
           </button>
-          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left hover:text-[#d62936] dark:border-white/10 dark:hover:text-[#ff727b]" onClick={toggleSpeech}>
+          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left hover:text-[var(--mikoroku-accent)] dark:border-white/10" onClick={toggleSpeech}>
             <div className="grid gap-[3px]"><strong className="text-[13px]">{speaking ? "Stop text-to-speech" : "Text-to-speech"}</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Listen to the chapter</small></div>
             <i className={`fas ${speaking ? "fa-stop" : "fa-volume-high"}`} aria-hidden="true" />
           </button>
@@ -1322,7 +1323,7 @@ export default function ReaderPage({
         </button>
         {chapterListOpen && data && <div className="reader-settings-chapter-list grid max-h-[200px] overflow-auto py-1 pl-2.5">
           {[...data.chapters].reverse().map((item) => (
-            <button type="button" key={item} className={`flex min-h-9 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-red-500/10 font-bold text-[#d62936] dark:text-[#ff727b]" : ""}`} onClick={() => changeChapter(item)}>
+            <button type="button" key={item} className={`flex min-h-9 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-[var(--mikoroku-accent-soft)] font-bold text-[var(--mikoroku-accent)]" : ""}`} onClick={() => changeChapter(item)}>
               <span>Chapter {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
             </button>
           ))}
@@ -1338,7 +1339,7 @@ export default function ReaderPage({
           <p className="mb-3">Help us improve this chapter.</p>
           <div className="reader-report-types my-4 flex flex-wrap gap-2">
             {(activeKind === "manga" ? mangaReportTypes : novelReportTypes).map((type) => (
-              <button key={type.value} type="button" className={`min-h-[38px] rounded-lg border border-black/20 bg-black/5 px-3 py-2 text-sm dark:border-white/20 dark:bg-white/10 ${reportType === type.value ? "border-[#7c3aed] bg-[#7c3aed] text-white" : ""}`} onClick={() => setReportType(type.value)}>{type.label}</button>
+              <button key={type.value} type="button" className={`min-h-[38px] rounded-lg border border-black/20 bg-black/5 px-3 py-2 text-sm dark:border-white/20 dark:bg-white/10 ${reportType === type.value ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent)] text-white" : ""}`} onClick={() => setReportType(type.value)}>{type.label}</button>
             ))}
           </div>
           <label className="mb-1.5 block" htmlFor="reader-report-reason">Additional details</label>
@@ -1346,7 +1347,7 @@ export default function ReaderPage({
           {reportMessage && <p className="my-3" role={reportMessage.includes("successfully") ? "status" : "alert"}>{reportMessage}</p>}
           <div className="reader-report-actions mt-3.5 flex justify-end gap-2">
             <button className="min-h-[38px] rounded-lg border border-black/20 bg-black/5 px-3 py-2 dark:border-white/20 dark:bg-white/10" type="button" onClick={() => setReportOpen(false)}>Cancel</button>
-            <button className="min-h-[38px] rounded-lg border border-[#7c3aed] bg-[#7c3aed] px-3 py-2 text-white disabled:cursor-wait disabled:opacity-60" type="submit" disabled={sendingReport}>{sendingReport ? "Submitting..." : "Submit report"}</button>
+            <button className="min-h-[38px] rounded-lg border border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent)] px-3 py-2 text-white disabled:cursor-wait disabled:opacity-60" type="submit" disabled={sendingReport}>{sendingReport ? "Submitting..." : "Submit report"}</button>
           </div>
         </form>
       </div>}

@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  applyGlobalAppearance,
+  GLOBAL_APPEARANCE_KEY,
+  readGlobalAppearance,
+} from "./lib/global-appearance";
 
 type MangaEntry = {
   title: string;
@@ -60,6 +65,7 @@ const DEFAULT_THUMB = "https://mikoroku.com/default-thumb.jpg";
 const DISPLAY_NAME_KEY = "commentWidget_displayName";
 const AVATAR_KEY = "commentWidget_avatar";
 const SIDEBAR_PREF_KEY = "mk_sidebar_open";
+const ADMIN_PANEL_EMAILS = ["mikorokuscan@gmail.com", "moemaomao@gmail.com"];
 let desktopSidebarPreference: boolean | null = null;
 const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const ANNOUNCEMENT_FIREBASE_CONFIG = {
@@ -270,6 +276,9 @@ function HeaderContents() {
   const searchArea = useRef<HTMLDivElement>(null);
   const bookmarkArea = useRef<HTMLDivElement>(null);
   const authArea = useRef<HTMLDivElement>(null);
+  const canAccessAdminPanels = Boolean(
+    user?.email && ADMIN_PANEL_EMAILS.includes(user.email.trim().toLowerCase()),
+  );
 
   const closeAuth = useCallback(() => setAuthOpen(false), []);
 
@@ -284,6 +293,7 @@ function HeaderContents() {
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
+    applyGlobalAppearance(readGlobalAppearance());
     const query = window.matchMedia("(min-width: 769px)");
     const applySidebarPreference = () => {
       const desktop = query.matches;
@@ -347,6 +357,9 @@ function HeaderContents() {
 
     const handleStorage = (event: StorageEvent) => {
       if (event.key === "darkMode") applyTheme(event.newValue === "true");
+      if (event.key === GLOBAL_APPEARANCE_KEY) {
+        applyGlobalAppearance(readGlobalAppearance());
+      }
       if (event.key === "mangaBookmarks") {
         setHasBookmarks(updateBookmarkIcon());
         setBookmarks(readBookmarks());
@@ -1089,6 +1102,7 @@ function HeaderContents() {
           <SidebarLink href="/hentai-list" icon="book" onClick={() => mobile && closeSidebar()}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={() => mobile && closeSidebar()}>Genre List</SidebarLink>
           <SidebarLink href="/bookmark" icon="bookmark" onClick={() => mobile && closeSidebar()}>Bookmark</SidebarLink>
+          <SidebarLink href="/global-settings" icon="settings" onClick={() => mobile && closeSidebar()}>Global Settings</SidebarLink>
           <button
             type="button"
             onClick={() => {
@@ -1103,7 +1117,12 @@ function HeaderContents() {
           <div className="my-3 h-px bg-gradient-to-r from-transparent via-black/15 to-transparent dark:via-white/15" />
           <SidebarLink href="https://discord.gg/kkt669knaG" icon="discord" external>Discord</SidebarLink>
           <SidebarLink href="https://trakteer.id/mikorokuscan" icon="donation" external>Donation</SidebarLink>
-          <SidebarLink href="/admin" icon="shield" onClick={() => mobile && closeSidebar()}>Admin Panel</SidebarLink>
+          {canAccessAdminPanels && (
+            <>
+              <SidebarLink href="/admin" icon="shield" onClick={() => mobile && closeSidebar()}>Admin Panel</SidebarLink>
+              <SidebarLink href="/admin/moderation" icon="shield" onClick={() => mobile && closeSidebar()}>Moderator Panel</SidebarLink>
+            </>
+          )}
         </nav>
       </aside>
     </>

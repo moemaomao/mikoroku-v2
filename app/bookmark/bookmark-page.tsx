@@ -104,6 +104,7 @@ declare global {
         forEach: (callback: (document: {
           id: string;
           data: () => Record<string, unknown>;
+          updateTime?: { toDate?: () => Date; seconds?: number };
         }) => void) => void;
       }>;
       addDoc?: (reference: unknown, data: Record<string, unknown>) => Promise<unknown>;
