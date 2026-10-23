@@ -47,7 +47,7 @@ const cardModeScopeSelector = cardContainers.join(",");
 const cardModeClasses = {
   list: {
     container: ["!grid-cols-1", "!gap-1.5", "!p-1.5", "md:!grid-cols-4", "md:!gap-2", "md:!p-2"],
-    card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-hidden", "!rounded-xl", "!border", "!border-black/10", "!bg-white", "!p-0", "dark:!border-white/10", "dark:!bg-[#191a20]"],
+    card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-visible", "!rounded-xl", "!border", "!border-black/10", "!bg-white", "!p-0", "dark:!border-white/10", "dark:!bg-[#191a20]"],
     cover: ["!h-auto", "!w-[28%]", "!shrink-0", "!aspect-[3/4]", "!rounded-l-xl", "!rounded-r-none", "md:!w-[32%]", "md:!aspect-[2/3]"],
     overlay: ["!static", "!order-first", "!w-full", "!bg-none", "!p-0", "!pb-0", "!text-left"],
     title: ["!relative", "!inset-auto", "!m-0", "!min-h-[2.5rem]", "!max-h-[2.5rem]", "!w-full", "!self-start", "!overflow-hidden", "!rounded-none", "!bg-transparent", "!p-0", "!pb-1.5", "!mb-0.5", "!text-left", "!text-xs", "!leading-5", "!text-slate-900", "!shadow-none", "!line-clamp-2", "!border-b", "!border-black/10", "md:!min-h-[2.75rem]", "md:!max-h-[2.75rem]", "md:!text-sm", "md:!leading-5", "md:!pb-2", "dark:!text-slate-100", "dark:!border-white/10"],
@@ -58,14 +58,21 @@ const cardModeClasses = {
 
 /** Extra classes when list mode uses cover as card background */
 const listCoverBackgroundClasses = {
-  card: ["!relative", "!overflow-hidden", "!isolate", "!z-0"],
-  cover: ["!relative", "!z-[2]", "!shrink-0"],
-  details: ["!relative", "!z-[2]", "!bg-transparent", "!min-w-0", "!flex-1"],
-  title: ["!text-slate-900", "dark:!text-white"],
+  card: ["!relative", "!overflow-hidden", "!isolate", "!min-h-[7.5rem]", "md:!min-h-[8.5rem]"],
+  cover: [
+    "!absolute", "!inset-0", "!z-0", "!h-full", "!w-full", "!max-w-none", "!aspect-auto",
+    "!rounded-xl", "!opacity-35", "!pointer-events-none",
+    "[&_img]:!h-full", "[&_img]:!w-full", "[&_img]:!object-cover", "[&_img]:!object-center", "[&_img]:!scale-110",
+    "[&_.status-badge]:!hidden", "[&_.type-badge]:!hidden", "[&_.ch-badge]:!hidden", "[&_.up-badge]:!hidden",
+  ],
+  details: [
+    "!relative", "!z-10", "!w-full", "!min-h-full",
+    "!bg-gradient-to-r", "!from-white/92", "!via-white/88", "!to-white/75",
+    "dark:!from-[#191a20]/94", "dark:!via-[#191a20]/90", "dark:!to-[#191a20]/78",
+    "!backdrop-blur-[1.5px]",
+  ],
+  title: ["!text-slate-900", "dark:!text-slate-50"],
 } as const;
-
-const LIST_COVER_BG_LAYER = "global-list-cover-bg";
-
 
 const chapterModeClasses = {
   chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1"],
@@ -80,7 +87,6 @@ const BLOGGER_CHAPTER_SOURCES = {
 } as const;
 const LIST_CHAPTER_LIMIT = 3;
 let appearanceObserver: MutationObserver | null = null;
-let themeObserver: MutationObserver | null = null;
 let appearanceRefreshListenersAttached = false;
 let chapterCardObserver: IntersectionObserver | null = null;
 let currentAppearance = defaultGlobalAppearance;
@@ -721,119 +727,30 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
     applyMode(cardTitleElements, "title", classes?.title ?? []);
     applyMode(cardDetailsElements, "details", classes?.details ?? []);
 
-            // List cover-as-background — decorative only; does not change flex layout
+    // List cover-as-background overlay
     const useCoverBg = mode === "list" && currentAppearance.listCoverBackground;
-    const isDark = document.documentElement.classList.contains("dark");
-
+    const stripCoverBg = (el: HTMLElement) => {
+      Object.values(listCoverBackgroundClasses).flat().forEach((c) => el.classList.remove(c));
+      // also strip from children cover/details/title keyed sets applied on wrong nodes - handled per selector below
+    };
     findElements(".card").forEach((card) => {
       if (!card.closest(cardModeScopeSelector)) return;
-
       listCoverBackgroundClasses.card.forEach((c) => card.classList.remove(c));
+      if (useCoverBg) listCoverBackgroundClasses.card.forEach((c) => card.classList.add(c));
       card.classList.toggle("list-cover-bg", useCoverBg);
-
-      const coverEl = card.querySelector<HTMLElement>(".thumb, .catalog-cover");
-      const detailsEl = card.querySelector<HTMLElement>(".global-card-details");
-      const layerExisting = card.querySelector<HTMLElement>(":scope > ." + LIST_COVER_BG_LAYER);
-
-      const clearCoverBgChrome = () => {
-        layerExisting?.remove();
-        card.style.removeProperty("background-color");
-        if (coverEl) {
-          listCoverBackgroundClasses.cover.forEach((c) => coverEl.classList.remove(c));
-          coverEl.style.removeProperty("z-index");
-        }
-        if (detailsEl) {
-          listCoverBackgroundClasses.details.forEach((c) => detailsEl.classList.remove(c));
-          detailsEl.style.removeProperty("z-index");
-          detailsEl.style.removeProperty("background");
-          detailsEl.querySelectorAll<HTMLElement>(".global-card-chapter-item").forEach((row) => {
-            row.style.removeProperty("background");
-            row.style.removeProperty("backdrop-filter");
-          });
-        }
-      };
-
-      if (!useCoverBg) {
-        clearCoverBgChrome();
-        return;
-      }
-
-      listCoverBackgroundClasses.card.forEach((c) => card.classList.add(c));
-      card.style.backgroundColor = isDark ? "#191a20" : "#ffffff";
-
-      // Keep original list layout: cover left (no gap), details right
-      if (coverEl) {
-        listCoverBackgroundClasses.cover.forEach((c) => coverEl.classList.add(c));
-        coverEl.style.zIndex = "2";
-      }
-      if (detailsEl) {
-        listCoverBackgroundClasses.details.forEach((c) => detailsEl.classList.add(c));
-        detailsEl.style.zIndex = "2";
-        detailsEl.style.background = "transparent";
-        detailsEl.querySelectorAll<HTMLElement>(".global-card-chapter-item").forEach((row) => {
-          row.style.background = isDark ? "rgba(0,0,0,0.38)" : "rgba(255,255,255,0.92)";
-          row.style.backdropFilter = "blur(2px)";
-        });
-      }
-
-      const coverImg = card.querySelector<HTMLImageElement>(".thumb img, .catalog-cover img");
-      const src = (coverImg?.currentSrc || coverImg?.src || "").trim();
-
-      let layer = layerExisting;
-      if (!layer) {
-        layer = document.createElement("span");
-        layer.className = LIST_COVER_BG_LAYER;
-        layer.setAttribute("aria-hidden", "true");
-        // Behind content, not affecting flex flow
-        card.insertBefore(layer, card.firstChild);
-      }
-
-      Object.assign(layer.style, {
-        position: "absolute",
-        left: "0",
-        top: "0",
-        right: "0",
-        bottom: "0",
-        zIndex: "0",
-        pointerEvents: "none",
-        borderRadius: "inherit",
-        overflow: "hidden",
-        margin: "0",
-        padding: "0",
-      });
-
-      let photo = layer.querySelector<HTMLElement>(":scope > .global-list-cover-photo");
-      if (!photo) {
-        photo = document.createElement("span");
-        photo.className = "global-list-cover-photo";
-        layer.append(photo);
-      }
-      Object.assign(photo.style, {
-        position: "absolute",
-        inset: "0",
-        backgroundImage: src ? `url("${src.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")` : "none",
-        backgroundSize: "cover",
-        backgroundPosition: "center right",
-        opacity: isDark ? "0.62" : "0.5",
-        transform: "none",
-      });
-
-      let veil = layer.querySelector<HTMLElement>(":scope > .global-list-cover-veil");
-      if (!veil) {
-        veil = document.createElement("span");
-        veil.className = "global-list-cover-veil";
-        layer.append(veil);
-      }
-      Object.assign(veil.style, {
-        position: "absolute",
-        inset: "0",
-        background: isDark
-          ? "linear-gradient(90deg, rgba(17,18,22,0.25) 0%, rgba(17,18,22,0.55) 40%, rgba(17,18,22,0.82) 100%)"
-          : "linear-gradient(90deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.7) 42%, rgba(255,255,255,0.9) 100%)",
-      });
+    });
+    findElements(".thumb, .catalog-cover").forEach((cover) => {
+      if (!cover.closest(cardModeScopeSelector)) return;
+      listCoverBackgroundClasses.cover.forEach((c) => cover.classList.remove(c));
+      if (useCoverBg) listCoverBackgroundClasses.cover.forEach((c) => cover.classList.add(c));
+    });
+    findElements(".global-card-details").forEach((details) => {
+      if (!details.closest(cardModeScopeSelector)) return;
+      listCoverBackgroundClasses.details.forEach((c) => details.classList.remove(c));
+      if (useCoverBg) listCoverBackgroundClasses.details.forEach((c) => details.classList.add(c));
     });
 
-const chapterElements = findElements(".global-card-chapters");
+    const chapterElements = findElements(".global-card-chapters");
     chapterElements.forEach((element) => {
       chapterModeClasses.chapters.forEach((className) => element.classList.remove(className));
       if (mode === "list") chapterModeClasses.chapters.forEach((className) => element.classList.add(className));
@@ -873,22 +790,5 @@ const chapterElements = findElements(".global-card-chapters");
     window.addEventListener("mikoroku:chapter-read", refreshListCards);
     window.addEventListener("mikoroku:chapters-updated", refreshListCards);
     appearanceRefreshListenersAttached = true;
-
-    if (!themeObserver && typeof MutationObserver !== "undefined") {
-      let themeTick = 0;
-      themeObserver = new MutationObserver(() => {
-        const token = ++themeTick;
-        window.requestAnimationFrame(() => {
-          if (token !== themeTick) return;
-          if (currentAppearance.cardDisplay === "list" && currentAppearance.listCoverBackground) {
-            applyGlobalAppearance(currentAppearance);
-          }
-        });
-      });
-      themeObserver.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["class"],
-      });
-    }
   }
 }
