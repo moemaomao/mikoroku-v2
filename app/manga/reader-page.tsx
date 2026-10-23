@@ -938,7 +938,7 @@ export default function ReaderPage({
 
   const changeChapter = useCallback((target: string) => {
     const path = activeKind === "novel" ? "/novel" : "/manga";
-    window.location.href = `${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`;
+    window.location.replace(`${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`);
   }, [activeKind, slug]);
 
   function toggleMode() {

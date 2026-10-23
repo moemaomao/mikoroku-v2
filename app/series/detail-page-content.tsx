@@ -419,19 +419,24 @@ function jsonp<T>(url: string, signal: AbortSignal): Promise<T> {
   });
 }
 
-async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
+function getCachedManga(slug: string): Manga | null {
   const cached = localStorage.getItem(`detail_${slug}`);
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached) as { time?: number; data?: Record<string, unknown> };
-      if (parsed.data && Date.now() - (parsed.time || 0) < 15 * 60 * 1000) {
-        return normalizeManga(parsed.data, slug);
-      }
-    } catch (error) {
-      console.warn("Cache detail manga tidak valid dan akan diabaikan.", error);
-      localStorage.removeItem(`detail_${slug}`);
+  if (!cached) return null;
+  try {
+    const parsed = JSON.parse(cached) as { time?: number; data?: Record<string, unknown> };
+    if (parsed.data && Date.now() - (parsed.time || 0) < 15 * 60 * 1000) {
+      return normalizeManga(parsed.data, slug);
     }
+  } catch (error) {
+    console.warn("Cache detail manga tidak valid dan akan diabaikan.", error);
+    localStorage.removeItem(`detail_${slug}`);
   }
+  return null;
+}
+
+async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
+  const cachedManga = getCachedManga(slug);
+  if (cachedManga) return cachedManga;
 
   const responses = await Promise.allSettled([
     fetch(GITHUB_DATA_URL, { signal }).then(async (response) => {
@@ -1030,7 +1035,14 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    setState("loading");
+    const cachedManga = getCachedManga(slug);
+    if (cachedManga) {
+      setManga(cachedManga);
+      setState("ready");
+    } else {
+      setManga(null);
+      setState("loading");
+    }
     loadManga(slug, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       if (!result) {
