@@ -1,4 +1,5 @@
 import { normalizeChapterNumber } from "../../lib/chapter-number";
+import { initializeFirebaseClient } from "./firebase-client";
 
 export type GlobalAppearanceSettings = {
   hideHero: boolean;
@@ -56,7 +57,7 @@ const chapterModeClasses = {
   chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1"],
 } as const;
 
-const listUpBadgeClasses = ["!relative", "!static", "!ml-1.5", "!inline-block", "!animate-[blink_1s_infinite]", "!align-middle"];
+const listUpBadgeClasses = ["!relative", "!static", "!ml-1.5", "!inline-block", "!animate-pulse", "!align-middle"];
 const chapterLoadPromises = new Map<string, Promise<void>>();
 const bloggerFeedPromises = new Map<string, Promise<ListBloggerEntry[]>>();
 const BLOGGER_CHAPTER_SOURCES = {
@@ -282,25 +283,7 @@ function bloggerChapterNumber(title: string, url: string): string | null {
 async function loadFirestoreListChapters(slug: string): Promise<ListChapterRecord[]> {
   const browser = window as ListChapterWindow;
   if (!browser.firestore || !browser.fs) {
-    const sdk = [...document.scripts].find((script) => script.src.endsWith("/firebase.js"));
-    if (!sdk) {
-      const script = document.createElement("script");
-      script.type = "module";
-      script.src = "/firebase.js";
-      document.head.appendChild(script);
-    }
-    await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        window.clearInterval(interval);
-        reject(new Error("Timed out initializing Firestore for chapter fallback."));
-      }, 10000);
-      const interval = window.setInterval(() => {
-        if (!browser.firestore || !browser.fs) return;
-        window.clearTimeout(timeout);
-        window.clearInterval(interval);
-        resolve();
-      }, 100);
-    });
+    initializeFirebaseClient();
   }
   if (!browser.firestore || !browser.fs) throw new Error("Firestore SDK is unavailable.");
   const snapshot = await browser.fs.getDocs(

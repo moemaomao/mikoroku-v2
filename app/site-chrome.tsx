@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import GlobalAuth from "./global-auth";
+import UserModals from "./user-modals";
+import { initializeFirebaseClient } from "./lib/firebase-client";
+import MangaDataProvider from "./manga-data-provider";
 import SiteFooter from "./site-footer";
 import SiteHeader from "./site-header";
 
@@ -8,10 +12,6 @@ function alreadyInitialized(src: string): boolean {
   if (src.includes("firebase-app-compat.js")) return !!window.firebase?.initializeApp;
   if (src.includes("firebase-auth-compat.js")) return !!window.firebase?.auth;
   if (src.includes("firebase-firestore-compat.js")) return !!window.firebase?.firestore;
-  if (src === "/firebase.js") return !!window.firestore && !!window.fs;
-  if (src === "/manga-data.js") return !!window.__mangaDataLoaded;
-  if (src === "/auth-loader.js") return !!window.__authListenerAttached || !!window.triggerLogin;
-  if (src === "/user-modals.js") return !!window.showHistory;
   return false;
 }
 
@@ -49,6 +49,7 @@ async function initializeSiteChrome(showChrome: boolean): Promise<void> {
   if (!showChrome) return;
 
   try {
+    initializeFirebaseClient();
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
@@ -63,27 +64,14 @@ async function initializeSiteChrome(showChrome: boolean): Promise<void> {
         appId: "1:249700505242:web:dab240af09caf30ad7f123",
       });
     }
-    await loadScript("/firebase.js", "module");
   } catch (error) {
     console.error("Firebase halaman gagal diinisialisasi.", error);
   }
 
-  if (showChrome && window.firestore && window.fs) {
-    await loadScript("/manga-data.js").catch((error: unknown) => {
-      console.error("Dataset katalog header gagal dimuat.", error);
-    });
-  } else if (showChrome) {
+  if (showChrome && (!window.firestore || !window.fs)) {
     console.warn("Firebase katalog tidak tersedia; pencarian header tanpa data manga.");
   }
 
-  const scripts = [
-    ...(showChrome && window.firebase ? ["/auth-loader.js", "/user-modals.js"] : []),
-  ];
-  for (const src of scripts) {
-    await loadScript(src).catch((error: unknown) => {
-      console.error(`Integrasi situs gagal dimuat: ${src}`, error);
-    });
-  }
 }
 
 export default function SiteChrome({
@@ -102,6 +90,9 @@ export default function SiteChrome({
   return showChrome || showFooter ? (
     <>
       {showChrome && <SiteHeader />}
+      {showChrome && <GlobalAuth />}
+      {showChrome && <UserModals />}
+      {showChrome && <MangaDataProvider />}
       {showFooter && <SiteFooter />}
     </>
   ) : null;

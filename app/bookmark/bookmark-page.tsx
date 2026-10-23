@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
+import GlobalAuth from "../global-auth";
+import { initializeFirebaseClient } from "../lib/firebase-client";
+import MangaDataProvider from "../manga-data-provider";
+import UserModals from "../user-modals";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
 
@@ -68,11 +72,17 @@ type FirebaseCompatApp = {
 type FirebaseCompat = {
   apps: FirebaseCompatApp[];
   initializeApp: (config: Record<string, string>, name?: string) => FirebaseCompatApp;
-  auth: () => {
+  auth: (() => {
     currentUser: AuthUser | null;
     onAuthStateChanged: (callback: (user: AuthUser | null) => void) => () => void;
     signInWithEmailAndPassword: (email: string, password: string) => Promise<unknown>;
     createUserWithEmailAndPassword: (email: string, password: string) => Promise<unknown>;
+    signInWithPopup: (provider: unknown) => Promise<unknown>;
+  }) & {
+    GoogleAuthProvider: new () => unknown;
+    GithubAuthProvider: new () => unknown;
+    FacebookAuthProvider: new () => unknown;
+    TwitterAuthProvider: new () => unknown;
   };
   firestore: (() => {
     collection: (name: string) => FirestoreCollection;
@@ -188,10 +198,6 @@ function scriptAlreadyExecuted(src: string): boolean {
   if (src.includes("firebase-app-compat.js")) return !!window.firebase?.initializeApp;
   if (src.includes("firebase-auth-compat.js")) return !!window.firebase?.auth;
   if (src.includes("firebase-firestore-compat.js")) return !!window.firebase?.firestore;
-  if (src === "/firebase.js") return !!window.firestore && !!window.fs;
-  if (src === "/manga-data.js") return !!window.__mangaDataLoaded;
-  if (src === "/auth-loader.js") return !!window.__authListenerAttached;
-  if (src === "/user-modals.js") return !!window.showHistory;
   return false;
 }
 
@@ -233,11 +239,7 @@ async function initializeBookmarkIntegrations(): Promise<void> {
   if (!window.firebase) throw new Error("Firebase compat SDK tidak tersedia setelah dimuat.");
   if (!window.firebase.apps.length) window.firebase.initializeApp(firebaseConfig);
 
-  await loadScript("/manga-data.js");
-  await loadScript("/firebase.js", "module");
-  for (const src of ["/auth-loader.js", "/user-modals.js"]) {
-    await loadScript(src);
-  }
+  initializeFirebaseClient();
 }
 
 function bookmarkFromFirestore(document: {
@@ -494,6 +496,9 @@ export default function BookmarkPage() {
 
   return (
     <>
+      <GlobalAuth />
+      <UserModals />
+      <MangaDataProvider />
       <SiteHeader />
       <main className="bookmark-route">
         <section className="bookmark-container" aria-labelledby="bookmark-title">

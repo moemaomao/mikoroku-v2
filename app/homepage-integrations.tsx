@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import GlobalAuth from "./global-auth";
+import UserModals from "./user-modals";
+import { initializeFirebaseClient } from "./lib/firebase-client";
+import MangaDataProvider from "./manga-data-provider";
 
 type ScriptSource = {
   src?: string;
@@ -9,20 +13,12 @@ type ScriptSource = {
 };
 
 const scripts: ScriptSource[] = [
-  { src: "/manga-data.js" },
-  { src: "/series-cover-preferences.js" },
-  { src: "/githubmangapost.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js" },
   {
     code: `if(!firebase.apps.length){firebase.initializeApp({apiKey:"AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",authDomain:"widget-comment.firebaseapp.com",projectId:"widget-comment",storageBucket:"widget-comment.firebasestorage.app",messagingSenderId:"249700505242",appId:"1:249700505242:web:dab240af09caf30ad7f123"})}`,
   },
-  { src: "/auth-loader.js" },
-  { src: "/user-modals.js" },
-  { src: "/firebase.js", type: "module" },
-  { src: "/firebasepost.js" },
-  { src: "/widget.js" },
 ];
 
 const adFrameDocument = `<!DOCTYPE html>
@@ -62,6 +58,7 @@ function loadScript(source: ScriptSource, index: number): Promise<void> {
 }
 
 async function loadHomepageIntegrations() {
+  initializeFirebaseClient();
   for (const [index, source] of scripts.entries()) {
     await loadScript(source, index);
   }
@@ -116,5 +113,11 @@ export default function HomepageIntegrations() {
     });
   }, []);
 
-  return null;
+  return (
+    <>
+      <GlobalAuth />
+      <UserModals />
+      <MangaDataProvider />
+    </>
+  );
 }

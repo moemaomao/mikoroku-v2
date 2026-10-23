@@ -7,6 +7,7 @@ import SiteChrome from "../site-chrome";
 import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapter-number";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
+import { initializeFirebaseClient } from "../lib/firebase-client";
 
 type ReaderKind = "manga" | "novel";
 type ChapterRecord = {
@@ -374,34 +375,11 @@ async function getFirestoreDocument(path: string, signal: AbortSignal): Promise<
 
 async function waitForReaderFirestore(signal: AbortSignal): Promise<void> {
   if (window.firestore && window.fs?.doc && window.fs.getDoc) return;
-  const sdkUrl = new URL("/firebase.js", window.location.href).href;
-  let script = [...document.scripts].find((item) => item.src === sdkUrl);
-  if (!script) {
-    script = document.createElement("script");
-    script.type = "module";
-    script.src = sdkUrl;
-    document.head.appendChild(script);
+  if (signal.aborted) throw new DOMException("Firestore request was cancelled.", "AbortError");
+  initializeFirebaseClient();
+  if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) {
+    throw new Error("Firebase Firestore is unavailable.");
   }
-
-  await new Promise<void>((resolve, reject) => {
-    const finish = (error?: Error) => {
-      window.clearTimeout(timeout);
-      window.clearInterval(interval);
-      signal.removeEventListener("abort", onAbort);
-      if (error) reject(error);
-      else resolve();
-    };
-    const timeout = window.setTimeout(
-      () => finish(new Error("Timed out while initializing Firestore.")),
-      15000,
-    );
-    const interval = window.setInterval(() => {
-      if (window.firestore && window.fs?.doc && window.fs.getDoc) finish();
-    }, 100);
-    const onAbort = () => finish(new DOMException("Firestore request was cancelled.", "AbortError"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    script?.addEventListener("error", () => finish(new Error("Failed to load Firebase Firestore.")), { once: true });
-  });
 }
 
 async function getReaderChapterDocuments(

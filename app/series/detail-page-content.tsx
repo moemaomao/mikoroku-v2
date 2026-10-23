@@ -8,9 +8,14 @@ import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
+import { SERIES_COVER_PREFERENCE_STORAGE_KEY } from "../lib/series-cover-preferences";
 import RecommendationSidebar from "./recommendation-sidebar";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
+import GlobalAuth from "../global-auth";
+import { initializeFirebaseClient } from "../lib/firebase-client";
+import MangaDataProvider from "../manga-data-provider";
+import UserModals from "../user-modals";
 
 type Manga = {
   slug: string;
@@ -303,8 +308,6 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
 
 const SERIES_COVER_PREFERENCE_DB = "mikoroku-series-cover-preferences";
 const SERIES_COVER_PREFERENCE_STORE = "selections";
-const SERIES_COVER_PREFERENCE_STORAGE_KEY = "mikoroku-series-cover:";
-
 type SeriesCoverPreference = { slug: string; url: string };
 
 function openSeriesCoverPreferences(): Promise<IDBDatabase> {
@@ -518,18 +521,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
 
 async function loadFirebaseDocument(slug: string, signal: AbortSignal): Promise<Manga | null> {
   if ((!window.firestore || !window.fs?.doc || !window.fs.getDoc) && !signal.aborted) {
-    await new Promise<void>((resolve, reject) => {
-      const script = document.createElement("script");
-      script.type = "module";
-      script.src = "/firebase.js";
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Firebase SDK gagal dimuat."));
-      signal.addEventListener("abort", () => {
-        script.remove();
-        reject(new DOMException("Permintaan dibatalkan.", "AbortError"));
-      }, { once: true });
-      document.head.appendChild(script);
-    });
+    initializeFirebaseClient();
   }
   if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) return null;
 
@@ -632,44 +624,9 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
 
 async function waitForFirestoreSdk(signal: AbortSignal): Promise<boolean> {
   if (window.firestore && window.fs?.collection && window.fs.getDocs) return true;
-
-  const sdkUrl = new URL("/firebase.js", window.location.href).href;
-  let script = [...document.scripts].find((item) => item.src === sdkUrl);
-  if (!script) {
-    script = document.createElement("script");
-    script.type = "module";
-    script.src = sdkUrl;
-    document.head.appendChild(script);
-  }
-
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("Waktu tunggu inisialisasi Firebase Firestore habis."));
-    }, 15000);
-    const interval = window.setInterval(() => {
-      if (window.firestore && window.fs?.collection && window.fs.getDocs) {
-        cleanup();
-        resolve(true);
-      }
-    }, 100);
-    const onAbort = () => {
-      cleanup();
-      reject(new DOMException("Permintaan Firestore dibatalkan.", "AbortError"));
-    };
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      window.clearInterval(interval);
-      signal.removeEventListener("abort", onAbort);
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    if (script) {
-      script.addEventListener("error", () => {
-        cleanup();
-        reject(new Error("Firebase Firestore gagal dimuat."));
-      }, { once: true });
-    }
-  });
+  if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
+  initializeFirebaseClient();
+  return Boolean(window.firestore && window.fs?.collection && window.fs.getDocs);
 }
 
 function chapterNumber(value: Chapter["num"]): number {
@@ -815,7 +772,7 @@ const detailPageClasses = `
   [&_.demographic-tag]:inline-flex [&_.demographic-tag]:cursor-pointer [&_.demographic-tag]:items-center [&_.demographic-tag]:whitespace-nowrap [&_.demographic-tag]:rounded-lg [&_.demographic-tag]:border [&_.demographic-tag]:border-[rgba(220,38,38,0.25)] [&_.demographic-tag]:bg-[rgba(220,38,38,0.1)] [&_.demographic-tag]:px-[10px] [&_.demographic-tag]:py-1 [&_.demographic-tag]:text-[10px] [&_.demographic-tag]:font-bold [&_.demographic-tag]:capitalize [&_.demographic-tag]:text-[#dc2626] [&_.demographic-tag]:no-underline [&_.demographic-tag]:transition-[background,border-color,transform] [&_.demographic-tag]:duration-200 [&_.demographic-tag:hover]:-translate-y-px [&_.demographic-tag:hover]:brightness-115 dark:[&_.demographic-tag]:border-[rgba(255,80,80,0.35)] dark:[&_.demographic-tag]:bg-[rgba(255,0,0,0.18)] dark:[&_.demographic-tag]:text-[#ffb3b3]
   [&_.synopsis]:mx-3 [&_.synopsis]:mb-[15px] [&_.synopsis]:rounded-[14px] [&_.synopsis]:border [&_.synopsis]:border-[rgba(0,0,0,0.1)] [&_.synopsis]:bg-[rgba(184,174,174,0.329)] [&_.synopsis]:px-[14px] [&_.synopsis]:py-[15px] [&_.synopsis]:text-[13px] [&_.synopsis]:text-[#050000] dark:[&_.synopsis]:border-[rgba(255,255,255,0.08)] dark:[&_.synopsis]:bg-[rgba(26,26,46,0.35)] dark:[&_.synopsis]:text-white
   [&_.synopsis_h2]:mb-[14px] [&_.synopsis_h2]:text-lg [&_.synopsis_h2]:text-[#050000] dark:[&_.synopsis_h2]:text-white [&_.synopsis-content_p]:mb-[10px] [&_.synopsis-content_p:last-child]:mb-0 [&_.synopsis-content_ul]:mb-[10px] [&_.synopsis-content_ul]:pl-6 [&_.synopsis-content_ol]:mb-[10px] [&_.synopsis-content_ol]:pl-6 [&_.synopsis-content_a]:text-blue-400 [&_.synopsis-content_a]:underline
-  [&_.section-title]:my-[25px] [&_.section-title]:mb-[15px] [&_.section-title]:pl-0 [&_.section-title]:text-xl
+  [&_.section-title]:my-[25px] [&_.section-title]:mb-[15px] [&_.section-title]:flex [&_.section-title]:min-h-[50px] [&_.section-title]:w-full [&_.section-title]:items-center [&_.section-title]:justify-center [&_.section-title]:gap-0 [&_.section-title]:pl-0 [&_.section-title]:text-xl [&_.section-title]:leading-5 [&_.section-title]:transition-[margin-left,width] [&_.section-title]:duration-300 [&_.section-title]:before:h-px [&_.section-title]:before:flex-1 [&_.section-title]:before:bg-[#aaa] [&_.section-title]:before:content-[''] [&_.section-title]:after:h-px [&_.section-title]:after:flex-1 [&_.section-title]:after:bg-[#aaa] [&_.section-title]:after:content-['']
   [&_.chapter-header]:box-border [&_.chapter-header]:flex [&_.chapter-header]:w-full [&_.chapter-header]:flex-wrap [&_.chapter-header]:items-center [&_.chapter-header]:gap-0 [&_.chapter-header]:px-[14px]
   [&_.chapter-header_.section-title]:order-2 [&_.chapter-header_.section-title]:my-1 [&_.chapter-header_.section-title]:mb-2 [&_.chapter-header_.section-title]:w-full [&_.chapter-header_.section-title]:basis-full [&_.chapter-header_.section-title]:p-0 [&_.chapter-header_.section-title]:text-center
   [&_.chapter-header-right]:order-1 [&_.chapter-header-right]:my-2 [&_.chapter-header-right]:flex [&_.chapter-header-right]:w-full [&_.chapter-header-right]:basis-full [&_.chapter-header-right]:min-w-0 [&_.chapter-header-right]:items-center [&_.chapter-header-right]:justify-between [&_.chapter-header-right]:gap-2 [&_.chapter-header-right]:[box-sizing:border-box]
@@ -1824,8 +1781,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 function RouteIntegrations() {
   useEffect(() => {
     const added: HTMLScriptElement[] = [];
-    let mangaDataCheck: number | undefined;
-    let mangaDataTimeout: number | undefined;
     const load = (src: string, persistent = false) => new Promise<void>((resolve) => {
       const existing = [...document.scripts].find((script) => script.src === new URL(src, location.href).href);
       if (existing) {
@@ -1843,23 +1798,6 @@ function RouteIntegrations() {
       document.body.appendChild(script);
     });
 
-    void load("/manga-data.js", true).then(() => {
-      const notifySearchReady = () => {
-        if (Object.keys(window.mangaData || {}).length <= 5) return false;
-        if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
-        if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
-        window.dispatchEvent(new Event("mangaDataReady"));
-        return true;
-      };
-
-      if (notifySearchReady()) return;
-      mangaDataCheck = window.setInterval(() => notifySearchReady(), 100);
-      mangaDataTimeout = window.setTimeout(() => {
-        if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
-        console.error("Manga search data did not become available on the series page.");
-      }, 15000);
-    });
-
     void (async () => {
       await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
       await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
@@ -1868,17 +1806,19 @@ function RouteIntegrations() {
       firebaseInit.textContent = `if (typeof firebase !== "undefined" && !firebase.apps.length) { firebase.initializeApp({ apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4", authDomain: "widget-comment.firebaseapp.com", projectId: "widget-comment", storageBucket: "widget-comment.firebasestorage.app", messagingSenderId: "249700505242", appId: "1:249700505242:web:dab240af09caf30ad7f123" }); }`;
       added.push(firebaseInit);
       document.head.appendChild(firebaseInit);
-      await load("/auth-loader.js");
-      await load("/user-modals.js");
       await load("/announcement.js");
     })();
 
     return () => {
-      if (mangaDataCheck !== undefined) window.clearInterval(mangaDataCheck);
-      if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
       for (const script of added) script.remove();
     };
   }, []);
 
-  return null;
+  return (
+    <>
+      <GlobalAuth />
+      <UserModals />
+      <MangaDataProvider />
+    </>
+  );
 }

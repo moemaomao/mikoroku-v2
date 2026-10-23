@@ -50,7 +50,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="id" suppressHydrationWarning className="overflow-y-scroll">
+    <html lang="id" suppressHydrationWarning className="overflow-y-scroll [--sidebar-width:280px] [--gap:12px] [--radius:10px]">
       <head>
         <meta name="author" content="Mikoroku" />
         <meta name="theme-color" content="#7A0000" />
@@ -74,9 +74,8 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
           data-fa="true"
         />
-        <link rel="stylesheet" href="/style.css" data-main-style="true" />
       </head>
-      <body suppressHydrationWarning className="pt-14!">
+      <body suppressHydrationWarning className="m-0 min-h-dvh overflow-x-clip bg-[#f8f9fa] pt-14! font-['Kodchasan',Arial,sans-serif] leading-[1.4] text-[#333] antialiased [text-rendering:optimizeLegibility] dark:bg-[#0b0b0b] dark:text-white">
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var roots=[document.documentElement,document.body];roots.forEach(function(root){root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark)})})();`,

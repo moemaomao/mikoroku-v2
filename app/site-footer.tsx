@@ -56,7 +56,7 @@ export default function SiteFooter() {
   }, []);
 
   return (
-    <div id="site-footer" className="m-0 w-full p-0">
+    <div id="site-footer" className="m-0 w-full p-0 transition-[margin,width] duration-300 min-[769px]:[body.sidebar-open_&]:ml-[var(--sidebar-width)] min-[769px]:[body.sidebar-open_&]:w-[calc(100%-var(--sidebar-width))]">
       <footer
         id="mainFooter"
         className="relative mt-10 w-full overflow-hidden bg-transparent py-[50px] text-[#858585] transition-[margin,width] duration-300 max-[600px]:mt-[30px] max-[600px]:px-[15px] max-[600px]:pt-10 max-[600px]:pb-[30px] min-[768px]:py-[60px]"
