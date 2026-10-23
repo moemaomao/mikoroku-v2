@@ -1,3 +1,5 @@
+import { normalizeChapterNumber } from "../../lib/chapter-number";
+
 export type GlobalAppearanceSettings = {
   hideHero: boolean;
   hideStatusBadge: boolean;
@@ -55,9 +57,43 @@ const chapterModeClasses = {
 } as const;
 
 const listUpBadgeClasses = ["!relative", "!static", "!ml-1.5", "!inline-block", "!animate-[blink_1s_infinite]", "!align-middle"];
+const chapterLoadPromises = new Map<string, Promise<void>>();
+const bloggerFeedPromises = new Map<string, Promise<ListBloggerEntry[]>>();
+const BLOGGER_CHAPTER_SOURCES = {
+  blogger: "https://www.mikodrive.my.id",
+  blogger2: "https://www.yomidays.my.id",
+} as const;
+const LIST_CHAPTER_LIMIT = 3;
 let appearanceObserver: MutationObserver | null = null;
 let appearanceRefreshListenersAttached = false;
+let chapterCardObserver: IntersectionObserver | null = null;
 let currentAppearance = defaultGlobalAppearance;
+
+type ListChapterRecord = Record<string, unknown> & {
+  id?: string;
+  num?: string | number;
+  title?: string;
+  source?: string;
+};
+
+type ListBloggerEntry = {
+  title?: { $t?: string };
+  link?: Array<{ rel?: string; href?: string }>;
+  updated?: { $t?: string };
+  published?: { $t?: string };
+};
+
+type ListFirestoreApi = {
+  collection: (...args: unknown[]) => unknown;
+  getDocs: (reference: unknown) => Promise<{
+    forEach: (callback: (document: { id: string; data: () => Record<string, unknown> }) => void) => void;
+  }>;
+};
+
+type ListChapterWindow = Window & {
+  firestore?: unknown;
+  fs?: ListFirestoreApi;
+};
 
 function chapterNumber(value: unknown): number {
   const parsed = Number.parseFloat(String(value ?? "").replace(/[^0-9.]/g, ""));
@@ -134,7 +170,7 @@ function formatUpdateDate(timestamp: number): string {
   }).format(timestamp);
 }
 
-function getLatestChapters(slug: string, fallbackChapter: string): string[] {
+function getLatestChapters(slug: string, fallbackChapter: string, forceFirestore = false): string[] {
   try {
     const cached: unknown = JSON.parse(localStorage.getItem(`chapters_${slug}`) || "null");
     const records = Array.isArray(cached)
@@ -142,38 +178,222 @@ function getLatestChapters(slug: string, fallbackChapter: string): string[] {
       : cached && typeof cached === "object" && Array.isArray((cached as { data?: unknown }).data)
         ? (cached as { data: unknown[] }).data
         : [];
-    const chapters = records
+    const sourcePreference = forceFirestore ? "es" : localStorage.getItem("chapterSourceMode");
+    const preferredSource = sourcePreference === "sv2" ? "blogger2" : "blogger";
+    const eligible = records
       .filter((record): record is Record<string, unknown> => !!record && typeof record === "object")
-      .map((record) => String(record.num ?? record.chapter ?? record.id ?? ""))
-      .filter((number) => chapterNumber(number) >= 0)
+      .filter((record) => record.isDraft !== true);
+    const primaryRecords = sourcePreference === "es"
+      ? eligible.filter((record) => record.source === "firestore")
+      : eligible.filter((record) => record.source === preferredSource);
+    const recordsToShow = primaryRecords.length
+      ? primaryRecords
+      : sourcePreference === "es"
+        ? []
+        : eligible.filter((record) => record.source === "firestore");
+    const chapters = recordsToShow
+      .map((record) => normalizeChapterNumber(record.num ?? record.chapter ?? record.id))
+      .filter((number): number is string => number !== null)
       .sort((left, right) => chapterNumber(right) - chapterNumber(left));
     const uniqueChapters = [...new Set(chapters)];
-    if (uniqueChapters.length >= 3) return uniqueChapters.slice(0, 3);
-
-    const latest = Math.max(
-      chapterNumber(fallbackChapter),
-      ...uniqueChapters.map(chapterNumber),
-    );
-    if (latest >= 0) {
-      for (let chapter = Math.floor(latest); uniqueChapters.length < 3 && chapter >= 0; chapter -= 1) {
-        const value = String(chapter);
-        if (!uniqueChapters.some((cachedChapter) => chapterNumber(cachedChapter) === chapter)) {
-          uniqueChapters.push(value);
-        }
-      }
-      return uniqueChapters
-        .sort((left, right) => chapterNumber(right) - chapterNumber(left))
-        .slice(0, 3);
+    if (uniqueChapters.length) {
+      return uniqueChapters.slice(0, LIST_CHAPTER_LIMIT);
     }
-    if (uniqueChapters.length) return uniqueChapters.slice(0, 3);
   } catch (error) {
     console.warn(`Chapter cache for ${slug} could not be read.`, error);
   }
 
-  const latest = chapterNumber(fallbackChapter);
-  if (latest < 0) return [];
-  return Array.from({ length: 3 }, (_, index) => String(latest - index))
-    .filter((number) => chapterNumber(number) >= 0);
+  const fallback = normalizeChapterNumber(fallbackChapter);
+  return fallback && chapterNumber(fallback) > 0 ? [fallback] : [];
+}
+
+function readCachedChapterRecords(slug: string): ListChapterRecord[] {
+  try {
+    const cached = JSON.parse(localStorage.getItem(`chapters_${slug}`) || "null") as
+      | ListChapterRecord[]
+      | { data?: ListChapterRecord[] }
+      | null;
+    const records = Array.isArray(cached) ? cached : cached?.data || [];
+    return records.filter((record) => record && typeof record === "object");
+  } catch (error) {
+    console.warn(`Chapter cache for ${slug} could not be read.`, error);
+    return [];
+  }
+}
+
+function cacheListChapterRecords(slug: string, chapters: ListChapterRecord[]): void {
+  const current = readCachedChapterRecords(slug);
+  const source = String(chapters[0]?.source || "blogger");
+  const retained = current.filter((record) => record.source !== source && record.source !== "firestore");
+  const data = [...chapters, ...retained];
+  try {
+    localStorage.setItem(`chapters_${slug}`, JSON.stringify({ time: Date.now(), data }));
+    window.dispatchEvent(new Event("mikoroku:chapters-updated"));
+  } catch (error) {
+    console.warn(`Chapter list for ${slug} could not be cached.`, error);
+  }
+}
+
+function loadBloggerFeed(source: "blogger" | "blogger2"): Promise<ListBloggerEntry[]> {
+  const cached = bloggerFeedPromises.get(source);
+  if (cached) return cached;
+  const callbackName = `mikorokuHomeChapters${Date.now()}${Math.random().toString(36).slice(2)}`;
+  const script = document.createElement("script");
+  const feedUrl = new URL("/feeds/posts/default", BLOGGER_CHAPTER_SOURCES[source]);
+  feedUrl.searchParams.set("alt", "json-in-script");
+  feedUrl.searchParams.set("max-results", "500");
+  feedUrl.searchParams.set("callback", callbackName);
+
+  const request = new Promise<ListBloggerEntry[]>((resolve, reject) => {
+    const finish = (error?: Error, entries: ListBloggerEntry[] = []) => {
+      window.clearTimeout(timeout);
+      script.remove();
+      Reflect.deleteProperty(window, callbackName);
+      if (error) reject(error);
+      else resolve(entries);
+    };
+    const timeout = window.setTimeout(
+      () => finish(new Error("Timed out loading the shared Blogger chapter feed.")),
+      10000,
+    );
+    Reflect.set(window, callbackName, (data: { feed?: { entry?: ListBloggerEntry[] } }) =>
+      finish(undefined, data.feed?.entry || []),
+    );
+    script.onerror = () => finish(new Error("Failed to load the shared Blogger chapter feed."));
+    script.src = feedUrl.href;
+    document.head.appendChild(script);
+  }).catch((error: unknown) => {
+    bloggerFeedPromises.delete(source);
+    throw error;
+  });
+  bloggerFeedPromises.set(source, request);
+  return request;
+}
+
+function bloggerChapterNumber(title: string, url: string): string | null {
+  const match = title.match(/(?:chapter|chapters|ch\.?|chap\.?|ep\.?|episode)\s*[:\-]?\s*(\d+(?:[.,．]\d+)?)/i)
+    || title.match(/第\s*(\d+(?:[.,．]\d+)?)\s*[話话回]?/)
+    || title.match(/#\s*(\d+(?:[.,．]\d+)?)/)
+    || [...title.matchAll(/(\d+(?:[.,．]\d+)?)/g)].at(-1)
+    || url.match(/(?:chapter|ch)[_-]?(\d+(?:[.-]\d+)?)/i);
+  return normalizeChapterNumber(match?.[1]);
+}
+
+async function loadFirestoreListChapters(slug: string): Promise<ListChapterRecord[]> {
+  const browser = window as ListChapterWindow;
+  if (!browser.firestore || !browser.fs) {
+    const sdk = [...document.scripts].find((script) => script.src.endsWith("/firebase.js"));
+    if (!sdk) {
+      const script = document.createElement("script");
+      script.type = "module";
+      script.src = "/firebase.js";
+      document.head.appendChild(script);
+    }
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        window.clearInterval(interval);
+        reject(new Error("Timed out initializing Firestore for chapter fallback."));
+      }, 10000);
+      const interval = window.setInterval(() => {
+        if (!browser.firestore || !browser.fs) return;
+        window.clearTimeout(timeout);
+        window.clearInterval(interval);
+        resolve();
+      }, 100);
+    });
+  }
+  if (!browser.firestore || !browser.fs) throw new Error("Firestore SDK is unavailable.");
+  const snapshot = await browser.fs.getDocs(
+    browser.fs.collection(browser.firestore, "manga", slug, "chapters"),
+  );
+  const chapters: ListChapterRecord[] = [];
+  snapshot.forEach((document) => {
+    const data = document.data();
+    const num = normalizeChapterNumber(data.num ?? data.chapter ?? data.title ?? document.id);
+    if (data.isDraft !== true && num) {
+      chapters.push({ ...data, id: document.id, num, source: "firestore" });
+    }
+  });
+  return chapters.sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num))
+    .slice(0, LIST_CHAPTER_LIMIT);
+}
+
+async function loadListChapterSources(slug: string, title: string, source: "blogger" | "blogger2" | "firestore"): Promise<void> {
+  let chapters: ListChapterRecord[] = [];
+  if (source !== "firestore") {
+    const titleKey = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const slugKey = slug.toLowerCase().replace(/[^a-z0-9]/g, "");
+    try {
+      chapters = (await loadBloggerFeed(source)).flatMap((entry) => {
+        const postTitle = entry.title?.$t?.trim() || "";
+        const postKey = postTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const url = entry.link?.find((link) => link.rel === "alternate")?.href || "";
+        const num = bloggerChapterNumber(postTitle, url);
+        if (!num || !((titleKey.length >= 8 && postKey.includes(titleKey)) ||
+          (slugKey.length >= 8 && postKey.includes(slugKey)))) return [];
+        return [{
+          num,
+          id: undefined,
+          title: postTitle,
+          postTitle,
+          label: `Chapter ${num}`,
+          url,
+          source,
+          createdAt: entry.updated?.$t || entry.published?.$t || "",
+        }];
+      }).sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num))
+        .slice(0, LIST_CHAPTER_LIMIT);
+    } catch (error) {
+      console.warn(`Blogger chapters failed for homepage card ${slug}.`, error);
+    }
+  }
+  if (!chapters.length) {
+    try {
+      chapters = await loadFirestoreListChapters(slug);
+    } catch (error) {
+      console.warn(`Firestore fallback failed for homepage card ${slug}.`, error);
+    }
+  }
+  if (chapters.length) cacheListChapterRecords(slug, chapters);
+}
+
+function ensureListChapterSources(card: HTMLElement, slug: string, title: string, forceFirestore: boolean): void {
+  const selected = localStorage.getItem("chapterSourceMode");
+  const source = forceFirestore || selected === "es"
+    ? "firestore"
+    : selected === "sv2" ? "blogger2" : "blogger";
+  const cached = readCachedChapterRecords(slug);
+  if (cached.filter((record) => record.source === source).length >= LIST_CHAPTER_LIMIT) return;
+  const key = `${slug}:${source}`;
+  if (chapterLoadPromises.has(key)) return;
+  const start = () => {
+    if (chapterLoadPromises.has(key)) return;
+    const request = loadListChapterSources(slug, title, source)
+      .catch((error: unknown) => console.warn(`Homepage chapters failed for ${slug}.`, error))
+      .finally(() => chapterLoadPromises.delete(key));
+    chapterLoadPromises.set(key, request);
+  };
+  if (card.dataset.chapterSourceVisible === "true" || typeof IntersectionObserver === "undefined") {
+    card.dataset.chapterSourceVisible = "true";
+    start();
+    return;
+  }
+  if (!chapterCardObserver) {
+    chapterCardObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!(entry.target instanceof HTMLElement) || !entry.isIntersecting) return;
+        const target = entry.target;
+        target.dataset.chapterSourceVisible = "true";
+        chapterCardObserver?.unobserve(target);
+        const targetSlug = target.dataset.slug;
+        const targetTitle = target.querySelector<HTMLElement>(".title")?.textContent?.trim();
+        if (targetSlug && targetTitle) {
+          ensureListChapterSources(target, targetSlug, targetTitle, Boolean(target.closest("#firebaseNovel")));
+        }
+      });
+    }, { rootMargin: "160px 0px" });
+  }
+  chapterCardObserver.observe(card);
 }
 
 function bindChapterNavigation(item: HTMLElement, card: HTMLElement, slug: string, chapter: string): void {
@@ -186,6 +406,45 @@ function bindChapterNavigation(item: HTMLElement, card: HTMLElement, slug: strin
     event.preventDefault();
     event.stopPropagation();
     const route = card.closest("#firebaseNovel") ? "novel" : "manga";
+    const sourcePreference = localStorage.getItem("chapterSourceMode");
+    const preferredSource = route === "novel" || sourcePreference === "es"
+      ? "firestore"
+      : sourcePreference === "sv1"
+        ? "blogger"
+        : sourcePreference === "sv2"
+          ? "blogger2"
+          : "blogger";
+    const chapterRecord = (() => {
+      try {
+        const cached: unknown = JSON.parse(localStorage.getItem(`chapters_${slug}`) || "null");
+        const records = Array.isArray(cached)
+          ? cached
+          : cached && typeof cached === "object" && Array.isArray((cached as { data?: unknown }).data)
+            ? (cached as { data: unknown[] }).data
+            : [];
+        const matchingRecords = records.filter((record): record is Record<string, unknown> =>
+          !!record && typeof record === "object" &&
+          normalizeChapterNumber(record.num ?? record.chapter ?? record.id) === chapter,
+        );
+        return matchingRecords.find((record) => record.source === preferredSource) ||
+          matchingRecords.find((record) => record.source === "firestore") ||
+          matchingRecords[0];
+      } catch (error) {
+        console.warn(`Chapter data for ${slug} could not be read before navigation.`, error);
+        return undefined;
+      }
+    })();
+    const seriesTitle = card.querySelector<HTMLElement>(".title")?.textContent?.trim() || slug;
+    localStorage.setItem("currentChapter", JSON.stringify({
+      ...chapterRecord,
+      slug,
+      id: typeof chapterRecord?.id === "string" ? chapterRecord.id : undefined,
+      num: chapter,
+      title: seriesTitle,
+      label: chapterRecord?.label || chapterRecord?.chapterTitle || chapterRecord?.title || `Chapter ${chapter}`,
+      source: route === "novel" ? "firestore" : chapterRecord?.source || "firestore",
+      isNovel: route === "novel" || chapterRecord?.isNovel === true,
+    }));
     window.location.assign(`/${route}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`);
   };
 
@@ -219,8 +478,10 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
   const fallbackChapter = card.querySelector<HTMLElement>(".ch-badge")?.textContent || "";
   if (!slug) return;
 
-  const chapters = getLatestChapters(slug, fallbackChapter);
-  const title = card.querySelector<HTMLElement>(".title")?.textContent?.trim() || "";
+  const title = card.querySelector<HTMLElement>(".title")?.textContent?.trim() || slug;
+  const forceFirestore = Boolean(card.closest("#firebaseNovel"));
+  ensureListChapterSources(card, slug, title, forceFirestore);
+  const chapters = getLatestChapters(slug, fallbackChapter, forceFirestore);
   const upBadge = card.querySelector<HTMLElement>(".up-badge");
   let list = existing;
   if (!list) {
@@ -485,6 +746,7 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
     });
     window.addEventListener("pageshow", refreshListCards);
     window.addEventListener("mikoroku:chapter-read", refreshListCards);
+    window.addEventListener("mikoroku:chapters-updated", refreshListCards);
     appearanceRefreshListenersAttached = true;
   }
 }

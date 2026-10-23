@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CommunityWidgets from "../community-widgets";
 import SiteChrome from "../site-chrome";
-import { chapterNumberFromRecord } from "../../lib/chapter-number";
+import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapter-number";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 
@@ -13,6 +13,7 @@ type ChapterRecord = {
   id?: string;
   num?: string | number;
   title?: string;
+  postTitle?: string;
   label?: string;
   images?: unknown;
   pages?: unknown;
@@ -38,7 +39,12 @@ type ReaderData = {
   source?: string;
 };
 
-const firestoreBase = "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
+const mangaDatasetUrl =
+  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const bloggerChapterSources = [
+  { source: "blogger", domain: "https://www.mikodrive.my.id" },
+  { source: "blogger2", domain: "https://www.yomidays.my.id" },
+] as const;
 const mangaReportTypes = [
   { value: "Chapter Tidak Muncul", label: "Chapter Not Showing" },
   { value: "Chapter Acak", label: "Wrong Chapter Order" },
@@ -57,30 +63,6 @@ const novelReportTypes = [
   { value: "Terjemahan Salah", label: "Incorrect Translation" },
   { value: "Lainnya", label: "Other" },
 ];
-
-function decodeFirestoreValue(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value;
-  const record = value as Record<string, unknown>;
-  if ("stringValue" in record) return record.stringValue;
-  if ("integerValue" in record) return Number(record.integerValue);
-  if ("doubleValue" in record) return Number(record.doubleValue);
-  if ("booleanValue" in record) return record.booleanValue;
-  if ("timestampValue" in record) return record.timestampValue;
-  if ("nullValue" in record) return null;
-  if ("arrayValue" in record) {
-    const array = record.arrayValue as { values?: unknown[] } | undefined;
-    return (array?.values || []).map(decodeFirestoreValue);
-  }
-  if ("mapValue" in record) {
-    const map = record.mapValue as { fields?: Record<string, unknown> } | undefined;
-    return Object.fromEntries(Object.entries(map?.fields || {}).map(([key, item]) => [key, decodeFirestoreValue(item)]));
-  }
-  return record;
-}
-
-function decodeDocument(document: { fields?: Record<string, unknown> }): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(document.fields || {}).map(([key, value]) => [key, decodeFirestoreValue(value)]));
-}
 
 function imageList(input: unknown, allowAnyUrl = false): string[] {
   if (Array.isArray(input)) {
@@ -117,6 +99,13 @@ function imageList(input: unknown, allowAnyUrl = false): string[] {
     return /\.(?:jpg|jpeg|png|gif|webp|bmp|avif)(?:$|[?#])/i.test(url) ||
       /(?:blogger\.googleusercontent\.com|googleusercontent\.com|imgur\.com|pixiv\.net)/i.test(url);
   }))];
+}
+
+function hasChapterPayload(chapter: ChapterRecord | null | undefined): boolean {
+  return Boolean(
+    imageList(chapter?.images || chapter?.pages, true).length ||
+    imageList(chapter?.content || chapter?.text || chapter?.html, true).length,
+  );
 }
 
 function novelText(value: unknown): string {
@@ -228,12 +217,132 @@ function normalizePostUrl(value: string): string {
   }
 }
 
+function chapterNumberFromPostTitle(title: string): string | null {
+  const match = title.match(/(?:chapter|chapters|ch\.?|chap\.?|ep\.?|episode)\s*[:\-]?\s*(\d+(?:[.,．]\d+)?)/i)
+    || title.match(/第\s*(\d+(?:[.,．]\d+)?)\s*[話话回]?/)
+    || title.match(/#\s*(\d+(?:[.,．]\d+)?)/)
+    || [...title.matchAll(/(\d+(?:[.,．]\d+)?)/g)].at(-1);
+  return normalizeChapterNumber(match?.[1]);
+}
+
+function normalizedSearchKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function differsByAtMostOneCharacter(first: string, second: string): boolean {
+  const a = normalizedSearchKey(first);
+  const b = normalizedSearchKey(second);
+  if (Math.min(a.length, b.length) < 12 || Math.abs(a.length - b.length) > 1) return false;
+
+  let firstIndex = 0;
+  let secondIndex = 0;
+  let differences = 0;
+  while (firstIndex < a.length && secondIndex < b.length) {
+    if (a[firstIndex] === b[secondIndex]) {
+      firstIndex += 1;
+      secondIndex += 1;
+      continue;
+    }
+    differences += 1;
+    if (differences > 1) return false;
+    if (a.length > b.length) firstIndex += 1;
+    else if (b.length > a.length) secondIndex += 1;
+    else {
+      firstIndex += 1;
+      secondIndex += 1;
+    }
+  }
+  if (firstIndex < a.length || secondIndex < b.length) differences += 1;
+  return differences <= 1;
+}
+
+async function findFirestoreSeriesSlug(
+  slug: string,
+  signal: AbortSignal,
+): Promise<string> {
+  await waitForReaderFirestore(signal);
+  if (!window.firestore || !window.fs?.collection || !window.fs.getDocs) {
+    throw new Error("The Firebase Firestore series-list API is unavailable.");
+  }
+
+  const snapshot = await window.fs.getDocs(window.fs.collection(window.firestore, "manga"));
+  const matches: string[] = [];
+  snapshot.forEach((document) => {
+    const data = document.data();
+    if (
+      differsByAtMostOneCharacter(slug, document.id) ||
+      differsByAtMostOneCharacter(slug, String(data.title || ""))
+    ) {
+      matches.push(document.id);
+    }
+  });
+  return matches.length === 1 ? matches[0] : slug;
+}
+
+async function loadMangaMetadataFromDataset(
+  slug: string,
+  signal: AbortSignal,
+): Promise<Record<string, unknown> | null> {
+  const response = await fetch(mangaDatasetUrl, { signal });
+  if (!response.ok) throw new Error(`Manga dataset returned HTTP ${response.status}.`);
+  const entries = await response.json() as Array<Record<string, unknown>>;
+  return entries.find((entry) =>
+    String(entry.slug || "") === slug ||
+    normalizedSearchKey(String(entry.title || "")) === normalizedSearchKey(slug),
+  ) || null;
+}
+
+async function loadBloggerChapterFromFeeds(
+  slug: string,
+  seriesTitle: string,
+  chapter: string,
+  preferredSource: "blogger" | "blogger2" | undefined,
+  signal: AbortSignal,
+): Promise<ChapterRecord | null> {
+  const sources = preferredSource
+    ? bloggerChapterSources.filter((item) => item.source === preferredSource)
+    : bloggerChapterSources;
+  const seriesKeys = [normalizedSearchKey(seriesTitle), normalizedSearchKey(slug)]
+    .filter((key) => key.length >= 5);
+  const settled = await Promise.allSettled(sources.map(async ({ source, domain }) => {
+    const feedUrl = new URL("/feeds/posts/default", domain);
+    feedUrl.searchParams.set("alt", "json-in-script");
+    feedUrl.searchParams.set("max-results", "500");
+    feedUrl.searchParams.set("q", seriesTitle || slug.replace(/-/g, " "));
+    const feed = await getJsonp<{ feed?: { entry?: BloggerFeedEntry[] } }>(feedUrl.href, signal);
+    return (feed.feed?.entry || []).flatMap((entry) => {
+      const postTitle = entry.title?.$t?.trim() || "";
+      const postKey = normalizedSearchKey(postTitle);
+      if (chapterNumberFromPostTitle(postTitle) !== chapter ||
+        !seriesKeys.some((key) => postKey.includes(key))) return [];
+      const url = entry.link?.find((link) => link.rel === "alternate")?.href || "";
+      const content = entry.content?.$t || "";
+      return [{
+        num: chapter,
+        title: postTitle,
+        postTitle,
+        label: `Chapter ${chapter}`,
+        url,
+        images: imageList(content, true),
+        content,
+        source,
+      }];
+    });
+  }));
+  for (const [index, result] of settled.entries()) {
+    if (result.status === "rejected" && !signal.aborted) {
+      console.warn(`Blogger ${sources[index].source} lookup failed for ${slug} chapter ${chapter}.`, result.reason);
+    }
+  }
+  return settled.flatMap((result) => result.status === "fulfilled" ? result.value : [])[0] || null;
+}
+
 async function getBloggerChapterImages(
   chapter: ChapterRecord,
   signal: AbortSignal,
 ): Promise<string[]> {
   if (chapter.source !== "blogger" && chapter.source !== "blogger2") return [];
-  const title = String(chapter.title || "").trim();
+  const title = String(chapter.postTitle || chapter.label || chapter.title || "").trim();
   if (!title) return [];
   const domain = chapter.source === "blogger"
     ? "https://www.mikodrive.my.id"
@@ -254,33 +363,13 @@ async function getBloggerChapterImages(
 }
 
 async function getFirestoreDocument(path: string, signal: AbortSignal): Promise<Record<string, unknown> | null> {
-  let restError: unknown;
-  try {
-    const response = await fetch(`${firestoreBase}/${path}`, { signal });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`Firestore REST returned HTTP ${response.status}.`);
-    return decodeDocument(await response.json());
-  } catch (error) {
-    if (signal.aborted) throw error;
-    restError = error;
-    console.warn("Firestore REST failed in the reader; trying Firebase SDK.", error);
+  await waitForReaderFirestore(signal);
+  if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) {
+    throw new Error("Firebase Firestore SDK is unavailable.");
   }
-
-  try {
-    await waitForReaderFirestore(signal);
-    if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) {
-      throw new Error("Firebase Firestore SDK is unavailable.");
-    }
-    const reference = window.fs.doc(window.firestore, ...path.split("/"));
-    const snapshot = await window.fs.getDoc(reference);
-    return snapshot.exists() ? snapshot.data() : null;
-  } catch (error) {
-    if (signal.aborted) throw error;
-    throw new Error(
-      `Firestore failed to load the document: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: restError },
-    );
-  }
+  const reference = window.fs.doc(window.firestore, ...path.split("/"));
+  const snapshot = await window.fs.getDoc(reference);
+  return snapshot.exists() ? snapshot.data() : null;
 }
 
 async function waitForReaderFirestore(signal: AbortSignal): Promise<void> {
@@ -315,7 +404,7 @@ async function waitForReaderFirestore(signal: AbortSignal): Promise<void> {
   });
 }
 
-async function getFirestoreChapters(
+async function getReaderChapterDocuments(
   slug: string,
   signal: AbortSignal,
 ): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
@@ -323,34 +412,46 @@ async function getFirestoreChapters(
   if (!window.firestore || !window.fs?.collection || !window.fs.getDocs) {
     throw new Error("The Firebase Firestore chapter-list API is unavailable.");
   }
-  const reference = window.fs.collection(window.firestore, "manga", slug, "chapters");
-  const snapshot = await window.fs.getDocs(reference);
+
+  const snapshot = await window.fs.getDocs(
+    window.fs.collection(window.firestore, "manga", slug, "chapters"),
+  );
   const documents: Array<{ id: string; data: Record<string, unknown> }> = [];
   snapshot.forEach((document) => documents.push({ id: document.id, data: document.data() }));
-  return documents;
-}
+  if (documents.length) return documents;
 
-async function getReaderChapterDocuments(
-  slug: string,
-  signal: AbortSignal,
-): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
   try {
-    const response = await fetch(
-      `${firestoreBase}/manga/${encodeURIComponent(slug)}/chapters?pageSize=1000`,
-      { signal },
+    if (!window.fs.doc || !window.fs.getDoc) {
+      throw new Error("The Firebase Firestore series-document API is unavailable.");
+    }
+    const seriesSnapshot = await window.fs.getDoc(
+      window.fs.doc(window.firestore, "manga", slug),
     );
-    if (!response.ok) throw new Error(`The chapter list returned HTTP ${response.status}.`);
-    const result = await response.json() as {
-      documents?: Array<{ name?: string; fields?: Record<string, unknown> }>;
-    };
-    return (result.documents || []).map((document) => ({
-      id: document.name?.split("/").at(-1) || "",
-      data: decodeDocument(document),
-    }));
+    if (!seriesSnapshot.exists()) return [];
+    const manga = seriesSnapshot.data();
+    const chapterMap: Record<string, unknown> = {};
+    for (const field of [manga.chapters, manga.chapter]) {
+      if (field && typeof field === "object" && !Array.isArray(field)) {
+        Object.assign(chapterMap, field);
+      }
+    }
+    for (const [key, value] of Object.entries(manga)) {
+      const match = key.match(/^chapters?[.\[](.+?)\]?$/i);
+      if (match && ((value && typeof value === "object") || typeof value === "string")) {
+        chapterMap[match[1]] = value;
+      }
+    }
+    return Object.entries(chapterMap).flatMap(([id, value]) => {
+      if (Array.isArray(value)) return [{ id, data: { images: value } }];
+      if (value && typeof value === "object") {
+        return [{ id, data: value as Record<string, unknown> }];
+      }
+      return typeof value === "string" ? [{ id, data: { content: value } }] : [];
+    });
   } catch (error) {
     if (signal.aborted) throw error;
-    console.warn("Could not load chapters from Firestore REST; trying Firebase SDK.", error);
-    return getFirestoreChapters(slug, signal);
+    console.warn("Could not load the chapter map from the Firestore series document.", error);
+    return [];
   }
 }
 
@@ -362,48 +463,158 @@ async function loadReaderData(
 ): Promise<ReaderData> {
   const cachedCurrent = getCurrentChapterCache(slug);
   const cachedChapters = getCachedChapters(slug);
-  const targetChapter = chapter || String(cachedCurrent?.num || "1");
+  const targetChapter = normalizeChapterNumber(chapter) ||
+    normalizeChapterNumber(cachedCurrent?.num) ||
+    "1";
+  const hasMatchingCachedCurrent = cachedCurrent &&
+    String(cachedCurrent.num) === targetChapter &&
+    (kind !== "novel" || (cachedCurrent.source !== "blogger" && cachedCurrent.source !== "blogger2"));
+  const cachedCurrentHasPayload = hasChapterPayload(cachedCurrent);
+  const sourcePreference = kind === "manga"
+    ? localStorage.getItem("chapterSourceMode")
+    : null;
+  const selectedSource = sourcePreference === "sv1"
+    ? "blogger"
+    : sourcePreference === "sv2"
+      ? "blogger2"
+      : sourcePreference === "es"
+        ? "firestore"
+        : undefined;
+  const canUseCachedCurrent = Boolean(
+    hasMatchingCachedCurrent &&
+    (selectedSource
+      ? cachedCurrent?.source === selectedSource
+      : (cachedCurrent?.source !== "blogger" && cachedCurrent?.source !== "blogger2") || cachedCurrentHasPayload),
+  );
+  let requestedSource = kind === "novel"
+    ? "firestore"
+    : selectedSource || (canUseCachedCurrent
+      ? cachedCurrent?.source
+      : undefined);
+  let isBloggerSource = requestedSource === "blogger" || requestedSource === "blogger2";
   let manga: Record<string, unknown> | null = null;
   let chapterData: Record<string, unknown> | null = null;
-  const cachedMatch = cachedChapters.find((item) =>
-    chapterNumberFromRecord(item, item.id || "") === targetChapter,
+  const matchingCachedChapters = cachedChapters.filter((item) =>
+    chapterNumberFromRecord(item, item.id || "") === targetChapter &&
+    (kind !== "novel" || (item.source !== "blogger" && item.source !== "blogger2")),
   );
+  const cachedMatch = isBloggerSource
+    ? matchingCachedChapters.find((item) => item.source === requestedSource)
+    : matchingCachedChapters.find((item) => item.source === "firestore" && hasChapterPayload(item)) ||
+      matchingCachedChapters.find(hasChapterPayload) ||
+      matchingCachedChapters.find((item) => item.source === "firestore") ||
+      matchingCachedChapters[0];
   let chapterDocumentId = cachedMatch?.id ||
-    (cachedCurrent && String(cachedCurrent.num) === targetChapter ? cachedCurrent.id : undefined) ||
+    (canUseCachedCurrent ? cachedCurrent?.id : undefined) ||
     targetChapter;
+  let firestoreSlug = slug;
   let readerDocuments: Array<{ id: string; data: Record<string, unknown> }> | undefined;
   let chapterListAttempted = false;
   let chapterListError: unknown;
+  let chapterDocumentAttempted = false;
   if (cachedMatch) chapterData = cachedMatch as Record<string, unknown>;
 
-  if (!cachedMatch?.id) {
+  if (kind === "novel" && !chapterData) {
+    chapterDocumentAttempted = true;
+    try {
+      chapterData = await getFirestoreDocument(
+        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
+        signal,
+      );
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn("The requested novel chapter could not be loaded directly from Firestore.", error);
+    }
+  }
+
+  if (!isBloggerSource && !cachedMatch?.id && !chapterData) {
     chapterListAttempted = true;
     try {
-      readerDocuments = await getReaderChapterDocuments(slug, signal);
-      const current = readerDocuments.find(({ id, data }) =>
-        chapterNumberFromRecord(data, id) === targetChapter,
-      ) || readerDocuments.find(({ id }) => id === targetChapter);
-      if (current) {
-        chapterData = current.data;
-        chapterDocumentId = current.id;
-      }
+      readerDocuments = await getReaderChapterDocuments(firestoreSlug, signal);
     } catch (error) {
       if (signal.aborted) throw error;
       chapterListError = error;
       console.warn("The Firestore chapter list failed; trying the requested chapter document.", error);
     }
+    if (kind === "manga" && !readerDocuments?.length) {
+      try {
+        const resolvedSlug = await findFirestoreSeriesSlug(slug, signal);
+        if (resolvedSlug !== slug) {
+          firestoreSlug = resolvedSlug;
+          readerDocuments = await getReaderChapterDocuments(firestoreSlug, signal);
+          chapterListError = undefined;
+        }
+      } catch (error) {
+        if (signal.aborted) throw error;
+        chapterListError = error;
+        console.warn("The Firestore series ID could not be resolved from the shared link.", error);
+      }
+    }
+    const current = readerDocuments?.find(({ id, data }) =>
+      chapterNumberFromRecord(data, id) === targetChapter,
+    ) || readerDocuments?.find(({ id }) => id === targetChapter);
+    if (current) {
+      chapterData = current.data;
+      chapterDocumentId = current.id;
+    }
   }
-  if (!chapterData && cachedCurrent && String(cachedCurrent.num) === targetChapter) {
+  if (!chapterData && canUseCachedCurrent && cachedCurrent) {
     chapterData = cachedCurrent;
     chapterDocumentId = cachedCurrent.id || targetChapter;
   }
 
+  if (kind === "novel" && !chapterData && !chapterDocumentAttempted) {
+    chapterDocumentAttempted = true;
+    try {
+      chapterData = await getFirestoreDocument(
+        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
+        signal,
+      );
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn("The requested novel chapter could not be loaded directly from Firestore.", error);
+    }
+  }
+
   try {
-    manga = await getFirestoreDocument(`manga/${encodeURIComponent(slug)}`, signal);
+    manga = await getFirestoreDocument(`manga/${encodeURIComponent(firestoreSlug)}`, signal);
   } catch (error) {
     if (signal.aborted) throw error;
-    if (!chapterData) throw error;
-    console.warn("Series info could not be loaded; using the cached chapter.", error);
+    if (!chapterData && kind !== "novel") {
+      console.warn("Series metadata could not be loaded from Firestore.", error);
+    }
+    console.warn("Series info could not be loaded; continuing with available chapter data.", error);
+  }
+
+  if (kind === "manga" && !manga && (!chapterData || !hasMatchingCachedCurrent)) {
+    try {
+      manga = await loadMangaMetadataFromDataset(slug, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn(`Manga metadata lookup failed for ${slug}.`, error);
+    }
+  }
+
+  if (kind === "manga" && !hasChapterPayload(chapterData) && sourcePreference !== "es") {
+    try {
+      const bloggerChapter = await loadBloggerChapterFromFeeds(
+        slug,
+        String(manga?.title || manga?.name || slug.replace(/-/g, " ")),
+        targetChapter,
+        selectedSource === "blogger" || selectedSource === "blogger2" ? selectedSource : undefined,
+        signal,
+      );
+      if (bloggerChapter) {
+        chapterData = bloggerChapter;
+        if (bloggerChapter.source === "blogger" || bloggerChapter.source === "blogger2") {
+          requestedSource = bloggerChapter.source;
+          isBloggerSource = true;
+        }
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn(`Blogger fallback failed for ${slug} chapter ${targetChapter}.`, error);
+    }
   }
 
   let resolvedKind: ReaderKind = isNovelSeries(manga) || cachedCurrent?.isNovel ? "novel" : kind;
@@ -434,12 +645,12 @@ async function loadReaderData(
     }
   }
 
-  if (resolvedKind === "manga" &&
+  if (!isBloggerSource && resolvedKind === "manga" &&
     !imageList(chapterData?.images || chapterData?.pages, true).length &&
     !imageList(chapterData?.content || chapterData?.html).length) {
     try {
       const storedChapter = await getFirestoreDocument(
-        `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
+        `manga/${encodeURIComponent(firestoreSlug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
         signal,
       );
       if (storedChapter &&
@@ -451,8 +662,10 @@ async function loadReaderData(
       if (signal.aborted) throw error;
       console.warn("Firestore chapter document could not be loaded; trying the chapter list.", error);
     }
-  } else if (resolvedKind === "novel" &&
+  } else if (!isBloggerSource && resolvedKind === "novel" &&
+    !chapterDocumentAttempted &&
     (typeof cachedContent !== "string" || !cachedContent.trim())) {
+    chapterDocumentAttempted = true;
     chapterData = await getFirestoreDocument(
       `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapterDocumentId)}`,
       signal,
@@ -471,14 +684,14 @@ async function loadReaderData(
   let chapters = cachedChapters
     .map((item) => chapterNumberFromRecord(item, item.id || ""))
     .filter(Boolean);
-  if (!chapters.length ||
+  if (!isBloggerSource && (!chapters.length ||
     (resolvedKind === "manga" &&
       !imageList(chapterData?.images || chapterData?.pages, true).length &&
-      !imageList(chapterData?.content || chapterData?.html).length)) {
+      !imageList(chapterData?.content || chapterData?.html).length))) {
     try {
       if (!chapterListAttempted) {
         chapterListAttempted = true;
-        readerDocuments = await getReaderChapterDocuments(slug, signal);
+        readerDocuments = await getReaderChapterDocuments(firestoreSlug, signal);
       }
       if (!readerDocuments && chapterListError) throw chapterListError;
       const documents = readerDocuments || [];
@@ -507,7 +720,7 @@ async function loadReaderData(
   if (!chapters.includes(resolvedChapter)) chapters.push(resolvedChapter);
   chapters = [...new Set(chapters)].sort((a, b) => chapterValue(a) - chapterValue(b));
 
-  if (!chapterData) {
+  if (!isBloggerSource && !chapterData) {
     const map = manga?.chapters;
     if (map && typeof map === "object") {
       const fromMap = (map as Record<string, unknown>)[targetChapter];

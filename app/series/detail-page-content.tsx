@@ -689,6 +689,25 @@ function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapt
   return merged;
 }
 
+function chapterSourceCacheKey(slug: string, source: ChapterSource): string {
+  return JSON.stringify([slug, source]);
+}
+
+function cachedChapterListForSource(
+  cache: Map<string, Chapter[]>,
+  slug: string,
+  source: ChapterSource,
+): Chapter[] | undefined {
+  if (source === "firestore") return cache.get(chapterSourceCacheKey(slug, source));
+
+  const sourceKey = chapterSourceCacheKey(slug, source);
+  if (!cache.has(sourceKey)) return undefined;
+  return mergeChapterSources(
+    cache.get(sourceKey) || [],
+    cache.get(chapterSourceCacheKey(slug, "firestore")) || [],
+  );
+}
+
 function cacheChapterList(slug: string, chapters: Chapter[]): void {
   const key = `chapters_${slug}`;
   const data = chapters.map(({ id, num, title, thumbnail, isNovel, url, source, createdAt, updatedAt, date, timestamp, order }) => ({
@@ -776,8 +795,8 @@ const detailPageClasses = `
   [&_.stars]:inline-flex [&_.stars]:items-center [&_.stars]:gap-0.5 [&_.stars]:text-[11px] [&_.stars]:tracking-[1px] [&_.stars]:text-[#ffd54a]
   [&_.stars_i]:leading-none [&_.rating-number]:mt-0 [&_.rating-number]:text-xs [&_.rating-number]:text-[#444] dark:[&_.rating-number]:text-[#ddd]
   [&_.latest-update]:!mb-3 [&_.latest-update]:text-[#019219] dark:[&_.latest-update]:text-[#30c430]
-  [&_.bookmark-btn]:inline-flex [&_.bookmark-btn]:w-full [&_.bookmark-btn]:cursor-pointer [&_.bookmark-btn]:items-center [&_.bookmark-btn]:justify-center [&_.bookmark-btn]:gap-1.5 [&_.bookmark-btn]:rounded-lg [&_.bookmark-btn]:border-2 [&_.bookmark-btn]:border-[rgba(0,0,0,0.15)] [&_.bookmark-btn]:bg-[rgba(80,78,78,0.04)] [&_.bookmark-btn]:px-[5px] [&_.bookmark-btn]:py-[3px] [&_.bookmark-btn]:text-[10px] [&_.bookmark-btn]:font-semibold [&_.bookmark-btn]:text-[#050000] [&_.bookmark-btn]:transition-all [&_.bookmark-btn]:duration-300 dark:[&_.bookmark-btn]:border-[rgba(255,255,255,0.18)] dark:[&_.bookmark-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.bookmark-btn]:text-white [&_.bookmark-btn:hover]:border-[rgba(0,0,0,0.1)] [&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.06)] dark:[&_.bookmark-btn:hover]:border-[rgba(255,255,255,0.08)] dark:[&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.35)] [&_.bookmark-btn.bookmarked]:border-[#ffcc00] [&_.bookmark-btn.bookmarked]:bg-[#ffcc00] [&_.bookmark-btn.bookmarked]:text-black
-  [&_.status]:mb-[6px] [&_.status]:flex [&_.status]:items-center [&_.status]:gap-2 [&_.status]:font-semibold [&_.status]:text-[violet] [&_.status_span]:font-bold [&_.status.ongoing_span]:text-green-500 [&_.status.completed_span]:text-sky-300 [&_.status.hiatus_span]:text-yellow-100 [&_.status.dropped_span]:text-[orangered] [&_.status.canceled_span]:text-orange-600 [&_.status.unknown_span]:text-gray-400
+  [&_.bookmark-btn]:inline-flex [&_.bookmark-btn]:w-full [&_.bookmark-btn]:cursor-pointer [&_.bookmark-btn]:items-center [&_.bookmark-btn]:justify-center [&_.bookmark-btn]:gap-1.5 [&_.bookmark-btn]:rounded-lg [&_.bookmark-btn]:border [&_.bookmark-btn]:border-[rgba(0,0,0,0.15)] [&_.bookmark-btn]:bg-[rgba(80,78,78,0.04)] [&_.bookmark-btn]:px-[5px] [&_.bookmark-btn]:py-[3px] [&_.bookmark-btn]:text-[10px] [&_.bookmark-btn]:font-semibold [&_.bookmark-btn]:text-[#050000] [&_.bookmark-btn]:transition-all [&_.bookmark-btn]:duration-300 dark:[&_.bookmark-btn]:border-[rgba(255,255,255,0.18)] dark:[&_.bookmark-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.bookmark-btn]:text-white [&_.bookmark-btn:hover]:border-[rgba(0,0,0,0.1)] [&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.06)] dark:[&_.bookmark-btn:hover]:border-[rgba(255,255,255,0.08)] dark:[&_.bookmark-btn:hover]:bg-[rgba(0,0,0,0.35)] [&_.bookmark-btn.bookmarked]:border-[#ffcc00] [&_.bookmark-btn.bookmarked]:bg-[rgba(255,204,0,0.2)] [&_.bookmark-btn.bookmarked]:text-[#ffcc00] dark:[&_.bookmark-btn.bookmarked]:text-[#ffdb4d]
+  [&_.status]:mb-[6px] [&_.status]:flex [&_.status]:items-center [&_.status]:gap-1.5 [&_.status]:font-semibold [&_.status]:text-[11px] [&_.status_span]:font-bold [&_.status.ongoing]:text-green-500 [&_.status.completed]:text-sky-300 [&_.status.hiatus]:text-yellow-400 [&_.status.dropped]:text-orange-500 [&_.status.canceled]:text-orange-600 [&_.status.unknown]:text-gray-400 lg:[&_.status]:text-sm
   [&_.detail-item]:mb-[5px] [&_.detail-item]:flex [&_.detail-item]:items-center [&_.detail-item]:gap-[3px] [&_.detail-item]:text-[11px] [&_.detail-item]:text-[#050000] dark:[&_.detail-item]:text-white [&_.detail-item_i]:w-5 [&_.detail-item_i]:text-center [&_.detail-item_i]:text-[#444] dark:[&_.detail-item_i]:text-[#ddd]
   [&_.genres]:grid [&_.genres]:grid-cols-4 [&_.genres]:gap-2 [&_.genres]:rounded-[14px] [&_.genres]:px-[14px] [&_.genres]:py-[15px]
   [&_.genre]:block [&_.genre]:overflow-hidden [&_.genre]:truncate [&_.genre]:whitespace-nowrap [&_.genre]:rounded-lg [&_.genre]:border [&_.genre]:border-[rgba(0,0,0,0.1)] [&_.genre]:bg-[rgba(0,0,0,0.06)] [&_.genre]:px-2 [&_.genre]:py-[6px] [&_.genre]:text-center [&_.genre]:text-[11px] [&_.genre]:text-[var(--genre-light-text)] [&_.genre]:no-underline [&_.genre]:backdrop-blur [&_.genre]:transition-[background,border-color,transform] [&_.genre]:duration-200 dark:[&_.genre]:border-[rgba(255,255,255,0.08)] dark:[&_.genre]:bg-[rgba(0,0,0,0.35)] dark:[&_.genre]:text-[var(--genre-accent)] [&_.genre:hover]:-translate-y-px [&_.genre:hover]:bg-[rgba(80,78,78,0.04)]
@@ -798,11 +817,11 @@ const detailPageClasses = `
   [&_.source-toggle]:flex [&_.source-toggle]:shrink-0 [&_.source-toggle]:items-center [&_.source-toggle]:gap-2 [&_.view-toggle]:flex [&_.view-toggle]:shrink-0 [&_.view-toggle]:items-center [&_.view-toggle]:gap-2
   [&_.server-btn]:relative [&_.server-btn]:shrink-0
   [&_.server-icon-wrap]:relative [&_.server-icon-wrap]:inline-flex [&_.server-icon-wrap]:h-[18px] [&_.server-icon-wrap]:w-[18px] [&_.server-icon-wrap]:items-center [&_.server-icon-wrap]:justify-center [&_.server-icon-wrap_svg]:block
-  [&_.server-number]:absolute [&_.server-number]:-top-1 [&_.server-number]:-right-1 [&_.server-number]:block [&_.server-number]:min-w-0 [&_.server-number]:border-0 [&_.server-number]:bg-transparent [&_.server-number]:p-0 [&_.server-number]:text-[8px] [&_.server-number]:font-extrabold [&_.server-number]:leading-none [&_.server-number]:text-[#1d4ed8] [&_#sourceSv1Btn.active_.server-number]:text-white [&_#sourceSv2Btn_.server-number]:text-[#b45309] [&_#sourceSv2Btn.active_.server-number]:text-white [&_#sourceEsBtn_.server-number]:text-[#b91c1c] [&_#sourceEsBtn.active_.server-number]:text-white
+  [&_.server-number]:absolute [&_.server-number]:-top-1 [&_.server-number]:-right-1 [&_.server-number]:block [&_.server-number]:min-w-0 [&_.server-number]:border-0 [&_.server-number]:bg-transparent [&_.server-number]:p-0 [&_.server-number]:text-[8px] [&_.server-number]:font-extrabold [&_.server-number]:leading-none [&_.server-number]:text-[#1d4ed8] [&_#sourceSv1Btn.active_.server-number]:text-white [&_#sourceSv2Btn_.server-number]:text-[#f59e0b] [&_#sourceSv2Btn.active_.server-number]:text-white [&_#sourceEsBtn_.server-number]:text-[#b91c1c] [&_#sourceEsBtn.active_.server-number]:text-white
   [&_.view-btn]:box-border [&_.view-btn]:inline-flex [&_.view-btn]:h-[38px] [&_.view-btn]:w-[38px] [&_.view-btn]:min-w-[38px] [&_.view-btn]:shrink-0 [&_.view-btn]:items-center [&_.view-btn]:justify-center [&_.view-btn]:cursor-pointer [&_.view-btn]:rounded-[10px] [&_.view-btn]:border [&_.view-btn]:border-[rgba(0,0,0,0.1)] [&_.view-btn]:bg-[rgba(80,78,78,0.04)] [&_.view-btn]:p-0 [&_.view-btn]:text-[#050000] [&_.view-btn]:transition-[background,border-color,transform] [&_.view-btn]:duration-[250ms] dark:[&_.view-btn]:border-[rgba(255,255,255,0.08)] dark:[&_.view-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.view-btn]:text-white [&_.view-btn:hover]:bg-[rgba(0,0,0,0.06)] [&_.view-btn:active]:scale-[0.94]
-  [&_#sourceSv1Btn]:border-[rgba(96,165,250,0.35)] [&_#sourceSv1Btn]:text-[#60a5fa] [&_#sourceSv2Btn]:border-[rgba(251,191,36,0.35)] [&_#sourceSv2Btn]:text-[#fbbf24] [&_#sourceEsBtn]:border-[rgba(239,68,68,0.35)] [&_#sourceEsBtn]:text-[#f87171] [&_#sourceEsBtn_svg]:shrink-0
-  [&_#sourceSv1Btn.active]:border-[#3b82f6] [&_#sourceSv1Btn.active]:bg-[#3b82f6] [&_#sourceSv1Btn.active]:text-white [&_#sourceSv2Btn.active]:border-[#f59e0b] [&_#sourceSv2Btn.active]:bg-[#f59e0b] [&_#sourceSv2Btn.active]:text-white [&_#sourceEsBtn.active]:border-[#ef4444] [&_#sourceEsBtn.active]:bg-[#ef4444] [&_#sourceEsBtn.active]:text-white
-  [&_#gridViewBtn.active]:border-[#ef4444] [&_#gridViewBtn.active]:bg-[#ef4444] [&_#gridViewBtn.active]:text-white [&_#textGridViewBtn.active]:border-[#3b82f6] [&_#textGridViewBtn.active]:bg-[#3b82f6] [&_#textGridViewBtn.active]:text-white [&_#listViewBtn.active]:border-[#22c55e] [&_#listViewBtn.active]:bg-[#22c55e] [&_#listViewBtn.active]:text-white
+  [&_#sourceSv1Btn]:border-[rgba(96,165,250,0.5)] [&_#sourceSv1Btn]:bg-[rgba(59,130,246,0.2)] [&_#sourceSv1Btn]:text-[#60a5fa] [&_#sourceSv2Btn]:border-[rgba(251,191,36,0.5)] [&_#sourceSv2Btn]:bg-[rgba(245,158,11,0.2)] [&_#sourceSv2Btn]:text-[#fbbf24] [&_#sourceEsBtn]:border-[rgba(239,68,68,0.5)] [&_#sourceEsBtn]:bg-[rgba(239,68,68,0.2)] [&_#sourceEsBtn]:text-[#f87171] [&_#sourceEsBtn_svg]:shrink-0
+  [&_#sourceSv1Btn.active]:!border-[#3b82f6] [&_#sourceSv1Btn.active]:!bg-[#3b82f6] [&_#sourceSv1Btn.active]:!text-white [&_#sourceSv2Btn.active]:!border-[#f59e0b] [&_#sourceSv2Btn.active]:!bg-[#f59e0b] [&_#sourceSv2Btn.active]:!text-white [&_#sourceEsBtn.active]:!border-[#ef4444] [&_#sourceEsBtn.active]:!bg-[#ef4444] [&_#sourceEsBtn.active]:!text-white
+  [&_#gridViewBtn]:border-[rgba(96,165,250,0.5)] [&_#gridViewBtn]:bg-[rgba(59,130,246,0.2)] [&_#gridViewBtn]:text-[#60a5fa] [&_#gridViewBtn.active]:!border-[#3b82f6] [&_#gridViewBtn.active]:!bg-[#3b82f6] [&_#gridViewBtn.active]:!text-white [&_#textGridViewBtn]:border-[rgba(251,191,36,0.5)] [&_#textGridViewBtn]:bg-[rgba(245,158,11,0.2)] [&_#textGridViewBtn]:text-[#fbbf24] [&_#textGridViewBtn.active]:!border-[#f59e0b] [&_#textGridViewBtn.active]:!bg-[#f59e0b] [&_#textGridViewBtn.active]:!text-white [&_#listViewBtn]:border-[rgba(239,68,68,0.5)] [&_#listViewBtn]:bg-[rgba(239,68,68,0.2)] [&_#listViewBtn]:text-[#f87171] [&_#listViewBtn.active]:!border-[#ef4444] [&_#listViewBtn.active]:!bg-[#ef4444] [&_#listViewBtn.active]:!text-white
   [&_#sortChapterBtn.active-newest]:border-[#fd6dfd] [&_#sortChapterBtn.active-newest]:bg-[#ed74f8] [&_#sortChapterBtn.active-newest]:text-white [&_#sortChapterBtn.active-oldest]:border-[#f59e0b] [&_#sortChapterBtn.active-oldest]:bg-[#f59e0b] [&_#sortChapterBtn.active-oldest]:text-white
   max-[380px]:[&_.chapter-header]:px-[10px] max-[380px]:[&_.chapter-header_.section-title]:mt-px max-[380px]:[&_.chapter-header_.section-title]:mb-2 max-[380px]:[&_.chapter-header-right]:gap-[5px] max-[380px]:[&_.chapter-header-right]:mb-2 max-[380px]:[&_.source-toggle]:gap-1 max-[380px]:[&_.view-toggle]:gap-1 max-[380px]:[&_.view-btn]:h-[33px] max-[380px]:[&_.view-btn]:w-[33px] max-[380px]:[&_.view-btn]:min-w-[33px] max-[380px]:[&_.view-btn]:rounded-lg
   max-[330px]:[&_.chapter-header]:px-2 max-[330px]:[&_.chapter-header-right]:gap-1 max-[330px]:[&_.source-toggle]:gap-[3px] max-[330px]:[&_.view-toggle]:gap-[3px] max-[330px]:[&_.view-btn]:h-[31px] max-[330px]:[&_.view-btn]:w-[31px] max-[330px]:[&_.view-btn]:min-w-[31px] max-[330px]:[&_.view-btn]:rounded-[7px]
@@ -820,7 +839,7 @@ const detailPageClasses = `
   md:[&_.chapter-search]:mx-0 md:[&_.chapter-search]:mb-3
   md:[&_.detail-tab-comments]:col-start-2 md:[&_.detail-tab-comments]:my-0 md:[&_.detail-tab-comments]:w-full
   lg:[&_.container]:my-[30px] lg:[&_.container]:max-w-[var(--detail-max-width)] lg:[&_.container]:rounded-3xl lg:[&_.container]:ml-[var(--detail-content-left)] lg:[&_.container]:mr-0 lg:[&_.container]:w-[var(--detail-content-width)]
-  lg:[&_.main]:gap-10 lg:[&_.main]:px-10 lg:[&_.main]:pt-10 lg:[&_.main]:pb-[30px] lg:[&_.left-column]:w-[240px] lg:[&_.cover]:h-[340px] lg:[&_.cover]:w-[240px] lg:[&_.info_h1]:!text-[28px] lg:[&_.detail-item]:text-sm lg:[&_.detail-item_i]:w-[22px] lg:[&_.detail-item_i]:text-sm lg:[&_.status]:text-[15px]
+  lg:[&_.main]:gap-10 lg:[&_.main]:px-10 lg:[&_.main]:pt-10 lg:[&_.main]:pb-[30px] lg:[&_.left-column]:w-[240px] lg:[&_.cover]:h-[340px] lg:[&_.cover]:w-[240px] lg:[&_.info_h1]:!text-[28px] lg:[&_.detail-item]:text-sm lg:[&_.detail-item_i]:w-[22px] lg:[&_.detail-item_i]:text-sm
   lg:[&_.genres]:py-[15px] lg:[&_.synopsis]:mb-10 lg:[&_.detail-extra-tags]:mb-4
   lg:[&_.chapter-grid]:grid-cols-[repeat(8,minmax(0,1fr))] lg:[&_.chapter-grid]:gap-[10px] lg:[&_.chapter-grid]:px-0 lg:[&_.chapter-grid]:pb-[50px]
   [&_.detail-route-message]:mx-auto [&_.detail-route-message]:my-8 [&_.detail-route-message]:max-w-[1150px] [&_.detail-route-message]:p-5 [&_.detail-route-message]:text-center
@@ -831,7 +850,7 @@ const detailPageClasses = `
   [&_.view-btn.active]:!border-[var(--mikoroku-source-emergency)] [&_.view-btn.active]:!bg-[var(--mikoroku-source-emergency)] [&_.view-btn.active]:!text-white [&_.view-btn.active-oldest]:!border-[var(--mikoroku-sort-oldest)] [&_.view-btn.active-oldest]:!bg-[var(--mikoroku-sort-oldest)] [&_.view-btn.active-oldest]:!text-white [&_.view-btn.active-newest]:!border-[var(--mikoroku-sort-newest-border)] [&_.view-btn.active-newest]:!bg-[var(--mikoroku-sort-newest)] [&_.view-btn.active-newest]:!text-white
   [&_.synopsis>h2]:!text-[var(--mikoroku-detail-tag-icon)] [&_.detail-tag-label_i]:!text-[var(--mikoroku-detail-tag-icon)] [&_.chapter-search:focus-within]:!border-[var(--mikoroku-accent)]
   [&_.demographic-tag.female-tag]:!border-[var(--mikoroku-detail-female-border)] [&_.demographic-tag.female-tag]:!bg-[var(--mikoroku-detail-female-bg)] [&_.demographic-tag.female-tag]:!text-[var(--mikoroku-detail-female-text)] [&_.demographic-tag.male-tag]:!border-[var(--mikoroku-detail-male-border)] [&_.demographic-tag.male-tag]:!bg-[var(--mikoroku-detail-male-bg)] [&_.demographic-tag.male-tag]:!text-[var(--mikoroku-detail-male-text)]
-  [&_.bookmark-btn:not(.bookmarked)]:!border-[var(--mikoroku-detail-bookmark-border)] [&_.bookmark-btn:not(.bookmarked)]:!text-[var(--mikoroku-detail-bookmark-text)] [&_.bookmark-btn:not(.bookmarked):hover]:!bg-[var(--mikoroku-detail-bookmark-hover)] [&_.bookmark-btn:not(.bookmarked):hover]:!border-[var(--mikoroku-detail-bookmark-hover-border)]
+  [&_.bookmark-btn:not(.bookmarked)]:!border-[var(--mikoroku-detail-bookmark-border)] [&_.bookmark-btn:not(.bookmarked)]:!bg-[var(--mikoroku-detail-bookmark-hover)] [&_.bookmark-btn:not(.bookmarked)]:!text-[var(--mikoroku-detail-bookmark-text)] dark:[&_.bookmark-btn:not(.bookmarked)]:!border-[rgba(245,220,190,0.48)] [&_.bookmark-btn:not(.bookmarked):hover]:!bg-[var(--mikoroku-detail-bookmark-hover)] [&_.bookmark-btn:not(.bookmarked):hover]:!border-[var(--mikoroku-detail-bookmark-hover-border)] dark:[&_.bookmark-btn:not(.bookmarked):hover]:!border-[rgba(255,230,200,0.62)]
   [&_.chapter-item:hover]:!ring-1 [&_.chapter-item:hover]:!ring-[var(--mikoroku-detail-chapter-hover)]
   lg:[&_.content]:grid-cols-[240px_minmax(0,1fr)] lg:[&_.content]:gap-x-10 lg:[&_.content]:px-10 lg:[&_.content]:pt-10 lg:[&_.left-column]:pt-0 lg:[&_.info]:pt-0
 `;
@@ -850,6 +869,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
   const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
+  const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
+  const chapterCacheSlugRef = useRef(slug);
   const baseCoverUrl = manga?.covers?.length
     ? manga.covers[manga.covers.length - 1]
     : manga?.img || manga?.cover || "";
@@ -1071,46 +1092,81 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   useEffect(() => {
     if (!manga) return;
     const controller = new AbortController();
-    setChapterState("loading");
     setChapterError("");
+    if (chapterCacheSlugRef.current !== slug) {
+      chapterSourceCacheRef.current.clear();
+      chapterCacheSlugRef.current = slug;
+    }
     let cachedChapters: Chapter[] = [];
+    let cachedSelectedChapters: Chapter[] = [];
+    let cachedFirestoreChapters: Chapter[] = [];
     const cached = localStorage.getItem(`chapters_${slug}`);
     if (cached) {
       try {
         const parsed = JSON.parse(cached) as { time?: number; data?: Chapter[] };
-        const valid = parsed.data?.filter((chapter) => chapter.source === source) || [];
-        if (valid.length && Date.now() - (parsed.time || 0) < 30 * 60 * 1000) {
-          cachedChapters = valid;
+        const valid = Date.now() - (parsed.time || 0) < 30 * 60 * 1000
+          ? parsed.data || []
+          : [];
+        cachedChapters = valid.filter((chapter) => chapter.source === source);
+        cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
+        cachedFirestoreChapters = valid.filter((chapter) => chapter.source === "firestore");
+        if (source !== "firestore" && cachedSelectedChapters.length) {
+          cachedChapters = mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters);
         }
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
         localStorage.removeItem(`chapters_${slug}`);
       }
     }
+    const immediatelyAvailable = cachedChapterListForSource(
+      chapterSourceCacheRef.current,
+      slug,
+      source,
+    );
+    if (immediatelyAvailable !== undefined) {
+      setChapters(immediatelyAvailable);
+      setChapterState("ready");
+    } else {
+      setChapterState("loading");
+    }
 
     const loadSelectedAndSupplementalSources = async () => {
-      if (source === "firestore") return loadFirestoreChapterSource(slug, controller.signal);
-      const secondarySource: ChapterSource = source === "blogger" ? "blogger2" : "blogger";
+      const loadAndCache = async (chapterSource: ChapterSource): Promise<Chapter[]> => {
+        const key = chapterSourceCacheKey(slug, chapterSource);
+        const memoryCache = chapterSourceCacheRef.current;
+        if (memoryCache.has(key)) return memoryCache.get(key) || [];
+        const loaded = chapterSource === "firestore"
+          ? await loadFirestoreChapterSource(slug, controller.signal)
+          : await loadBloggerChapterSource(manga.title, chapterSource, controller.signal);
+        if (controller.signal.aborted) {
+          throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
+        }
+        memoryCache.set(key, loaded);
+        return loaded;
+      };
+
+      if (source === "firestore") return loadAndCache(source);
       const settled = await Promise.allSettled([
-        loadBloggerChapterSource(manga.title, source, controller.signal),
-        loadBloggerChapterSource(manga.title, secondarySource, controller.signal),
-        loadFirestoreChapterSource(slug, controller.signal),
+        loadAndCache(source),
+        loadAndCache("firestore"),
       ]);
       if (controller.signal.aborted) throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
 
       const sources = settled.map((result, index) => {
         if (result.status === "fulfilled") return result.value;
         console.warn(
-          `Chapter source ${index === 0 ? source : index === 1 ? secondarySource : "firestore"} failed for ${slug}.`,
+          `Chapter source ${index === 0 ? source : "firestore"} failed for ${slug}.`,
           result.reason,
         );
         return [];
       });
-      if (!sources.some((chapters) => chapters.length > 0)) {
-        const firstError = settled.find((result) => result.status === "rejected");
-        if (firstError?.status === "rejected") throw firstError.reason;
-      }
-      return mergeChapterSources(mergeChapterSources(sources[0], sources[1]), sources[2]);
+      const selectedChapters = sources[0].length ? sources[0] : cachedSelectedChapters;
+      const firestoreChapters = sources[1].length ? sources[1] : cachedFirestoreChapters;
+      const mergedChapters = mergeChapterSources(selectedChapters, firestoreChapters);
+      if (mergedChapters.length) return mergedChapters;
+      const firstError = settled.find((result) => result.status === "rejected");
+      if (firstError?.status === "rejected") throw firstError.reason;
+      return cachedSelectedChapters;
     };
 
     loadSelectedAndSupplementalSources().then((result) => {
@@ -1128,7 +1184,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         }
       }
       const merged = mergeChapterSources(
-        previous.filter((item) => item.source !== source && item.source !== "firestore"),
+        previous.filter((item) => item.source !== source),
         finalResult,
       );
       cacheChapterList(slug, merged);
@@ -1150,10 +1206,26 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {
     if (source === nextSource) return;
     localStorage.setItem("chapterSourceMode", preference);
-    setChapters([]);
     setChapterError("");
-    setChapterState("loading");
+    const cachedChapters = cachedChapterListForSource(
+      chapterSourceCacheRef.current,
+      slug,
+      nextSource,
+    );
+    if (cachedChapters !== undefined) {
+      setChapters(cachedChapters);
+      setChapterState("ready");
+    } else {
+      setChapterState("loading");
+    }
     setSource(nextSource);
+  }
+
+  function retryChapterLoad() {
+    for (const chapterSource of ["blogger", "blogger2", "firestore"] as const) {
+      chapterSourceCacheRef.current.delete(chapterSourceCacheKey(slug, chapterSource));
+    }
+    setChapterRetry((attempt) => attempt + 1);
   }
 
   useEffect(() => {
@@ -1286,8 +1358,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       localStorage.setItem(readKey, JSON.stringify(read));
       setReadChapters(read);
     }
-    let images = chapter.images || [];
-    if (!isNovel && !images.length && chapter.source === "firestore") {
+    const readerSource = chapter.source === "firestore" && source !== "firestore"
+      ? source
+      : chapter.source;
+    let images = chapter.source === "firestore" && readerSource !== "firestore"
+      ? []
+      : chapter.images || [];
+    if (!isNovel && !images.length && chapter.source === "firestore" && readerSource === "firestore") {
       try {
         const response = await fetch(
           `${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapter.id || String(chapter.num))}`,
@@ -1306,14 +1383,15 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     images = [...new Set(images.map(originalReaderImageUrl))];
     localStorage.setItem("currentChapter", JSON.stringify({
       slug,
-      id: chapter.id,
+      id: readerSource === "firestore" ? chapter.id : undefined,
       num: chapter.num,
       title: manga.title,
+      postTitle: chapter.title || chapterName,
       label: chapterName,
       images,
       thumbnail: chapter.thumbnail || images[0] || "",
       url: chapter.url || "",
-      source: chapter.source,
+      source: readerSource,
       isNovel,
     }));
     const readerRoute = isNovel ? "/novel" : "/manga";
@@ -1405,7 +1483,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   </div>
                   <div className="rating-number">{ratingValue === undefined ? "N/A" : ratingValue.toFixed(1)}</div>
                 </div>
-                <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#e59a00] bg-[#e59a00] px-1 py-2 text-[10px] font-semibold text-black transition hover:bg-[#f0aa18] disabled:cursor-not-allowed disabled:opacity-50 max-[767px]:min-h-0 max-[767px]:border-2 max-[767px]:px-[5px] max-[767px]:py-[3px] lg:px-3 lg:text-sm" type="button" onClick={() => {
+                <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-1 py-2 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] lg:px-3 lg:text-sm" type="button" onClick={() => {
                   if (latestChapter) void openChapter(latestChapter);
                 }} disabled={!latestChapter || chapterState !== "ready"}>
                   <i className="fas fa-book-open" aria-hidden="true" />
@@ -1417,13 +1495,12 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 </button>
               </div>
               <div className="info">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#777] dark:text-white/55">Series details</p>
-                <h1 className="title">{manga.title}</h1>
-                <div className="title-divider" />
-                {manga.altTitle && <div className="alt-title">{manga.altTitle}</div>}
                 <div className={`status ${status.toLowerCase()}`}>
                   <i className="fas fa-fire" aria-hidden="true" /> <span>{status}</span>
                 </div>
+                <h1 className="title">{manga.title}</h1>
+                <div className="title-divider" />
+                {manga.altTitle && <div className="alt-title">{manga.altTitle}</div>}
                 <MetaTag label="Type" value={manga.type} icon="fa-layer-group" />
                 <MetaTag label="Series" value={manga.series} icon="fa-bookmark" />
                 <MetaTag label="Characters" value={asStringList(manga.characters).join(", ")} icon="fa-user-group" />
@@ -1644,7 +1721,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
                     <p>Chapter gagal dimuat.</p>
                     {chapterError && <p>{chapterError}</p>}
-                    <button type="button" onClick={() => setChapterRetry((attempt) => attempt + 1)}>Coba lagi</button>
+                    <button type="button" onClick={retryChapterLoad}>Coba lagi</button>
                   </div>
                 )}
                 {chapterState === "ready" && visibleChapters.length === 0 && (
