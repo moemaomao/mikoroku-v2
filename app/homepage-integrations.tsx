@@ -10,6 +10,7 @@ type ScriptSource = {
 
 const scripts: ScriptSource[] = [
   { src: "/manga-data.js" },
+  { src: "/series-cover-preferences.js" },
   { src: "/githubmangapost.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js" },
   { src: "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js" },

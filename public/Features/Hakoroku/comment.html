@@ -5770,8 +5770,11 @@ border-radius:12px;
       appId: "1:249700505242:web:dab240af09caf30ad7f123"
     };
 
-    const firebaseApp = firebase.apps.find(app => app.options.projectId === firebaseConfig.projectId)
-      || firebase.initializeApp(firebaseConfig, 'hakoroku-comments');
+    const firebaseApp = firebase.apps.find(app => app.name === '[DEFAULT]')
+      || firebase.initializeApp(firebaseConfig);
+    if (firebaseApp.options.projectId !== firebaseConfig.projectId) {
+      throw new Error('The default Firebase app must use the shared comment authentication project.');
+    }
     const auth = firebaseApp.auth();
     const db = firebaseApp.firestore();
 
@@ -5829,7 +5832,8 @@ border-radius:12px;
       saveUserStatsCache();
     }
 
-    let postId = document.documentElement.dataset.communityPageId
+    let postId = new URLSearchParams(window.location.search).get('pageId')
+      || document.documentElement.dataset.communityPageId
       || window.location.pathname + window.location.search;
     postId = postId
       .replace(/^[\/]+|[\/]+$/g, '')
@@ -8927,6 +8931,7 @@ function generateUsername(user, fallbackName = '') {
     };
   }
 
+  let commentSaved = false;
   try {
     sortingLocked = true;
 
@@ -8934,6 +8939,7 @@ function generateUsername(user, fallbackName = '') {
       .doc(postId)
       .collection('postComments')
       .add(newComment);
+    commentSaved = true;
 
     console.log("Comment success:", ref.id);
 
@@ -8974,10 +8980,12 @@ function generateUsername(user, fallbackName = '') {
       sortingLocked = false;
       sortComments();
     }, 400);
+    return true;
 
   } catch (err) {
     console.error("Gagal kirim komentar:", err);
     sortingLocked = false;
+    return commentSaved;
   }
 }
 
@@ -9362,7 +9370,7 @@ if (fileInput) {
       handlePaste(e, textarea, previewContainer, previewImg, removeBtn)
     );
 
-    form.onsubmit = e => {
+    form.onsubmit = async e => {
 
   e.preventDefault();
 
@@ -9383,52 +9391,61 @@ if (fileInput) {
         return;
       }
 
-      const sendReply = (img) => {
+      const sendReply = async (img) => {
+        try {
+          const saved = await addComment(authorInput, text, img, true, parentId);
+          if (!saved) {
+            alert('Komentar gagal dikirim. Silakan coba lagi.');
+            return;
+          }
 
-        addComment(authorInput, text, img, true, parentId);
+          db.collection('comments')
+            .doc(postId)
+            .collection('postComments')
+            .doc(parentId)
+            .get()
+            .then(doc => {
+              if (doc.exists) {
+                const parentComment = { id: doc.id, ...doc.data() };
 
-        db.collection('comments')
-          .doc(postId)
-          .collection('postComments')
-          .doc(parentId)
-          .get()
-          .then(doc => {
-            if (doc.exists) {
-              const parentComment = { id: doc.id, ...doc.data() };
+                if (
+                  currentUser &&
+                  (parentComment.uid !== currentUser.uid || DEBUG_SELF_NOTIFICATION)
+                ) {
+                  addReplyNotification(parentComment, text);
+                }
+              }
+            })
+            .catch(err => console.error('Gagal ambil parent comment:', err));
 
-              if (
-  currentUser &&
-  (parentComment.uid !== currentUser.uid || DEBUG_SELF_NOTIFICATION)
-) {
-  addReplyNotification(parentComment, text);
-}
-            }
-          })
-          .catch(err => console.error('Gagal ambil parent comment:', err));
-
-        form.reset();
-        textarea.dataset.pastedImage = '';
-        previewContainer.style.display = 'none';
-        form.closest('.reply-form-container').style.display = 'none';
-
-        form.dataset.submitting = "false";
+          form.reset();
+          textarea.dataset.pastedImage = '';
+          previewContainer.style.display = 'none';
+          form.closest('.reply-form-container').style.display = 'none';
+        } finally {
+          form.dataset.submitting = "false";
+        }
       };
 
       if (textarea.dataset.pastedImage) {
-        sendReply(textarea.dataset.pastedImage);
-      } else {
-        const fileInput = form.querySelector('.reply-image');
-        if (fileInput.files[0]) {
-          (async () => {
-  const imageUrl =
-    await uploadToImgBB(fileInput.files[0]);
-  if (!imageUrl) return;
-  sendReply(imageUrl);
-})();
-          return;
-        }
-        sendReply(null);
+        await sendReply(textarea.dataset.pastedImage);
+        return;
       }
+      const fileInput = form.querySelector('.reply-image');
+      if (fileInput.files[0]) {
+        try {
+          const imageUrl = await uploadToImgBB(fileInput.files[0]);
+          if (!imageUrl) return;
+          await sendReply(imageUrl);
+        } catch (error) {
+          console.error('Gagal mengunggah gambar balasan:', error);
+          alert('Gambar gagal diunggah. Silakan coba lagi.');
+        } finally {
+          form.dataset.submitting = "false";
+        }
+        return;
+      }
+      await sendReply(null);
     };
 
     form.querySelector('.cancel-reply').onclick = () => {
@@ -9540,7 +9557,7 @@ if (fileInput) {
 }
 
 
-    document.getElementById('comment-form').onsubmit = e => {
+    document.getElementById('comment-form').onsubmit = async e => {
 
   e.preventDefault();
 
@@ -9576,17 +9593,9 @@ if (fileInput) {
     return;
   }
 
-  recent.push(now);
-
-  localStorage.setItem(
-    spamKey,
-    JSON.stringify(recent)
-  );
-
+  const lastCommentKey = `last_comment_${currentUser?.uid || 'guest'}`;
   const lastComment =
-    localStorage.getItem(
-      `last_comment_${currentUser?.uid || 'guest'}`
-    );
+    localStorage.getItem(lastCommentKey);
 
   if (
     lastComment &&
@@ -9596,11 +9605,6 @@ if (fileInput) {
     alert('Komentar duplikat terdeteksi.');
     return;
   }
-
-  localStorage.setItem(
-    `last_comment_${currentUser?.uid || 'guest'}`,
-    text
-  );
 
   if (/(.)\1{15,}/i.test(text)) {
     alert('Spam karakter terdeteksi.');
@@ -9621,19 +9625,31 @@ if (fileInput) {
        const imageUrl =
         await uploadToImgBB(fileInput.files[0]);
         if (!imageUrl) return;
-        addComment(authorInput, text, imageUrl);
+        const saved = await addComment(authorInput, text, imageUrl);
+        if (!saved) {
+          alert('Komentar gagal dikirim. Silakan coba lagi.');
+          return;
+        }
+        recent.push(now);
+        localStorage.setItem(spamKey, JSON.stringify(recent));
+        localStorage.setItem(lastCommentKey, text);
         e.target.reset();
-        document.getElementById('author').value =
-        authorInput;
-        document.getElementById('comment-preview')
-       .style.display = 'none';
+        document.getElementById('author').value = authorInput;
+        document.getElementById('comment-preview').style.display = 'none';
         textarea.dataset.pastedImage = '';
         })();
           return;
         }
       }
 
-      addComment(authorInput, text, image);
+      const saved = await addComment(authorInput, text, image);
+      if (!saved) {
+        alert('Komentar gagal dikirim. Silakan coba lagi.');
+        return;
+      }
+      recent.push(now);
+      localStorage.setItem(spamKey, JSON.stringify(recent));
+      localStorage.setItem(lastCommentKey, text);
       e.target.reset();
       document.getElementById('author').value = authorInput;
       document.getElementById('comment-preview').style.display = 'none';

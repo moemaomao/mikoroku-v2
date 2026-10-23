@@ -804,7 +804,8 @@
       const slug = (item.slug && String(item.slug).trim()) || slugify(title);
       const meta = getFsMetaForItem(item);
       const finalSlug = (meta && meta.slug) || slug;
-      const coverSrc = (meta && meta.cover) || item.img || item.cover;
+      const coverSrc = (window.getSeriesCoverPreference && window.getSeriesCoverPreference(finalSlug)) ||
+        (meta && meta.cover) || item.img || item.cover;
       const thumb = getThumbnail(coverSrc);
       const status = ((meta && meta.status) || item.status || "").toLowerCase();
       const type = ((meta && meta.type) || item.type || "manga").toLowerCase();

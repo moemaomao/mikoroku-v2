@@ -266,6 +266,7 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
 
 const SERIES_COVER_PREFERENCE_DB = "mikoroku-series-cover-preferences";
 const SERIES_COVER_PREFERENCE_STORE = "selections";
+const SERIES_COVER_PREFERENCE_STORAGE_KEY = "mikoroku-series-cover:";
 
 type SeriesCoverPreference = { slug: string; url: string };
 
@@ -812,7 +813,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     () => [...new Set([...(manga?.covers || []), baseCoverUrl].filter(Boolean))],
     [baseCoverUrl, manga?.covers],
   );
-  const coverOptionsRef = useRef(coverOptions);
+  const selectedCoverSlugRef = useRef("");
   const activeCoverUrl = coverOptions.includes(selectedCoverUrl) ? selectedCoverUrl : baseCoverUrl;
   const cover = useCoverImageSource(activeCoverUrl, 1200);
   const [state, setState] = useState<DetailState>("loading");
@@ -833,21 +834,34 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const mangaSlug = manga?.slug;
 
   useEffect(() => {
-    coverOptionsRef.current = coverOptions;
-  }, [coverOptions]);
-
-  useEffect(() => {
     if (!mangaSlug) return;
     let active = true;
-    setSelectedCoverUrl("");
-    setCoverPreferenceError("");
-    if (!("indexedDB" in window)) {
-      setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
-      return;
+    if (selectedCoverSlugRef.current !== mangaSlug) {
+      selectedCoverSlugRef.current = mangaSlug;
+      setSelectedCoverUrl("");
     }
+    setCoverPreferenceError("");
+    let localPreference = "";
+    try {
+      localPreference = localStorage.getItem(`${SERIES_COVER_PREFERENCE_STORAGE_KEY}${mangaSlug}`) || "";
+    } catch (error) {
+      console.warn(`Could not read the homepage cover selection for ${mangaSlug}.`, error);
+    }
+    if (localPreference && coverOptions.includes(localPreference)) {
+      setSelectedCoverUrl(localPreference);
+      return () => {
+        active = false;
+      };
+    }
+    if (!("indexedDB" in window)) return;
     void readSeriesCoverPreference(mangaSlug).then((savedUrl) => {
-      if (!active || !savedUrl || !coverOptionsRef.current.includes(savedUrl)) return;
+      if (!active || !savedUrl || !coverOptions.includes(savedUrl)) return;
       setSelectedCoverUrl(savedUrl);
+      try {
+        localStorage.setItem(`${SERIES_COVER_PREFERENCE_STORAGE_KEY}${mangaSlug}`, savedUrl);
+      } catch (error) {
+        console.warn(`Could not mirror the selected cover for ${mangaSlug} to homepage storage.`, error);
+      }
     }).catch((error: unknown) => {
       console.error(`Could not load the selected cover for ${mangaSlug}.`, error);
       if (active) setCoverPreferenceError("Could not load the saved cover selection.");
@@ -855,7 +869,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return () => {
       active = false;
     };
-  }, [mangaSlug]);
+  }, [coverOptions, mangaSlug]);
 
   useEffect(() => {
     const updateSidebarState = () => setSiteSidebarOpen(document.body.classList.contains("sidebar-open"));
@@ -1086,13 +1100,21 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
     setCoverPreferenceError("");
-    if (!manga || !("indexedDB" in window)) {
-      setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
+    if (!manga) return;
+    let localSaved = false;
+    try {
+      localStorage.setItem(`${SERIES_COVER_PREFERENCE_STORAGE_KEY}${manga.slug}`, url);
+      localSaved = true;
+    } catch (error) {
+      console.warn(`Could not save the homepage cover selection for ${manga.slug}.`, error);
+    }
+    if (!("indexedDB" in window)) {
+      if (!localSaved) setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
       return;
     }
     void writeSeriesCoverPreference(manga.slug, url).catch((error: unknown) => {
       console.error(`Could not save the selected cover for ${manga.slug}.`, error);
-      setCoverPreferenceError("Cover changed for this visit, but could not be saved in this browser.");
+      if (!localSaved) setCoverPreferenceError("Cover changed for this visit, but could not be saved in this browser.");
     });
   }
   const latestChapter = useMemo(

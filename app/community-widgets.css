@@ -37,6 +37,17 @@
 }
 
 @media (max-width: 767px) {
+  .detail-tab-comments {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .detail-tab-comments .community-widgets {
+    width: 100%;
+    margin: 12px 0;
+  }
+
   .community-widgets.detail-widgets {
     margin-top: 0;
   }

@@ -209,7 +209,8 @@ function updateFirebaseLoadMoreBtn() {
 function createCardAndAppend(container, m, index = 0) {
   const ch = getLastChapter(m);
   const isNew = m.updatedAt && (Date.now() - m.updatedAt < 86400000);
-  const thumb = getThumbnail(m.cover || m.img || m.info?.cover || m.info?.img);
+  const selectedCover = window.getSeriesCoverPreference && window.getSeriesCoverPreference(m.slug);
+  const thumb = getThumbnail(selectedCover || m.cover || m.img || m.info?.cover || m.info?.img);
   const html = createCardHTML(m, thumb, ch, isNew);
 
   const temp = document.createElement("div");
