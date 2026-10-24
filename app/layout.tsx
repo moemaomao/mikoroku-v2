@@ -51,8 +51,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="id" suppressHydrationWarning className="overflow-y-scroll [--sidebar-width:280px] [--gap:12px] [--radius:10px]">
+    <html
+      lang="id"
+      suppressHydrationWarning
+      className="overflow-y-scroll [--sidebar-width:280px] [--gap:12px] [--radius:10px]"
+      style={{ backgroundColor: "#0b0b0b" }}
+    >
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark);root.style.backgroundColor=isDark?"#0b0b0b":"#f8f9fa";root.style.colorScheme=isDark?"dark":"light";try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}})();`,
+          }}
+        />
         <meta name="author" content="Mikoroku" />
         <meta name="theme-color" content="#7A0000" />
         <meta name="36b5c8cd1a2e7f2ae448252f862af29bf0ba6ff9" content="36b5c8cd1a2e7f2ae448252f862af29bf0ba6ff9" />
@@ -80,7 +90,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body suppressHydrationWarning className="m-0 min-h-dvh overflow-x-clip bg-[#f8f9fa] pt-14! font-['Kodchasan',Arial,sans-serif] leading-[1.4] text-[#333] antialiased [text-rendering:optimizeLegibility] dark:bg-[#0b0b0b] dark:text-white">
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;var roots=[root,document.body];roots.forEach(function(element){element.classList.toggle("dark",isDark);element.classList.toggle("light",!isDark)});try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}})();`,
+            __html: `(function(){var root=document.documentElement;document.body.classList.toggle("dark",root.classList.contains("dark"));document.body.classList.toggle("light",root.classList.contains("light"))})();`,
           }}
         />
         <AdvertisementManager>{children}</AdvertisementManager>

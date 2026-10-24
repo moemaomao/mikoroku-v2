@@ -1316,7 +1316,7 @@ export default function ReaderPage({
 
       <BannerAdSlot placement="reader-before-content" />
       {error ? <section className="reader-message mx-auto my-12 w-[min(calc(100%-32px),700px)] rounded-2xl border border-black/10 bg-white p-6 text-center shadow-lg dark:border-white/10 dark:bg-[#191a20]" role="alert"><h1>Unable to load chapter</h1><p>{error}</p><button className="rounded-lg border border-black/20 bg-black/10 px-3 py-2 dark:border-white/20 dark:bg-white/10" type="button" onClick={() => window.location.reload()}>Try again</button></section>
-        : !data ? <p className="reader-message mx-auto my-12 w-[min(calc(100%-32px),700px)] rounded-2xl border border-black/10 bg-white p-6 text-center shadow-lg dark:border-white/10 dark:bg-[#191a20]" role="status">Loading chapter...</p>
+        : !data ? null
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-white py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] dark:bg-[#0a0a0c] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
             {mode === "long-strip" ? data.images.map((image, index) => (
