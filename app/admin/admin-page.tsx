@@ -116,6 +116,8 @@ type SummaryEntry = {
   title: string;
   altTitle: string;
   cover: string;
+  covers?: string[];
+  coverNumbers?: Record<string, string>;
   type: string;
   status: string;
   author: string;
@@ -414,6 +416,8 @@ function toSummaryEntry(manga: MangaRecord): SummaryEntry {
     title: manga.title,
     altTitle: manga.altTitle,
     cover: manga.cover,
+    covers: manga.covers || [],
+    coverNumbers: manga.coverNumbers || {},
     type: manga.type || "manga",
     status: manga.status.toLowerCase(),
     author: manga.author,
@@ -1385,6 +1389,7 @@ export default function AdminPage() {
       covers: nextCovers,
       coverNumbers: nextCoverNumbers,
     };
+    await updateSummary(firestore, updatedManga);
     setSelectedManga(updatedManga);
     setSavedCoverOrder(nextCovers);
     const updatedCatalog = manga.map((item) => item.slug === updatedManga.slug ? updatedManga : item);

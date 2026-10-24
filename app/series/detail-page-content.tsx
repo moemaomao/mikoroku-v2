@@ -1053,22 +1053,27 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         if (!snapshot.exists() || controller.signal.aborted) return;
         const data = snapshot.data();
         const firestoreCovers = asStringList(data.covers).map(resolveCover).filter(Boolean);
-        if (firestoreCovers.length || data.coverNumbers) {
-          const coverNumbers = data.coverNumbers && typeof data.coverNumbers === "object"
-            ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, asString(number)]))
-            : {};
-          setManga((current) => {
-            if (current?.slug !== slug) return current;
-            if (firestoreCovers.length === (current.covers || []).length &&
-              firestoreCovers.every((cover, index) => cover === current.covers?.[index]) &&
-              Object.keys(coverNumbers).every((url) => current.coverNumbers?.[url] === coverNumbers[url])) return current;
-            return {
-              ...current,
-              ...(firestoreCovers.length ? { covers: firestoreCovers } : {}),
-              coverNumbers,
-            };
-          });
-        }
+        const hasFirestoreCovers = Array.isArray(data.covers);
+        const coverNumbers = data.coverNumbers && typeof data.coverNumbers === "object"
+          ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, asString(number)]))
+          : {};
+        setManga((current) => {
+          if (current?.slug !== slug) return current;
+          const currentCovers = current.covers || [];
+          const coversMatch = !hasFirestoreCovers ||
+            (firestoreCovers.length === currentCovers.length &&
+              firestoreCovers.every((cover, index) => cover === currentCovers[index]));
+          const currentCoverNumbers = current.coverNumbers || {};
+          const coverNumbersMatch =
+            Object.keys(coverNumbers).length === Object.keys(currentCoverNumbers).length &&
+            Object.entries(coverNumbers).every(([url, number]) => currentCoverNumbers[url] === number);
+          if (coversMatch && coverNumbersMatch) return current;
+          return {
+            ...current,
+            ...(hasFirestoreCovers ? { covers: firestoreCovers } : {}),
+            coverNumbers,
+          };
+        });
         const latest = data.latestUpdate || data.updatedAt;
         if (latest) setFirestoreLatestUpdate(firestoreDate(latest));
       } catch (error) {
@@ -1608,10 +1613,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                       key={coverUrl}
                       onClick={() => selectDetailCover(coverUrl)}
                       aria-pressed={activeCoverUrl === coverUrl}
-                      aria-label={`Use volume ${index + 1} cover`}
+                      aria-label={`Use volume ${manga.coverNumbers?.[coverUrl]?.trim() || index + 1} cover`}
                     >
                       <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizeWidth={240} />
-                      <span className="block truncate px-2 py-2 text-xs font-medium">Volume {manga.coverNumbers?.[coverUrl] || index + 1}</span>
+                      <span className="block truncate px-2 py-2 text-xs font-medium">Volume {manga.coverNumbers?.[coverUrl]?.trim() || index + 1}</span>
                       {activeCoverUrl === coverUrl && <span className="absolute right-2 top-2 rounded-full bg-[var(--mikoroku-detail-cover-accent)] px-2 py-1 text-[10px] font-bold text-white">Selected</span>}
                     </button>
                   ))}

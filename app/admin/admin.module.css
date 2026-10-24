@@ -1044,19 +1044,20 @@
 
 .chapterCard .rowActions {
   position: absolute;
-  top: 8px;
+  top: 4px;
   right: 8px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   margin: 0;
 }
 
 .chapterCard .rowActions button {
   display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   place-items: center;
   padding: 0;
   border: none;
@@ -2400,8 +2401,29 @@
   }
 
   .chapterCard {
-    min-height: 88px;
-    padding: 10px;
+    min-height: 68px;
+    padding: 8px;
+  }
+
+  .chapterCardHeading {
+    padding-right: 30px;
+  }
+
+  .chapterDate {
+    padding-right: 30px;
+  }
+
+  .chapterCard .rowActions {
+    top: 6px;
+    right: 6px;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .chapterCard .rowActions button {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
   }
 
   .mangaCardBody {
@@ -3312,4 +3334,3 @@
 :global(html.adminPageHtml) {
   background: inherit;
 }
-
