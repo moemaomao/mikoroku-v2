@@ -555,14 +555,48 @@ async function loadBloggerChapterSource(
   signal: AbortSignal,
 ): Promise<Chapter[]> {
   if (source === "firestore") return [];
-  const domain = source === "blogger"
-    ? "https://www.mikodrive.my.id"
-    : "https://www.yomidays.my.id";
-  const feed = await jsonp<{ feed?: { entry?: BloggerEntry[] } }>(
-    `${domain}/feeds/posts/default?alt=json-in-script&max-results=500&q=${encodeURIComponent(title)}`,
+
+  const params = new URLSearchParams({
+    title,
+    source: source === "blogger2" ? "blogger2" : "blogger",
+  });
+
+  const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
     signal,
-  );
-  return parseBloggerEntries(feed, source);
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(
+      body?.error ||
+        `Proxy chapter Blogger gagal (HTTP ${response.status}).`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    chapters?: Array<{
+      num: string;
+      title: string;
+      url: string;
+      images?: string[];
+      thumbnail?: string;
+      createdAt?: string;
+      source: "blogger" | "blogger2";
+    }>;
+  };
+
+  return (data.chapters || []).map((chapter) => ({
+    num: chapter.num,
+    title: chapter.title,
+    url: chapter.url,
+    images: chapter.images || [],
+    thumbnail: chapter.thumbnail || "",
+    createdAt: chapter.createdAt || "",
+    source: chapter.source,
+  }));
 }
 
 async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Promise<Chapter[]> {

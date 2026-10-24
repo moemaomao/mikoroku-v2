@@ -19,13 +19,20 @@ function getKv(): KVNamespace | null {
     if (env?.MIKOROKU_V2_CACHE) {
       return env.MIKOROKU_V2_CACHE as KVNamespace;
     }
+    if (env?.MIKOROKU_CACHE) {
+      return env.MIKOROKU_CACHE as KVNamespace;
+    }
   } catch {
     // ignore
   }
 
   const g = globalThis as any;
   const env = g.env || g.__env__;
-  return (env?.MIKOROKU_V2_CACHE as KVNamespace) || null;
+  return (
+    (env?.MIKOROKU_V2_CACHE as KVNamespace) ||
+    (env?.MIKOROKU_CACHE as KVNamespace) ||
+    null
+  );
 }
 
 export async function kvGet<T = unknown>(
@@ -99,6 +106,9 @@ export const CacheKeys = {
   hentaiList: (page = 1) => `hentai:list:p${page}`,
   seriesDetail: (slug: string) => `series:${slug}`,
   chapterList: (slug: string) => `chapters:${slug}`,
+  /** Blogger chapter list by source + title (see lib/blogger-chapters.ts). */
+  bloggerChapters: (source: string, title: string) =>
+    `blogger:chapters:${source}:${title.trim().toLowerCase().replace(/\s+/g, " ")}`,
   genreList: () => `genres:all`,
   home: () => `home:latest`,
   ogSeries: (slug: string) => `og:series:${slug}`,
