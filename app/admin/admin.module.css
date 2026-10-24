@@ -79,12 +79,17 @@
   width: 100%;
   min-width: 0;
   padding: 11px 12px;
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 12px;
   outline: none;
   color: #eef2ff;
-  background: rgb(10 15 29 / 55%);
+  background: #252b40;
   font: inherit;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: #7d8aa8;
 }
 
 .field input:focus,
@@ -101,7 +106,42 @@
 
 .field select option {
   color: #eef2ff;
-  background: #161e32;
+  background: #252b40;
+}
+
+/* Modern select (closed state) */
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  padding-right: 40px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #9eb0d4 50%),
+    linear-gradient(135deg, #9eb0d4 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  background-color: #252b40;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.field select:hover {
+  border-color: rgb(107 155 255 / 45%);
+}
+
+.field select:focus {
+  background-image:
+    linear-gradient(45deg, transparent 50%, #c4d4ff 50%),
+    linear-gradient(135deg, #c4d4ff 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  background-color: #2a3148;
 }
 
 .loginCard .field + .field {
@@ -179,6 +219,7 @@
   background: #111221;
   font-family: Inter, system-ui, sans-serif;
   font-size: 14px;
+  color-scheme: dark;
 }
 
 :global(html),
@@ -351,7 +392,7 @@
   border: 1px solid rgb(255 255 255 / 13%);
   border-radius: 999px;
   color: #8190ae;
-  background: rgb(19 21 38 / 75%);
+  background: #252b40;
 }
 
 .searchBox input {
@@ -767,19 +808,20 @@
 .coverGalleryItem {
   position: relative;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 10px;
   background: rgb(10 15 29 / 55%);
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 120ms ease;
 }
 
 .coverGalleryItemDragging {
-  z-index: 2;
-  transform: translateY(-10px) scale(1.04);
-  border-color: rgb(125 164 255 / 90%);
-  box-shadow: 0 16px 34px rgb(0 0 0 / 45%), 0 0 0 2px rgb(107 155 255 / 35%);
-  will-change: transform;
+  z-index: 5;
+  opacity: 0.45;
+  transform: scale(0.96);
+  border-color: rgb(125 164 255 / 70%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 35%);
+  will-change: transform, opacity;
 }
 
 .coverGalleryItem > img {
@@ -792,9 +834,10 @@
 .coverGalleryImage {
   position: relative;
   overflow: hidden;
+  border-radius: 10px 10px 0 0;
   cursor: grab;
-  touch-action: none;
   user-select: none;
+  -webkit-user-drag: element;
 }
 
 .coverGalleryImage:active {
@@ -823,16 +866,17 @@
 
 .coverGalleryActions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   padding: 8px;
 }
 
 .volumeNumberField {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
   gap: 5px;
   color: #bac5dc;
@@ -840,19 +884,63 @@
 }
 
 .volumeNumberField > input {
-  width: 56px;
+  width: 48px;
   min-width: 0;
   padding: 5px 6px;
   border: 1px solid rgb(255 255 255 / 15%);
   border-radius: 6px;
   color: #eef2ff;
-  background: rgb(10 15 29 / 65%);
+  background: #252b40;
   font: inherit;
 }
 
 .volumeNumberField > input:focus {
   border-color: #6b9bff;
   outline: 2px solid rgb(107 155 255 / 25%);
+}
+
+.volumeDeleteButton {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  color: #9eb0d4;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.volumeDeleteButton:hover:not(:disabled) {
+  color: #ff9b9b;
+  background: rgb(248 113 113 / 14%);
+}
+
+.volumeDeleteButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.volumeDeleteButton svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.lightMode .volumeDeleteButton {
+  color: #6b7c9c;
+}
+
+.lightMode .volumeDeleteButton:hover:not(:disabled) {
+  color: #a5293c;
+  background: rgb(190 46 64 / 10%);
 }
 
 .coverGalleryActions > .deleteButton {
@@ -899,24 +987,26 @@
 }
 
 .chapterCard {
+  position: relative;
   display: flex;
   min-width: 0;
-  min-height: 96px;
+  min-height: 0;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   background: rgba(22, 28, 48, 0.88);
   cursor: grab;
   content-visibility: auto;
-  contain-intrinsic-size: auto 104px;
+  contain-intrinsic-size: auto 64px;
   contain: layout style paint;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .chapterCard:hover {
   border-color: rgba(107, 155, 255, 0.4);
+  background: rgba(28, 36, 58, 0.95);
 }
 
 .chapterCard:active {
@@ -928,6 +1018,7 @@
   align-items: baseline;
   gap: 3px;
   min-width: 0;
+  padding-right: 56px; /* room for icon actions */
 }
 
 .chapterCardHeading strong {
@@ -947,48 +1038,55 @@
 .chapterDate {
   color: #8d99b4;
   font-size: 11px;
+  margin-top: 0;
+  line-height: 1.2;
 }
 
 .chapterCard .rowActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: flex;
-  justify-content: flex-end;
-  gap: 7px;
-  margin-top: auto;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
 }
 
 .chapterCard .rowActions button {
   display: grid;
-  width: 34px;
-  height: 32px;
-  flex: 0 0 34px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   place-items: center;
   padding: 0;
-  border: 1px solid rgb(107 155 255 / 25%);
-  border-radius: 8px;
-  color: #bed0ff;
-  background: rgb(107 155 255 / 8%);
+  border: none;
+  border-radius: 6px;
+  color: #9eb0d4;
+  background: transparent;
   cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .chapterCard .rowActions button:hover {
-  border-color: rgb(107 155 255 / 55%);
-  background: rgb(107 155 255 / 18%);
+  color: #d6e4ff;
+  background: rgb(107 155 255 / 14%);
 }
 
 .chapterCard .rowActions .deleteButton {
-  border-color: rgb(248 113 113 / 30%);
-  color: #ffaaaa;
-  background: rgb(248 113 113 / 8%);
+  border: none;
+  color: #9eb0d4;
+  background: transparent;
 }
 
 .chapterCard .rowActions .deleteButton:hover {
-  border-color: rgb(248 113 113 / 60%);
-  background: rgb(248 113 113 / 17%);
+  border: none;
+  color: #ff9b9b;
+  background: rgb(248 113 113 / 14%);
 }
 
 .chapterCard .rowActions button svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -998,7 +1096,7 @@
 
 .chapterCard .rowActions button:focus-visible {
   outline: 2px solid #82a7ff;
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .deleteButton {
@@ -1331,10 +1429,10 @@
   min-width: 160px;
   min-height: 42px;
   padding: 5px;
-  border: 1px solid rgb(255 255 255 / 18%);
+  border: 1px solid rgb(255 255 255 / 16%);
   border-radius: 10px;
   color: #c7d0e2;
-  background: rgb(10 15 29 / 72%);
+  background: #252b40;
   font: inherit;
   font-size: 12px;
 }
@@ -1826,9 +1924,50 @@
 .lightMode .field select,
 .lightMode .field textarea,
 .lightMode .searchBox input {
-  border-color: rgb(20 29 55 / 17%);
+  border-color: rgb(20 29 55 / 14%);
   color: #20283b;
   background: #fff;
+  box-shadow: 0 1px 2px rgb(20 29 55 / 4%);
+}
+
+.lightMode .field select {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #6b7c9c 50%),
+    linear-gradient(135deg, #6b7c9c 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  color: #20283b;
+}
+
+.lightMode .field select:hover {
+  border-color: rgb(57 89 163 / 40%);
+  background-color: #fafbff;
+}
+
+.lightMode .field select:focus {
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #3959a3 50%),
+    linear-gradient(135deg, #3959a3 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.lightMode .field select option {
+  color: #20283b;
+  background: #ffffff;
+}
+
+.lightMode .field input:hover,
+.lightMode .field textarea:hover {
+  border-color: rgb(57 89 163 / 28%);
 }
 
 .lightMode .searchBox,
@@ -1942,25 +2081,27 @@
 }
 
 .lightMode .chapterCard .rowActions button:not(.deleteButton) {
-  border-color: rgb(57 89 163 / 19%);
-  color: #3959a3;
-  background: #f2f5fc;
+  border: none;
+  color: #6b7c9c;
+  background: transparent;
 }
 
 .lightMode .chapterCard .rowActions button:not(.deleteButton):hover {
-  border-color: rgb(57 89 163 / 42%);
-  background: #e6ecf9;
+  border: none;
+  color: #3959a3;
+  background: rgb(57 89 163 / 12%);
 }
 
 .lightMode .chapterCard .rowActions .deleteButton {
-  border-color: rgb(190 46 64 / 26%);
-  color: #a5293c;
-  background: rgb(190 46 64 / 6%);
+  border: none;
+  color: #6b7c9c;
+  background: transparent;
 }
 
 .lightMode .chapterCard .rowActions .deleteButton:hover {
-  border-color: rgb(190 46 64 / 42%);
-  background: rgb(190 46 64 / 11%);
+  border: none;
+  color: #a5293c;
+  background: rgb(190 46 64 / 10%);
 }
 
 .lightMode .deleteButton {
@@ -2670,10 +2811,15 @@
 }
 
 .workspace {
-  margin-left: 250px !important;
   padding-top: 0 !important;
   margin-top: 0 !important;
   background: #eef1f7;
+}
+
+@media (min-width: 641px) {
+  .workspace {
+    margin-left: 250px !important;
+  }
 }
 
 .adminShell:not(.lightMode) .workspace,
@@ -2696,6 +2842,7 @@
 
 .lightMode.adminShell,
 .adminShell.lightMode {
+  color-scheme: light;
   background:
     radial-gradient(ellipse 72% 42% at 12% 0%, rgb(113 142 209 / 12%), transparent 70%),
     radial-gradient(ellipse 58% 38% at 100% 30%, rgb(157 139 211 / 10%), transparent 72%),
@@ -3135,3 +3282,34 @@
     animation-duration: 2s;
   }
 }
+
+:global(body.adminPageBody) {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+:global(body.adminPageBody.adminLight),
+:global(body.adminPageBody.light) {
+  background: #eef1f7 !important;
+}
+
+:global(html.adminPageHtml),
+:global(body.adminPageBody) {
+  overflow-x: hidden;
+}
+
+:global(html.adminPageHtml),
+:global(html.adminPageHtml body),
+:global(body.adminPageBody),
+:global(body.adminPageBody.adminLight),
+:global(body.adminPageBody.adminPageBody) {
+  padding-top: 0 !important;
+  padding-block-start: 0 !important;
+  margin-top: 0 !important;
+  margin-block-start: 0 !important;
+}
+
+:global(html.adminPageHtml) {
+  background: inherit;
+}
+

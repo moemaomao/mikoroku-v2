@@ -28,7 +28,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import "quill/dist/quill.snow.css";
 import styles from "./admin.module.css";
 import { CoverImage } from "../lib/cover-image";
@@ -656,7 +656,6 @@ export default function AdminPage() {
   const [settingsStatus, setSettingsStatus] = useState("");
   const [uploadNotice, setUploadNotice] = useState<UploadNotice | null>(null);
   const [draggingCoverUrl, setDraggingCoverUrl] = useState<string | null>(null);
-  const coverPointerDrag = useRef<{ pointerId: number; url: string } | null>(null);
   const coverFileInput = useRef<HTMLInputElement>(null);
   const coverGalleryFilesInput = useRef<HTMLInputElement>(null);
   const thumbnailFileInput = useRef<HTMLInputElement>(null);
@@ -792,9 +791,30 @@ export default function AdminPage() {
   }, [loadManga, user]);
 
   useEffect(() => {
-    document.body.classList.toggle("adminPageBody", Boolean(user));
-    return () => document.body.classList.remove("adminPageBody");
-  }, [user]);
+    const body = document.body;
+    const html = document.documentElement;
+    body.classList.toggle("adminPageBody", Boolean(user));
+    body.classList.toggle("adminLight", Boolean(user) && isLightMode);
+    html.classList.toggle("adminPageHtml", Boolean(user));
+
+    // Override layout body pt-14 (site header offset) — admin has no site header
+    const prevPaddingTop = body.style.paddingTop;
+    const prevHtmlPaddingTop = html.style.paddingTop;
+    if (user) {
+      body.style.setProperty("padding-top", "0px", "important");
+      html.style.setProperty("padding-top", "0px", "important");
+      body.style.setProperty("margin-top", "0px", "important");
+    }
+
+    return () => {
+      body.classList.remove("adminPageBody");
+      body.classList.remove("adminLight");
+      html.classList.remove("adminPageHtml");
+      body.style.paddingTop = prevPaddingTop;
+      html.style.paddingTop = prevHtmlPaddingTop;
+      body.style.removeProperty("margin-top");
+    };
+  }, [user, isLightMode]);
 
   useEffect(() => {
     if (activeSection === "reports" && user) void loadReports();
@@ -1428,38 +1448,56 @@ export default function AdminPage() {
     const covers = [...(selectedManga?.covers || [])];
     const fromIndex = covers.indexOf(fromUrl);
     if (fromIndex < 0 || toIndex < 0 || toIndex >= covers.length || fromIndex === toIndex) return null;
-    [covers[fromIndex], covers[toIndex]] = [covers[toIndex], covers[fromIndex]];
+    const next = [...covers];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
     setSelectedManga((current) => {
       if (!current || current.slug !== selectedManga?.slug) return current;
-      return { ...current, cover: covers[covers.length - 1] || current.cover, covers };
+      return { ...current, cover: next[next.length - 1] || current.cover, covers: next };
     });
-    return covers;
+    return next;
   }
 
-  function handleCoverPointerDown(event: PointerEvent<HTMLElement>, url: string) {
-    if (busy || event.button !== 0 || !selectedManga) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+  function handleVolumeDragStart(event: DragEvent<HTMLElement>, url: string) {
+    if (busy) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData("text/plain", url);
+    event.dataTransfer.effectAllowed = "move";
     setDraggingCoverUrl(url);
-    coverPointerDrag.current = {
-      pointerId: event.pointerId,
-      url,
-    };
+
+    const img = event.currentTarget.querySelector("img");
+    if (img) {
+      const ghost = img.cloneNode(true) as HTMLImageElement;
+      ghost.style.width = "110px";
+      ghost.style.height = "150px";
+      ghost.style.objectFit = "cover";
+      ghost.style.borderRadius = "8px";
+      ghost.style.boxShadow = "0 18px 40px rgba(0,0,0,0.55)";
+      ghost.style.position = "absolute";
+      ghost.style.top = "-9999px";
+      ghost.style.left = "-9999px";
+      document.body.appendChild(ghost);
+      event.dataTransfer.setDragImage(ghost, 55, 75);
+      window.setTimeout(() => ghost.remove(), 0);
+    }
   }
 
-  function handleCoverPointerMove(event: PointerEvent<HTMLDivElement>) {
-    const drag = coverPointerDrag.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-volume-index]");
-    if (!target) return;
-    const targetIndex = Number(target.dataset.volumeIndex);
-    reorderCoverInMemory(drag.url, targetIndex);
+  function handleVolumeDragOver(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
   }
 
-  function handleCoverPointerUp(event: PointerEvent<HTMLDivElement>) {
-    const drag = coverPointerDrag.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    coverPointerDrag.current = null;
+  function handleVolumeDrop(event: DragEvent<HTMLElement>, toIndex: number) {
+    event.preventDefault();
+    const fromUrl = event.dataTransfer.getData("text/plain");
+    if (!fromUrl) return;
+    reorderCoverInMemory(fromUrl, toIndex);
+    setDraggingCoverUrl(null);
+  }
+
+  function handleVolumeDragEnd() {
     setDraggingCoverUrl(null);
   }
 
@@ -2306,23 +2344,19 @@ export default function AdminPage() {
                   </div>
                   <p className={styles.coverGalleryHint}>Drag with a mouse or touch to reorder volumes, then select Save order. The last volume becomes the main cover.</p>
                   {selectedManga.covers?.length ? (
-                    <div
-                      className={styles.coverGalleryGrid}
-                      onPointerMove={handleCoverPointerMove}
-                      onPointerUp={(event) => void handleCoverPointerUp(event)}
-                      onPointerCancel={(event) => void handleCoverPointerUp(event)}
-                    >
+                    <div className={styles.coverGalleryGrid}>
                       {selectedManga.covers.map((coverUrl, index) => (
                         <article
                           className={`${styles.coverGalleryItem} ${draggingCoverUrl === coverUrl ? styles.coverGalleryItemDragging : ""}`}
                           key={coverUrl}
                           data-volume-index={index}
+                          draggable={!busy}
+                          onDragStart={(event) => handleVolumeDragStart(event, coverUrl)}
+                          onDragOver={handleVolumeDragOver}
+                          onDrop={(event) => handleVolumeDrop(event, index)}
+                          onDragEnd={handleVolumeDragEnd}
                         >
-                          <div
-                            className={styles.coverGalleryImage}
-                            onPointerDown={(event) => handleCoverPointerDown(event, coverUrl)}
-                            title="Drag to reorder"
-                          >
+                          <div className={styles.coverGalleryImage} title="Drag to reorder">
                             <CoverImage src={coverUrl} alt={`${selectedManga.title} volume ${selectedManga.coverNumbers?.[coverUrl] || index + 1}`} loading="lazy" />
                             <span className={styles.coverDragHint}>Drag</span>
                           </div>
@@ -2336,6 +2370,8 @@ export default function AdminPage() {
                                 placeholder={String(index + 1)}
                                 aria-label={`Volume number, current position ${index + 1}`}
                                 disabled={busy}
+                                draggable={false}
+                                onDragStart={(event) => event.preventDefault()}
                                 onPointerDown={(event) => event.stopPropagation()}
                                 onChange={(event) => {
                                   const number = event.currentTarget.value;
@@ -2347,16 +2383,27 @@ export default function AdminPage() {
                               />
                             </label>
                             <button
-                              className={styles.deleteButton}
+                              className={styles.volumeDeleteButton}
                               type="button"
                               onClick={() => void removeAdditionalCover(coverUrl)}
                               disabled={busy || (selectedManga.covers?.length ?? 0) <= 1}
                               aria-label={`Remove volume ${index + 1}`}
+                              title="Remove volume"
+                              draggable={false}
+                              onDragStart={(event) => event.preventDefault()}
                               onPointerDown={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
                               }}
-                            >Remove</button>
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                              </svg>
+                            </button>
                           </div>
                         </article>
                       ))}
@@ -2758,7 +2805,6 @@ export default function AdminPage() {
                       setChapterDraft((current) => ({ ...current, images: reordered.join("\n") }));
                     }}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={url} alt={`Chapter page ${index + 1}`} loading="lazy" />
                     <span className={styles.imageIndex}>{index + 1}</span>
                     <span className={styles.imageFileName} title={imageFileName(url)}>{imageFileName(url) || `page-${index + 1}`}</span>
