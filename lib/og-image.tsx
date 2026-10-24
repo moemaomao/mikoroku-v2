@@ -8,6 +8,20 @@ export const OG_IMAGE_HEIGHT = 630;
 const COVER_W = 320;
 const COVER_H = 480;
 
+function isSafeCoverHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return (
+      host === "i.ibb.co" ||
+      host === "ibb.co" ||
+      host.endsWith(".ibb.co") ||
+      host === "image.ibb.co"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function toOgCoverDataUrl(
   coverUrl: string | null | undefined,
 ): Promise<string | null> {
@@ -19,22 +33,23 @@ export async function toOgCoverDataUrl(
     return null;
   }
 
-  let url = coverUrl;
-  if (url.includes("blogger.googleusercontent.com")) {
-    url = url.replace(/\/s\d+\//, "/s400/");
+  if (coverUrl.includes("blogger.googleusercontent.com")) {
+    return null;
+  }
+
+  if (isSafeCoverHost(coverUrl)) {
+    return coverUrl;
   }
 
   try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(4000),
+    const res = await fetch(coverUrl, {
+      signal: AbortSignal.timeout(3000),
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; MikorokuOG/1.0; +https://mikoroku.top)",
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        Accept: "image/*,*/*;q=0.8",
+        "User-Agent": "MikorokuOG/1.0",
       },
       redirect: "follow",
     });
-
     if (!res.ok) return null;
 
     const contentType = (res.headers.get("content-type") || "image/jpeg")
@@ -43,18 +58,15 @@ export async function toOgCoverDataUrl(
     if (!contentType.startsWith("image/")) return null;
 
     const buf = await res.arrayBuffer();
-    if (buf.byteLength < 100 || buf.byteLength > 1_500_000) return null;
+    if (buf.byteLength < 100 || buf.byteLength > 800_000) return null;
 
     const bytes = new Uint8Array(buf);
     let binary = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]!);
     }
-    const b64 = btoa(binary);
-    return `data:${contentType};base64,${b64}`;
-  } catch (error) {
-    console.warn("[OG] cover fetch failed", coverUrl, error);
+    return `data:${contentType};base64,${btoa(binary)}`;
+  } catch {
     return null;
   }
 }
@@ -235,22 +247,31 @@ export function createMikorokuOgImage(opts: {
   label: string;
   coverUrl?: string | null;
 }) {
-  const headers = {
-    "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
-  };
+  return new ImageResponse(buildOgJsx(opts), {
+    width: OG_IMAGE_WIDTH,
+    height: OG_IMAGE_HEIGHT,
+    headers: {
+      "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+    },
+  });
+}
 
-  try {
-    return new ImageResponse(buildOgJsx(opts), {
-      width: OG_IMAGE_WIDTH,
-      height: OG_IMAGE_HEIGHT,
-      headers,
-    });
-  } catch (error) {
-    console.warn("[OG] generate with cover failed, retry without cover", error);
-    return new ImageResponse(buildOgJsx({ ...opts, coverUrl: null }), {
-      width: OG_IMAGE_WIDTH,
-      height: OG_IMAGE_HEIGHT,
-      headers,
-    });
+export async function renderOgPng(opts: {
+  title: string;
+  description: string;
+  label: string;
+  coverUrl?: string | null;
+}): Promise<ArrayBuffer> {
+  if (opts.coverUrl) {
+    try {
+      const withCover = createMikorokuOgImage(opts);
+      const buf = await withCover.arrayBuffer();
+      if (buf.byteLength > 1000) return buf;
+    } catch (error) {
+      console.warn("[OG] with cover failed", error);
+    }
   }
+
+  const plain = createMikorokuOgImage({ ...opts, coverUrl: null });
+  return plain.arrayBuffer();
 }

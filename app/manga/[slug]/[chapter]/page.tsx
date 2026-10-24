@@ -1,15 +1,25 @@
 import type { Metadata } from "next";
-import ReaderPage from "../../../manga/reader-page";
+import dynamic from "next/dynamic";
 import { getChapterSeoTitle } from "../../../../lib/seo-metadata";
 
-export default async function MangaReaderRoute({
-  params,
-}: {
-  params: Promise<{ slug: string; chapter: string }>;
-}) {
-  const { slug, chapter } = await params;
-  return <ReaderPage slug={slug} chapter={chapter} kind="manga" />;
-}
+const ReaderPage = dynamic(() => import("../../../manga/reader-page"), {
+  ssr: false,
+  loading: () => (
+    <div
+      style={{
+        minHeight: "50vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "system-ui, sans-serif",
+        fontSize: 14,
+        color: "#94a3b8",
+      }}
+    >
+      Loading chapter…
+    </div>
+  ),
+});
 
 export async function generateMetadata({
   params,
@@ -50,4 +60,13 @@ export async function generateMetadata({
       images: [imageUrl],
     },
   };
+}
+
+export default async function MangaReaderRoute({
+  params,
+}: {
+  params: Promise<{ slug: string; chapter: string }>;
+}) {
+  const { slug, chapter } = await params;
+  return <ReaderPage slug={slug} chapter={chapter} kind="manga" />;
 }
