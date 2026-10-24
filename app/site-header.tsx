@@ -115,9 +115,12 @@ function getMangaEntry(value: unknown): MangaEntry | undefined {
 }
 
 function getCurrentUser(): HeaderUser | null {
-  return (window.currentUser as HeaderUser | null | undefined) ||
-    (window.firebase?.auth?.().currentUser as HeaderUser | null | undefined) ||
-    null;
+  const currentUser = window.currentUser as HeaderUser | null | undefined;
+  if (currentUser) return currentUser;
+
+  const firebase = window.firebase;
+  if (!firebase?.auth || !firebase.apps.some((app) => app.name === "[DEFAULT]")) return null;
+  return (firebase.auth().currentUser as HeaderUser | null | undefined) || null;
 }
 
 function getDisplayName(user: HeaderUser | null): string {
@@ -553,7 +556,7 @@ function HeaderContents() {
     let authCheck: number | undefined;
     const connectAuth = () => {
       const firebase = window.firebase;
-      if (!firebase?.auth) return false;
+      if (!firebase?.auth || !firebase.apps.some((app) => app.name === "[DEFAULT]")) return false;
       try {
         unsubscribe = firebase.auth().onAuthStateChanged((nextUser) => {
           window.currentUser = nextUser;

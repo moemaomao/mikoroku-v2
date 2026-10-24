@@ -237,7 +237,9 @@ async function initializeBookmarkIntegrations(): Promise<void> {
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
   await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
   if (!window.firebase) throw new Error("Firebase compat SDK tidak tersedia setelah dimuat.");
-  if (!window.firebase.apps.length) window.firebase.initializeApp(firebaseConfig);
+  if (!window.firebase.apps.some((app) => app.name === "[DEFAULT]")) {
+    window.firebase.initializeApp(firebaseConfig);
+  }
 
   initializeFirebaseClient();
 }

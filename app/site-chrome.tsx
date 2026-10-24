@@ -54,7 +54,7 @@ async function initializeSiteChrome(showChrome: boolean): Promise<void> {
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
     await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
     if (!window.firebase) throw new Error("Firebase compat SDK tidak tersedia.");
-    if (!window.firebase.apps.length) {
+    if (!window.firebase.apps.some((app) => app.name === "[DEFAULT]")) {
       window.firebase.initializeApp({
         apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
         authDomain: "widget-comment.firebaseapp.com",

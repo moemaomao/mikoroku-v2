@@ -45,9 +45,19 @@ const GITHUB_DATA_URL =
 const GITHUB_RAW_BASE =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const CACHE_KEY = "mk_rec_sidebar_gh_fs_v3";
+const VISIBILITY_KEY = "mk_rec_sidebar_hidden";
 const CACHE_TTL = 25 * 60 * 1000;
 const NO_COVER =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='170'%3E%3Crect width='120' height='170' fill='%231a1a1a'/%3E%3C/svg%3E";
+
+function readVisibility(): boolean {
+  try {
+    return localStorage.getItem(VISIBILITY_KEY) !== "true";
+  } catch (error) {
+    console.warn("Preferensi tampilan rekomendasi tidak dapat dibaca.", error);
+    return true;
+  }
+}
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : value == null ? fallback : String(value);
@@ -242,7 +252,11 @@ export default function RecommendationSidebar({
 }) {
   const [catalogue, setCatalogue] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(readVisibility);
+
+  useEffect(() => {
+    onVisibilityChange(visible);
+  }, [onVisibilityChange, visible]);
 
   useEffect(() => {
     let active = true;
@@ -408,7 +422,11 @@ export default function RecommendationSidebar({
   const toggleVisibility = () => {
     const nextVisible = !visible;
     setVisible(nextVisible);
-    onVisibilityChange(nextVisible);
+    try {
+      localStorage.setItem(VISIBILITY_KEY, String(!nextVisible));
+    } catch (error) {
+      console.warn("Preferensi tampilan rekomendasi tidak dapat disimpan.", error);
+    }
     requestAnimationFrame(() => {
       document.getElementById(visible ? "rec-sidebar-show-button" : "rec-sidebar-hide-button")?.focus();
     });

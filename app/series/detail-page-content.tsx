@@ -858,6 +858,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [bookmarked, setBookmarked] = useState(false);
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [recommendationsHidden, setRecommendationsHidden] = useState(false);
+  const handleRecommendationVisibilityChange = useCallback(
+    (visible: boolean) => setRecommendationsHidden(!visible),
+    [],
+  );
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
 
@@ -1788,7 +1792,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             </>}
           </div>
         </div>
-        <RecommendationSidebar manga={manga} onVisibilityChange={(visible) => setRecommendationsHidden(!visible)} />
+        <RecommendationSidebar manga={manga} onVisibilityChange={handleRecommendationVisibilityChange} />
       </main>
       <div className="relative z-[2]">
         <SiteFooter />
@@ -1804,12 +1808,33 @@ function RouteIntegrations() {
     const load = (src: string, persistent = false) => new Promise<void>((resolve) => {
       const existing = [...document.scripts].find((script) => script.src === new URL(src, location.href).href);
       if (existing) {
-        resolve();
+        const libraryReady = src.includes("firebase-app-compat.js")
+          ? Boolean(window.firebase?.initializeApp)
+          : src.includes("firebase-auth-compat.js")
+            ? Boolean(window.firebase?.auth)
+            : src.includes("firebase-firestore-compat.js")
+              ? Boolean(window.firebase?.firestore)
+              : existing.dataset.loaded === "true";
+        if (existing.dataset.loaded === "true" || libraryReady) {
+          resolve();
+          return;
+        }
+        existing.addEventListener("load", () => {
+          existing.dataset.loaded = "true";
+          resolve();
+        }, { once: true });
+        existing.addEventListener("error", () => {
+          console.error(`Gagal memuat integrasi halaman manga: ${src}`);
+          resolve();
+        }, { once: true });
         return;
       }
       const script = document.createElement("script");
       script.src = src;
-      script.onload = () => resolve();
+      script.onload = () => {
+        script.dataset.loaded = "true";
+        resolve();
+      };
       script.onerror = () => {
         console.error(`Gagal memuat integrasi halaman manga: ${src}`);
         resolve();
@@ -1823,7 +1848,7 @@ function RouteIntegrations() {
       await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
       await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
       const firebaseInit = document.createElement("script");
-      firebaseInit.textContent = `if (typeof firebase !== "undefined" && !firebase.apps.length) { firebase.initializeApp({ apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4", authDomain: "widget-comment.firebaseapp.com", projectId: "widget-comment", storageBucket: "widget-comment.firebasestorage.app", messagingSenderId: "249700505242", appId: "1:249700505242:web:dab240af09caf30ad7f123" }); }`;
+      firebaseInit.textContent = `if (typeof firebase !== "undefined" && !firebase.apps.some(function(app) { return app.name === "[DEFAULT]"; })) { firebase.initializeApp({ apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4", authDomain: "widget-comment.firebaseapp.com", projectId: "widget-comment", storageBucket: "widget-comment.firebasestorage.app", messagingSenderId: "249700505242", appId: "1:249700505242:web:dab240af09caf30ad7f123" }); }`;
       added.push(firebaseInit);
       document.head.appendChild(firebaseInit);
       await load("/announcement.js");
