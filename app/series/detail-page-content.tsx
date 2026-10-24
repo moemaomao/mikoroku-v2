@@ -1416,7 +1416,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     <>
       <SiteHeader />
       <div
-        className="pointer-events-none fixed inset-0 z-0 scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[4px] transition-[background-image,opacity] duration-500 dark:opacity-100"
+        className="pointer-events-none fixed inset-0 z-0 scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[1px] transition-[background-image,opacity] duration-500 dark:opacity-100"
         id="bgLayer"
         aria-hidden="true"
         style={{ backgroundImage: cover ? `url("${cover}")` : undefined }}
@@ -1758,7 +1758,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                         view === "list"
                           ? `!text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
                           : view === "text-grid"
-                            ? `text-[12px] md:text-[14px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
+                            ? `text-[12px] md:text-[12px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
                             : "text-[9px]"
                       }`}>
                         {view === "text-grid" ? (
@@ -1774,7 +1774,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                         view === "list"
                           ? `text-[11px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
                           : view === "text-grid"
-                            ? `text-[10px] opacity-70 md:text-[12px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
+                            ? `text-[10px] opacity-70 md:text-[10px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
                             : "text-[7px]"
                       }`}>
                         {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
