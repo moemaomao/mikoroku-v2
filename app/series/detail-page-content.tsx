@@ -1422,7 +1422,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         style={{ backgroundImage: cover ? `url("${cover}")` : undefined }}
       />
       <div
-        className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.62)_0%,rgba(5,5,10,0.44)_48%,rgba(15,5,12,0.62)_100%)]"
+        className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.92)_0%,rgba(5,5,10,0.55)_45%,rgba(5,5,10,0.55)_55%,rgba(15,5,12,0.94)_100%)]"
         aria-hidden="true"
       />
       <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
