@@ -10,33 +10,11 @@ export async function generateMetadata({
   const { slug } = await params;
   const manga = await getSeriesSeoData(slug);
   const title = `${manga.title} - Mikoroku`;
-  const description = (manga.description || `Baca ${manga.title} di Mikoroku.`).slice(0, 200);
+  const description = (
+    manga.description || `Baca ${manga.title} di Mikoroku.`
+  ).slice(0, 200);
   const url = `https://mikoroku.top/series/${encodeURIComponent(slug)}`;
   const imageUrl = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
-  const cover =
-    typeof manga.image === "string" && manga.image.startsWith("http")
-      ? manga.image
-      : undefined;
-
-  const images = [
-    {
-      url: imageUrl,
-      width: 1200,
-      height: 630,
-      alt: title,
-      type: "image/png" as const,
-    },
-    ...(cover
-      ? [
-          {
-            url: cover,
-            width: 400,
-            height: 600,
-            alt: title,
-          },
-        ]
-      : []),
-  ];
 
   return {
     title,
@@ -49,13 +27,21 @@ export async function generateMetadata({
       url,
       siteName: "Mikoroku",
       locale: "id_ID",
-      images,
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: title,
+          type: "image/png",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [imageUrl, ...(cover ? [cover] : [])],
+      images: [imageUrl],
     },
   };
 }
