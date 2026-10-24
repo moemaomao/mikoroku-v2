@@ -106,7 +106,6 @@ export const CacheKeys = {
   hentaiList: (page = 1) => `hentai:list:p${page}`,
   seriesDetail: (slug: string) => `series:${slug}`,
   chapterList: (slug: string) => `chapters:${slug}`,
-  /** Blogger chapter list by source + title (see lib/blogger-chapters.ts). */
   bloggerChapters: (source: string, title: string) =>
     `blogger:chapters:${source}:${title.trim().toLowerCase().replace(/\s+/g, " ")}`,
   genreList: () => `genres:all`,

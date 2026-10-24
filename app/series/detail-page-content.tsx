@@ -682,6 +682,8 @@ async function waitForFirestoreSdk(signal: AbortSignal): Promise<boolean> {
   return Boolean(window.firestore && window.fs?.collection && window.fs.getDocs);
 }
 
+const CHAPTER_UI_BATCH = 48;
+
 function chapterNumber(value: Chapter["num"]): number {
   return Number.parseFloat(String(value).replace(",", ".")) || 0;
 }
@@ -898,6 +900,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     () => readGlobalAppearance().hideDetailCoverBackground,
   );
   const [chapterSearch, setChapterSearch] = useState("");
+  const [chapterWindow, setChapterWindow] = useState(CHAPTER_UI_BATCH);
+  const chapterSentinelRef = useRef<HTMLDivElement | null>(null);
   const [bookmarked, setBookmarked] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportType, setReportType] = useState("");
@@ -1164,6 +1168,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     const hasLocalCache = Boolean(
       typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
     );
+
     if (!mangaTitle && !hasLocalCache) return;
     const controller = new AbortController();
     setChapterError("");
@@ -1181,12 +1186,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         const valid = Date.now() - (parsed.time || 0) < 30 * 60 * 1000
           ? parsed.data || []
           : [];
-        cachedChapters = valid.filter((chapter) => chapter.source === source);
         cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
         cachedFirestoreChapters = valid.filter((chapter) => chapter.source === "firestore");
-        if (source !== "firestore" && cachedSelectedChapters.length) {
-          cachedChapters = mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters);
-        }
+        cachedChapters = source === "firestore"
+          ? cachedSelectedChapters
+          : cachedSelectedChapters.length
+            ? mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters)
+            : cachedFirestoreChapters;
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
         localStorage.removeItem(`chapters_${slug}`);
@@ -1235,27 +1241,51 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         return loaded;
       };
 
-      if (source === "firestore") return loadAndCache(source);
-      const settled = await Promise.allSettled([
-        loadAndCache(source),
-        loadAndCache("firestore"),
-      ]);
-      if (controller.signal.aborted) throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
+      const publishEarly = (list: Chapter[]) => {
+        if (controller.signal.aborted || !list.length) return;
+        setChapters(list);
+        setChapterState("ready");
+      };
 
-      const sources = settled.map((result, index) => {
-        if (result.status === "fulfilled") return result.value;
-        console.warn(
-          `Chapter source ${index === 0 ? source : "firestore"} failed for ${slug}.`,
-          result.reason,
-        );
-        return [];
-      });
-      const selectedChapters = sources[0].length ? sources[0] : cachedSelectedChapters;
-      const firestoreChapters = sources[1].length ? sources[1] : cachedFirestoreChapters;
+      if (source === "firestore") {
+        try {
+          const only = await loadAndCache(source);
+          if (only.length) return only;
+        } catch (error) {
+          if (cachedSelectedChapters.length) return cachedSelectedChapters;
+          throw error;
+        }
+        return cachedSelectedChapters;
+      }
+
+      const primaryPromise = loadAndCache(source);
+      const firestorePromise = loadAndCache("firestore");
+
+      let selectedChapters = cachedSelectedChapters;
+      let firestoreChapters = cachedFirestoreChapters;
+      let primaryError: unknown;
+
+      try {
+        const primary = await primaryPromise;
+        if (primary.length) selectedChapters = primary;
+      } catch (error) {
+        primaryError = error;
+        console.warn(`Chapter source ${source} failed for ${slug}.`, error);
+      }
+
+      const earlyMerge = mergeChapterSources(selectedChapters, firestoreChapters);
+      if (earlyMerge.length) publishEarly(earlyMerge);
+
+      try {
+        const fsLoaded = await firestorePromise;
+        if (fsLoaded.length) firestoreChapters = fsLoaded;
+      } catch (error) {
+        console.warn(`Chapter source firestore failed for ${slug}.`, error);
+      }
+
       const mergedChapters = mergeChapterSources(selectedChapters, firestoreChapters);
       if (mergedChapters.length) return mergedChapters;
-      const firstError = settled.find((result) => result.status === "rejected");
-      if (firstError?.status === "rejected") throw firstError.reason;
+      if (primaryError) throw primaryError;
       return cachedSelectedChapters;
     };
 
@@ -1342,7 +1372,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       .filter((genre) => !/^(shounen|seinen|shoujo|josei|kodomo|hentai)$/i.test(genre)))],
     [manga?.genres],
   );
-  const visibleChapters = useMemo(() => [...chapters]
+  const filteredSortedChapters = useMemo(() => [...chapters]
     .filter((chapter) => {
       const query = chapterSearch.trim().toLowerCase();
       return !query || `chapter ${chapter.num} ${chapter.title || ""}`.toLowerCase().includes(query);
@@ -1351,6 +1381,34 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       const order = chapterNumber(left.num) - chapterNumber(right.num);
       return sort === "newest" ? -order : order;
     }), [chapterSearch, chapters, sort]);
+
+  const visibleChapters = useMemo(
+    () => filteredSortedChapters.slice(0, chapterWindow),
+    [filteredSortedChapters, chapterWindow],
+  );
+  const hasMoreChapters = filteredSortedChapters.length > chapterWindow;
+
+  useEffect(() => {
+    setChapterWindow(CHAPTER_UI_BATCH);
+  }, [slug, source, sort, chapterSearch]);
+
+  useEffect(() => {
+    if (!hasMoreChapters || chapterState !== "ready") return;
+    const node = chapterSentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setChapterWindow((current) =>
+            Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
+          );
+        }
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMoreChapters, chapterState, filteredSortedChapters.length, chapterWindow]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
     setCoverPreferenceError("");
@@ -1885,7 +1943,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                       <img
                         className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
                         alt=""
-                        loading="lazy"
+                        loading={index < 12 ? "eager" : "lazy"}
+                        fetchPriority={index < 4 ? "high" : undefined}
                         src={chapter.thumbnail || cover || "/assets/icons/favicon.ico"}
                       />
                     )}
@@ -1949,6 +2008,18 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     </button>
                   );
                 })}
+                {chapterState === "ready" && hasMoreChapters && (
+                  <div
+                    ref={chapterSentinelRef}
+                    className="col-span-full flex min-h-10 w-full items-center justify-center py-3 text-xs text-[#666] dark:text-white/50"
+                    aria-hidden="true"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <i className="fas fa-spinner fa-spin" aria-hidden="true" />
+                      Memuat chapter…
+                    </span>
+                  </div>
+                )}
               </div>
             </section>
             </>}

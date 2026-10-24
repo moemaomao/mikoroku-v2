@@ -1,8 +1,3 @@
-/**
- * Server-side Blogger chapter feed fetch + normalize.
- * Used by /api/blogger/chapters (and optionally the Worker interceptor).
- */
-
 export type BloggerChapterSource = "blogger" | "blogger2";
 
 export type BloggerChapter = {
@@ -32,10 +27,7 @@ const BLOGGER_DOMAINS: Record<BloggerChapterSource, string> = {
   blogger2: "https://www.yomidays.my.id",
 };
 
-/** KV TTL for chapter lists (20 minutes — aligns with cron). */
 export const BLOGGER_CHAPTERS_TTL = 20 * 60;
-
-/** Browser / CDN hint (slightly shorter so clients revalidate with Worker). */
 export const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 
 export function bloggerChaptersCacheKey(
@@ -82,10 +74,6 @@ export function parseBloggerEntries(
   });
 }
 
-/**
- * Fetch Blogger Atom/JSON feed without JSONP (server-side only).
- * Uses alt=json so the response is pure JSON.
- */
 export async function fetchBloggerChapters(
   title: string,
   source: BloggerChapterSource,
@@ -104,7 +92,6 @@ export async function fetchBloggerChapters(
       Accept: "application/json",
       "User-Agent": "mikoroku-blogger-proxy/1.0",
     },
-    // Avoid Next.js fetch cache interfering with our KV layer
     cache: "no-store",
   });
 
