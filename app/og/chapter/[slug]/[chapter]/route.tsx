@@ -2,6 +2,7 @@ import { getSeriesSeoData } from "../../../../../lib/seo-metadata";
 import {
   createMikorokuOgImage,
   toOgCoverDataUrl,
+  renderOgPng,
 } from "../../../../../lib/og-image";
 import {
   CacheKeys,
@@ -39,19 +40,13 @@ export async function GET(
       series.description ||
       `Baca Chapter ${chapter} ${series.title} di Mikoroku.`;
 
-    const coverDataUrl = await toOgCoverDataUrl(series.image);
-
-    const imageRes = createMikorokuOgImage({
+    const coverUrl = await toOgCoverDataUrl(series.image);
+    const buffer = await renderOgPng({
       title,
       description,
       label: "Manga Chapter",
-      coverUrl: coverDataUrl,
+      coverUrl,
     });
-
-    const buffer = await imageRes.arrayBuffer();
-    if (buffer.byteLength < 1000) {
-      throw new Error("OG buffer too small");
-    }
 
     try {
       void kvSetArrayBuffer(cacheKey, buffer, CACHE_TTL);
@@ -59,17 +54,23 @@ export async function GET(
       console.warn("[OG chapter] KV write failed", error);
     }
 
-    return new Response(buffer, { headers: CACHE_HEADERS });
+    return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
   } catch (error) {
     console.error("[OG chapter]", error);
-
-    const fallback = createMikorokuOgImage({
-      title: "Chapter - Mikoroku",
-      description: "Baca manga di Mikoroku.",
-      label: "Manga Chapter",
-      coverUrl: null,
-    });
-    const buffer = await fallback.arrayBuffer();
-    return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
+    try {
+      const fallback = createMikorokuOgImage({
+        title: "Chapter - Mikoroku",
+        description: "Baca manga di Mikoroku.",
+        label: "Manga Chapter",
+        coverUrl: null,
+      });
+      const buffer = await fallback.arrayBuffer();
+      return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
+    } catch {
+      return new Response("OG unavailable", {
+        status: 200,
+        headers: CACHE_HEADERS,
+      });
+    }
   }
 }

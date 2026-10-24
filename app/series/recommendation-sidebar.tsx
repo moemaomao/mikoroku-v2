@@ -169,22 +169,46 @@ function readCache(): Recommendation[] {
   }
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = (error as { name?: string }).name;
+  return name === "AbortError";
+}
+
 function saveCache(items: Recommendation[]): void {
   if (!items.length) return;
+  const compact = items.slice(0, 80).map((item) => ({
+    title: item.title,
+    slug: item.slug,
+    img: item.img,
+    cover: item.cover,
+    desc: item.desc.slice(0, 160),
+    genres: item.genres.slice(0, 12),
+    status: item.status,
+    type: item.type,
+    rating: item.rating,
+    source: item.source,
+    updatedAt: item.updatedAt,
+  }));
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: items }));
-  } catch (error) {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: compact }));
+  } catch {
     try {
       Object.keys(localStorage)
-        .filter((key) => key.startsWith("mk_rec"))
-        .slice(0, 6)
-        .forEach((key) => localStorage.removeItem(key));
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: items }));
-    } catch (retryError) {
-      console.warn(
-        "Cache rekomendasi manga tidak dapat disimpan.",
-        new AggregateError([error, retryError]),
+        .filter((key) => key.startsWith("mk_rec") || key.startsWith("manga_cache"))
+        .slice(0, 12)
+        .forEach((key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch {
+            /* ignore */
+          }
+        });
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({ time: Date.now(), data: compact.slice(0, 40) }),
       );
+    } catch {
     }
   }
 }
@@ -278,52 +302,65 @@ export default function RecommendationSidebar({
     }
 
     const loadGithub = async () => {
-      const response = await fetch(`${GITHUB_DATA_URL}?t=${Date.now()}`, {
-        signal: controller.signal,
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`Dataset manga merespons HTTP ${response.status}.`);
-      const data: unknown = await response.json();
-      if (!Array.isArray(data)) throw new Error("Dataset rekomendasi bukan berupa array.");
-      data.forEach((value) => {
-        if (value && typeof value === "object") {
-          upsert(normalizeRecommendation(value as Record<string, unknown>, "github"));
-        }
-      });
-      publish();
+      try {
+        if (controller.signal.aborted || !active) return;
+        const response = await fetch(`${GITHUB_DATA_URL}?t=${Date.now()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`Dataset manga merespons HTTP ${response.status}.`);
+        const data: unknown = await response.json();
+        if (!active || controller.signal.aborted) return;
+        if (!Array.isArray(data)) throw new Error("Dataset rekomendasi bukan berupa array.");
+        data.forEach((value) => {
+          if (value && typeof value === "object") {
+            upsert(normalizeRecommendation(value as Record<string, unknown>, "github"));
+          }
+        });
+        publish();
+      } catch (error) {
+        if (isAbortError(error) || !active) return;
+        throw error;
+      }
     };
 
     const loadFirestore = async () => {
-      const deadline = Date.now() + 8000;
-      while (
-        active &&
-        Date.now() < deadline &&
-        (!window.firestore || !window.fs?.collection || !window.fs.getDocs)
-      ) {
-        await new Promise((resolve) => window.setTimeout(resolve, 100));
+      try {
+        const deadline = Date.now() + 8000;
+        while (
+          active &&
+          !controller.signal.aborted &&
+          Date.now() < deadline &&
+          (!window.firestore || !window.fs?.collection || !window.fs.getDocs)
+        ) {
+          await new Promise((resolve) => window.setTimeout(resolve, 100));
+        }
+        if (!active || controller.signal.aborted) return;
+        if (!window.firestore || !window.fs?.collection || !window.fs.getDocs) {
+          return;
+        }
+        const collection = window.fs.collection(window.firestore, "manga");
+        const snapshot = await window.fs.getDocs(collection);
+        if (!active || controller.signal.aborted) return;
+        if (snapshot.empty) return;
+        snapshot.forEach((document: { id: string; data: () => Record<string, unknown> }) => {
+          const data = document.data();
+          upsert(normalizeRecommendation({
+            ...data,
+            title: data.title || document.id,
+            slug: data.slug || normalizeSlug(asString(data.title, document.id)) || document.id,
+          }, "firestore"));
+        });
+        publish();
+      } catch (error) {
+        if (isAbortError(error) || !active) return;
+        throw error;
       }
-      if (!active) return;
-      if (!window.firestore || !window.fs?.collection || !window.fs.getDocs) {
-        throw new Error("Firestore SDK tidak tersedia untuk memuat rekomendasi.");
-      }
-      const collection = window.fs.collection(window.firestore, "manga");
-      const snapshot = await window.fs.getDocs(collection);
-      if (snapshot.empty) return;
-      snapshot.forEach((document) => {
-        const data = document.data();
-        upsert(normalizeRecommendation({
-          ...data,
-          title: data.title || document.id,
-          slug: data.slug || normalizeSlug(asString(data.title, document.id)) || document.id,
-        }, "firestore"));
-      });
-      publish();
     };
 
     const reportFailure = (source: string) => (error: unknown) => {
-      if (active && !(error instanceof DOMException && error.name === "AbortError")) {
-        console.warn(`${source} rekomendasi manga gagal dimuat.`, error);
-      }
+      if (!active || isAbortError(error)) return;
+      console.warn(`${source} rekomendasi manga gagal dimuat.`, error);
     };
 
     void Promise.allSettled([loadGithub(), loadFirestore()]).then((results) => {
@@ -337,7 +374,11 @@ export default function RecommendationSidebar({
 
     return () => {
       active = false;
-      controller.abort();
+      try {
+        controller.abort();
+      } catch {
+        /* ignore */
+      }
       if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
       window.removeEventListener("mangaDataReady", handleMangaDataReady);
     };
