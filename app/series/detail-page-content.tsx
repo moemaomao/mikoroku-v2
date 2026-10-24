@@ -396,26 +396,38 @@ function jsonp<T>(url: string, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const callbackName = `mikorokuJsonp${Date.now()}${Math.random().toString(36).slice(2)}`;
     const script = document.createElement("script");
-    const timeout = window.setTimeout(() => finish(new Error("Waktu tunggu sumber manga habis.")), 15000);
-    const callback = (data: T) => finish(undefined, data);
+    const timeout = window.setTimeout(
+      () => finish(new Error("Waktu tunggu sumber manga habis.")),
+      15000,
+    );
     let settled = false;
+
+    const root = window as any;
 
     function finish(error?: Error, data?: T) {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeout);
-      Reflect.deleteProperty(window, callbackName);
-      script.remove();
       signal.removeEventListener("abort", onAbort);
+      script.remove();
+      window.setTimeout(() => {
+        try {
+          delete root[callbackName];
+        } catch {
+          /* ignore */
+        }
+      }, 5000);
       if (error) reject(error);
       else resolve(data as T);
     }
 
-    const onAbort = () => finish(new DOMException("Permintaan dibatalkan.", "AbortError"));
-    Object.defineProperty(window, callbackName, {
-      configurable: true,
-      value: callback,
-    });
+    const onAbort = () => {
+      root[callbackName] = () => {};
+      finish(new DOMException("Permintaan dibatalkan.", "AbortError"));
+    };
+
+    root[callbackName] = (data: T) => finish(undefined, data);
+
     script.onerror = () => finish(new Error("Sumber manga tidak dapat dimuat."));
     signal.addEventListener("abort", onAbort, { once: true });
     script.src = `${url}${url.includes("?") ? "&" : "?"}callback=${callbackName}`;

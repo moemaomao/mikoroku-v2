@@ -47,38 +47,46 @@ export function initializeFirebaseClient(): FirebaseClient {
 
   if (initializedClient) return initializedClient;
 
-  const app = getApps().some((registeredApp) => registeredApp.name === "[DEFAULT]")
-    ? getApp()
-    : initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  pruneStoredChapterCaches();
-  let firestore;
-  let persistentStorageAvailable = false;
-  const storageProbeKey = `mikoroku-storage-probe-${Date.now()}`;
+  let app: FirebaseApp;
   try {
-    localStorage.setItem(storageProbeKey, "x".repeat(1024));
-    localStorage.removeItem(storageProbeKey);
-    persistentStorageAvailable = true;
-  } catch (error) {
-    console.warn("Browser storage quota is full; Firestore will use an in-memory cache.", error);
-    try {
-      localStorage.removeItem(storageProbeKey);
-    } catch (cleanupError) {
-      console.warn("Temporary browser storage probe could not be removed.", cleanupError);
-    }
+    const apps = getApps();
+    app = apps.length > 0 ? getApp() : initializeApp(firebaseConfig);
+  } catch {
+    app = initializeApp(firebaseConfig);
   }
 
+  const db = getDatabase(app);
+  pruneStoredChapterCaches();
+
+  let firestore: Firestore;
   try {
-    firestore = initializeFirestore(app, persistentStorageAvailable
-      ? {
-          localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager(),
-          }),
-        }
-      : { localCache: memoryLocalCache() });
-  } catch (error) {
-    console.warn("Persistent Firestore cache could not be initialized; using the default cache.", error);
-    firestore = getFirestore(app);
+    let persistentStorageAvailable = false;
+    try {
+      const key = `mikoroku-storage-probe-${Date.now()}`;
+      localStorage.setItem(key, "1");
+      localStorage.removeItem(key);
+      persistentStorageAvailable = true;
+    } catch {
+      persistentStorageAvailable = false;
+    }
+
+    firestore = initializeFirestore(
+      app,
+      persistentStorageAvailable
+        ? {
+            localCache: persistentLocalCache({
+              tabManager: persistentMultipleTabManager(),
+            }),
+          }
+        : { localCache: memoryLocalCache() },
+    );
+  } catch {
+    try {
+      firestore = getFirestore(app);
+    } catch (error) {
+      console.error("[Firebase] firestore init failed", error);
+      throw error;
+    }
   }
 
   Object.assign(window, {
