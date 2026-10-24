@@ -5,6 +5,7 @@ import {
   bloggerChaptersCacheKey,
   fetchBloggerChapters,
   isBloggerChapterSource,
+  toListChapters,
   type BloggerChapter,
   type BloggerChapterSource,
 } from "../../../../lib/blogger-chapters";
@@ -57,6 +58,10 @@ function jsonResponse(
   });
 }
 
+function shapeChapters(chapters: BloggerChapter[], full: boolean) {
+  return full ? chapters : toListChapters(chapters);
+}
+
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 204,
@@ -70,6 +75,7 @@ export async function GET(request: NextRequest) {
   const title = (searchParams.get("title") || "").trim();
   const sourceRaw = (searchParams.get("source") || "blogger").trim();
   const forceRefresh = searchParams.get("refresh") === "1";
+  const full = searchParams.get("full") === "1";
 
   if (!title) {
     return jsonResponse(
@@ -97,11 +103,12 @@ export async function GET(request: NextRequest) {
       if (cached?.chapters && Array.isArray(cached.chapters)) {
         return jsonResponse(
           {
-            chapters: cached.chapters,
+            chapters: shapeChapters(cached.chapters, full),
             source: cached.source ?? source,
             title: cached.title ?? title,
             cachedAt: cached.cachedAt,
             count: cached.chapters.length,
+            full,
           },
           { origin, cacheStatus: "HIT" },
         );
@@ -130,11 +137,12 @@ export async function GET(request: NextRequest) {
 
     return jsonResponse(
       {
-        chapters,
+        chapters: shapeChapters(chapters, full),
         source,
         title,
         cachedAt: payload.cachedAt,
         count: chapters.length,
+        full,
       },
       { origin, cacheStatus: forceRefresh ? "BYPASS" : "MISS" },
     );
@@ -143,26 +151,25 @@ export async function GET(request: NextRequest) {
       error instanceof Error ? error.message : "Gagal memuat feed Blogger.";
     console.error("[api/blogger/chapters]", message);
 
-    if (forceRefresh) {
-      try {
-        const stale = await kvGet<CachedPayload>(cacheKey);
-        if (stale?.chapters?.length) {
-          return jsonResponse(
-            {
-              chapters: stale.chapters,
-              source: stale.source ?? source,
-              title: stale.title ?? title,
-              cachedAt: stale.cachedAt,
-              count: stale.chapters.length,
-              stale: true,
-              warning: message,
-            },
-            { origin, cacheStatus: "HIT" },
-          );
-        }
-      } catch {
-        /* ignore */
+    try {
+      const stale = await kvGet<CachedPayload>(cacheKey);
+      if (stale?.chapters?.length) {
+        return jsonResponse(
+          {
+            chapters: shapeChapters(stale.chapters, full),
+            source: stale.source ?? source,
+            title: stale.title ?? title,
+            cachedAt: stale.cachedAt,
+            count: stale.chapters.length,
+            stale: true,
+            warning: message,
+            full,
+          },
+          { origin, cacheStatus: "HIT" },
+        );
       }
+    } catch {
+      /* ignore */
     }
 
     return jsonResponse(

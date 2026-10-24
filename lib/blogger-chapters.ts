@@ -10,6 +10,15 @@ export type BloggerChapter = {
   source: BloggerChapterSource;
 };
 
+export type BloggerChapterListItem = {
+  num: string;
+  title: string;
+  url: string;
+  thumbnail: string;
+  createdAt: string;
+  source: BloggerChapterSource;
+};
+
 type BloggerEntry = {
   title?: { $t?: string };
   link?: Array<{ rel?: string; href?: string }>;
@@ -72,6 +81,19 @@ export function parseBloggerEntries(
       source,
     };
   });
+}
+
+export function toListChapters(
+  chapters: BloggerChapter[],
+): BloggerChapterListItem[] {
+  return chapters.map(({ num, title, url, thumbnail, createdAt, source }) => ({
+    num,
+    title,
+    url,
+    thumbnail,
+    createdAt,
+    source,
+  }));
 }
 
 export async function fetchBloggerChapters(

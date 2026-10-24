@@ -556,9 +556,10 @@ async function loadBloggerChapterSource(
 ): Promise<Chapter[]> {
   if (source === "firestore") return [];
 
+  const bloggerSource = source === "blogger2" ? "blogger2" : "blogger";
   const params = new URLSearchParams({
-    title,
-    source: source === "blogger2" ? "blogger2" : "blogger",
+    title: title.trim(),
+    source: bloggerSource,
   });
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
@@ -595,8 +596,38 @@ async function loadBloggerChapterSource(
     images: chapter.images || [],
     thumbnail: chapter.thumbnail || "",
     createdAt: chapter.createdAt || "",
-    source: chapter.source,
+    source: chapter.source === "blogger2" ? "blogger2" : "blogger",
   }));
+}
+
+async function loadBloggerChapterImages(
+  title: string,
+  source: "blogger" | "blogger2",
+  chapterNum: string | number,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const params = new URLSearchParams({
+    title: title.trim(),
+    source,
+    full: "1",
+  });
+  const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) return [];
+  const data = (await response.json()) as {
+    chapters?: Array<{ num: string; images?: string[] }>;
+  };
+  const want = String(chapterNum).trim().toLowerCase().replace(",", ".");
+  const match = (data.chapters || []).find((item) => {
+    const raw = String(item.num).trim().toLowerCase().replace(",", ".");
+    const n = Number.parseFloat(raw);
+    const w = Number.parseFloat(want);
+    if (Number.isFinite(n) && Number.isFinite(w)) return n === w;
+    return raw === want;
+  });
+  return match?.images || [];
 }
 
 async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Promise<Chapter[]> {
@@ -1379,6 +1410,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     })
     .sort((left, right) => {
       const order = chapterNumber(left.num) - chapterNumber(right.num);
+      // newest = chapter tertinggi di atas (high priority batch pertama)
       return sort === "newest" ? -order : order;
     }), [chapterSearch, chapters, sort]);
 
@@ -1546,6 +1578,23 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     let images = chapter.source === "firestore" && readerSource !== "firestore"
       ? []
       : chapter.images || [];
+    // List API slim (tanpa images) — hydrate saat buka chapter Blogger
+    if (
+      !isNovel &&
+      !images.length &&
+      (readerSource === "blogger" || readerSource === "blogger2") &&
+      manga.title
+    ) {
+      try {
+        images = await loadBloggerChapterImages(
+          manga.title,
+          readerSource,
+          chapter.num,
+        );
+      } catch (error) {
+        console.warn("Gagal mengambil gambar chapter dari proxy Blogger.", error);
+      }
+    }
     if (!isNovel && !images.length && chapter.source === "firestore" && readerSource === "firestore") {
       try {
         const response = await fetch(
