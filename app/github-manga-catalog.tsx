@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { collection, doc, getDocFromServer, getDocsFromServer } from "firebase/firestore";
 import { initializeFirebaseClient } from "./lib/firebase-client";
 import {
   cardClass,
@@ -82,7 +82,6 @@ const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main
 const MANGA_LIST_URL = `${GITHUB_RAW}all-manga.json`;
 const CACHE_DURATION = 60 * 60 * 1000;
 const STALE_OK_DURATION = 24 * 60 * 60 * 1000;
-const FS_CACHE_DURATION = 10 * 60 * 1000;
 const HERO_CACHE_DURATION = 30 * 60 * 1000;
 const PAGE_SIZE = 24;
 
@@ -199,19 +198,13 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
   };
 }
 
-async function loadFirestoreMetadata(force = false): Promise<Record<string, FirestoreMeta>> {
-  const cached = safeGet<Cache<Record<string, FirestoreMeta>>>("mangaFsMetaCache", {});
-  if (!force && cached.data && Date.now() - (cached.time || 0) < FS_CACHE_DURATION) {
-    window.fsMangaMeta = cached.data;
-    return cached.data;
-  }
-
+async function loadFirestoreMetadata(): Promise<Record<string, FirestoreMeta>> {
   try {
     const { firestore } = initializeFirebaseClient();
     let metadata: Record<string, FirestoreMeta> = {};
     let usedSummary = false;
     try {
-      const summary = await getDoc(doc(firestore, "meta", "mangaSummary"));
+      const summary = await getDocFromServer(doc(firestore, "meta", "mangaSummary"));
       const entries = summary.exists() ? summary.data().list : null;
       if (Array.isArray(entries) && entries.length) {
         for (const entry of entries as Record<string, unknown>[]) {
@@ -227,7 +220,7 @@ async function loadFirestoreMetadata(force = false): Promise<Record<string, Fire
     }
 
     if (!usedSummary || !Object.keys(metadata).length) {
-      const snapshot = await getDocs(collection(firestore, "manga"));
+      const snapshot = await getDocsFromServer(collection(firestore, "manga"));
       metadata = {};
       snapshot.forEach((document) => {
         const item = metadataFromData(document.id, document.data());
@@ -336,10 +329,10 @@ function makeHeroItem(item: MangaItem, source: string): MangaItem | null {
   };
 }
 
-function thumbnail(value: unknown, width: number, quality: number): string {
+function thumbnail(value: unknown, width: number, quality: number, version = 0): string {
   const cover = resolveCover(value);
   return cover
-    ? `https://images.weserv.nl/?url=${encodeURIComponent(cover)}&w=${width}&q=${quality}&output=webp`
+    ? `https://images.weserv.nl/?url=${encodeURIComponent(cover)}&w=${width}&q=${quality}&output=webp${version ? `&v=${version}` : ""}`
     : "";
 }
 
@@ -430,7 +423,7 @@ function MangaCard({ item, metadata, priority, index }: {
   const manga = mangaForMetadata(item, meta);
   const slug = String(manga.slug || item.slug || slugify(item.title));
   const cover = String(manga.img || "");
-  const image = thumbnail(cover, 150, 60);
+  const image = thumbnail(cover, 150, 60, meta?.updatedAt);
   const status = String(manga.status || "").toLowerCase();
   const type = String(manga.type || "manga").toLowerCase();
   const chapter = chapterNumber(item, meta);
@@ -528,7 +521,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
     }
 
     try {
-      const metadataPromise = loadFirestoreMetadata(force);
+      const metadataPromise = loadFirestoreMetadata();
       const [list, freshMetadata] = await Promise.all([
         (async () => {
           if (!force) {
@@ -656,7 +649,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
           <>
             <div className="flex h-full min-h-[inherit] w-full transition-transform duration-[650ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] [will-change:transform]" style={{ transform: `translateX(-${heroPage * 100}%)` }}>
               {heroItems.map((item, index) => {
-                const image = thumbnail(item.img || item.cover, 150, 70);
+                const image = thumbnail(item.img || item.cover, 150, 70, Number(item.updatedAt || 0));
                 const manga = mangaForMetadata(item, getMetadata(item, metadata));
                 return (
                   <a
