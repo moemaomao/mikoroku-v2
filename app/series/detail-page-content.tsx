@@ -331,7 +331,7 @@ function openSeriesCoverPreferences(): Promise<IDBDatabase> {
   });
 }
 
-async function readSeriesCoverPreference(slug: string): Promise<string | null> {
+async function r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(slug: string): Promise<string | null> {
   const database = await openSeriesCoverPreferences();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(SERIES_COVER_PREFERENCE_STORE, "readonly");
@@ -351,7 +351,7 @@ async function readSeriesCoverPreference(slug: string): Promise<string | null> {
   });
 }
 
-async function writeSeriesCoverPreference(slug: string, url: string): Promise<void> {
+async function wr9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(slug: string, url: string): Promise<void> {
   const database = await openSeriesCoverPreferences();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(SERIES_COVER_PREFERENCE_STORE, "readwrite");
@@ -1026,7 +1026,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       };
     }
     if (!("indexedDB" in window)) return;
-    void readSeriesCoverPreference(mangaSlug).then((savedUrl) => {
+    void r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(mangaSlug).then((savedUrl) => {
       if (!active || !savedUrl) return;
       setSelectedCoverUrl(savedUrl);
       try {
@@ -1161,7 +1161,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   }, [slug]);
 
   useEffect(() => {
-    if (!mangaTitle) return;
+    const hasLocalCache = Boolean(
+      typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
+    );
+    if (!mangaTitle && !hasLocalCache) return;
     const controller = new AbortController();
     setChapterError("");
     if (chapterCacheSlugRef.current !== slug) {
@@ -1194,9 +1197,23 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       slug,
       source,
     );
+
     if (immediatelyAvailable !== undefined) {
       setChapters(immediatelyAvailable);
       setChapterState("ready");
+    } else if (cachedChapters.length > 0) {
+      setChapters(cachedChapters);
+      setChapterState("ready");
+      chapterSourceCacheRef.current.set(
+        chapterSourceCacheKey(slug, source),
+        cachedSelectedChapters.length ? cachedSelectedChapters : cachedChapters,
+      );
+      if (cachedFirestoreChapters.length) {
+        chapterSourceCacheRef.current.set(
+          chapterSourceCacheKey(slug, "firestore"),
+          cachedFirestoreChapters,
+        );
+      }
     } else {
       setChapterState("loading");
     }
@@ -1208,7 +1225,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         if (memoryCache.has(key)) return memoryCache.get(key) || [];
         const loaded = chapterSource === "firestore"
           ? await loadFirestoreChapterSource(slug, controller.signal)
-          : await loadBloggerChapterSource(mangaTitle, chapterSource, controller.signal);
+          : mangaTitle
+            ? await loadBloggerChapterSource(mangaTitle, chapterSource, controller.signal)
+            : [];
         if (controller.signal.aborted) {
           throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
         }
@@ -1347,7 +1366,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       if (!localSaved) setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
       return;
     }
-    void writeSeriesCoverPreference(manga.slug, url).catch((error: unknown) => {
+    void wr9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(manga.slug, url).catch((error: unknown) => {
       console.error(`Could not save the selected cover for ${manga.slug}.`, error);
       if (!localSaved) setCoverPreferenceError("Cover changed for this visit, but could not be saved in this browser.");
     });
