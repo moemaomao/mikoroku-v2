@@ -2,6 +2,10 @@ import { ImageResponse } from "next/og";
 
 const FAVICON_URL = "https://i.ibb.co/B5g000HF/apple-touch-icon.png";
 
+/** Discord/Twitter prefer 1200x630 for summary_large_image */
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
+
 export function createMikorokuOgImage({
   title,
   description,
@@ -13,8 +17,8 @@ export function createMikorokuOgImage({
   label: string;
   coverUrl?: string | null;
 }) {
-  const safeTitle = (title || "Mikoroku").slice(0, 60);
-  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 75);
+  const safeTitle = (title || "Mikoroku").slice(0, 72);
+  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 140);
   const hasCover =
     typeof coverUrl === "string" &&
     coverUrl.startsWith("http") &&
@@ -31,7 +35,7 @@ export function createMikorokuOgImage({
             "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
           color: "#f5f5f5",
           fontFamily: "Arial, sans-serif",
-          padding: "20px 24px",
+          padding: "40px 48px",
           position: "relative",
           overflow: "hidden",
         }}
@@ -42,8 +46,8 @@ export function createMikorokuOgImage({
             left: 0,
             top: 0,
             bottom: 0,
-            width: 5,
-            background: "linear-gradient(180deg, #ff4d5e, #a52335)",
+            width: 10,
+            background: "linear-gradient(180deg, #e11d48 0%, #f59e0b 100%)",
           }}
         />
 
@@ -52,79 +56,95 @@ export function createMikorokuOgImage({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: hasCover ? 340 : "100%",
+            width: hasCover ? 720 : "100%",
             height: "100%",
-            zIndex: 1,
+            paddingRight: hasCover ? 24 : 0,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img
-              src={FAVICON_URL}
-              width={26}
-              height={26}
-              alt=""
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: 7,
-                objectFit: "cover",
-              }}
-            />
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span
-                style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2 }}
-              >
-                MIKOROKU
-              </span>
-              <span
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <img
+                src={FAVICON_URL}
+                width={52}
+                height={52}
+                alt=""
                 style={{
-                  fontSize: 8,
-                  color: "#a9a9b1",
-                  letterSpacing: 1,
-                  marginTop: 1,
+                  width: 52,
+                  height: 52,
+                  borderRadius: 12,
+                }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
                 }}
               >
-                READ YOUR NEXT STORY
-              </span>
+                <span
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    color: "#fb7185",
+                  }}
+                >
+                  MIKOROKU
+                </span>
+                <span style={{ fontSize: 16, color: "rgba(255,255,255,0.55)" }}>
+                  READ YOUR NEXT STORY
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              maxWidth: 320,
-            }}
-          >
             <div
               style={{
-                alignSelf: "flex-start",
-                border: "1px solid rgba(255,255,255,0.18)",
-                borderRadius: 999,
-                padding: "3px 8px",
-                color: "#ff8290",
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginTop: 8,
               }}
             >
-              {(label || "MANGA").toUpperCase()}
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 600,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  color: "#fda4af",
+                  background: "rgba(225, 29, 72, 0.18)",
+                  border: "1px solid rgba(251, 113, 133, 0.35)",
+                  borderRadius: 999,
+                  padding: "6px 14px",
+                }}
+              >
+                {label || "Manga & Series"}
+              </span>
             </div>
 
             <div
               style={{
-                fontSize: 22,
+                fontSize: 44,
                 fontWeight: 800,
                 lineHeight: 1.15,
-                letterSpacing: -0.3,
                 color: "#fff",
+                marginTop: 8,
+                maxHeight: 160,
+                overflow: "hidden",
               }}
             >
               {safeTitle}
             </div>
 
-            <div style={{ fontSize: 11, lineHeight: 1.35, color: "#c3c1c8" }}>
+            <div
+              style={{
+                fontSize: 22,
+                lineHeight: 1.4,
+                color: "rgba(255,255,255,0.72)",
+                maxHeight: 120,
+                overflow: "hidden",
+              }}
+            >
               {safeDesc}
             </div>
           </div>
@@ -133,14 +153,12 @@ export function createMikorokuOgImage({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 5,
-              color: "#999",
-              fontSize: 10,
+              gap: 10,
+              fontSize: 18,
+              color: "rgba(255,255,255,0.45)",
             }}
           >
-            <span style={{ color: "#ff6476", fontWeight: 700 }}>
-              mikoroku.top
-            </span>
+            <span>mikoroku.top</span>
             <span>·</span>
             <span>Manga, manhwa & more</span>
           </div>
@@ -150,14 +168,14 @@ export function createMikorokuOgImage({
           <div
             style={{
               position: "absolute",
-              top: 22,
-              right: 24,
-              width: 172,
-              height: 255,
-              borderRadius: 10,
+              top: 44,
+              right: 48,
+              width: 344,
+              height: 510,
+              borderRadius: 20,
               overflow: "hidden",
               border: "1px solid rgba(255,255,255,0.18)",
-              boxShadow: "0 10px 28px rgba(0,0,0,0.5)",
+              boxShadow: "0 20px 56px rgba(0,0,0,0.5)",
               background: "#24232a",
               display: "flex",
               alignItems: "center",
@@ -166,8 +184,8 @@ export function createMikorokuOgImage({
           >
             <img
               src={coverUrl!}
-              width={172}
-              height={255}
+              width={344}
+              height={510}
               alt=""
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
@@ -176,8 +194,8 @@ export function createMikorokuOgImage({
       </div>
     ),
     {
-      width: 600,
-      height: 315,
+      width: OG_IMAGE_WIDTH,
+      height: OG_IMAGE_HEIGHT,
       headers: {
         "Cache-Control":
           "public, s-maxage=86400, stale-while-revalidate=604800",
