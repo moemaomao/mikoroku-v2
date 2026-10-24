@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { collection, doc, getDocFromServer, getDocsFromServer } from "firebase/firestore";
-import { initializeFirebaseClient } from "./lib/firebase-client";
+import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import {
   cardClass,
   cardCoverClass,
@@ -200,34 +199,13 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
 
 async function loadFirestoreMetadata(): Promise<Record<string, FirestoreMeta>> {
   try {
-    const { firestore } = initializeFirebaseClient();
-    let metadata: Record<string, FirestoreMeta> = {};
-    let usedSummary = false;
-    try {
-      const summary = await getDocFromServer(doc(firestore, "meta", "mangaSummary"));
-      const entries = summary.exists() ? summary.data().list : null;
-      if (Array.isArray(entries) && entries.length) {
-        for (const entry of entries as Record<string, unknown>[]) {
-          if (!entry || !entry.slug) continue;
-          const item = metadataFromData(String(entry.slug), entry);
-          metadata[item.slug] = item;
-          if (item.githubSlug) metadata[item.githubSlug] = item;
-        }
-        usedSummary = true;
-      }
-    } catch (error) {
-      console.warn("Manga summary document unavailable; reading manga metadata.", error);
-    }
-
-    if (!usedSummary || !Object.keys(metadata).length) {
-      const snapshot = await getDocsFromServer(collection(firestore, "manga"));
-      metadata = {};
-      snapshot.forEach((document) => {
-        const item = metadataFromData(document.id, document.data());
-        metadata[item.slug] = item;
-        if (item.githubSlug) metadata[item.githubSlug] = item;
-      });
-    }
+    const snapshot = await loadFirestoreMangaCatalog();
+    const metadata: Record<string, FirestoreMeta> = {};
+    snapshot.forEach((document) => {
+      const item = metadataFromData(document.id, document.data());
+      metadata[item.slug] = item;
+      if (item.githubSlug) metadata[item.githubSlug] = item;
+    });
     window.fsMangaMeta = metadata;
     safeSet("mangaFsMetaCache", { time: Date.now(), data: metadata });
     return metadata;

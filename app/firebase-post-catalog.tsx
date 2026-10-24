@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { initializeFirebaseClient } from "./lib/firebase-client";
+import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import {
   cardClass,
   cardCoverClass,
@@ -160,9 +159,7 @@ function cacheRecords(records: Record<string, MangaRecord>) {
 }
 
 async function fetchRecords(): Promise<Record<string, MangaRecord>> {
-  const { firestore } = initializeFirebaseClient();
-  const source = collection(firestore, "manga");
-  const snapshot = await getDocs(source);
+  const snapshot = await loadFirestoreMangaCatalog();
 
   const records: Record<string, MangaRecord> = {};
   snapshot.forEach((document) => {

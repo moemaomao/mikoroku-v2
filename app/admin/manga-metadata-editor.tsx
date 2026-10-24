@@ -14,7 +14,9 @@ type MangaMetadataEditorProps = {
   onChange: (key: keyof MangaDraft, value: string | boolean) => void;
   onUploadCover: () => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
+  onUpdateTimestamp: () => void;
   onCancel: () => void;
+  currentUpdatedAt?: number;
 };
 
 export default function MangaMetadataEditor({
@@ -25,7 +27,9 @@ export default function MangaMetadataEditor({
   onChange,
   onUploadCover,
   onSubmit,
+  onUpdateTimestamp,
   onCancel,
+  currentUpdatedAt,
 }: MangaMetadataEditorProps) {
   return (
     <form className={styles.panel} onSubmit={onSubmit}>
@@ -59,7 +63,7 @@ export default function MangaMetadataEditor({
             <button type="button" className={styles.secondaryButton} onClick={onUploadCover} disabled={busy}>Upload Cover</button>
           </div>
           {draft.cover && (
-            <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" />
+            <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" optimizeWidth={200} />
           )}
         </div>
         <label className={styles.field}>
@@ -139,6 +143,46 @@ export default function MangaMetadataEditor({
         <input type="checkbox" checked={draft.isDraft} onChange={(event) => onChange("isDraft", event.target.checked)} />
         <span>Save as Draft</span>
       </label>
+      <section className={styles.timestampSection} aria-label="Update timestamp">
+        <div className={styles.panelHeading}>
+          <div>
+            <h3>Update Timestamp</h3>
+            {currentUpdatedAt ? (
+              <p>Current: {new Date(currentUpdatedAt).toLocaleString()}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className={styles.timestampControls}>
+          <label className={styles.field}>
+            <span>Date &amp; Time</span>
+            <input
+              type="datetime-local"
+              value={draft.updateDate}
+              onChange={(event) => onChange("updateDate", event.target.value)}
+            />
+          </label>
+          <div className={styles.timestampActions}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() => onChange("updateDate", new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16))}
+              disabled={busy}
+            >
+              Now
+            </button>
+            {editing && (
+              <button
+                type="button"
+                className={styles.timestampUpdateButton}
+                onClick={onUpdateTimestamp}
+                disabled={busy}
+              >
+                {busy ? "Updating..." : "Update"}
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
       <div className={styles.formActions}>
         <button className={styles.primaryButton} disabled={busy}>{busy ? "Saving..." : "Save Manga"}</button>
         <button type="button" className={styles.secondaryButton} onClick={onCancel}>Cancel</button>

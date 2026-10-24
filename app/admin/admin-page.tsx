@@ -47,7 +47,7 @@ const firebaseConfig = {
 
 const ADMIN_APP_NAME = "mikoroku-admin";
 const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache";
-const ADMIN_MANGA_CACHE_DURATION = 5 * 60 * 1000;
+const ADMIN_MANGA_CACHE_DURATION = 45 * 60 * 1000;
 const GITHUB_JSON =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
@@ -90,6 +90,7 @@ type MangaRecord = {
 export type MangaDraft = {
   slug: string;
   title: string;
+  updateDate: string;
   altTitle: string;
   cover: string;
   desc: string;
@@ -180,6 +181,7 @@ type UploadNotice = {
 const emptyDraft: MangaDraft = {
   slug: "",
   title: "",
+  updateDate: "",
   altTitle: "",
   cover: "",
   desc: "",
@@ -222,6 +224,14 @@ function text(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
+function toDateTimeInput(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
 function stringList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(text).filter(Boolean);
   if (typeof value === "string") return value.split(",").map((entry) => entry.trim()).filter(Boolean);
@@ -236,6 +246,7 @@ function toDraft(manga?: MangaRecord): MangaDraft {
   return {
     slug: manga.slug,
     title: manga.title,
+    updateDate: toDateTimeInput(manga.updatedAt),
     altTitle: manga.altTitle,
     cover: manga.cover,
     desc: manga.desc,
@@ -621,6 +632,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [busy, setBusy] = useState(false);
   const [manga, setManga] = useState<MangaRecord[]>([]);
+  const [catalogFromCache, setCatalogFromCache] = useState(false);
   const [loadingManga, setLoadingManga] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [warning, setWarning] = useState("");
@@ -639,6 +651,7 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [isLightMode, setIsLightMode] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const quickAddRef = useRef<HTMLDivElement>(null);
   const [chapterModalOpen, setChapterModalOpen] = useState(false);
   const [editingChapterNumber, setEditingChapterNumber] = useState<string | null>(null);
   const [chapterDraft, setChapterDraft] = useState<ChapterDraft>({ ...emptyChapterDraft });
@@ -676,11 +689,30 @@ export default function AdminPage() {
     return () => window.clearTimeout(timeout);
   }, [uploadNotice]);
 
+  useEffect(() => {
+    if (!quickAddOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !quickAddRef.current?.contains(event.target)) {
+        setQuickAddOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQuickAddOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [quickAddOpen]);
+
   const loadManga = useCallback(async (force = false) => {
     if (loadingMangaRef.current) return;
     const cached = readAdminMangaCache();
     if (!force && cached && Date.now() - cached.time < ADMIN_MANGA_CACHE_DURATION) {
       setManga(cached.items);
+      setCatalogFromCache(true);
       setLoadError("");
       setWarning("");
       return;
@@ -688,6 +720,7 @@ export default function AdminPage() {
 
     loadingMangaRef.current = true;
     setLoadingManga(true);
+    setCatalogFromCache(false);
     setLoadError("");
     setWarning("");
     try {
@@ -735,6 +768,7 @@ export default function AdminPage() {
       if (!githubManga.length && !firestoreManga.length) {
         if (cached?.items.length) {
           setManga(cached.items);
+          setCatalogFromCache(true);
           setWarning(
             `Could not load the latest catalog. Showing the local cache. ${summaryWarning} ${githubResult.status === "rejected" ? getErrorMessage(githubResult.reason) : ""}`.trim(),
           );
@@ -750,6 +784,7 @@ export default function AdminPage() {
 
       const loadedManga = mergeGithubMetadata(githubManga, firestoreManga);
       setManga(loadedManga);
+      setCatalogFromCache(false);
       writeAdminMangaCache(loadedManga);
       const githubWarning = githubResult.status === "rejected"
         ? `GitHub data unavailable: ${getErrorMessage(githubResult.reason)}.`
@@ -759,6 +794,7 @@ export default function AdminPage() {
       console.error("Failed to load the admin manga list.", error);
       if (cached?.items.length) {
         setManga(cached.items);
+        setCatalogFromCache(true);
         setWarning(`Could not load the latest catalog. Showing the local cache: ${getErrorMessage(error)}`);
       } else {
         setLoadError(`Failed to load manga: ${getErrorMessage(error)}`);
@@ -768,6 +804,18 @@ export default function AdminPage() {
       setLoadingManga(false);
     }
   }, []);
+
+  function loadMangaCache() {
+    const cached = readAdminMangaCache();
+    if (!cached?.items.length) {
+      setWarning("No saved local manga cache is available yet.");
+      return;
+    }
+    setManga(cached.items);
+    setCatalogFromCache(true);
+    setLoadError("");
+    setWarning(`Loaded local cache from ${new Date(cached.time).toLocaleString()}.`);
+  }
 
   useEffect(() => {
     const { auth } = getAdminFirebase();
@@ -928,7 +976,13 @@ export default function AdminPage() {
         }
       }
 
-      const updatedAt = Date.now();
+      const updatedAt = draft.updateDate
+        ? new Date(draft.updateDate).getTime()
+        : Date.now();
+      if (!Number.isFinite(updatedAt)) {
+        setMessage("Enter a valid update date and time.");
+        return;
+      }
       const isGithub = Boolean(
         editing &&
           (editing.origin === "github" ||
@@ -1020,6 +1074,73 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Failed to save the manga.", error);
       setMessage(`Failed to save manga: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdateTimestamp() {
+    if (!editing) return;
+    const updatedAt = draft.updateDate
+      ? new Date(draft.updateDate).getTime()
+      : Date.now();
+    if (!Number.isFinite(updatedAt)) {
+      setMessage("Enter a valid update date and time.");
+      return;
+    }
+    if (!window.confirm(`Update timestamp to ${new Date(updatedAt).toLocaleString()}?`)) return;
+
+    setBusy(true);
+    setMessage("");
+    try {
+      const { firestore } = getAdminFirebase();
+      const isGithub = editing.origin === "github" ||
+        editing.source === "github" ||
+        Boolean(editing.githubSlug);
+      const timestampData = {
+        updatedAt,
+        latestUpdate: updatedAt,
+        managedByAdmin: true,
+        ...(isGithub ? {
+          title: editing.title,
+          cover: editing.cover,
+          desc: editing.desc,
+          type: editing.type,
+          status: editing.status,
+          genres: editing.genres,
+          chapterCount: editing.chapterCount,
+          origin: "github",
+          source: "hybrid",
+          githubSlug: editing.githubSlug || editing.slug,
+        } : {}),
+      };
+      await setDoc(doc(firestore, "manga", editing.slug), timestampData, { merge: true });
+
+      const updatedManga = fromFirestore(editing.slug, {
+        ...editing,
+        ...timestampData,
+      });
+      setManga((current) => current.map((item) =>
+        item.slug === updatedManga.slug ? updatedManga : item,
+      ));
+      setEditing(updatedManga);
+      setSelectedManga(updatedManga);
+      setDraft((current) => ({
+        ...current,
+        updateDate: toDateTimeInput(updatedAt),
+      }));
+      invalidateAdminMangaCache();
+
+      try {
+        await updateSummary(firestore, updatedManga);
+        setMessage("Manga timestamp updated successfully.");
+      } catch (error) {
+        console.error("Failed to update the manga summary.", error);
+        setMessage(`Timestamp saved, but the summary could not be updated: ${getErrorMessage(error)}`);
+      }
+    } catch (error) {
+      console.error("Failed to update the manga timestamp.", error);
+      setMessage(`Failed to update timestamp: ${getErrorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -2210,9 +2331,15 @@ export default function AdminPage() {
               <div className={styles.panelHeading}>
                 <div>
                   <h2>Manga List</h2>
-                  <p>{filteredManga.length.toLocaleString("en-US")} manga</p>
+                  <p>
+                    {filteredManga.length.toLocaleString("en-US")} manga
+                    {catalogFromCache && <span className={styles.cacheBadge}>Local cache</span>}
+                  </p>
                 </div>
                 <div className={styles.panelActions}>
+                  <button className={styles.secondaryButton} onClick={loadMangaCache} disabled={loadingManga}>
+                    Load Cache
+                  </button>
                   <button className={styles.secondaryButton} onClick={() => void loadManga(true)} disabled={loadingManga}>
                     {loadingManga ? "Loading..." : "Force Refresh"}
                   </button>
@@ -2229,7 +2356,7 @@ export default function AdminPage() {
                     <article className={styles.mangaCard} key={item.slug}>
                       <button className={styles.mangaCoverButton} onClick={() => void openMangaChapters(item)} aria-label={`Open ${item.title}`}>
                         {item.cover ? (
-                          <CoverImage src={item.cover} alt="" />
+                          <CoverImage src={item.cover} alt="" optimizeWidth={200} />
                         ) : <span className={styles.coverPlaceholder}>M</span>}
                         <span className={styles.mangaSource}>{item.source === "hybrid" ? "HYBRID" : item.source.toUpperCase()}</span>
                         {item.isDraft && <span className={styles.mangaDraftBadge}>DRAFT</span>}
@@ -2254,7 +2381,7 @@ export default function AdminPage() {
             <section className={styles.panel}>
               <div className={styles.detailHeader}>
                 {selectedManga.cover ? (
-                  <CoverImage src={selectedManga.cover} alt="" loading="eager" />
+                  <CoverImage src={selectedManga.cover} alt="" loading="eager" optimizeWidth={200} />
                 ) : <span className={styles.coverPlaceholder}>M</span>}
                 <div className={styles.detailMeta}>
                   <div className={styles.detailBadges}>
@@ -2310,6 +2437,8 @@ export default function AdminPage() {
                   onChange={updateDraftField}
                   onUploadCover={() => void uploadCoverFile()}
                   onSubmit={handleSaveManga}
+                  onUpdateTimestamp={() => void handleUpdateTimestamp()}
+                  currentUpdatedAt={selectedManga.updatedAt}
                   onCancel={() => setDetailTab("chapters")}
                 />
               ) : detailTab === "covers" ? (
@@ -2357,7 +2486,7 @@ export default function AdminPage() {
                           onDragEnd={handleVolumeDragEnd}
                         >
                           <div className={styles.coverGalleryImage} title="Drag to reorder">
-                            <CoverImage src={coverUrl} alt={`${selectedManga.title} volume ${selectedManga.coverNumbers?.[coverUrl] || index + 1}`} loading="lazy" />
+                            <CoverImage src={coverUrl} alt={`${selectedManga.title} volume ${selectedManga.coverNumbers?.[coverUrl] || index + 1}`} loading="lazy" optimizeWidth={200} />
                             <span className={styles.coverDragHint}>Drag</span>
                           </div>
                           <div className={styles.coverGalleryActions}>
@@ -2422,7 +2551,6 @@ export default function AdminPage() {
                       setUploadNotice(null);
                       setChapterModalOpen(true);
                     }}>＋ Add Chapter</button>
-                    <button className={styles.secondaryButton} onClick={() => void openMangaChapters(selectedManga)} disabled={loadingChapters}>⟳ Refresh</button>
                     <button className={styles.secondaryButton} onClick={() => void saveChapterOrder()} disabled={busy || !chapters.length}>▣ Save Order</button>
                     <small>Drag or use arrows to reorder chapters.</small>
                   </div>
@@ -2452,7 +2580,7 @@ export default function AdminPage() {
                           }}
                         >
                           <div className={styles.chapterCardHeading}>
-                            <strong>{chapter.title || `Chapter ${chapter.num}`}</strong>
+                            <strong title={chapter.title || `Chapter ${chapter.num}`}>Ch. {chapter.num}</strong>
                             {chapter.isDraft ? <small className={styles.chapterDraftBadge}>DRAFT</small> : null}
                           </div>
                           <span className={styles.chapterDate}>{chapter.date ? new Date(getTimestamp(chapter.date)).toLocaleDateString("en-US") : ""}</span>
@@ -2501,6 +2629,8 @@ export default function AdminPage() {
               onChange={updateDraftField}
               onUploadCover={() => void uploadCoverFile()}
               onSubmit={handleSaveManga}
+              onUpdateTimestamp={() => void handleUpdateTimestamp()}
+              currentUpdatedAt={editing?.updatedAt}
               onCancel={() => setActiveSection("manga-list")}
             />
           )}
@@ -2687,14 +2817,21 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <div className={styles.quickAddWrap}>
+      <div className={styles.quickAddWrap} ref={quickAddRef}>
         {quickAddOpen && (
-          <div className={styles.quickAddMenu}>
-            <button onClick={() => { setQuickAddOpen(false); openNewManga(); }}>＋ Add Manga</button>
-            <button onClick={openChapterModal}>▤ Upload Chapter</button>
+          <div className={styles.quickAddMenu} id="quick-add-menu">
+            <button type="button" onClick={() => { setQuickAddOpen(false); openNewManga(); }}>＋ Add Manga</button>
+            <button type="button" onClick={() => { setQuickAddOpen(false); openChapterModal(); }}>▤ Upload Chapter</button>
           </div>
         )}
-        <button className={styles.quickAddButton} onClick={() => setQuickAddOpen((current) => !current)} aria-label="Quick Add">
+        <button
+          className={styles.quickAddButton}
+          type="button"
+          onClick={() => setQuickAddOpen((current) => !current)}
+          aria-label={quickAddOpen ? "Close quick add menu" : "Quick Add"}
+          aria-expanded={quickAddOpen}
+          aria-controls="quick-add-menu"
+        >
           {quickAddOpen ? "×" : "+"}
         </button>
       </div>

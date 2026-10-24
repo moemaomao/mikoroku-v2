@@ -1,8 +1,9 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
-import { collection, getDocs, getFirestore } from "firebase/firestore";
+import { addDoc, collection, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
@@ -864,6 +865,14 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   );
   const [chapterSearch, setChapterSearch] = useState("");
   const [bookmarked, setBookmarked] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportType, setReportType] = useState("");
+  const [reportTypeOpen, setReportTypeOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportMessage, setReportMessage] = useState("");
+  const [reportToast, setReportToast] = useState("");
+  const [sendingReport, setSendingReport] = useState(false);
+  const reportTypeDropdownRef = useRef<HTMLDivElement>(null);
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [recommendationsHidden, setRecommendationsHidden] = useState(false);
   const handleRecommendationVisibilityChange = useCallback(
@@ -873,6 +882,37 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
   const mangaTitle = manga?.title;
+
+  useEffect(() => {
+    if (!reportOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || sendingReport) return;
+      if (reportTypeOpen) {
+        setReportTypeOpen(false);
+      } else {
+        setReportOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [reportOpen, reportTypeOpen, sendingReport]);
+
+  useEffect(() => {
+    if (!reportOpen || !reportTypeOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!reportTypeDropdownRef.current?.contains(event.target as Node)) {
+        setReportTypeOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [reportOpen, reportTypeOpen]);
+
+  useEffect(() => {
+    if (!reportToast) return;
+    const timeout = window.setTimeout(() => setReportToast(""), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [reportToast]);
 
   useEffect(() => {
     const syncAppearance = (event: StorageEvent) => {
@@ -1338,6 +1378,40 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     window.dispatchEvent(new Event("bookmarkUpdated"));
   }, [manga, slug]);
 
+  async function submitDetailReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!manga || !reportType) {
+      setReportMessage("Please select a report type.");
+      return;
+    }
+
+    setSendingReport(true);
+    setReportMessage("");
+    try {
+      const { firestore } = initializeFirebaseClient();
+      await addDoc(collection(firestore, "chapterReports"), {
+        slug: manga.slug,
+        chapter: "Detail",
+        url: window.location.href,
+        type: `Detail: ${reportType}`,
+        reason: reportReason.trim() || "-",
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setReportToast("Laporan berhasil terkirim.");
+      setReportOpen(false);
+      setReportMessage("");
+      setReportType("");
+      setReportTypeOpen(false);
+      setReportReason("");
+    } catch (error) {
+      console.error("Failed to submit manga detail report.", error);
+      setReportMessage(error instanceof Error ? error.message : "Failed to submit report.");
+    } finally {
+      setSendingReport(false);
+    }
+  }
+
   const openChapter = useCallback(async (chapter: Chapter) => {
     if (!manga) return;
     const isNovel = chapter.isNovel || isNovelSeries(manga);
@@ -1489,6 +1563,17 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 <button className={`bookmark-btn${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
                   <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
                   <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
+                </button>
+                <button
+                  className="detail-report-btn inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-500/60 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 md:text-sm"
+                  type="button"
+                  onClick={() => {
+                    setReportMessage("");
+                    setReportOpen(true);
+                  }}
+                >
+                  <i className="fas fa-flag" aria-hidden="true" />
+                  <span>Report</span>
                 </button>
               </div>
               <div className="info">
@@ -1818,6 +1903,120 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         </div>
         <RecommendationSidebar manga={manga} onVisibilityChange={handleRecommendationVisibilityChange} />
       </main>
+      {reportOpen && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-[3px]"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !sendingReport) setReportOpen(false);
+          }}
+        >
+          <form
+            className="max-h-[min(90vh,700px)] w-full max-w-[520px] overflow-auto rounded-2xl border border-white/15 bg-white p-5 text-[#171717] shadow-2xl dark:bg-[#191a20] dark:text-white"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="detail-report-title"
+            onSubmit={submitDetailReport}
+          >
+            <h2 className="mb-2 text-lg font-bold" id="detail-report-title">Report manga detail</h2>
+            <p className="mb-4 text-sm opacity-75">Tell us what is wrong with this manga page.</p>
+            <label className="mb-1.5 block text-sm font-semibold" id="detail-report-type-label">Issue type</label>
+            <div className="relative mb-4" ref={reportTypeDropdownRef}>
+              <button
+                aria-expanded={reportTypeOpen}
+                aria-haspopup="listbox"
+                aria-labelledby="detail-report-type-label"
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-black/15 bg-white px-3.5 py-2.5 text-left text-sm shadow-sm transition hover:border-red-500/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-white/15 dark:bg-[#22232b] dark:hover:border-red-400/60"
+                id="detail-report-type"
+                type="button"
+                onClick={() => setReportTypeOpen((open) => !open)}
+              >
+                <span className={reportType ? "" : "text-black/50 dark:text-white/50"}>
+                  {reportType || "Choose an issue"}
+                </span>
+                <i className={`fas fa-chevron-down text-xs opacity-60 transition-transform ${reportTypeOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+              </button>
+              {reportTypeOpen && (
+                <div
+                  className="absolute left-0 right-0 top-[calc(100%+6px)] z-10 overflow-hidden rounded-xl border border-black/10 bg-white p-1.5 shadow-xl dark:border-white/10 dark:bg-[#22232b]"
+                  role="listbox"
+                  aria-labelledby="detail-report-type-label"
+                >
+                  {[
+                    "Incorrect information",
+                    "Broken link",
+                    "Missing chapters",
+                    "Other",
+                  ].map((type) => (
+                    <button
+                      aria-selected={reportType === type}
+                      className={`flex min-h-10 w-full items-center justify-between rounded-lg px-3 text-left text-sm transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-300 ${reportType === type ? "bg-red-50 font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300" : ""}`}
+                      key={type}
+                      role="option"
+                      type="button"
+                      onClick={() => {
+                        setReportType(type);
+                        setReportTypeOpen(false);
+                      }}
+                    >
+                      <span>{type}</span>
+                      {reportType === type && <i className="fas fa-check text-xs" aria-hidden="true" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <label className="mb-1.5 block text-sm font-semibold" htmlFor="detail-report-reason">Additional details</label>
+            <textarea
+              className="min-h-[110px] w-full resize-y rounded-lg border border-black/20 bg-transparent p-2.5 dark:border-white/20"
+              id="detail-report-reason"
+              placeholder="Describe the issue (optional)"
+              value={reportReason}
+              maxLength={1000}
+              onChange={(event) => setReportReason(event.target.value)}
+            />
+            {reportMessage && (
+              <p className="my-3 text-sm" role={reportMessage.includes("successfully") ? "status" : "alert"}>
+                {reportMessage}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="min-h-10 rounded-lg border border-black/20 bg-black/5 px-4 py-2 text-sm dark:border-white/20 dark:bg-white/10"
+                type="button"
+                onClick={() => setReportOpen(false)}
+                disabled={sendingReport}
+              >Cancel</button>
+              <button
+                className="min-h-10 rounded-lg border border-red-700 bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-wait disabled:opacity-60"
+                type="submit"
+                disabled={sendingReport || !reportType}
+              >{sendingReport ? "Submitting..." : "Submit report"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {reportToast && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed left-1/2 top-5 z-[9999] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl border border-emerald-500/40 bg-white px-5 py-3.5 text-sm font-semibold text-[#171717] shadow-2xl dark:bg-[#202129] dark:text-white"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+            <i className="fas fa-check" aria-hidden="true" />
+          </span>
+          {reportToast}
+          <button
+            className="ml-2 grid h-7 w-7 shrink-0 place-items-center rounded-md opacity-60 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+            type="button"
+            aria-label="Tutup notifikasi"
+            onClick={() => setReportToast("")}
+          >
+            <i className="fas fa-times" aria-hidden="true" />
+          </button>
+        </div>,
+        document.body,
+      )}
       <div className="relative z-[2]">
         <SiteFooter />
       </div>

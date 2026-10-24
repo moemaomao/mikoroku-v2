@@ -23,8 +23,9 @@ import {
   serverTimestamp,
   terminate,
   where,
+  getDocsFromServer,
 } from "firebase/firestore";
-import type { Firestore } from "firebase/firestore";
+import type { Firestore, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { pruneStoredChapterCaches } from "./chapter-cache";
 
 const firebaseConfig = {
@@ -40,6 +41,7 @@ const firebaseConfig = {
 const FIREBASE_APP_NAME = "mikoroku-catalog";
 type FirebaseClient = { app: FirebaseApp; db: Database; firestore: Firestore };
 let initializedClient: FirebaseClient | undefined;
+let mangaCatalogPromise: Promise<QuerySnapshot<DocumentData>> | undefined;
 
 export function initializeFirebaseClient(): FirebaseClient {
   if (typeof window === "undefined") {
@@ -116,6 +118,18 @@ export function initializeFirebaseClient(): FirebaseClient {
 
   initializedClient = { app, db, firestore };
   return initializedClient;
+}
+
+export function loadFirestoreMangaCatalog(): Promise<QuerySnapshot<DocumentData>> {
+  const { firestore } = initializeFirebaseClient();
+  if (!mangaCatalogPromise) {
+    const request = getDocsFromServer(collection(firestore, "manga"));
+    mangaCatalogPromise = request.catch((error: unknown) => {
+      mangaCatalogPromise = undefined;
+      throw error;
+    });
+  }
+  return mangaCatalogPromise;
 }
 
 export async function clearFirestoreOfflineCache(): Promise<void> {

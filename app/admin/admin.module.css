@@ -733,6 +733,19 @@
   margin: 6px 0 0;
 }
 
+.cacheBadge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 7px;
+  border: 1px solid rgb(107 155 255 / 28%);
+  border-radius: 999px;
+  color: #a9c1ff;
+  background: rgb(107 155 255 / 9%);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 .inlineStatus {
   margin: 0 0 12px;
   color: #aebcda;
@@ -1387,6 +1400,57 @@
   gap: 16px;
 }
 
+.timestampSection {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.timestampSection h3 {
+  margin: 0;
+  color: #eef2ff;
+  font-size: 14px;
+}
+
+.timestampControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.timestampActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timestampUpdateButton {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 13px;
+  border: 1px solid rgb(52 211 153 / 40%);
+  border-radius: 9px;
+  color: #86efac;
+  background: rgb(52 211 153 / 9%);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.timestampUpdateButton:hover {
+  border-color: #34d399;
+  background: rgb(52 211 153 / 18%);
+}
+
+.timestampUpdateButton:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
 .fullWidth {
   grid-column: 1 / -1;
 }
@@ -1727,6 +1791,10 @@
 }
 
 .quickAddWrap {
+  display: flex;
+  width: max-content;
+  flex-direction: column;
+  align-items: flex-end;
   position: fixed;
   z-index: 5;
   right: 24px;
@@ -2396,21 +2464,51 @@
   }
 
   .chapterGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .coverGalleryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .coverGalleryActions {
+    gap: 2px;
+    padding: 5px 4px;
+  }
+
+  .volumeNumberField {
+    gap: 3px;
+    font-size: 10px;
+  }
+
+  .volumeNumberField > input {
+    width: 32px;
+    padding: 5px 3px;
+  }
+
+  .volumeDeleteButton {
+    width: 26px;
+    height: 26px;
+    flex-basis: 26px;
   }
 
   .chapterCard {
     min-height: 68px;
-    padding: 8px;
+    padding: 6px;
   }
 
   .chapterCardHeading {
-    padding-right: 30px;
+    padding-right: 27px;
+  }
+
+  .chapterCardHeading strong {
+    font-size: 11px;
   }
 
   .chapterDate {
-    padding-right: 30px;
+    padding-right: 0;
   }
 
   .chapterCard .rowActions {
@@ -2543,7 +2641,7 @@
   }
 
   .chapterGrid {
-    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .uploadedImageGrid {

@@ -6,6 +6,7 @@ const COVER_CACHE_DB = "mikoroku-cover-cache";
 const COVER_CACHE_STORE = "covers";
 const MAX_CACHED_COVERS = 500;
 const WESERV_ENDPOINT = "https://images.weserv.nl/";
+const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const pendingCoverRequests = new Map<string, Promise<Blob>>();
 
 type CachedCover = {
@@ -15,17 +16,26 @@ type CachedCover = {
 };
 
 function getOptimizedCoverUrl(source: string, width: number): string {
-  if (!source || source.startsWith("/") || /^(data|blob):/i.test(source)) return source;
+  const trimmedSource = source.trim();
+  if (!trimmedSource || trimmedSource === "-") return "";
+  const resolvedSource = /^https?:\/\//i.test(trimmedSource) ||
+    trimmedSource.startsWith("/") ||
+    /^(data|blob):/i.test(trimmedSource)
+    ? trimmedSource
+    : GITHUB_RAW + trimmedSource.replace(/^\//, "");
+  if (resolvedSource.startsWith("/") || /^(data|blob):/i.test(resolvedSource)) {
+    return resolvedSource;
+  }
 
   try {
-    let originalUrl = new URL(source);
+    let originalUrl = new URL(resolvedSource);
     let requestedWidth = width;
     let quality = 72;
 
     if (originalUrl.hostname === "images.weserv.nl") {
       const proxyParameters = originalUrl.searchParams;
       const original = proxyParameters.get("url");
-      if (!original) return source;
+      if (!original) return resolvedSource;
       originalUrl = new URL(original);
       const existingWidth = Number(proxyParameters.get("w"));
       const existingQuality = Number(proxyParameters.get("q"));
@@ -33,7 +43,7 @@ function getOptimizedCoverUrl(source: string, width: number): string {
       if (existingQuality > 0) quality = Math.min(quality, existingQuality);
     }
 
-    if (!["http:", "https:"].includes(originalUrl.protocol)) return source;
+    if (!["http:", "https:"].includes(originalUrl.protocol)) return resolvedSource;
 
     const optimized = new URL(WESERV_ENDPOINT);
     optimized.searchParams.set("url", originalUrl.toString());
@@ -42,7 +52,7 @@ function getOptimizedCoverUrl(source: string, width: number): string {
     optimized.searchParams.set("output", "webp");
     return optimized.toString();
   } catch {
-    return source;
+    return resolvedSource;
   }
 }
 
@@ -232,7 +242,7 @@ export function useCoverImageSource(source: string, width = 400, enabled = true)
     setResolvedSource("");
 
     if (!("indexedDB" in window)) {
-      setResolvedSource(source);
+      setResolvedSource(getCoverSourceUrl(source));
       return;
     }
 
@@ -242,7 +252,7 @@ export function useCoverImageSource(source: string, width = 400, enabled = true)
       setResolvedSource(objectUrl);
     }).catch((error: unknown) => {
       console.warn("Could not load the optimized cover image; using the original cover URL.", error);
-      if (active) setResolvedSource(source);
+      if (active) setResolvedSource(getCoverSourceUrl(source));
     });
 
     return () => {
@@ -252,6 +262,15 @@ export function useCoverImageSource(source: string, width = 400, enabled = true)
   }, [enabled, source, width]);
 
   return resolvedSource || (enabled ? source : "");
+}
+
+function getCoverSourceUrl(source: string): string {
+  const trimmedSource = source.trim();
+  if (!trimmedSource || trimmedSource === "-") return "";
+  if (/^https?:\/\//i.test(trimmedSource) || trimmedSource.startsWith("/") || /^(data|blob):/i.test(trimmedSource)) {
+    return trimmedSource;
+  }
+  return GITHUB_RAW + trimmedSource.replace(/^\//, "");
 }
 
 type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
