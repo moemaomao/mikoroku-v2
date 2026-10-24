@@ -2,7 +2,6 @@ import { ImageResponse } from "next/og";
 
 const FAVICON_URL = "https://i.ibb.co/B5g000HF/apple-touch-icon.png";
 
-/** Discord/Twitter prefer 1200x630 for summary_large_image */
 export const OG_IMAGE_WIDTH = 1200;
 export const OG_IMAGE_HEIGHT = 630;
 

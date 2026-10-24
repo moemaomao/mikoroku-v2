@@ -6,10 +6,11 @@ import {
   kvSetArrayBuffer,
 } from "../../../../lib/kv-cache";
 
-const CACHE_TTL = 86400; // 1 hari
-const CACHE_HEADERS = {
+const CACHE_TTL = 86400;
+const CACHE_HEADERS: HeadersInit = {
   "Content-Type": "image/png",
   "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+  "Access-Control-Allow-Origin": "*",
 };
 
 export async function GET(
@@ -19,10 +20,13 @@ export async function GET(
   const { slug } = await params;
   const cacheKey = CacheKeys.ogSeries(slug);
 
-  // 1) cek KV dulu
-  const cached = await kvGetArrayBuffer(cacheKey);
-  if (cached && cached.byteLength > 1000) {
-    return new Response(cached, { headers: CACHE_HEADERS });
+  try {
+    const cached = await kvGetArrayBuffer(cacheKey);
+    if (cached && cached.byteLength > 1000) {
+      return new Response(cached, { headers: CACHE_HEADERS });
+    }
+  } catch (error) {
+    console.warn("[OG series] KV read failed", error);
   }
 
   try {
@@ -36,8 +40,11 @@ export async function GET(
 
     const buffer = await imageRes.arrayBuffer();
 
-    // 2) simpan ke KV (jangan block response terlalu lama)
-    void kvSetArrayBuffer(cacheKey, buffer, CACHE_TTL);
+    try {
+      void kvSetArrayBuffer(cacheKey, buffer, CACHE_TTL);
+    } catch (error) {
+      console.warn("[OG series] KV write failed", error);
+    }
 
     return new Response(buffer, { headers: CACHE_HEADERS });
   } catch (error) {
