@@ -1527,7 +1527,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 )}
               </section>
             )}
-            <nav className="detail-tabs mx-3 flex w-[calc(100%-24px)] border-b border-black/15 text-sm dark:border-white/15 md:mx-[30px] md:w-auto lg:mx-10" role="tablist" aria-label="Series details">
+            <nav className="detail-tabs mx-3 flex w-[calc(100%-24px)] flex-nowrap items-stretch justify-between border-b border-black/15 text-sm dark:border-white/15 md:mx-[30px] md:w-auto md:justify-start lg:mx-10" role="tablist" aria-label="Series details">
               {([
                 ["chapters", `Chapters (${chapters.length})`],
                 ["synopsis", "Synopsis"],
@@ -1535,13 +1535,14 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 ["discussion", `Comments (${commentCount ?? "…" })`],
               ] as const).map(([tab, label]) => (
                 <button
-                  className={`relative min-h-12 min-w-0 flex-1 border-b-2 px-2 text-[11px] font-medium transition-colors md:flex-none md:px-4 md:text-sm ${detailTab === tab ? "border-[var(--mikoroku-detail-tab-accent)] text-[var(--mikoroku-detail-tab-accent)]" : "border-transparent text-[#666] hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white/60 dark:hover:text-[var(--mikoroku-detail-tab-accent)]"}`}
+                  className={`relative min-h-10 min-w-0 flex-1 truncate border-b-2 px-0.5 py-2 text-center text-[10px] font-medium leading-tight transition-colors sm:text-[11px] md:min-h-12 md:flex-none md:px-4 md:text-left md:text-sm ${detailTab === tab ? "border-[var(--mikoroku-detail-tab-accent)] text-[var(--mikoroku-detail-tab-accent)]" : "border-transparent text-[#666] hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white/60 dark:hover:text-[var(--mikoroku-detail-tab-accent)]"}`}
                   type="button"
                   key={tab}
                   id={`detail-tab-${tab}`}
                   role="tab"
                   aria-selected={detailTab === tab}
                   onClick={() => setDetailTab(tab)}
+                  title={label}
                 >
                   {label}
                 </button>
@@ -1741,10 +1742,29 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                           ? "!static !items-start !gap-[5px] !bg-transparent !p-0 !pr-8 !text-left !text-inherit ![text-shadow:none]"
                           : ""
                     }`}>
-                      <span className={`chapter-title block text-[9px] font-bold leading-[1.15] ${view === "list" ? `!text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : view === "text-grid" ? `text-[10px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}` : ""}`}>
-                        Chapter {chapter.num}
+                      <span className={`chapter-title block font-bold leading-[1.15] ${
+                        view === "list"
+                          ? `!text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
+                          : view === "text-grid"
+                            ? `text-[12px] md:text-[14px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
+                            : "text-[9px]"
+                      }`}>
+                        {view === "text-grid" ? (
+                          <>
+                            <span className="md:hidden">Ch {chapter.num}</span>
+                            <span className="hidden md:inline">Chapter {chapter.num}</span>
+                          </>
+                        ) : (
+                          <>Chapter {chapter.num}</>
+                        )}
                       </span>
-                      <span className={`chapter-date mt-0 block text-[7px] opacity-80 ${view === "list" ? `text-[11px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}` : view === "text-grid" ? `text-[9px] opacity-70 ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}` : ""}`}>
+                      <span className={`chapter-date mt-0 block opacity-80 ${
+                        view === "list"
+                          ? `text-[11px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
+                          : view === "text-grid"
+                            ? `text-[10px] opacity-70 md:text-[12px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
+                            : "text-[7px]"
+                      }`}>
                         {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
                       </span>
                     </span>

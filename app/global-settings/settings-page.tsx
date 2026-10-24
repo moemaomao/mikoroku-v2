@@ -574,7 +574,7 @@ export default function GlobalSettingsPage() {
                 [
                   "list",
                   "List",
-                  "Four columns on desktop, with cover, title, badges, and the three latest chapters.",
+                  "Horizontal cards with cover, title, and the three latest chapters.",
                 ],
               ] as const).map(([value, title, description]) => {
                 const selected = settings.cardDisplay === value;
@@ -596,27 +596,6 @@ export default function GlobalSettingsPage() {
                 );
               })}
             </div>
-            {settings.cardDisplay === "list" && (
-              <div className="mt-4">
-                <AppearanceToggle
-                  title="Cover as background"
-                  description="Use the manga cover as a faded background behind the list card content."
-                  checked={settings.listCoverBackground}
-                  onChange={(value) => {
-                    const updated = { ...settings, listCoverBackground: value };
-                    try {
-                      saveGlobalAppearance(updated);
-                      applyGlobalAppearance(updated);
-                      setSettings(updated);
-                      setNotice("Layout settings saved.");
-                    } catch (error) {
-                      console.error("Failed to save global appearance preferences.", error);
-                      setNotice("Settings could not be saved. Check your browser storage permissions.");
-                    }
-                  }}
-                />
-              </div>
-            )}
           </section>
 
           {/* Appearance */}

@@ -8,7 +8,6 @@ export type GlobalAppearanceSettings = {
   hideTypeBadge: boolean;
   hideChapterBadge: boolean;
   cardDisplay: "default" | "list";
-  listCoverBackground: boolean;
   accentColor: string | null;
 };
 
@@ -26,7 +25,6 @@ export const defaultGlobalAppearance: GlobalAppearanceSettings = {
   hideTypeBadge: false,
   hideChapterBadge: false,
   cardDisplay: "default",
-  listCoverBackground: false,
   accentColor: null,
 };
 
@@ -47,32 +45,22 @@ const cardModeScopeSelector = cardContainers.join(",");
 const cardModeClasses = {
   list: {
     container: ["!grid-cols-1", "!gap-1.5", "!p-1.5", "md:!grid-cols-4", "md:!gap-2", "md:!p-2"],
-    card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-visible", "!rounded-xl", "!border", "!border-black/10", "!bg-white", "!p-0", "dark:!border-white/10", "dark:!bg-[#191a20]"],
+    card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-hidden", "!rounded-xl", "!border", "!border-black/10", "!bg-white", "!p-0", "dark:!border-white/10", "dark:!bg-[#191a20]"],
     cover: ["!h-auto", "!w-[28%]", "!shrink-0", "!aspect-[3/4]", "!rounded-l-xl", "!rounded-r-none", "md:!w-[32%]", "md:!aspect-[2/3]"],
     overlay: ["!static", "!order-first", "!w-full", "!bg-none", "!p-0", "!pb-0", "!text-left"],
-    title: ["!relative", "!inset-auto", "!m-0", "!min-h-[2.5rem]", "!max-h-[2.5rem]", "!w-full", "!self-start", "!overflow-hidden", "!rounded-none", "!bg-transparent", "!p-0", "!pb-1.5", "!mb-0.5", "!text-left", "!text-xs", "!leading-5", "!text-slate-900", "!shadow-none", "!line-clamp-2", "!border-b", "!border-black/10", "md:!min-h-[2.75rem]", "md:!max-h-[2.75rem]", "md:!text-sm", "md:!leading-5", "md:!pb-2", "dark:!text-slate-100", "dark:!border-white/10"],
-    details: ["!flex", "!min-w-0", "!flex-1", "!flex-col", "!items-start", "!gap-1.5", "!p-1.5", "md:!gap-2", "md:!p-2"],
-    chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1"],
+    title: [
+      "!relative", "!inset-auto", "!m-0", "!min-h-[2.75rem]", "!max-h-[2.75rem]", "!w-full", "!self-start",
+      "!overflow-hidden", "!rounded-none", "!bg-transparent", "!p-0", "!pb-2", "!mb-1",
+      "!text-left", "!text-[15px]", "!leading-5", "!font-semibold", "!text-slate-900", "!shadow-none",
+      "!line-clamp-2", "!border-b", "!border-black/10",
+      "md:!min-h-[2.5rem]", "md:!max-h-[2.5rem]", "md:!text-sm", "md:!leading-5", "md:!pb-1.5", "md:!mb-0.5", "md:!font-medium",
+      "dark:!text-slate-100", "dark:!border-white/10",
+    ],
+    details: ["!flex", "!min-w-0", "!flex-1", "!flex-col", "!items-start", "!gap-2", "!p-2.5", "md:!gap-1.5", "md:!p-2"],
+    chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1.5", "md:!gap-1"],
   },
 } as const;
 
-/** Extra classes when list mode uses cover as card background */
-const listCoverBackgroundClasses = {
-  card: ["!relative", "!overflow-hidden", "!isolate", "!min-h-[7.5rem]", "md:!min-h-[8.5rem]"],
-  cover: [
-    "!absolute", "!inset-0", "!z-0", "!h-full", "!w-full", "!max-w-none", "!aspect-auto",
-    "!rounded-xl", "!opacity-35", "!pointer-events-none",
-    "[&_img]:!h-full", "[&_img]:!w-full", "[&_img]:!object-cover", "[&_img]:!object-center", "[&_img]:!scale-110",
-    "[&_.status-badge]:!hidden", "[&_.type-badge]:!hidden", "[&_.ch-badge]:!hidden", "[&_.up-badge]:!hidden",
-  ],
-  details: [
-    "!relative", "!z-10", "!w-full", "!min-h-full",
-    "!bg-gradient-to-r", "!from-white/92", "!via-white/88", "!to-white/75",
-    "dark:!from-[#191a20]/94", "dark:!via-[#191a20]/90", "dark:!to-[#191a20]/78",
-    "!backdrop-blur-[1.5px]",
-  ],
-  title: ["!text-slate-900", "dark:!text-slate-50"],
-} as const;
 
 const chapterModeClasses = {
   chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1"],
@@ -87,7 +75,7 @@ const BLOGGER_CHAPTER_SOURCES = {
 } as const;
 const LIST_CHAPTER_LIMIT = 3;
 let appearanceObserver: MutationObserver | null = null;
-let appearanceRefreshListenersAttached = false;
+let appear9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8 = false;
 let chapterCardObserver: IntersectionObserver | null = null;
 let currentAppearance = defaultGlobalAppearance;
 
@@ -527,7 +515,7 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
   list.replaceChildren();
   chapters.forEach((chapter) => {
     const item = document.createElement("div");
-    item.className = "global-card-chapter-item flex w-full cursor-pointer items-center justify-between gap-1 rounded-md bg-black/5 px-1.5 py-0.5 text-[10px] text-slate-700 transition hover:ring-1 hover:ring-[var(--mikoroku-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mikoroku-accent)] dark:bg-white/[0.06] dark:text-slate-300 md:gap-1 md:px-1.5 md:py-1 md:text-[12px]";
+    item.className = "global-card-chapter-item flex w-full cursor-pointer items-center justify-between gap-2 rounded-md bg-black/5 px-2.5 py-1.5 text-[13px] text-slate-700 transition hover:ring-1 hover:ring-[var(--mikoroku-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mikoroku-accent)] dark:bg-white/[0.06] dark:text-slate-300 md:gap-1 md:px-1.5 md:py-1 md:text-[12px]";
     bindChapterNavigation(item, card, slug, chapter);
     const chapterInfo = document.createElement("span");
     chapterInfo.className = "global-card-chapter-info flex min-w-0 flex-1 items-center gap-1";
@@ -543,7 +531,7 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
     const chapterUpdateDate = formatUpdateDate(updateTimeFor(slug, chapter));
     if (chapterUpdateDate) {
       const date = document.createElement("span");
-      date.className = "global-card-update-date shrink-0 text-right text-[9px] text-slate-500 md:text-[11px] dark:text-slate-400";
+      date.className = "global-card-update-date shrink-0 text-right text-[11px] text-slate-500 md:text-[11px] dark:text-slate-400";
       date.textContent = chapterUpdateDate;
       item.append(date);
     }
@@ -611,7 +599,6 @@ export function readGlobalAppearance(): GlobalAppearanceSettings {
       cardDisplay: settings.cardDisplay === "list"
         ? "list"
         : "default",
-      listCoverBackground: settings.listCoverBackground === true,
       accentColor: typeof settings.accentColor === "string" &&
         /^#[0-9a-fA-F]{6}$/.test(settings.accentColor) &&
         settings.accentColor.toLowerCase() !== "#9d1018"
@@ -631,8 +618,6 @@ export function saveGlobalAppearance(settings: GlobalAppearanceSettings): void {
 export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void {
   currentAppearance = settings;
   document.documentElement.dataset.cardDisplay = settings.cardDisplay;
-  document.documentElement.dataset.listCoverBackground =
-    settings.cardDisplay === "list" && settings.listCoverBackground ? "true" : "false";
   const accent = settings.accentColor;
   const rootStyle = document.documentElement.style;
   const setAccentVariable = (name: string, customValue: string | null, defaultValue: string) => {
@@ -727,30 +712,7 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
     applyMode(cardTitleElements, "title", classes?.title ?? []);
     applyMode(cardDetailsElements, "details", classes?.details ?? []);
 
-    // List cover-as-background overlay
-    const useCoverBg = mode === "list" && currentAppearance.listCoverBackground;
-    const stripCoverBg = (el: HTMLElement) => {
-      Object.values(listCoverBackgroundClasses).flat().forEach((c) => el.classList.remove(c));
-      // also strip from children cover/details/title keyed sets applied on wrong nodes - handled per selector below
-    };
-    findElements(".card").forEach((card) => {
-      if (!card.closest(cardModeScopeSelector)) return;
-      listCoverBackgroundClasses.card.forEach((c) => card.classList.remove(c));
-      if (useCoverBg) listCoverBackgroundClasses.card.forEach((c) => card.classList.add(c));
-      card.classList.toggle("list-cover-bg", useCoverBg);
-    });
-    findElements(".thumb, .catalog-cover").forEach((cover) => {
-      if (!cover.closest(cardModeScopeSelector)) return;
-      listCoverBackgroundClasses.cover.forEach((c) => cover.classList.remove(c));
-      if (useCoverBg) listCoverBackgroundClasses.cover.forEach((c) => cover.classList.add(c));
-    });
-    findElements(".global-card-details").forEach((details) => {
-      if (!details.closest(cardModeScopeSelector)) return;
-      listCoverBackgroundClasses.details.forEach((c) => details.classList.remove(c));
-      if (useCoverBg) listCoverBackgroundClasses.details.forEach((c) => details.classList.add(c));
-    });
-
-    const chapterElements = findElements(".global-card-chapters");
+            const chapterElements = findElements(".global-card-chapters");
     chapterElements.forEach((element) => {
       chapterModeClasses.chapters.forEach((className) => element.classList.remove(className));
       if (mode === "list") chapterModeClasses.chapters.forEach((className) => element.classList.add(className));
@@ -779,7 +741,7 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
     });
     appearanceObserver.observe(document.body, { childList: true, subtree: true });
   }
-  if (!appearanceRefreshListenersAttached) {
+  if (!appear9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8) {
     const refreshListCards = () => {
       if (currentAppearance.cardDisplay === "list") updateListCardStructure(document, true);
     };
@@ -789,6 +751,6 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
     window.addEventListener("pageshow", refreshListCards);
     window.addEventListener("mikoroku:chapter-read", refreshListCards);
     window.addEventListener("mikoroku:chapters-updated", refreshListCards);
-    appearanceRefreshListenersAttached = true;
+    appear9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8 = true;
   }
 }

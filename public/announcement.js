@@ -108,13 +108,13 @@ if (document.readyState === "loading") {
     padding: 0;
   }
 
-  /* Sama persis dengan .synopsis */
+  /* Sama dengan .synopsis — margin atas biar tidak mepet tab di mobile */
   #announcement-widget .mkr-announcement {
     padding: 15px 14px;
     background: rgba(26, 26, 46, 0.35);
-    margin: 0 12px 15px;
+    margin: 16px 12px 15px;
     border-radius: 14px;
-    border: 1px solid rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     font-size: 13px;
@@ -239,7 +239,7 @@ if (document.readyState === "loading") {
   /* Tablet — sama margin .synopsis */
   @media (min-width: 768px) {
     #announcement-widget .mkr-announcement {
-      margin: 0 30px 30px;
+      margin: 12px 30px 30px;
       padding: 15px 14px;
     }
   }
@@ -261,14 +261,27 @@ if (document.readyState === "loading") {
      LIGHT MODE
      ========================================================= */
 
-  html.light #announcement-widget .mkr-announcement {
-    background: rgba(92, 90, 90, 0.15);
-    border-color: rgba(82, 82, 82, 0.88);
-    color: #111111;
+  /* Match .synopsis light: rgba(184,174,174,0.329) + soft border */
+  html.light #announcement-widget .mkr-announcement,
+  html:not(.dark) #announcement-widget .mkr-announcement {
+    background: rgba(184, 174, 174, 0.329);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #050000;
   }
 
-  html.light #announcement-widget .mkr-announcement-title {
-    color: #111111;
+  html.dark #announcement-widget .mkr-announcement {
+    background: rgba(26, 26, 46, 0.35);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  html.light #announcement-widget .mkr-announcement-title,
+  html:not(.dark) #announcement-widget .mkr-announcement-title {
+    color: #b45309;
+  }
+
+  html.dark #announcement-widget .mkr-announcement-title {
+    color: #ffd700;
   }
 
   html.light #announcement-widget .mkr-announcement-close {
