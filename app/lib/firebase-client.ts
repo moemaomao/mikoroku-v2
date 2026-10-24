@@ -1,6 +1,6 @@
 "use client";
 
-import { getApp, getApps, initializeApp } from "firebase/app";
+import { getApps, initializeApp } from "firebase/app";
 import type { FirebaseApp } from "firebase/app";
 import { get, getDatabase, ref } from "firebase/database";
 import type { Database } from "firebase/database";
@@ -37,6 +37,7 @@ const firebaseConfig = {
   appId: "1:271920446600:web:974b11c707ebc11a7bf33d",
 };
 
+const FIREBASE_APP_NAME = "mikoroku-catalog";
 type FirebaseClient = { app: FirebaseApp; db: Database; firestore: Firestore };
 let initializedClient: FirebaseClient | undefined;
 
@@ -47,13 +48,8 @@ export function initializeFirebaseClient(): FirebaseClient {
 
   if (initializedClient) return initializedClient;
 
-  let app: FirebaseApp;
-  try {
-    const apps = getApps();
-    app = apps.length > 0 ? getApp() : initializeApp(firebaseConfig);
-  } catch {
-    app = initializeApp(firebaseConfig);
-  }
+  const app = getApps().find((candidate) => candidate.name === FIREBASE_APP_NAME) ??
+    initializeApp(firebaseConfig, FIREBASE_APP_NAME);
 
   const db = getDatabase(app);
   pruneStoredChapterCaches();

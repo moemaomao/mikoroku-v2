@@ -872,6 +872,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   );
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
+  const mangaTitle = manga?.title;
 
   useEffect(() => {
     const syncAppearance = (event: StorageEvent) => {
@@ -1018,10 +1019,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     if (cachedManga) {
       setManga(cachedManga);
       setState("ready");
-    } else {
-      setManga(null);
-      setState("loading");
+      return () => controller.abort();
     }
+    setManga(null);
+    setState("loading");
     loadManga(slug, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       if (!result) {
@@ -1039,7 +1040,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   }, [slug]);
 
   useEffect(() => {
-    if (!manga) return;
+    if (!slug) return;
     const controller = new AbortController();
     setFirestoreLatestUpdate("");
     void (async () => {
@@ -1083,10 +1084,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       }
     })();
     return () => controller.abort();
-  }, [manga, slug]);
+  }, [slug]);
 
   useEffect(() => {
-    if (!manga) return;
+    if (!mangaTitle) return;
     const controller = new AbortController();
     setChapterError("");
     if (chapterCacheSlugRef.current !== slug) {
@@ -1133,7 +1134,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         if (memoryCache.has(key)) return memoryCache.get(key) || [];
         const loaded = chapterSource === "firestore"
           ? await loadFirestoreChapterSource(slug, controller.signal)
-          : await loadBloggerChapterSource(manga.title, chapterSource, controller.signal);
+          : await loadBloggerChapterSource(mangaTitle, chapterSource, controller.signal);
         if (controller.signal.aborted) {
           throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
         }
@@ -1197,7 +1198,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     });
 
     return () => controller.abort();
-  }, [slug, manga, source, chapterRetry]);
+  }, [slug, mangaTitle, source, chapterRetry]);
 
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {
     if (source === nextSource) return;
