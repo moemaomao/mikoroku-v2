@@ -15,6 +15,10 @@ import SiteHeader from "../site-header";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient } from "../lib/firebase-client";
 import { compactChapterCache } from "../lib/chapter-cache";
+import {
+  GLOBAL_APPEARANCE_KEY,
+  readGlobalAppearance,
+} from "../lib/global-appearance";
 import MangaDataProvider from "../manga-data-provider";
 import UserModals from "../user-modals";
 
@@ -854,6 +858,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("grid");
   const [detailTab, setDetailTab] = useState<"chapters" | "synopsis" | "covers" | "discussion">("chapters");
+  const [hideDetailCoverBackground, setHideDetailCoverBackground] = useState(
+    () => readGlobalAppearance().hideDetailCoverBackground,
+  );
   const [chapterSearch, setChapterSearch] = useState("");
   const [bookmarked, setBookmarked] = useState(false);
   const [readChapters, setReadChapters] = useState<string[]>([]);
@@ -864,6 +871,16 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   );
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
+
+  useEffect(() => {
+    const syncAppearance = (event: StorageEvent) => {
+      if (event.key === GLOBAL_APPEARANCE_KEY || event.key === null) {
+        setHideDetailCoverBackground(readGlobalAppearance().hideDetailCoverBackground);
+      }
+    };
+    window.addEventListener("storage", syncAppearance);
+    return () => window.removeEventListener("storage", syncAppearance);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -1423,7 +1440,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         className="pointer-events-none fixed inset-0 z-0 scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[1px] transition-[background-image,opacity] duration-500 dark:opacity-100"
         id="bgLayer"
         aria-hidden="true"
-        style={{ backgroundImage: cover ? `url("${cover}")` : undefined }}
+        style={{ backgroundImage: !hideDetailCoverBackground && cover ? `url("${cover}")` : undefined }}
       />
       <div
         className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.92)_0%,rgba(5,5,10,0.55)_45%,rgba(5,5,10,0.55)_55%,rgba(15,5,12,0.94)_100%)]"

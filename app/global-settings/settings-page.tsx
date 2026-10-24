@@ -103,6 +103,7 @@ const appearanceOptions: Array<{
   { key: "hideStatusBadge", title: "Hide status badge", description: "Hide status badges such as ongoing or completed." },
   { key: "hideTypeBadge", title: "Hide type badge", description: "Hide content type badges such as manga or manhwa." },
   { key: "hideChapterBadge", title: "Hide chapter badge", description: "Hide the chapter count badge on manga cards." },
+  { key: "hideDetailCoverBackground", title: "Disable detail cover background", description: "Hide the cover image used as the background on series detail pages." },
 ];
 
 function AppearanceToggle({

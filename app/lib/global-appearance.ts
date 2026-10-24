@@ -7,6 +7,7 @@ export type GlobalAppearanceSettings = {
   hideStatusBadge: boolean;
   hideTypeBadge: boolean;
   hideChapterBadge: boolean;
+  hideDetailCoverBackground: boolean;
   cardDisplay: "default" | "list";
   accentColor: string | null;
 };
@@ -15,7 +16,8 @@ export type GlobalAppearanceToggleSetting =
   | "hideHero"
   | "hideStatusBadge"
   | "hideTypeBadge"
-  | "hideChapterBadge";
+  | "hideChapterBadge"
+  | "hideDetailCoverBackground";
 
 export const GLOBAL_APPEARANCE_KEY = "mikoroku_global_appearance_v1";
 
@@ -24,6 +26,7 @@ export const defaultGlobalAppearance: GlobalAppearanceSettings = {
   hideStatusBadge: false,
   hideTypeBadge: false,
   hideChapterBadge: false,
+  hideDetailCoverBackground: false,
   cardDisplay: "default",
   accentColor: null,
 };
@@ -596,6 +599,9 @@ export function readGlobalAppearance(): GlobalAppearanceSettings {
       hideStatusBadge: typeof settings.hideStatusBadge === "boolean" ? settings.hideStatusBadge : false,
       hideTypeBadge: typeof settings.hideTypeBadge === "boolean" ? settings.hideTypeBadge : false,
       hideChapterBadge: typeof settings.hideChapterBadge === "boolean" ? settings.hideChapterBadge : false,
+      hideDetailCoverBackground: typeof settings.hideDetailCoverBackground === "boolean"
+        ? settings.hideDetailCoverBackground
+        : false,
       cardDisplay: settings.cardDisplay === "list"
         ? "list"
         : "default",
