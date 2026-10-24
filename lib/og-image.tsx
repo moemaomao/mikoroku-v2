@@ -16,15 +16,15 @@ export function createMikorokuOgImage({
   label: string;
   coverUrl?: string | null;
 }) {
-  const safeTitle = (title || "Mikoroku").slice(0, 72);
-  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 140);
+  const safeTitle = (title || "Mikoroku").slice(0, 80);
+  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 160);
   const hasCover =
     typeof coverUrl === "string" &&
     coverUrl.startsWith("http") &&
     !coverUrl.includes("MIKOROKU.png");
 
-  const COVER_W = 260;
-  const COVER_H = 390;
+  const COVER_W = 320;
+  const COVER_H = 480;
 
   return new ImageResponse(
     (
@@ -37,19 +37,18 @@ export function createMikorokuOgImage({
             "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
           color: "#f5f5f5",
           fontFamily: "Arial, sans-serif",
-          padding: "36px 44px",
+          padding: "40px 44px",
           position: "relative",
           overflow: "hidden",
         }}
       >
-
         <div
           style={{
             position: "absolute",
             left: 0,
             top: 0,
             bottom: 0,
-            width: 8,
+            width: 10,
             background: "linear-gradient(180deg, #e11d48 0%, #f59e0b 100%)",
           }}
         />
@@ -59,81 +58,77 @@ export function createMikorokuOgImage({
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: hasCover ? OG_IMAGE_WIDTH - COVER_W - 120 : "100%",
+            width: hasCover ? 760 : "100%",
             height: "100%",
-            paddingRight: hasCover ? 20 : 0,
+            paddingRight: hasCover ? 28 : 0,
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <img
                 src={FAVICON_URL}
-                width={44}
-                height={44}
+                width={52}
+                height={52}
                 alt=""
-                style={{ width: 44, height: 44, borderRadius: 10 }}
+                style={{ width: 52, height: 52, borderRadius: 12 }}
               />
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span
                   style={{
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: 700,
-                    letterSpacing: 1.1,
+                    letterSpacing: 1.2,
                     color: "#fb7185",
                   }}
                 >
                   MIKOROKU
                 </span>
-                <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>
+                <span style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}>
                   READ YOUR NEXT STORY
                 </span>
               </div>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                marginTop: 4,
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", marginTop: 4 }}>
               <span
                 style={{
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
-                  letterSpacing: 0.6,
+                  letterSpacing: 0.7,
                   textTransform: "uppercase",
                   color: "#fda4af",
                   background: "rgba(225, 29, 72, 0.18)",
                   border: "1px solid rgba(251, 113, 133, 0.35)",
                   borderRadius: 999,
-                  padding: "5px 12px",
+                  padding: "6px 14px",
                 }}
               >
                 {label || "Manga & Series"}
               </span>
             </div>
 
+            {/* Title lebih besar */}
             <div
               style={{
-                fontSize: hasCover ? 40 : 44,
+                fontSize: 48,
                 fontWeight: 800,
                 lineHeight: 1.12,
                 color: "#fff",
                 marginTop: 6,
-                maxHeight: 150,
+                maxHeight: 170,
                 overflow: "hidden",
               }}
             >
               {safeTitle}
             </div>
 
+            {/* Description lebih besar */}
             <div
               style={{
-                fontSize: 20,
-                lineHeight: 1.35,
-                color: "rgba(255,255,255,0.7)",
-                maxHeight: 100,
+                fontSize: 24,
+                lineHeight: 1.4,
+                color: "rgba(255,255,255,0.72)",
+                maxHeight: 130,
                 overflow: "hidden",
               }}
             >
@@ -145,9 +140,9 @@ export function createMikorokuOgImage({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
-              fontSize: 16,
-              color: "rgba(255,255,255,0.4)",
+              gap: 10,
+              fontSize: 18,
+              color: "rgba(255,255,255,0.45)",
             }}
           >
             <span>mikoroku.top</span>
@@ -164,10 +159,10 @@ export function createMikorokuOgImage({
               right: 44,
               width: COVER_W,
               height: COVER_H,
-              borderRadius: 14,
+              borderRadius: 18,
               overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.16)",
-              boxShadow: "0 14px 36px rgba(0,0,0,0.45)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              boxShadow: "0 18px 48px rgba(0,0,0,0.5)",
               background: "#24232a",
               display: "flex",
               alignItems: "center",
@@ -179,11 +174,7 @@ export function createMikorokuOgImage({
               width={COVER_W}
               height={COVER_H}
               alt=""
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           </div>
         ) : null}
