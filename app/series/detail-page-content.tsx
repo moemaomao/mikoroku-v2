@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
 import { addDoc, collection, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
+import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
@@ -1633,6 +1634,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return (
       <>
         <SiteHeader />
+        <BannerAdSlot placement="site-top" />
         <main className={`detail-route ${detailPageClasses}`}>
           <div className="detail-route-loading" role="status" aria-label="Memuat detail manga">
             <span className="detail-route-spinner" aria-hidden="true" />
@@ -1647,6 +1649,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return (
       <>
         <SiteHeader />
+        <BannerAdSlot placement="site-top" />
         <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
           <p className="detail-route-message" role="status">Manga tidak ditemukan.</p>
         </main>
@@ -1659,6 +1662,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return (
       <>
         <SiteHeader />
+        <BannerAdSlot placement="site-top" />
         <main className={`detail-route ${detailPageClasses}`}>
           <p className="detail-route-message" role="alert">Detail manga gagal dimuat. Coba muat ulang halaman.</p>
         </main>
@@ -1677,6 +1681,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   return (
     <>
       <SiteHeader />
+      <BannerAdSlot placement="site-top" />
       <div
         className="pointer-events-none fixed inset-0 z-0 scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[1px] transition-[background-image,opacity] duration-500 dark:opacity-100"
         id="bgLayer"
@@ -1875,6 +1880,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             </div>}
 
             {detailTab === "chapters" && <>
+            <BannerAdSlot placement="series-before-chapters" />
             <ReaderServerNotice />
             <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
               <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 max-[767px]:mt-3 md:mx-[30px]">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { AdvertisementManager } from "./advertisement-manager";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://mikoroku.top"),
@@ -81,7 +82,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
             __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;var roots=[root,document.body];roots.forEach(function(element){element.classList.toggle("dark",isDark);element.classList.toggle("light",!isDark)});try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}})();`,
           }}
         />
-        {children}
+        <AdvertisementManager>{children}</AdvertisementManager>
       </body>
     </html>
   );

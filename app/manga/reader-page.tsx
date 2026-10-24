@@ -3,6 +3,7 @@
 import JSZip from "jszip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CommunityWidgets from "../community-widgets";
+import { BannerAdSlot } from "../advertisement-manager";
 import SiteChrome from "../site-chrome";
 import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapter-number";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
@@ -1313,6 +1314,7 @@ export default function ReaderPage({
       </div>}
       {readerNotice && <p className="reader-feedback mx-auto my-3 w-[calc(100%-32px)] max-w-[800px] text-center text-[#9a6700] dark:text-[#f3c96b]" role="status">{readerNotice}</p>}
 
+      <BannerAdSlot placement="reader-before-content" />
       {error ? <section className="reader-message mx-auto my-12 w-[min(calc(100%-32px),700px)] rounded-2xl border border-black/10 bg-white p-6 text-center shadow-lg dark:border-white/10 dark:bg-[#191a20]" role="alert"><h1>Unable to load chapter</h1><p>{error}</p><button className="rounded-lg border border-black/20 bg-black/10 px-3 py-2 dark:border-white/20 dark:bg-white/10" type="button" onClick={() => window.location.reload()}>Try again</button></section>
         : !data ? <p className="reader-message mx-auto my-12 w-[min(calc(100%-32px),700px)] rounded-2xl border border-black/10 bg-white p-6 text-center shadow-lg dark:border-white/10 dark:bg-[#191a20]" role="status">Loading chapter...</p>
         : activeKind === "manga" ? (
@@ -1521,6 +1523,7 @@ export default function ReaderPage({
         </div>}
       </div>
       </div>}
+      <BannerAdSlot placement="reader-after-content" />
       {data && <CommunityWidgets className="reader-community mx-auto my-6 w-[calc(100%-28px)] max-w-[1000px]" pageId={`reader_${slug}_${data.chapter}`} />}
       {reportOpen && <div className="reader-report-backdrop fixed inset-0 z-20 grid place-items-center bg-black/70 p-4" role="presentation" onMouseDown={(event) => {
         if (event.target === event.currentTarget) setReportOpen(false);

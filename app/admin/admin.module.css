@@ -752,6 +752,66 @@
   font-size: 12px;
 }
 
+.advertisementList,
+.advertisementEditor {
+  display: grid;
+  gap: 12px;
+}
+
+.advertisementList {
+  margin: 18px 0 24px;
+}
+
+.advertisementCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.advertisementCard p {
+  margin: 5px 0 0;
+  color: #98a6c1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.advertisementEditor {
+  padding: 18px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.advertisementEditor h3 {
+  margin: 0;
+  color: #f5f7ff;
+  font-size: 16px;
+}
+
+.field .advertisementScript {
+  min-height: 240px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lightMode .advertisementCard,
+.lightMode .advertisementEditor {
+  border-color: rgb(15 23 42 / 12%);
+  background: rgb(255 255 255 / 70%);
+}
+
+.lightMode .advertisementCard p,
+.lightMode .advertisementEditor h3 {
+  color: #334155;
+}
+
 .reportReason {
   max-width: 260px;
   overflow-wrap: anywhere;

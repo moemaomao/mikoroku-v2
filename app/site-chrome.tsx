@@ -7,6 +7,7 @@ import { initializeFirebaseClient } from "./lib/firebase-client";
 import MangaDataProvider from "./manga-data-provider";
 import SiteFooter from "./site-footer";
 import SiteHeader from "./site-header";
+import { BannerAdSlot } from "./advertisement-manager";
 
 function alreadyInitialized(src: string): boolean {
   if (src.includes("firebase-app-compat.js")) return !!window.firebase?.initializeApp;
@@ -90,6 +91,7 @@ export default function SiteChrome({
   return showChrome || showFooter ? (
     <>
       {showChrome && <SiteHeader />}
+      {showChrome && <BannerAdSlot placement="site-top" />}
       {showChrome && <GlobalAuth />}
       {showChrome && <UserModals />}
       {showChrome && <MangaDataProvider />}
