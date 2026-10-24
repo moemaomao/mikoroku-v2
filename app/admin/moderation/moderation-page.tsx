@@ -33,8 +33,8 @@ const firebaseConfig = {
   authDomain: "widget-comment.firebaseapp.com",
   projectId: "widget-comment",
   storageBucket: "widget-comment.firebasestorage.app",
-  messagingSenderId: "249700446600",
-  appId: "1:249700446600:web:dab240af09caf30ad7f123",
+  messagingSenderId: "249700505242",
+  appId: "1:249700505242:web:dab240af09caf30ad7f123",
 };
 
 const emojiFirebaseConfig = {
