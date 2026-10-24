@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { initializeFirebaseClient } from "./lib/firebase-client";
 import {
   cardClass,
@@ -31,6 +31,26 @@ type MangaRecord = Record<string, unknown> & {
 const CACHE_KEY = "manga_cache_v5";
 const CACHE_TIME = 60 * 60 * 1000;
 const PAGE_SIZE = 12;
+
+function updatedAtMillis(record: MangaRecord): number {
+  const updatedAt = value(record, "updatedAt", value(record, "latestUpdate", 0));
+  if (typeof updatedAt === "number") {
+    return updatedAt < 1e12 ? updatedAt * 1000 : updatedAt;
+  }
+  if (typeof updatedAt === "string") {
+    const numeric = Number(updatedAt);
+    if (Number.isFinite(numeric)) return numeric < 1e12 ? numeric * 1000 : numeric;
+    const parsed = Date.parse(updatedAt);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (updatedAt && typeof updatedAt === "object") {
+    const timestamp = updatedAt as { toMillis?: () => number; seconds?: number; _seconds?: number };
+    if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
+    const seconds = timestamp.seconds ?? timestamp._seconds;
+    if (typeof seconds === "number") return seconds * 1000;
+  }
+  return 0;
+}
 
 function value(record: MangaRecord, key: string, fallback: unknown = ""): unknown {
   return record[key] ?? record.info?.[key] ?? fallback;
@@ -77,15 +97,6 @@ function seriesType(record: MangaRecord): string {
 
 function isNovel(record: MangaRecord): boolean {
   return seriesType(record).includes("novel");
-}
-
-function shuffleRecords<T>(list: T[]): T[] {
-  const next = list.slice();
-  for (let i = next.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [next[i], next[j]] = [next[j], next[i]];
-  }
-  return next;
 }
 
 function readCache(): { data: Record<string, MangaRecord>; expired: boolean } | null {
@@ -151,18 +162,7 @@ function cacheRecords(records: Record<string, MangaRecord>) {
 async function fetchRecords(): Promise<Record<string, MangaRecord>> {
   const { firestore } = initializeFirebaseClient();
   const source = collection(firestore, "manga");
-  let snapshot;
-  try {
-    snapshot = await getDocs(
-      query(source, orderBy("updatedAt", "desc"), limit(100)),
-    );
-  } catch (error) {
-    console.warn(
-      "Ordered Firestore catalog query failed; retrying without sorting.",
-      error,
-    );
-    snapshot = await getDocs(source);
-  }
+  const snapshot = await getDocs(source);
 
   const records: Record<string, MangaRecord> = {};
   snapshot.forEach((document) => {
@@ -262,7 +262,10 @@ export default function FirebasePostCatalog() {
     setRecords(cleaned);
 
     const mangaOnly = cleaned.filter((record) => !isNovel(record));
-    setRandomManga(shuffleRecords(mangaOnly));
+    setRandomManga(mangaOnly.sort((left, right) =>
+      updatedAtMillis(right) - updatedAtMillis(left) ||
+      left.slug.localeCompare(right.slug),
+    ));
   }, []);
 
   const refresh = useCallback(
@@ -298,7 +301,11 @@ export default function FirebasePostCatalog() {
     };
   }, [refresh, applyRecords]);
 
-  const novels = records.filter(isNovel);
+  const novels = records.filter(isNovel).sort(
+    (left, right) =>
+      updatedAtMillis(right) - updatedAtMillis(left) ||
+      left.slug.localeCompare(right.slug),
+  );
   const hasMoreManga = visibleCount < randomManga.length;
   const hasMoreNovel = visibleCount < novels.length;
 
