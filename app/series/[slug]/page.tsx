@@ -1,15 +1,6 @@
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
+import DetailPageClient from "../detail-page-client";
 import { getSeriesSeoData } from "../../../lib/seo-metadata";
-
-const DetailPageContent = dynamic(() => import("../detail-page-content"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex min-h-[50vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-      Loading…
-    </div>
-  ),
-});
 
 export async function generateMetadata({
   params,
@@ -75,5 +66,5 @@ export default async function DetailRoute({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  return <DetailPageContent slug={slug} />;
+  return <DetailPageClient slug={slug} />;
 }
