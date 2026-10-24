@@ -1,5 +1,8 @@
 import { getSeriesSeoData } from "../../../../lib/seo-metadata";
-import { createMikorokuOgImage } from "../../../../lib/og-image";
+import {
+  createMikorokuOgImage,
+  toOgCoverDataUrl,
+} from "../../../../lib/og-image";
 import {
   CacheKeys,
   kvGetArrayBuffer,
@@ -31,14 +34,19 @@ export async function GET(
 
   try {
     const series = await getSeriesSeoData(slug);
+    const coverDataUrl = await toOgCoverDataUrl(series.image);
+
     const imageRes = createMikorokuOgImage({
       title: series.title,
       description: series.description,
       label: "Manga & Series",
-      coverUrl: series.image,
+      coverUrl: coverDataUrl,
     });
 
     const buffer = await imageRes.arrayBuffer();
+    if (buffer.byteLength < 1000) {
+      throw new Error("OG buffer too small");
+    }
 
     try {
       void kvSetArrayBuffer(cacheKey, buffer, CACHE_TTL);
@@ -56,6 +64,7 @@ export async function GET(
       label: "Manga & Series",
       coverUrl: null,
     });
-    return fallback;
+    const buffer = await fallback.arrayBuffer();
+    return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
   }
 }
