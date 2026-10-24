@@ -10,6 +10,7 @@ import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 import { SERIES_COVER_PREFERENCE_STORAGE_KEY } from "../lib/series-cover-preferences";
 import RecommendationSidebar from "./recommendation-sidebar";
+import ReaderServerNotice from "./reader-server-notice";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
 import GlobalAuth from "../global-auth";
@@ -1623,7 +1624,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             </div>}
 
             {detailTab === "chapters" && <>
-            <div id="announcement-widget" />
+            <ReaderServerNotice />
             <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
               <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 max-[767px]:mt-3 md:mx-[30px]">
                 <i className="fas fa-search text-xs" aria-hidden="true" />
@@ -1868,7 +1869,6 @@ function RouteIntegrations() {
       firebaseInit.textContent = `if (typeof firebase !== "undefined" && !firebase.apps.some(function(app) { return app.name === "[DEFAULT]"; })) { firebase.initializeApp({ apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4", authDomain: "widget-comment.firebaseapp.com", projectId: "widget-comment", storageBucket: "widget-comment.firebasestorage.app", messagingSenderId: "249700505242", appId: "1:249700505242:web:dab240af09caf30ad7f123" }); }`;
       added.push(firebaseInit);
       document.head.appendChild(firebaseInit);
-      await load("/announcement.js");
     })();
 
     return () => {
