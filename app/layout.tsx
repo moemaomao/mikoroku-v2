@@ -55,6 +55,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <head>
         <meta name="author" content="Mikoroku" />
         <meta name="theme-color" content="#7A0000" />
+        <meta name="36b5c8cd1a2e7f2ae448252f862af29bf0ba6ff9" content="36b5c8cd1a2e7f2ae448252f862af29bf0ba6ff9" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://blogger.googleusercontent.com" />
