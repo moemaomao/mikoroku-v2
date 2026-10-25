@@ -104,9 +104,16 @@ function imageList(input: unknown, allowAnyUrl = false): string[] {
   }))];
 }
 
+function chapterImages(chapter: ChapterRecord | null | undefined): string[] {
+  return [...new Set([
+    ...imageList(chapter?.images, true),
+    ...imageList(chapter?.pages, true),
+  ])];
+}
+
 function hasChapterPayload(chapter: ChapterRecord | null | undefined): boolean {
   return Boolean(
-    imageList(chapter?.images || chapter?.pages, true).length ||
+    chapterImages(chapter).length ||
     imageList(chapter?.content || chapter?.text || chapter?.html, true).length,
   );
 }
@@ -132,6 +139,67 @@ function imageWithQuality(url: string, quality: number): string {
 
 function readerImageUrl(url: string, dataSaver: boolean, quality: number): string {
   return dataSaver ? imageWithQuality(url, quality) : originalReaderImageUrl(url);
+}
+
+function ReaderImage({
+  src,
+  alt,
+  className,
+  wrapperClassName,
+  loading,
+  fetchPriority = "auto",
+}: {
+  src: string;
+  alt: string;
+  className: string;
+  wrapperClassName: string;
+  loading: "eager" | "lazy";
+  fetchPriority?: "high" | "auto" | "low";
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  function handleError(event: React.SyntheticEvent<HTMLImageElement>) {
+    const image = event.currentTarget;
+    if (image.dataset.fallbackTried) {
+      setFailed(true);
+      return;
+    }
+    image.dataset.fallbackTried = "true";
+    const fallback = imageProxyUrl(src, "readerFallback");
+    if (fallback === image.src) {
+      setFailed(true);
+      return;
+    }
+    image.src = fallback;
+  }
+
+  return (
+    <span className={`reader-image-frame relative block ${!loaded && !failed ? "min-h-[40vh]" : ""} ${wrapperClassName}`} aria-busy={!loaded && !failed}>
+      {!loaded && !failed && (
+        <span
+          className="absolute inset-0 min-h-[40vh] animate-pulse border-y border-slate-400/40 bg-slate-300 dark:border-zinc-600 dark:bg-zinc-700"
+          aria-hidden="true"
+        />
+      )}
+      {failed ? (
+        <span className="grid min-h-[40vh] place-items-center bg-black/[.04] px-4 text-sm text-slate-500 dark:bg-white/[.04] dark:text-slate-400" role="img" aria-label={`${alt} could not be loaded`}>
+          Image could not be loaded
+        </span>
+      ) : (
+        <img
+          className={`${className} relative transition-opacity duration-200 ${loaded ? "opacity-100" : "opacity-0"}`}
+          src={src}
+          alt={alt}
+          loading={loading}
+          fetchPriority={fetchPriority}
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          onError={handleError}
+        />
+      )}
+    </span>
+  );
 }
 
 function isAbortError(error: unknown): boolean {
@@ -298,7 +366,10 @@ async function loadBloggerChapterFromFeeds(
   signal: AbortSignal,
 ): Promise<ChapterRecord | null> {
   const sources = preferredSource
-    ? bloggerChapterSources.filter((item) => item.source === preferredSource)
+    ? [
+        ...bloggerChapterSources.filter((item) => item.source === preferredSource),
+        ...bloggerChapterSources.filter((item) => item.source !== preferredSource),
+      ]
     : bloggerChapterSources;
   const seriesKeys = [normalizedSearchKey(seriesTitle), normalizedSearchKey(slug)]
     .filter((key) => key.length >= 5);
@@ -592,6 +663,7 @@ async function loadReaderData(
       console.warn(`Blogger fallback failed for ${slug} chapter ${targetChapter}.`, error);
     }
   }
+  if (isBloggerSource && !hasChapterPayload(chapterData)) isBloggerSource = false;
 
   let resolvedKind: ReaderKind = isNovelSeries(manga) || cachedCurrent?.isNovel ? "novel" : kind;
   if (resolvedKind !== kind) {
@@ -610,7 +682,7 @@ async function loadReaderData(
   }
   const cachedContent = chapterData?.content || chapterData?.text || chapterData?.html;
   if (resolvedKind === "manga" &&
-    !imageList(chapterData?.images || chapterData?.pages, true).length &&
+    !chapterImages(chapterData).length &&
     !imageList(cachedContent).length) {
     try {
       const bloggerImages = await getBloggerChapterImages(chapterData || {}, signal);
@@ -622,7 +694,7 @@ async function loadReaderData(
   }
 
   if (!isBloggerSource && resolvedKind === "manga" &&
-    !imageList(chapterData?.images || chapterData?.pages, true).length &&
+    !chapterImages(chapterData).length &&
     !imageList(chapterData?.content || chapterData?.html).length) {
     try {
       const storedChapter = await getFirestoreDocument(
@@ -630,7 +702,7 @@ async function loadReaderData(
         signal,
       );
       if (storedChapter &&
-        (imageList(storedChapter.images || storedChapter.pages, true).length ||
+        (chapterImages(storedChapter).length ||
           imageList(storedChapter.content || storedChapter.html).length)) {
         chapterData = storedChapter;
       }
@@ -662,7 +734,7 @@ async function loadReaderData(
     .filter(Boolean);
   if (!isBloggerSource && (!chapters.length ||
     (resolvedKind === "manga" &&
-      !imageList(chapterData?.images || chapterData?.pages, true).length &&
+      !chapterImages(chapterData).length &&
       !imageList(chapterData?.content || chapterData?.html).length))) {
     try {
       if (!chapterListAttempted) {
@@ -679,7 +751,7 @@ async function loadReaderData(
         chapterNumberFromRecord(data, id) === targetChapter,
       ) || documents.find(({ id }) => id === targetChapter);
       if (current) {
-        const currentImages = imageList(current.data.images || current.data.pages, true);
+        const currentImages = chapterImages(current.data);
         const currentContent = current.data.content || current.data.text || current.data.html;
         if (currentImages.length || imageList(currentContent).length || !chapterData) {
           chapterData = current.data;
@@ -710,8 +782,7 @@ async function loadReaderData(
     (typeof chapterData?.data === "object" && chapterData.data
       ? (chapterData.data as Record<string, unknown>).content
       : "");
-  const rawImages = chapterData?.images || chapterData?.pages;
-  const images = [...new Set([...imageList(rawImages, true), ...imageList(content)])];
+  const images = [...new Set([...chapterImages(chapterData), ...imageList(content)])];
   const text = novelText(content);
   if (resolvedKind === "manga" && !images.length && text) resolvedKind = "novel";
   if (!chapterData) throw new Error(`Chapter ${targetChapter} was not found.`);
@@ -946,8 +1017,9 @@ export default function ReaderPage({
 
   useEffect(() => {
     if (!data || kind !== "manga") return;
-    const start = mode === "single" ? page : 1;
-    data.images.slice(start, start + 4).forEach((src) => {
+    const start = mode === "single" ? page - 1 : 0;
+    const preloadCount = mode === "single" ? 4 : 3;
+    data.images.slice(start, start + preloadCount).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
       image.src = readerImageUrl(src, dataSaver, imageQuality);
@@ -1282,16 +1354,6 @@ export default function ReaderPage({
     }
   }
 
-  function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
-    const image = event.currentTarget;
-    if (image.dataset.fallbackTried) {
-      image.style.display = "none";
-      return;
-    }
-    image.dataset.fallbackTried = "true";
-    image.src = imageProxyUrl(image.src, "readerFallback");
-  }
-
   return (
     <>
       <SiteChrome showChrome showFooter={false} />
@@ -1394,12 +1456,31 @@ export default function ReaderPage({
         : !data ? null
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-white py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] dark:bg-[#0a0a0c] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
-            {mode === "long-strip" ? data.images.map((image, index) => (
-              <img className="block h-auto w-full" key={`${image}:${index}`} src={readerImageUrl(image, dataSaver, imageQuality)} alt={`Page ${index + 1}`} loading={index < 2 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "auto"} decoding="async" onError={handleImageError} />
-            )) : (
+            {mode === "long-strip" ? data.images.map((image, index) => {
+              const src = readerImageUrl(image, dataSaver, imageQuality);
+              return (
+                <ReaderImage
+                  className="block h-auto w-full"
+                  wrapperClassName="w-full"
+                  key={`${src}:${index}`}
+                  src={src}
+                  alt={`Page ${index + 1}`}
+                  loading={index < 3 ? "eager" : "lazy"}
+                  fetchPriority={index < 3 ? "high" : "auto"}
+                />
+              );
+            }) : (
               <>
                 <div className="reader-single-page-frame relative grid w-full justify-items-center">
-                  <img className="w-auto max-w-full object-contain [max-height:calc(100vh-250px)]" src={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)} alt={`Page ${page}`} fetchPriority="high" decoding="async" onError={handleImageError} />
+                  <ReaderImage
+                    className="w-auto max-w-full object-contain [max-height:calc(100vh-250px)]"
+                    wrapperClassName="grid w-full justify-items-center"
+                    key={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)}
+                    src={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)}
+                    alt={`Page ${page}`}
+                    loading="eager"
+                    fetchPriority="high"
+                  />
                   <button className="reader-image-nav reader-image-nav-previous absolute left-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[var(--mikoroku-accent)] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:left-5 dark:border-white/10 dark:bg-[#191a20]/90" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
                     <i className="fas fa-chevron-left" aria-hidden="true" />
                   </button>
@@ -1414,7 +1495,20 @@ export default function ReaderPage({
         ) : (
           <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>
             {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
-            {data.images.map((image, index) => <img className="mx-auto block h-auto max-w-full" key={`${image}:${index}`} src={image} alt={`Illustration ${index + 1}`} loading="lazy" onError={handleImageError} />)}
+            {data.images.map((image, index) => {
+              const src = image;
+              return (
+                <ReaderImage
+                  className="mx-auto block h-auto max-w-full"
+                  wrapperClassName="mx-auto my-4 w-full"
+                  key={`${src}:${index}`}
+                  src={src}
+                  alt={`Illustration ${index + 1}`}
+                  loading={index < 3 ? "eager" : "lazy"}
+                  fetchPriority={index < 3 ? "high" : "auto"}
+                />
+              );
+            })}
           </article>
         )}
 

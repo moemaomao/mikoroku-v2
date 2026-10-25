@@ -35,6 +35,11 @@ import AdvertisementSettings from "./advertisement-settings";
 import { CoverImage } from "../lib/cover-image";
 import RichTextEditor from "./rich-text-editor";
 import MangaMetadataEditor from "./manga-metadata-editor";
+import {
+  DEFAULT_READER_SERVER_NOTICE,
+  normalizeReaderServerNoticeConfig,
+  type ReaderServerNoticeConfig,
+} from "../series/reader-server-notice-config";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
@@ -667,6 +672,10 @@ export default function AdminPage() {
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
   const [announcementPublished, setAnnouncementPublished] = useState(true);
+  const [readerNoticeConfig, setReaderNoticeConfig] = useState<ReaderServerNoticeConfig>(DEFAULT_READER_SERVER_NOTICE);
+  const [loadingReaderNotice, setLoadingReaderNotice] = useState(false);
+  const [readerNoticeLoaded, setReaderNoticeLoaded] = useState(false);
+  const [readerNoticeStatus, setReaderNoticeStatus] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
   const [uploadNotice, setUploadNotice] = useState<UploadNotice | null>(null);
   const [draggingCoverUrl, setDraggingCoverUrl] = useState<string | null>(null);
@@ -874,6 +883,12 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === "announcements" && user) void loadAnnouncements();
     // Announcements are refreshed whenever the section is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, user]);
+
+  useEffect(() => {
+    if (activeSection === "settings" && user) void loadReaderNoticeConfig();
+    // Reader notice settings are refreshed whenever Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, user]);
 
@@ -1250,6 +1265,56 @@ export default function AdminPage() {
       return false;
     } finally {
       setLoadingAnnouncements(false);
+    }
+  }
+
+  async function loadReaderNoticeConfig() {
+    setLoadingReaderNotice(true);
+    setReaderNoticeLoaded(false);
+    setReaderNoticeStatus("");
+    try {
+      const { firestore } = getAdminFirebase();
+      const snapshot = await getDoc(doc(firestore, "meta", "mangaSummary"));
+      const savedConfig = snapshot.exists() ? snapshot.data().readerServerNotice : null;
+      setReaderNoticeConfig(savedConfig
+        ? normalizeReaderServerNoticeConfig(savedConfig)
+        : DEFAULT_READER_SERVER_NOTICE);
+      setReaderNoticeStatus(savedConfig
+        ? "Reader notice settings loaded."
+        : "No saved settings yet. The default notice is shown.");
+      setReaderNoticeLoaded(true);
+    } catch (error) {
+      console.error("Failed to load reader notice settings.", error);
+      setReaderNoticeStatus(`Failed to load reader notice settings: ${getErrorMessage(error)}`);
+    } finally {
+      setLoadingReaderNotice(false);
+    }
+  }
+
+  async function saveReaderNoticeConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (readerNoticeConfig.code.length > 50_000) {
+      setReaderNoticeStatus("Notice code must be 50,000 characters or fewer.");
+      return;
+    }
+    setBusy(true);
+    setReaderNoticeStatus("");
+    try {
+      const { firestore } = getAdminFirebase();
+      await setDoc(
+        doc(firestore, "meta", "mangaSummary"),
+        {
+          readerServerNotice: readerNoticeConfig,
+          readerServerNoticeUpdatedAt: Date.now(),
+        },
+        { merge: true },
+      );
+      setReaderNoticeStatus("Reader notice settings saved.");
+    } catch (error) {
+      console.error("Failed to save reader notice settings.", error);
+      setReaderNoticeStatus(`Failed to save reader notice settings: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -2809,6 +2874,52 @@ export default function AdminPage() {
           {activeSection === "settings" && (
             <section className={styles.panel}>
               <div className={styles.panelHeading}><div><h2>Settings</h2><p>Catalog summary and Firestore backups.</p></div></div>
+              <form className={styles.settingsSection} onSubmit={(event) => void saveReaderNoticeConfig(event)}>
+                <h3>Reader Server Notice</h3>
+                <p>Edit the single HTML/script block shown above the chapter list. Scripts run inside a sandboxed frame. Only add code from sources you trust.</p>
+                {readerNoticeStatus && <p className={styles.inlineStatus} role="status">{readerNoticeStatus}</p>}
+                <label className={styles.announcementPublishToggle}>
+                  <input
+                    type="checkbox"
+                    checked={readerNoticeConfig.enabled}
+                    onChange={(event) => setReaderNoticeConfig((current) => ({
+                      ...current,
+                      enabled: event.target.checked,
+                    }))}
+                    disabled={!readerNoticeLoaded || loadingReaderNotice || busy}
+                  />
+                  <span>Show notice on detail pages</span>
+                </label>
+                <label className={styles.field}>
+                  <span>Notice script or HTML</span>
+                  <textarea
+                    className={styles.advertisementScript}
+                    value={readerNoticeConfig.code}
+                    onChange={(event) => setReaderNoticeConfig((current) => ({
+                      ...current,
+                      code: event.target.value,
+                    }))}
+                    placeholder="<script>/* Build your notice here */</script>"
+                    rows={20}
+                    maxLength={50_000}
+                    required
+                    disabled={!readerNoticeLoaded || loadingReaderNotice || busy}
+                  />
+                </label>
+                <div className={styles.panelActions}>
+                  <button className={styles.primaryButton} type="submit" disabled={!readerNoticeLoaded || loadingReaderNotice || busy}>
+                    {busy ? "Saving..." : "Save Reader Notice"}
+                  </button>
+                  <button
+                    className={styles.secondaryButton}
+                    type="button"
+                    onClick={() => void loadReaderNoticeConfig()}
+                    disabled={loadingReaderNotice || busy}
+                  >
+                    {loadingReaderNotice ? "Loading..." : "Reload"}
+                  </button>
+                </div>
+              </form>
               <div className={styles.settingsSection}>
                 <h3>Manga Summary Document</h3>
                 <p>The Dashboard and Manga List use <code>meta/mangaSummary</code>. Rebuild it if the summary looks out of sync.</p>
