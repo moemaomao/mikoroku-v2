@@ -439,6 +439,7 @@ async function loadReaderData(
   chapter: string,
   kind: ReaderKind,
   signal: AbortSignal,
+  forceSource?: "sv1" | "sv2" | "es" | null,
 ): Promise<ReaderData> {
   const cachedCurrent = getCurrentChapterCache(slug);
   const cachedChapters = getCachedChapters(slug);
@@ -450,7 +451,7 @@ async function loadReaderData(
     (kind !== "novel" || (cachedCurrent.source !== "blogger" && cachedCurrent.source !== "blogger2"));
   const cachedCurrentHasPayload = hasChapterPayload(cachedCurrent);
   const sourcePreference = kind === "manga"
-    ? localStorage.getItem("chapterSourceMode")
+    ? (forceSource || localStorage.getItem("chapterSourceMode"))
     : null;
   const selectedSource = sourcePreference === "sv1"
     ? "blogger"
@@ -717,7 +718,7 @@ async function loadReaderData(
   const images = [...new Set([...imageList(rawImages, true), ...imageList(content)])];
   const text = novelText(content);
   if (resolvedKind === "manga" && !images.length && text) resolvedKind = "novel";
-  if (!chapterData) throw new Error(`Chapter ${targetChapter} tidak ditemukan.`);
+  if (!chapterData) throw new Error(`Chapter ${targetChapter} was not found.`);
   if (resolvedKind === "manga" && !images.length) throw new Error(`No images found for chapter ${targetChapter}.`);
   if (resolvedKind === "novel" && !text) throw new Error(`Chapter ${targetChapter} has no text content.`);
 
@@ -748,6 +749,12 @@ export default function ReaderPage({
 }) {
   const [data, setData] = useState<ReaderData | null>(null);
   const [error, setError] = useState("");
+  const [forcedServer, setForcedServer] = useState<"sv1" | "sv2" | "es" | null>(null);
+  const [activeServer, setActiveServer] = useState<"sv1" | "sv2" | "es" | null>(() => {
+    if (typeof window === "undefined") return null;
+    const mode = localStorage.getItem("chapterSourceMode");
+    return mode === "sv1" || mode === "sv2" || mode === "es" ? mode : null;
+  });
   const [page, setPage] = useState(1);
   const [mode, setMode] = useState<"long-strip" | "single">("long-strip");
   const [fontSize, setFontSize] = useState(18);
@@ -834,7 +841,7 @@ export default function ReaderPage({
     }
     setData(null);
     setError("");
-    loadReaderData(slug, targetChapter, kind, controller.signal)
+    loadReaderData(slug, targetChapter, kind, controller.signal, forcedServer)
       .then((result) => {
         if (controller.signal.aborted) return;
         if (result.kind !== kind) {
@@ -908,7 +915,7 @@ export default function ReaderPage({
         controller.abort(new DOMException("Chapter request was superseded.", "AbortError"));
       }
     };
-  }, [chapter, kind, preferStoredChapter, slug]);
+  }, [chapter, forcedServer, kind, preferStoredChapter, slug]);
 
   const chapterIndex = useMemo(
     () => data?.chapters.indexOf(data.chapter) ?? -1,
@@ -919,6 +926,19 @@ export default function ReaderPage({
     const path = activeKind === "novel" ? "/novel" : "/manga";
     window.location.replace(`${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`);
   }, [activeKind, slug]);
+
+  const tryServer = useCallback((server: "sv1" | "sv2" | "es") => {
+    try {
+      localStorage.setItem("chapterSourceMode", server);
+    } catch (persistError) {
+      console.warn("Could not persist chapter source preference.", persistError);
+    }
+    setActiveServer(server);
+    setError("");
+    setData(null);
+    setForcedServer(null);
+    window.setTimeout(() => setForcedServer(server), 0);
+  }, []);
 
   function toggleMode() {
     const nextMode = mode === "long-strip" ? "single" : "long-strip";
@@ -1315,7 +1335,66 @@ export default function ReaderPage({
       {readerNotice && <p className="reader-feedback mx-auto my-3 w-[calc(100%-32px)] max-w-[800px] text-center text-[#9a6700] dark:text-[#f3c96b]" role="status">{readerNotice}</p>}
 
       <BannerAdSlot placement="reader-before-content" />
-      {error ? <section className="reader-message mx-auto my-12 w-[min(calc(100%-32px),700px)] rounded-2xl border border-black/10 bg-white p-6 text-center shadow-lg dark:border-white/10 dark:bg-[#191a20]" role="alert"><h1>Unable to load chapter</h1><p>{error}</p><button className="rounded-lg border border-black/20 bg-black/10 px-3 py-2 dark:border-white/20 dark:bg-white/10" type="button" onClick={() => window.location.reload()}>Try again</button></section>
+      {error ? <section className="reader-message mx-auto my-12 w-[min(calc(100%-32px),700px)] rounded-2xl border border-black/10 bg-white p-6 text-center shadow-lg dark:border-white/10 dark:bg-[#191a20]" role="alert">
+          <h1 className="text-lg font-bold">Unable to load chapter</h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{error}</p>
+          {kind === "manga" && (
+            <div className="mt-5">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Try another server</p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  aria-pressed={activeServer === "sv1"}
+                  className={`rounded-lg border px-3.5 py-2 text-sm font-semibold transition ${
+                    activeServer === "sv1"
+                      ? "border-[var(--mikoroku-source-one,#3b82f6)] bg-[var(--mikoroku-source-one,#3b82f6)] text-white shadow-[0_0_0_2px_color-mix(in_srgb,var(--mikoroku-source-one,#3b82f6)_35%,transparent)]"
+                      : "border-[color-mix(in_srgb,var(--mikoroku-source-one,#3b82f6)_45%,transparent)] bg-[color-mix(in_srgb,var(--mikoroku-source-one,#3b82f6)_12%,transparent)] text-[var(--mikoroku-source-one,#3b82f6)] hover:bg-[color-mix(in_srgb,var(--mikoroku-source-one,#3b82f6)_22%,transparent)]"
+                  }`}
+                  onClick={() => tryServer("sv1")}
+                  title="Server 1 — Mikodrive"
+                >
+                  SV1
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={activeServer === "sv2"}
+                  className={`rounded-lg border px-3.5 py-2 text-sm font-semibold transition ${
+                    activeServer === "sv2"
+                      ? "border-[var(--mikoroku-source-two,#f59e0b)] bg-[var(--mikoroku-source-two,#f59e0b)] text-white shadow-[0_0_0_2px_color-mix(in_srgb,var(--mikoroku-source-two,#f59e0b)_35%,transparent)]"
+                      : "border-[color-mix(in_srgb,var(--mikoroku-source-two,#f59e0b)_45%,transparent)] bg-[color-mix(in_srgb,var(--mikoroku-source-two,#f59e0b)_12%,transparent)] text-[var(--mikoroku-source-two,#f59e0b)] hover:bg-[color-mix(in_srgb,var(--mikoroku-source-two,#f59e0b)_22%,transparent)]"
+                  }`}
+                  onClick={() => tryServer("sv2")}
+                  title="Server 2 — Yomidays"
+                >
+                  SV2
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={activeServer === "es"}
+                  className={`rounded-lg border px-3.5 py-2 text-sm font-semibold transition ${
+                    activeServer === "es"
+                      ? "border-[var(--mikoroku-source-emergency,#ef4444)] bg-[var(--mikoroku-source-emergency,#ef4444)] text-white shadow-[0_0_0_2px_color-mix(in_srgb,var(--mikoroku-source-emergency,#ef4444)_35%,transparent)]"
+                      : "border-[color-mix(in_srgb,var(--mikoroku-source-emergency,#ef4444)_45%,transparent)] bg-[color-mix(in_srgb,var(--mikoroku-source-emergency,#ef4444)_12%,transparent)] text-[var(--mikoroku-source-emergency,#ef4444)] hover:bg-[color-mix(in_srgb,var(--mikoroku-source-emergency,#ef4444)_22%,transparent)]"
+                  }`}
+                  onClick={() => tryServer("es")}
+                  title="Emergency Server — Firestore"
+                >
+                  ES
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                {activeServer === "sv1" && "Currently using SV1"}
+                {activeServer === "sv2" && "Currently using SV2"}
+                {activeServer === "es" && "Currently using Emergency Server"}
+                {!activeServer && "SV1 = Server 1 · SV2 = Server 2 · ES = Emergency Server"}
+              </p>
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <button className="rounded-lg border border-black/20 bg-black/10 px-3 py-2 text-sm dark:border-white/20 dark:bg-white/10" type="button" onClick={() => window.location.reload()}>Try again</button>
+            <a className="rounded-lg border border-black/20 px-3 py-2 text-sm no-underline dark:border-white/20" href={`/series/${encodeURIComponent(slug)}`}>Back to series</a>
+          </div>
+        </section>
         : !data ? null
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-white py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] dark:bg-[#0a0a0c] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>

@@ -17,6 +17,7 @@ const BOOKMARKS_KEY = "mangaBookmarks";
 const HISTORY_KEY = "readingHistory";
 const HISTORY_LIMIT = 50;
 const LOCAL_CACHE_KEYS = new Set([
+  "manga_cache_v1",
   "manga_cache_v5",
   "mangaGithubCache",
   "mangaFsMetaCache",
@@ -25,7 +26,22 @@ const LOCAL_CACHE_KEYS = new Set([
   "currentManga",
   "currentChapter",
 ]);
-const CACHE_PREFIXES = ["chapters_", "detail_"];
+const CACHE_PREFIXES = ["chapters_", "detail_", "manga_cache_", "mangaGithub", "mk_hero_"];
+const PROTECTED_LOCAL_STORAGE_KEYS = new Set([
+  BOOKMARKS_KEY,
+  HISTORY_KEY,
+  "mikoroku_global_appearance_v1",
+  "darkMode",
+  "chapterSourceMode",
+  "chapterSortMode",
+  "chapterViewMode",
+  "seriesCoverPreferences",
+]);
+const PROTECTED_LOCAL_STORAGE_PREFIXES = [
+  "firebase:",
+  "firebaseui:",
+  "firebaseLocalStorageDb",
+];
 
 type StorageReport = {
   localStorageBytes: number;
@@ -86,10 +102,26 @@ function mergeBy<T extends Record<string, unknown>>(current: T[], incoming: T[],
   return [...merged.values()];
 }
 
+function isProtectedLocalStorageKey(key: string): boolean {
+  if (PROTECTED_LOCAL_STORAGE_KEYS.has(key)) return true;
+  return PROTECTED_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function isLocalAppCacheKey(key: string): boolean {
+  if (isProtectedLocalStorageKey(key)) return false;
+  if (LOCAL_CACHE_KEYS.has(key)) return true;
+  if (CACHE_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
+  return false;
+}
+
 function clearLocalAppCaches(): number {
-  const keys = Object.keys(localStorage).filter((key) =>
-    LOCAL_CACHE_KEYS.has(key) || CACHE_PREFIXES.some((prefix) => key.startsWith(prefix)),
-  );
+  const keys = Object.keys(localStorage).filter(isLocalAppCacheKey);
+  keys.forEach((key) => localStorage.removeItem(key));
+  return keys.length;
+}
+
+function clearAllLocalStorageExceptAccount(): number {
+  const keys = Object.keys(localStorage).filter((key) => !isProtectedLocalStorageKey(key));
   keys.forEach((key) => localStorage.removeItem(key));
   return keys.length;
 }
@@ -224,7 +256,6 @@ function AccentColorWheel({
       ctx.fill();
     }
 
-    // indicator on ring
     const rad = (hue * Math.PI) / 180;
     const markerR = (innerR + radius - 2) / 2;
     const mx = radius + Math.cos(rad) * markerR;
@@ -489,6 +520,27 @@ export default function GlobalSettingsPage() {
     }
   }
 
+  async function clearAllLocalExceptAccount() {
+    if (
+      !window.confirm(
+        "Clear ALL localStorage except bookmarks, history, appearance, and login-related keys? This removes every other cached key in this browser.",
+      )
+    ) {
+      return;
+    }
+    setStorageBusy(true);
+    try {
+      const removed = clearAllLocalStorageExceptAccount();
+      setNotice(`Cleared ${removed} localStorage keys. Account data and preferences were kept.`);
+      await refreshStorageReport();
+    } catch (error) {
+      console.error("Failed to clear localStorage.", error);
+      setNotice("Failed to clear localStorage.");
+    } finally {
+      setStorageBusy(false);
+    }
+  }
+
   async function clearImageCache() {
     if (!window.confirm("Clear cached cover images? Images will be downloaded again when needed.")) return;
     setStorageBusy(true);
@@ -647,8 +699,9 @@ export default function GlobalSettingsPage() {
             <div className="mb-4">
               <h2 id="storage-heading" className="text-lg font-bold">Data &amp; storage tools</h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                Inspect and manage local browser cache. Firestore offline cache includes chapter data;
-                bookmarks, history, and preferences are not removed when clearing app caches.
+                Inspect and manage local browser cache. Firestore offline data lives mostly in IndexedDB
+                (shown under total origin storage). localStorage also holds bookmarks, history, theme,
+                and preferences — those are kept unless you use &quot;Clear all localStorage&quot;.
               </p>
             </div>
 
@@ -696,7 +749,18 @@ export default function GlobalSettingsPage() {
               >
                 Clear local app caches
                 <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">
-                  Clears catalog, detail, and chapter list caches; local account data is kept.
+                  Clears catalog, detail, chapter list, and related caches. Bookmarks, history, and preferences are kept.
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={storageBusy}
+                onClick={() => void clearAllLocalExceptAccount()}
+                className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-left text-sm font-semibold transition hover:bg-rose-500/20 disabled:opacity-50"
+              >
+                Clear all localStorage (keep account)
+                <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">
+                  Removes every localStorage key except bookmarks, history, appearance, theme, and Firebase login data. Use this if the size stays high after a normal cache clear.
                 </span>
               </button>
               <button
