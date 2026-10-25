@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
+  arrayUnion,
   collection,
   collectionGroup,
   documentId,
@@ -21,6 +22,7 @@ import {
   getDocs,
   getDocsFromServer,
   getFirestore,
+  increment,
   limit,
   orderBy,
   query,
@@ -122,7 +124,6 @@ function normalizeChapterPart(value: unknown): string | null {
     return normalizeChapterNumber(`${separatedPart[1]}.${separatedPart[2]}`);
   }
 
-  // Legacy reader slugs remove decimal separators, so chapter 23.3 is stored as 233.
   const compactLegacyPart = raw.match(/^(\d{2,})(\d)$/);
   if (compactLegacyPart) {
     return normalizeChapterNumber(`${compactLegacyPart[1]}.${compactLegacyPart[2]}`);
@@ -729,39 +730,130 @@ export default function ModerationPage() {
     setImportBusy(true);
     setPageError("");
     setActionStatus("");
+    const results = new Map<string, EmojiImportPreview>();
     try {
       const { firestore } = getEmojiServices();
       const snapshot = await getDocsFromServer(collection(firestore, "emoji_reactions"));
       const allDocs = new Map(snapshot.docs.map((entry) => [entry.id, entry.data() as RecordData]));
       let copiedPages = 0;
       let skippedPages = 0;
-      const results: EmojiImportPreview[] = [];
-      for (const [index, entry] of emojiPreview.entries.entries()) {
-        try {
-          const sourceData = allDocs.get(entry.sourceId);
-          if (!sourceData) throw new Error("Dokumen sumber tidak ditemukan saat import.");
-          const imported = await mergeEmojiCounts(firestore, entry.sourceId, entry.targetId, sourceData);
-          if (!imported) {
-            skippedPages += 1;
-            results.push({ ...entry, result: "Dilewati: count sumber ini sudah pernah ditambahkan" });
-          } else {
-            copiedPages += 1;
-            results.push({ ...entry, targetCount: entry.targetCount + entry.sourceCount, result: "Count emoji berhasil ditambahkan ke count tujuan" });
-          }
-        } catch (error) {
-          console.error(`Emoji import failed for ${entry.sourceId} -> ${entry.targetId}.`, error);
-          results.push({ ...entry, result: `Gagal: ${errorMessage(error)}` });
+      const pendingByTarget = new Map<string, {
+        entries: EmojiImportPreview[];
+        counts: Record<EmojiCountKey, number>;
+        sourceIds: string[];
+        currentCount: number;
+      }>();
+      for (const entry of emojiPreview.entries) {
+        const targetData = allDocs.get(entry.targetId) || {};
+        const importedSources = Array.isArray(targetData[EMOJI_IMPORT_MARKER])
+          ? targetData[EMOJI_IMPORT_MARKER].filter((value): value is string => typeof value === "string")
+          : [];
+        if (importedSources.includes(entry.sourceId)) {
+          skippedPages += 1;
+          results.set(entry.sourceId, {
+            ...entry,
+            result: "Dilewati: count sumber ini sudah pernah ditambahkan",
+          });
+          continue;
         }
-        setEmojiPreview({ ...emojiPreview, entries: [...results, ...emojiPreview.entries.slice(index + 1)] });
-        setActionStatus(`Memproses emoji ${index + 1}/${emojiPreview.entries.length}... ${copiedPages} halaman berhasil.`);
+
+        const sourceData = allDocs.get(entry.sourceId);
+        if (!sourceData) {
+          results.set(entry.sourceId, {
+            ...entry,
+            result: "Gagal: dokumen sumber tidak ditemukan",
+          });
+          continue;
+        }
+
+        const target = pendingByTarget.get(entry.targetId) || {
+          entries: [],
+          counts: { like: 0, haha: 0, wow: 0, sad: 0, angry2: 0 },
+          sourceIds: [],
+          currentCount: emojiCountTotal(targetData),
+        };
+        const sourceCounts = emojiCounts(sourceData);
+        for (const key of EMOJI_COUNT_KEYS) {
+          target.counts[key] += sourceCounts[key] || 0;
+        }
+        target.entries.push(entry);
+        target.sourceIds.push(entry.sourceId);
+        pendingByTarget.set(entry.targetId, target);
       }
-      const failures = results.filter((entry) => entry.result?.startsWith("Gagal:"));
+
+      const targets = [...pendingByTarget.entries()];
+      const batchSize = 400;
+      const batchCount = Math.ceil(targets.length / batchSize);
+      let completedBatches = 0;
+      for (let offset = 0; offset < targets.length; offset += batchSize) {
+        const chunk = targets.slice(offset, offset + batchSize);
+        const batch = writeBatch(firestore);
+        chunk.forEach(([targetId, target]) => {
+          const targetRef = doc(firestore, "emoji_reactions", targetId);
+          batch.set(targetRef, {
+            ...Object.fromEntries(
+              EMOJI_COUNT_KEYS.map((key) => [key, increment(target.counts[key])]),
+            ),
+            [EMOJI_IMPORT_MARKER]: arrayUnion(...target.sourceIds),
+          }, { merge: true });
+        });
+
+        try {
+          await batch.commit();
+        } catch (error) {
+          console.error(`Emoji import batch ${completedBatches + 1}/${batchCount} failed.`, error);
+          chunk.forEach(([, target]) => {
+            target.entries.forEach((entry) => {
+              results.set(entry.sourceId, {
+                ...entry,
+                result: `Gagal: ${errorMessage(error)}. Batch ini belum tersimpan; jalankan ulang untuk melanjutkan.`,
+              });
+            });
+          });
+          throw error;
+        }
+
+        completedBatches += 1;
+        chunk.forEach(([, target]) => {
+          const addedCount = Object.values(target.counts).reduce((sum, count) => sum + count, 0);
+          target.entries.forEach((entry) => {
+            copiedPages += 1;
+            results.set(entry.sourceId, {
+              ...entry,
+              targetCount: target.currentCount + addedCount,
+              result: "Count emoji berhasil ditambahkan ke count tujuan",
+            });
+          });
+        });
+        const updatedEntries = emojiPreview.entries.map((entry) =>
+          results.get(entry.sourceId) || entry,
+        );
+        setEmojiPreview({ ...emojiPreview, entries: updatedEntries });
+        setActionStatus(
+          `Menyimpan emoji dalam batch ${completedBatches}/${batchCount}... ${copiedPages} halaman berhasil, ${skippedPages} sudah pernah diimpor.`,
+        );
+        if (offset + batchSize < targets.length) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+        }
+      }
+
+      const updatedEntries = emojiPreview.entries.map((entry) =>
+        results.get(entry.sourceId) || entry,
+      );
+      setEmojiPreview({ ...emojiPreview, entries: updatedEntries });
+      const failures = updatedEntries.filter((entry) => entry.result?.startsWith("Gagal:"));
       setActionStatus(
         `Import count emoji selesai: ${copiedPages} halaman ditambahkan, ${skippedPages} dilewati karena sumber sudah pernah diimpor.${failures.length ? ` ${failures.length} halaman gagal; lihat detail.` : ""} Data sumber tetap utuh.`,
       );
     } catch (error) {
       console.error("Emoji site import failed.", error);
-      setPageError(`Import count emoji gagal: ${errorMessage(error)}`);
+      setEmojiPreview({
+        ...emojiPreview,
+        entries: emojiPreview.entries.map((entry) => results.get(entry.sourceId) || entry),
+      });
+      setPageError(
+        `Import count emoji terhenti: ${errorMessage(error)}. Batch yang sudah tersimpan tetap aman; jalankan import lagi untuk melewati sumber yang sudah masuk dan melanjutkan sisanya.`,
+      );
     } finally {
       setImportBusy(false);
     }
