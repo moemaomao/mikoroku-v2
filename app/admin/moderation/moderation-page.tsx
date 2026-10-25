@@ -134,11 +134,15 @@ function normalizeChapterPart(value: unknown): string | null {
 
 function targetPostIdFromLegacyId(sourcePostId: string): string | null {
   const detailMatch = sourcePostId.match(/^detail_slug_(.+)$/);
-  if (detailMatch) return `detail_${detailMatch[1]}`;
+  if (detailMatch) {
+    return `detail_${detailMatch[1]}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
 
   const readerMatch = sourcePostId.match(/^reader_slug_(.+)-chapter-(.+)$/);
   const chapter = readerMatch && normalizeChapterPart(readerMatch[2]);
-  if (readerMatch && chapter) return `reader_${readerMatch[1]}_${chapter}`;
+  if (readerMatch && chapter) {
+    return `reader_${readerMatch[1]}_${chapter}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
 
   return null;
 }
