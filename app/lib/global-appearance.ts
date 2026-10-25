@@ -309,13 +309,58 @@ async function loadFirestoreListChapters(slug: string): Promise<ListChapterRecor
       chapters.push({ ...data, id: document.id, num, source: "firestore" });
     }
   });
-  return chapters.sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num))
-    .slice(0, LIST_CHAPTER_LIMIT);
+
+  return chapters.sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num));
 }
 
 async function loadListChapterSources(slug: string, title: string, source: "blogger" | "blogger2" | "firestore"): Promise<void> {
   let chapters: ListChapterRecord[] = [];
-  if (source !== "firestore") {
+
+  if (source !== "firestore" && title.trim()) {
+    try {
+      const params = new URLSearchParams({
+        title: title.trim(),
+        source,
+      });
+      const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (response.ok) {
+        const data = (await response.json()) as {
+          chapters?: Array<{
+            num?: string;
+            title?: string;
+            url?: string;
+            createdAt?: string;
+            source?: string;
+          }>;
+        };
+        chapters = (data.chapters || [])
+          .map((item) => {
+            const num = normalizeChapterNumber(item.num);
+            if (!num) return null;
+            return {
+              num,
+              id: undefined,
+              title: item.title || `Chapter ${num}`,
+              postTitle: item.title || "",
+              label: `Chapter ${num}`,
+              url: item.url || "",
+              source,
+              createdAt: item.createdAt || "",
+            } as ListChapterRecord;
+          })
+          .filter((item): item is ListChapterRecord => item !== null)
+          .sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num));
+      } else {
+        console.warn(`Blogger chapters API HTTP ${response.status} for homepage card ${slug}.`);
+      }
+    } catch (error) {
+      console.warn(`Blogger chapters API failed for homepage card ${slug}.`, error);
+    }
+  }
+
+  if (!chapters.length && source !== "firestore") {
     const titleKey = title.toLowerCase().replace(/[^a-z0-9]/g, "");
     const slugKey = slug.toLowerCase().replace(/[^a-z0-9]/g, "");
     try {
@@ -336,12 +381,12 @@ async function loadListChapterSources(slug: string, title: string, source: "blog
           source,
           createdAt: entry.updated?.$t || entry.published?.$t || "",
         }];
-      }).sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num))
-        .slice(0, LIST_CHAPTER_LIMIT);
+      }).sort((left, right) => chapterNumber(right.num) - chapterNumber(left.num));
     } catch (error) {
-      console.warn(`Blogger chapters failed for homepage card ${slug}.`, error);
+      console.warn(`Blogger feed fallback failed for homepage card ${slug}.`, error);
     }
   }
+
   if (!chapters.length) {
     try {
       chapters = await loadFirestoreListChapters(slug);
@@ -358,7 +403,9 @@ function ensureListChapterSources(card: HTMLElement, slug: string, title: string
     ? "firestore"
     : selected === "sv2" ? "blogger2" : "blogger";
   const cached = readCachedChapterRecords(slug);
-  if (cached.filter((record) => record.source === source).length >= LIST_CHAPTER_LIMIT) return;
+  // Only skip if we already have a large primary list (partial ~10 from old feed is not enough)
+  const FULL_CACHE_THRESHOLD = 40;
+  if (cached.filter((record) => record.source === source).length >= FULL_CACHE_THRESHOLD) return;
   const key = `${slug}:${source}`;
   if (chapterLoadPromises.has(key)) return;
   const start = () => {
@@ -503,7 +550,6 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
         || currentItems[0].querySelector<HTMLElement>(".global-card-chapter-label")?.parentElement;
       if (chapterInfo && upBadge.parentElement !== chapterInfo) {
         listUpBadgeClasses.forEach((className) => upBadge.classList.add(className));
-        // Keep UP badge next to chapter label, not after the date
         const label = chapterInfo.querySelector(".global-card-chapter-label");
         if (label && label.nextSibling !== upBadge) {
           label.insertAdjacentElement("afterend", upBadge);
