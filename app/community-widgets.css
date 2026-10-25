@@ -74,7 +74,8 @@ html.dark .community-widget-error {
 #dm-modal,
 #report-modal,
 #reply-notif-overlay,
-#user-profile-modal {
+#user-profile-modal,
+#legacy-comment-profile-modal {
   z-index: 100000 !important;
 }
 
@@ -94,6 +95,7 @@ html.dark .community-widget-error {
 #dm-modal .dm-wrapper,
 #report-modal-content,
 #user-profile-modal > :first-child,
+#legacy-comment-profile-modal > :first-child,
 #reply-notif-overlay > :first-child {
   box-sizing: border-box !important;
   max-height: calc(100dvh - 16px) !important;
@@ -105,8 +107,7 @@ html.dark .community-widget-error {
 #user-settings-modal:not([style*="display: flex"]):not([style*="display:flex"]),
 #dm-modal:not([style*="display: flex"]):not([style*="display:flex"]),
 #report-modal:not([style*="display: flex"]):not([style*="display:flex"]),
-#reply-notif-overlay:not([style*="display: flex"]):not([style*="display:flex"]),
-#user-profile-modal:not([style*="display: flex"]):not([style*="display:flex"]) {
+#reply-notif-overlay:not([style*="display: flex"]):not([style*="display:flex"]) {
   display: none !important;
 }
 

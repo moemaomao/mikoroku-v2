@@ -6206,7 +6206,7 @@ if (currentUser) {
   signinX.style.display = 'none';
   emailSignin.style.display = 'none';
 
-  signout.style.display = 'inline-block';
+  signout.style.display = 'flex';
   userInfo.style.display = 'flex';
     
     // =========================
@@ -8366,8 +8366,15 @@ function getOptimizedAvatar(avatarUrl, size = 96) {
   if (comment.uid) {
     const userId = comment.uid;
     const badgeId = `badge-${comment.id}`;
+    const cachedStats = userStatsCache[userId];
+    const statsRequest = cachedStats
+      ? Promise.resolve({
+          exists: !cachedStats._empty,
+          data: () => cachedStats
+        })
+      : db.collection('userStats').doc(userId).get();
 
-    db.collection('userStats').doc(userId).get().then(doc => {
+    statsRequest.then(doc => {
       const data = doc.exists ? doc.data() : {};
       
       const level = getCommentLevel(data.commentCount || 0);
@@ -8703,8 +8710,9 @@ async function startRealtimeListener() {
 
       window.__commentsCache = comments;
 
+      const visibleComments = getCommentsToRender(comments);
       const uniqueUids = [...new Set(
-        comments.filter(c => c.uid).map(c => c.uid)
+        visibleComments.filter(c => c.uid).map(c => c.uid)
       )];
       await batchGetUserStats(uniqueUids);
 
@@ -10067,7 +10075,7 @@ window.currentProfileUser = {
   avatar: data.avatar || ANONYMOUS_AVATAR
 };
       
-      const modal = document.getElementById('user-profile-modal');
+      const modal = document.getElementById('legacy-comment-profile-modal');
       if (modal && modal.style.display !== 'none') {
         showUserProfile(uid);
       }
@@ -11637,12 +11645,12 @@ function calculateLevel(points = 0) {
 
 
 async function showUserProfile(uid) {
-  let modal = document.getElementById('user-profile-modal');
+  let modal = document.getElementById('legacy-comment-profile-modal');
 
   if (!modal) {
     console.log("Creating user profile modal...");
     modal = document.createElement('div');
-    modal.id = 'user-profile-modal';
+    modal.id = 'legacy-comment-profile-modal';
     modal.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.9); z-index: 99999; display: none;
@@ -11721,18 +11729,23 @@ async function showUserProfile(uid) {
     document.body.appendChild(modal);
   }
 
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+
   // Reset
-  document.getElementById('modal-avatar').src = ANONYMOUS_AVATAR || '';
-  document.getElementById('modal-displayname').textContent = 'Loading all...';
-  document.getElementById('modal-username').textContent = '';
-  document.getElementById('modal-bio').textContent = '';
-  document.getElementById('modal-joined').textContent = '—';
+  modal.querySelector('#modal-avatar').src = ANONYMOUS_AVATAR || '';
+  modal.querySelector('#modal-displayname').textContent = 'Memuat profil...';
+  modal.querySelector('#modal-username').textContent = '';
+  modal.querySelector('#modal-bio').textContent = '';
+  modal.querySelector('#modal-joined').textContent = '—';
+  modal.style.setProperty('display', 'flex', 'important');
 
   try {
     const doc = await db.collection('userStats').doc(uid).get();
     const data = doc.exists ? doc.data() : {};
     
-    const dmBtn = document.getElementById('profile-dm-btn');
+    const dmBtn = modal.querySelector('#profile-dm-btn');
 
 if (dmBtn) {
   dmBtn.onclick = () => {
@@ -11749,13 +11762,13 @@ console.log("DATA:", data);
 console.log("joinedAt:", data.joinedAt);
 console.log("createdAt:", data.createdAt);
 
-    document.getElementById('modal-avatar').src = data.avatar || ANONYMOUS_AVATAR;
-    document.getElementById('modal-displayname').textContent = data.displayName || 'Anonymous';
-    document.getElementById('modal-username').textContent = data.username ? '@' + data.username : '';
-    document.getElementById('modal-bio').textContent = data.bio || 'Belum ada bio.';
+    modal.querySelector('#modal-avatar').src = data.avatar || ANONYMOUS_AVATAR;
+    modal.querySelector('#modal-displayname').textContent = data.displayName || 'Anonymous';
+    modal.querySelector('#modal-username').textContent = data.username ? '@' + data.username : '';
+    modal.querySelector('#modal-bio').textContent = data.bio || 'Belum ada bio.';
 
     // ==================== JOINED DATE FIXED ====================
-const joinedEl = document.getElementById('modal-joined');
+const joinedEl = modal.querySelector('#modal-joined');
 let joinedDate = '—';
 
 const getJoinedDate = (timestamp) => {
@@ -11786,18 +11799,18 @@ if (data.joinedAt) {
     // ==================== END FIX ====================
 
     const level = getCommentLevel(data.commentCount || 0);
-    document.getElementById('modal-level').textContent = `Lv. ${level}`;
+    modal.querySelector('#modal-level').textContent = `Lv. ${level}`;
 
-    document.getElementById('modal-points').textContent = `${(data.points || 0).toLocaleString()} pts`;
-    document.getElementById('modal-commentcount').textContent = (data.commentCount || 0).toLocaleString();
+    modal.querySelector('#modal-points').textContent = `${(data.points || 0).toLocaleString()} pts`;
+    modal.querySelector('#modal-commentcount').textContent = (data.commentCount || 0).toLocaleString();
 
     const reputation = data.reputation || 0;
-    const repEl = document.getElementById('modal-reputation');
+    const repEl = modal.querySelector('#modal-reputation');
     repEl.textContent = reputation >= 0 ? `+${reputation.toLocaleString()}` : reputation.toLocaleString();
     repEl.style.color = reputation > 0 ? '#4ade80' : reputation < 0 ? '#ef4444' : '#aaa';
 
     // Badge
-    const badgeDiv = document.getElementById('modal-badge');
+    const badgeDiv = modal.querySelector('#modal-badge');
     badgeDiv.innerHTML = '';
     if (data.customBadge) {
       const badge = BADGES.find(b => b.id === data.customBadge);
@@ -11811,7 +11824,7 @@ if (data.joinedAt) {
     }
 
         // ==================== GAME ROLES DISPLAY ====================
-    let existingRoles = document.getElementById('modal-game-roles');
+    let existingRoles = modal.querySelector('#modal-game-roles');
     if (existingRoles) existingRoles.remove();
 
     const rolesDiv = document.createElement('div');
@@ -11876,7 +11889,7 @@ if (data.joinedAt) {
   });
 }
 
-    const badgeContainer = document.getElementById('modal-badge');
+    const badgeContainer = modal.querySelector('#modal-badge');
     if (badgeContainer && badgeContainer.parentNode) {
       badgeContainer.parentNode.appendChild(rolesDiv);
     }
@@ -11885,7 +11898,8 @@ if (data.joinedAt) {
 
   } catch (e) {
     console.error('Error loading profile:', e);
-    document.getElementById('modal-joined').textContent = '—';
+    modal.querySelector('#modal-displayname').textContent = 'Profil tidak tersedia';
+    modal.querySelector('#modal-bio').textContent = 'Gagal memuat data profil. Coba lagi nanti.';
   }
 }
 
@@ -11908,10 +11922,10 @@ async function addUserPoints(uid, amount) {
 
 function closeProfileModal() {
   const modal =
-    document.getElementById('user-profile-modal');
+    document.getElementById('legacy-comment-profile-modal');
 
   if (modal) {
-    modal.style.display = 'none';
+    modal.style.setProperty('display', 'none', 'important');
   }
 }
 

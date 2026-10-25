@@ -301,6 +301,9 @@
   let unsubscribe = null;
   let currentRef = null;
   let pageId = "";
+  const COUNTS_CACHE_KEY = "emojiReactionCounts_v1";
+  const MAX_CACHED_PAGES = 20;
+  const REACTION_KEYS = ["like", "haha", "wow", "sad", "angry2"];
 
   function getPageRef() {
     const url = new URL(location.href);
@@ -312,22 +315,66 @@
     return doc(db, "emoji_reactions", pageId);
   }
 
+  function readCachedCounts(targetPageId) {
+    try {
+      const cache = JSON.parse(localStorage.getItem(COUNTS_CACHE_KEY) || "{}");
+      const counts = cache[targetPageId];
+      if (!counts || typeof counts !== "object") return null;
+      return counts;
+    } catch (error) {
+      console.warn("Could not read cached emoji counts.", error);
+      return null;
+    }
+  }
+
+  function saveCachedCounts(targetPageId, counts) {
+    try {
+      const cache = JSON.parse(localStorage.getItem(COUNTS_CACHE_KEY) || "{}");
+      delete cache[targetPageId];
+      cache[targetPageId] = counts;
+      while (Object.keys(cache).length > MAX_CACHED_PAGES) {
+        delete cache[Object.keys(cache)[0]];
+      }
+      localStorage.setItem(COUNTS_CACHE_KEY, JSON.stringify(cache));
+    } catch (error) {
+      console.warn("Could not save cached emoji counts.", error);
+    }
+  }
+
+  function renderCounts(counts) {
+    const widget = document.getElementById("emoji-reaction-widget");
+    if (!widget) return;
+    widget.querySelectorAll("button[data-k]").forEach((button) => {
+      const key = button.dataset.k;
+      const value = counts[key];
+      const count = typeof value === "number" && Number.isFinite(value) ? value : 0;
+      const countEl = button.querySelector(".count");
+      if (countEl) countEl.textContent = count;
+      button.classList.toggle("fire", count >= 10);
+    });
+  }
+
   function startListener(targetRef) {
     if (unsubscribe) {
       unsubscribe();
       unsubscribe = null;
     }
+    const targetPageId = pageId;
     currentRef = targetRef;
+    const cachedCounts = readCachedCounts(targetPageId);
+    if (cachedCounts) renderCounts(cachedCounts);
+
     unsubscribe = onSnapshot(targetRef, (s) => {
+      if (currentRef !== targetRef) return;
       const d = s.data() || {};
-      requestAnimationFrame(() => {
-        document.querySelectorAll(".reaction button").forEach((b) => {
-          const v = d[b.dataset.k] || 0;
-          const countEl = b.querySelector(".count");
-          if (countEl) countEl.textContent = v;
-          b.classList.toggle("fire", v >= 10);
-        });
-      });
+      const counts = Object.fromEntries(
+        REACTION_KEYS.map((key) => [
+          key,
+          typeof d[key] === "number" && Number.isFinite(d[key]) ? d[key] : 0
+        ])
+      );
+      renderCounts(counts);
+      saveCachedCounts(targetPageId, counts);
     }, (err) => console.warn("emoji listener:", err));
   }
 
