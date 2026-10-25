@@ -508,20 +508,21 @@ export default function ModerationPage() {
         });
       });
 
-      const duplicateTargets = new Set<string>();
-      const seenTargets = new Set<string>();
+      const targetSourceCounts = new Map<string, number>();
       entries.forEach((entry) => {
-        if (seenTargets.has(entry.targetPostId)) duplicateTargets.add(entry.targetPostId);
-        seenTargets.add(entry.targetPostId);
+        targetSourceCounts.set(
+          entry.targetPostId,
+          (targetSourceCounts.get(entry.targetPostId) ?? 0) + 1,
+        );
       });
-      if (duplicateTargets.size) {
-        throw new Error(`Beberapa ID sumber menuju halaman yang sama: ${Array.from(duplicateTargets).join(", ")}`);
-      }
+      const mergedTargetCount = Array.from(targetSourceCounts.values())
+        .filter((sourceCount) => sourceCount > 1)
+        .length;
       entries.sort((left, right) => left.sourcePostId.localeCompare(right.sourcePostId));
       unmapped.sort((left, right) => left.sourcePostId.localeCompare(right.sourcePostId));
       setPreview({ entries, unmapped });
       setActionStatus(
-        `Pemindaian selesai: ${entries.length} halaman lama dapat dipetakan, ${entries.reduce((sum, entry) => sum + entry.sourceCount, 0)} komentar ditemukan, ${unmapped.length} ID halaman perlu pemetaan manual.`,
+        `Pemindaian selesai: ${entries.length} ID sumber lama dapat dipetakan, ${entries.reduce((sum, entry) => sum + entry.sourceCount, 0)} komentar ditemukan, ${mergedTargetCount} halaman tujuan menggabungkan beberapa ID sumber, ${unmapped.length} ID halaman perlu pemetaan manual.`,
       );
     } catch (error) {
       console.error("Comment import preview failed.", error);
@@ -638,12 +639,21 @@ export default function ModerationPage() {
         comment: ScannedComment;
       }> = [];
       const pageProgress = new Map<string, { sourceCount: number; existingCount: number; copied: number; skipped: number }>();
+      const knownCommentIdsByTarget = new Map<string, Set<string>>();
 
       for (const entry of preview.entries) {
         const sourceComments = commentsByPost.get(entry.sourcePostId) ?? [];
         const targetComments = commentsByPost.get(entry.targetPostId) ?? [];
-        const targetIds = new Set(targetComments.map((comment) => comment.id));
-        const missing = sourceComments.filter((comment) => !targetIds.has(comment.id));
+        let targetIds = knownCommentIdsByTarget.get(entry.targetPostId);
+        if (!targetIds) {
+          targetIds = new Set(targetComments.map((comment) => comment.id));
+          knownCommentIdsByTarget.set(entry.targetPostId, targetIds);
+        }
+        const missing = sourceComments.filter((comment) => {
+          if (targetIds.has(comment.id)) return false;
+          targetIds.add(comment.id);
+          return true;
+        });
         const skipped = sourceComments.length - missing.length;
         skippedTotal += skipped;
         pageProgress.set(entry.sourcePostId, {
