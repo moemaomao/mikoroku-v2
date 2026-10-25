@@ -264,9 +264,7 @@
   import {
     getFirestore,
     doc,
-    getDoc,
     setDoc,
-    updateDoc,
     increment,
     onSnapshot,
     enableIndexedDbPersistence
@@ -314,13 +312,6 @@
     return doc(db, "emoji_reactions", pageId);
   }
 
-  async function initData(ref) {
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      await setDoc(ref, { like: 0, haha: 0, wow: 0, sad: 0, angry2: 0 });
-    }
-  }
-
   function startListener(targetRef) {
     if (unsubscribe) {
       unsubscribe();
@@ -346,13 +337,11 @@
     const nextRef = getPageRef();
     if (pageId === previousPageId) return;
     startListener(nextRef);
-    initData(nextRef).catch(console.error);
   };
 
   // First load
   const firstRef = getPageRef();
   startListener(firstRef);
-  initData(firstRef).catch(console.error);
 
   let lastUrl = location.href;
   function checkUrlChange() {
@@ -360,7 +349,6 @@
     lastUrl = location.href;
     const newRef = getPageRef();
     startListener(newRef);
-    initData(newRef).catch(console.error);
   }
 
   window.addEventListener("popstate", checkUrlChange);
@@ -371,41 +359,56 @@
   document.querySelectorAll(".reaction button").forEach((b) => {
     b.onclick = async () => {
       const key = b.dataset.k;
-      if (clickLock.get(key)) return;
-      clickLock.set(key, true);
-      setTimeout(() => clickLock.delete(key), 400);
+      const voteKey = `${pageId}_${key}`;
+      if (clickLock.get(voteKey)) return;
+      clickLock.set(voteKey, true);
 
-      const lock = "reacted_" + pageId + "_" + key;
-      if (!isAdmin()) {
-        if (localStorage.getItem(lock)) {
-          showBubble(b, "Already selected!");
-          return;
+      try {
+        const lock = "reacted_" + pageId + "_" + key;
+        if (!isAdmin()) {
+          let alreadyReacted = false;
+          try {
+            alreadyReacted = Boolean(localStorage.getItem(lock));
+          } catch (error) {
+            console.warn("Could not read the local emoji vote lock.", error);
+          }
+          if (alreadyReacted) {
+            showBubble(b, "Already selected!");
+            return;
+          }
         }
-        localStorage.setItem(lock, "1");
-      }
 
-      const countEl = b.querySelector(".count");
-      if (countEl) countEl.textContent = parseInt(countEl.textContent || "0", 10) + 1;
-
-      if (currentRef) {
-        updateDoc(currentRef, { [key]: increment(1) }).catch(() => {});
-      }
-
-      if (key === "wow") {
-        const animationsDisabled =
-          document.documentElement.classList.contains("no-animations") ||
-          document.body.classList.contains("no-animations") ||
-          document.getElementById("comment-widget")?.classList.contains("no-animations");
-        if (!animationsDisabled) {
-          slimeEffect(b);
+        if (!currentRef) throw new Error("Emoji reaction page is not ready.");
+        await setDoc(currentRef, { [key]: increment(1) }, { merge: true });
+        if (!isAdmin()) {
+          try {
+            localStorage.setItem(lock, "1");
+          } catch (error) {
+            console.warn("Could not save the local emoji vote lock.", error);
+          }
         }
-      }
-      else if (key === "like") likeEffect(b);
-      else if (key === "angry2") angryEffect(b);
-      else if (key === "haha") pinballEffect(b);
-      else if (key === "sad") sadEffect(b);
 
-      navigator.vibrate?.(30);
+        if (key === "wow") {
+          const animationsDisabled =
+            document.documentElement.classList.contains("no-animations") ||
+            document.body.classList.contains("no-animations") ||
+            document.getElementById("comment-widget")?.classList.contains("no-animations");
+          if (!animationsDisabled) {
+            slimeEffect(b);
+          }
+        }
+        else if (key === "like") likeEffect(b);
+        else if (key === "angry2") angryEffect(b);
+        else if (key === "haha") pinballEffect(b);
+        else if (key === "sad") sadEffect(b);
+
+        navigator.vibrate?.(30);
+      } catch (error) {
+        console.error("Failed to save emoji reaction.", error);
+        showBubble(b, "Gagal menyimpan. Coba lagi.");
+      } finally {
+        clickLock.delete(voteKey);
+      }
     };
   });
 
