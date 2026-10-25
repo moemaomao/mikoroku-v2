@@ -693,15 +693,13 @@ async function loadReaderData(
     };
   }
   const cachedContent = chapterData?.content || chapterData?.text || chapterData?.html;
-  if (resolvedKind === "manga" &&
-    !chapterImages(chapterData).length &&
-    !imageList(cachedContent).length) {
+  if (resolvedKind === "manga" && isBloggerSource) {
     try {
       const bloggerImages = await getBloggerChapterImages(chapterData || {}, signal);
       if (bloggerImages.length) chapterData = { ...chapterData, images: bloggerImages };
     } catch (error) {
       if (signal.aborted) throw error;
-      console.warn("Blogger chapter images could not be loaded; trying Firestore.", error);
+      console.warn("Blogger chapter images could not be refreshed; using cached chapter data.", error);
     }
   }
 

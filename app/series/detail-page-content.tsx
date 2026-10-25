@@ -566,7 +566,6 @@ async function loadBloggerChapterSource(
   const params = new URLSearchParams({
     title: title.trim(),
     source: bloggerSource,
-    // full=1 includes content images so we can build real chapter thumbnails on the detail page
     full: "1",
   });
 
@@ -606,7 +605,7 @@ async function loadBloggerChapterSource(
             !/favicon|emoji|icon|spacer|pixel|1x1/i.test(src),
         )
       : [];
-    // 3rd page image is the usual chapter preview (skip header/logo frames)
+
     const rawThumb =
       images[2] ||
       images[1] ||
@@ -618,7 +617,6 @@ async function loadBloggerChapterSource(
       num: chapter.num,
       title: chapter.title,
       url: chapter.url,
-      // Keep a couple of alternates so the grid can recover if one URL fails
       images: images.slice(0, 4),
       thumbnail,
       createdAt: chapter.createdAt || "",
@@ -1282,7 +1280,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           : [];
         cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
         cachedFirestoreChapters = valid.filter((chapter) => chapter.source === "firestore");
-        // Selected server only — never fall back to ES while SV1/SV2 is active
         cachedChapters = cachedSelectedChapters;
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
@@ -1380,8 +1377,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         return cachedSelectedChapters;
       }
 
-      // Primary server first. Parallel servers only fill missing chapter numbers
-      // (never replace a chapter that already exists on SV1/SV2).
       let selectedChapters = cachedSelectedChapters;
       let primaryError: unknown;
       const alternateBlogger: ChapterSource = source === "blogger" ? "blogger2" : "blogger";
@@ -1404,7 +1399,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         console.warn(`Chapter source ${source} failed for ${slug}.`, error);
       }
 
-      // Show primary immediately, then top up gaps from parallel servers.
       if (selectedChapters.length) publishEarly(selectedChapters);
 
       const [alternateChapters, firestoreChapters] = await Promise.all([
