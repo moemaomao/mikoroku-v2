@@ -79,6 +79,7 @@ type GlobalEmojiPreview = {
   entries: EmojiImportPreview[];
   unmapped: Array<{ sourceId: string; total: number }>;
 };
+type EmojiCountKey = (typeof EMOJI_COUNT_KEYS)[number];
 
 function getServices(): ModeratorServices {
   const app: FirebaseApp = getApps().find((candidate) => candidate.name === FIREBASE_APP_NAME) ??
@@ -192,6 +193,13 @@ function emojiDocumentId(pageId: string): string {
 
 const EMOJI_COUNT_KEYS = ["like", "haha", "wow", "sad", "angry2"] as const;
 const EMOJI_IMPORT_MARKER = "_legacyEmojiSources";
+const EMOJI_LABELS: Record<EmojiCountKey, string> = {
+  like: "LIKE",
+  haha: "LOL",
+  wow: "CUM",
+  sad: "SAD",
+  angry2: "MAD",
+};
 
 function emojiCounts(data: RecordData): Record<string, number> {
   return Object.fromEntries(EMOJI_COUNT_KEYS.flatMap((key) => {
@@ -254,7 +262,7 @@ export default function ModerationPage() {
   const [pagePreview, setPagePreview] = useState<ImportPreview | null>(null);
   const [emojiPreview, setEmojiPreview] = useState<GlobalEmojiPreview | null>(null);
   const [emojiPagePreview, setEmojiPagePreview] = useState<EmojiImportPreview | null>(null);
-  const [importDataType, setImportDataType] = useState<"comments" | "emoji">("comments");
+  const [importDataType, setImportDataType] = useState<"comments" | "emoji-import">("comments");
   const [importMode, setImportMode] = useState<ImportMode>("page");
   const [legacyUrl, setLegacyUrl] = useState("https://mikoroku.com/reader?slug=isekai-koushoku-musou-roku-chapter-01");
   const [newUrl, setNewUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
@@ -264,6 +272,16 @@ export default function ModerationPage() {
   const [emojiNewUrl, setEmojiNewUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
   const [emojiSourceIdOverride, setEmojiSourceIdOverride] = useState("");
   const [emojiTargetIdOverride, setEmojiTargetIdOverride] = useState("");
+  const [emojiCountUrl, setEmojiCountUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
+  const [emojiCountAmounts, setEmojiCountAmounts] = useState<Record<EmojiCountKey, string>>({
+    like: "0",
+    haha: "0",
+    wow: "0",
+    sad: "0",
+    angry2: "0",
+  });
+  const [emojiLoadedUrl, setEmojiLoadedUrl] = useState("");
+  const [loadingEmojiCounts, setLoadingEmojiCounts] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<"import" | "reports" | "banned">("import");
 
@@ -746,6 +764,85 @@ export default function ModerationPage() {
     }
   };
 
+  const emojiTargetIdForUrl = (value: string): { url: URL; targetId: string } => {
+    const url = new URL(value.trim());
+    if (!["mikoroku.top", "www.mikoroku.top", "mikoroku.com", "www.mikoroku.com"].includes(url.hostname.toLowerCase())) {
+      throw new Error("Masukkan URL halaman Mikoroku.");
+    }
+    const targetId = targetEmojiIdFromUrl(url.href);
+    if (!/^emoji_[a-zA-Z0-9_]{1,1500}$/.test(targetId)) {
+      throw new Error("ID halaman emoji tidak valid.");
+    }
+    return { url, targetId };
+  };
+
+  const loadEmojiCounts = async () => {
+    setPageError("");
+    setActionStatus("");
+    setLoadingEmojiCounts(true);
+    try {
+      const { url, targetId } = emojiTargetIdForUrl(emojiCountUrl);
+      const { firestore } = getEmojiServices();
+      const snapshot = await getDocFromServer(doc(firestore, "emoji_reactions", targetId));
+      const data = snapshot.exists() ? snapshot.data() : {};
+      const counts = Object.fromEntries(EMOJI_COUNT_KEYS.map((key) => {
+        const value = data[key];
+        return [key, typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0];
+      })) as Record<EmojiCountKey, number>;
+      setEmojiCountAmounts(Object.fromEntries(
+        EMOJI_COUNT_KEYS.map((key) => [key, String(counts[key])]),
+      ) as Record<EmojiCountKey, string>);
+      setEmojiLoadedUrl(url.href);
+      setActionStatus(snapshot.exists()
+        ? `Count emoji berhasil dimuat dari ${url.href}.`
+        : `Belum ada dokumen count untuk ${url.href}; semua count saat ini 0.`);
+    } catch (error) {
+      console.error("Failed to load emoji counts for the target page.", error);
+      setPageError(`Gagal memuat count emoji: ${errorMessage(error)}`);
+      setEmojiLoadedUrl("");
+    } finally {
+      setLoadingEmojiCounts(false);
+    }
+  };
+
+  const addEmojiCount = async () => {
+    if (!services || !isModerator) return;
+    setPageError("");
+    setActionStatus("");
+    setImportBusy(true);
+    try {
+      const targetCounts = Object.fromEntries(EMOJI_COUNT_KEYS.map((key) => {
+        const rawCount = emojiCountAmounts[key].trim();
+        const count = rawCount === "" ? 0 : Number(rawCount);
+        if (!Number.isSafeInteger(count) || count < 0) {
+          throw new Error(`Count ${EMOJI_LABELS[key]} harus bilangan bulat nol atau lebih.`);
+        }
+        return [key, count];
+      })) as Record<EmojiCountKey, number>;
+
+      const { url: pageUrl, targetId } = emojiTargetIdForUrl(emojiCountUrl);
+      const countSummary = EMOJI_COUNT_KEYS
+        .map((key) => `${EMOJI_LABELS[key]} ${targetCounts[key]}`)
+        .join(", ");
+      if (!window.confirm(
+        `Atur count emoji halaman ${pageUrl.href} menjadi:\n\n${countSummary}\n\nNilai saat ini akan diganti.`,
+      )) return;
+
+      const { firestore } = getEmojiServices();
+      const targetRef = doc(firestore, "emoji_reactions", targetId);
+      await runTransaction(firestore, async (transaction) => {
+        transaction.set(targetRef, targetCounts, { merge: true });
+      });
+      setEmojiLoadedUrl(pageUrl.href);
+      setActionStatus(`Batch count berhasil disimpan untuk ${pageUrl.href}: ${countSummary}.`);
+    } catch (error) {
+      console.error("Manual emoji count adjustment failed.", error);
+      setPageError(`Gagal menambahkan count emoji: ${errorMessage(error)}`);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
   const resolveReport = async (report: ReportRow, action: "delete" | "ignore" | "ban") => {
     if (!services) return;
     const commentId = displayText(report.data.commentId, "");
@@ -875,6 +972,7 @@ export default function ModerationPage() {
             {actionStatus && <p className="mb-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-300" role="status">{actionStatus}</p>}
 
             {activeTab === "import" && (
+              <>
               <section className="rounded-3xl border border-black/[0.06] bg-white p-5 shadow-[0_18px_60px_-42px_rgba(15,23,42,.35)] dark:border-white/[0.07] dark:bg-[#17181e] sm:p-7" aria-labelledby="import-heading">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
@@ -883,10 +981,10 @@ export default function ModerationPage() {
                   </div>
                   <p className="max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400">Data sumber tetap aman. Count tujuan digabungkan dan sumber ditandai agar tidak terhitung dua kali.</p>
                 </div>
-                <div className="mt-6 inline-flex rounded-2xl bg-slate-100 p-1 dark:bg-black/20" role="tablist" aria-label="Jenis data import">
+                <div className="mt-6 inline-flex flex-wrap rounded-2xl bg-slate-100 p-1 dark:bg-black/20" role="tablist" aria-label="Jenis moderasi data">
                   {([
                     ["comments", "Komentar"],
-                    ["emoji", "Count Emoji"],
+                    ["emoji-import", "Import Emoji"],
                   ] as const).map(([type, label]) => (
                     <button
                       key={type}
@@ -1112,6 +1210,72 @@ export default function ModerationPage() {
                   </div>
                 )}
               </section>
+              <section className="mt-6 rounded-2xl border border-amber-500/25 bg-white p-5 shadow-sm dark:bg-[#191a20] sm:p-6" aria-labelledby="emoji-spam-heading">
+                <p className="text-xs font-bold uppercase tracking-[.16em] text-amber-700 dark:text-amber-300">Penyesuaian manual moderator</p>
+                <h2 id="emoji-spam-heading" className="mt-1 text-lg font-bold">Tambah count emoji</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400">
+                  Panel terpisah dari import. Muat count halaman sebagai referensi, lalu tambahkan jumlah untuk beberapa reaction sekaligus.
+                </p>
+                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
+                    URL halaman Mikoroku
+                    <input
+                      value={emojiCountUrl}
+                      onChange={(event) => {
+                        setEmojiCountUrl(event.currentTarget.value);
+                        setEmojiLoadedUrl("");
+                      }}
+                      type="url"
+                      placeholder="https://mikoroku.top/manga/slug/1"
+                      className="min-w-0 rounded-xl border border-black/10 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-500/10 dark:border-white/10 dark:bg-black/10"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void loadEmojiCounts()}
+                    disabled={!services || !isModerator || loadingEmojiCounts || importBusy}
+                    className="rounded-xl border border-black/10 bg-slate-50 px-4 py-2.5 text-sm font-semibold transition hover:border-amber-400 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-amber-500/10"
+                  >
+                    {loadingEmojiCounts ? "Memuat..." : "Muat count"}
+                  </button>
+                </div>
+                {emojiLoadedUrl && (
+                  <p className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
+                    Form dimuat dari {emojiLoadedUrl}. Ubah angka sesuai count akhir yang diinginkan.
+                  </p>
+                )}
+                <fieldset className="mt-4">
+                  <legend className="text-sm font-semibold">Count akhir per reaction</legend>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {EMOJI_COUNT_KEYS.map((key) => (
+                      <label key={key} className="grid gap-2 text-sm font-medium">
+                        {EMOJI_LABELS[key]}
+                        <input
+                          value={emojiCountAmounts[key]}
+                          onChange={(event) => {
+                            const amount = event.currentTarget.value;
+                            setEmojiCountAmounts((current) => ({ ...current, [key]: amount }));
+                          }}
+                          type="number"
+                          min="0"
+                          step="1"
+                          inputMode="numeric"
+                          className="min-w-0 rounded-xl border border-black/10 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-500/10 dark:border-white/10 dark:bg-black/10"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <button
+                  type="button"
+                  onClick={() => void addEmojiCount()}
+                  disabled={!services || !isModerator || importBusy || loadingEmojiCounts}
+                  className="mt-4 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-600/15 transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {importBusy ? "Menyimpan..." : "Simpan count"}
+                </button>
+              </section>
+              </>
             )}
 
             {activeTab === "reports" && (
