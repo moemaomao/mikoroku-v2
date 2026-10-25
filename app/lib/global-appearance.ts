@@ -86,6 +86,7 @@ let appearanceObserver: MutationObserver | null = null;
 let appear9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8 = false;
 let chapterCardObserver: IntersectionObserver | null = null;
 let currentAppearance = defaultGlobalAppearance;
+const completedChapterSourceLoads = new Set<string>();
 
 type ListChapterRecord = Record<string, unknown> & {
   id?: string;
@@ -335,9 +336,21 @@ async function loadFirestoreListChapters(slug: string): Promise<ListChapterRecor
     initializeFirebaseClient();
   }
   if (!browser.firestore || !browser.fs) throw new Error("Firestore SDK is unavailable.");
-  const snapshot = await browser.fs.getDocs(
+  const snapshotPromise = browser.fs.getDocs(
     browser.fs.collection(browser.firestore, "manga", slug, "chapters"),
   );
+  let timeout: number | undefined;
+  const snapshot = await Promise.race([
+    snapshotPromise,
+    new Promise<never>((_, reject) => {
+      timeout = window.setTimeout(
+        () => reject(new Error(`Firestore chapter query timed out for ${slug}.`)),
+        15000,
+      );
+    }),
+  ]).finally(() => {
+    if (timeout !== undefined) window.clearTimeout(timeout);
+  });
   const chapters: ListChapterRecord[] = [];
   snapshot.forEach((document) => {
     const data = document.data();
@@ -371,6 +384,7 @@ async function loadListChapterSources(slug: string, title: string, source: "blog
       });
       const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
         headers: { Accept: "application/json" },
+        priority: "high",
       });
       if (response.ok) {
         const data = (await response.json()) as {
@@ -450,9 +464,11 @@ function ensureListChapterSources(card: HTMLElement, slug: string, title: string
   const source = forceFirestore || selected === "es"
     ? "firestore"
     : selected === "sv2" ? "blogger2" : "blogger";
+  const key = `${slug}:${source}`;
+  if (completedChapterSourceLoads.has(key)) return;
   const cached = readCachedChapterRecords(slug);
-  const FULL_CACHE_THRESHOLD = 40;
-  if (cached.filter((record) => record.source === source).length >= FULL_CACHE_THRESHOLD) {
+  if (cached.filter((record) => record.source === source).length >= LIST_CHAPTER_LIMIT) {
+    completedChapterSourceLoads.add(key);
     if (source !== "firestore") {
       const matching = cached.filter((record) => record.source === source);
       void mergeSharedChapterCache(slug, source, matching).catch((error: unknown) => {
@@ -461,13 +477,18 @@ function ensureListChapterSources(card: HTMLElement, slug: string, title: string
     }
     return;
   }
-  const key = `${slug}:${source}`;
   if (chapterLoadPromises.has(key)) return;
   const start = () => {
     if (chapterLoadPromises.has(key)) return;
+    card.dataset.chapterSourceLoading = "true";
     const request = loadListChapterSources(slug, title, source)
       .catch((error: unknown) => console.warn(`Homepage chapters failed for ${slug}.`, error))
-      .finally(() => chapterLoadPromises.delete(key));
+      .finally(() => {
+        chapterLoadPromises.delete(key);
+        completedChapterSourceLoads.add(key);
+        card.dataset.chapterSourceLoading = "false";
+        window.dispatchEvent(new Event("mikoroku:chapters-updated"));
+      });
     chapterLoadPromises.set(key, request);
   };
   if (card.dataset.chapterSourceVisible === "true" || typeof IntersectionObserver === "undefined") {
@@ -488,7 +509,7 @@ function ensureListChapterSources(card: HTMLElement, slug: string, title: string
           ensureListChapterSources(target, targetSlug, targetTitle, Boolean(target.closest("#firebaseNovel")));
         }
       });
-    }, { rootMargin: "160px 0px" });
+    }, { rootMargin: "800px 0px" });
   }
   chapterCardObserver.observe(card);
 }
@@ -613,6 +634,21 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
         }
       }
     }
+    return;
+  }
+
+  if (chapters.length < LIST_CHAPTER_LIMIT && card.dataset.chapterSourceLoading === "true") {
+    list.replaceChildren();
+    for (let index = 0; index < LIST_CHAPTER_LIMIT; index++) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "global-card-chapter-loading flex min-h-8 w-full items-center rounded-md bg-black/5 px-2.5 py-1.5 dark:bg-white/[0.06]";
+      placeholder.setAttribute("aria-hidden", "true");
+      const bar = document.createElement("span");
+      bar.className = "h-3 w-2/3 animate-pulse rounded bg-slate-300/70 dark:bg-slate-600/70";
+      placeholder.append(bar);
+      list.append(placeholder);
+    }
+    details.append(list);
     return;
   }
 
