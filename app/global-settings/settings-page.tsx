@@ -22,6 +22,7 @@ import {
   type CoverImageConversionPreset,
   type CoverImageConversionSettings,
 } from "../../lib/image-proxy";
+import { clearSharedChapterCache } from "../lib/chapter-cache";
 
 const BOOKMARKS_KEY = "mangaBookmarks";
 const HISTORY_KEY = "readingHistory";
@@ -513,6 +514,7 @@ export default function GlobalSettingsPage() {
     setStorageBusy(true);
     setNotice("Clearing Firestore offline cache...");
     try {
+      await clearSharedChapterCache();
       await clearFirestoreOfflineCache();
       setNotice("Firestore cache cleared. Reloading page...");
       window.setTimeout(() => window.location.reload(), 900);
@@ -528,6 +530,7 @@ export default function GlobalSettingsPage() {
     setStorageBusy(true);
     try {
       const removed = clearLocalAppCaches();
+      await clearSharedChapterCache();
       setNotice(`Cleared ${removed} local cache entries.`);
       await refreshStorageReport();
     } catch (error) {

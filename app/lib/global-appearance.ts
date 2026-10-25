@@ -1,6 +1,11 @@
 import { normalizeChapterNumber } from "../../lib/chapter-number";
 import { initializeFirebaseClient } from "./firebase-client";
-import { compactChapterCache } from "./chapter-cache";
+import {
+  compactChapterCache,
+  mergeSharedChapterCache,
+  readSharedChapterCache,
+  type SharedChapterSource,
+} from "./chapter-cache";
 
 export type GlobalAppearanceSettings = {
   hideHero: boolean;
@@ -255,11 +260,20 @@ function toHomepageChapterRecord(record: ListChapterRecord): ListChapterRecord {
   };
 }
 
-function cacheListChapterRecords(slug: string, chapters: ListChapterRecord[]): void {
+async function cacheListChapterRecords(slug: string, chapters: ListChapterRecord[]): Promise<void> {
   const current = readCachedChapterRecords(slug);
-  const source = String(chapters[0]?.source || "blogger");
+  const sourceValue = chapters[0]?.source;
+  const source: SharedChapterSource = sourceValue === "blogger2" || sourceValue === "firestore"
+    ? sourceValue
+    : "blogger";
+  let sharedChapters = chapters;
+  try {
+    sharedChapters = await mergeSharedChapterCache(slug, source, chapters);
+  } catch (error) {
+    console.warn(`IndexedDB chapter cache could not be updated for ${slug}.`, error);
+  }
   const retained = current.filter((record) => record.source !== source && record.source !== "firestore");
-  const lightweight = chapters.map(toHomepageChapterRecord);
+  const lightweight = sharedChapters.map(toHomepageChapterRecord);
   const retainedLight = retained.map(toHomepageChapterRecord);
   const data = compactChapterCache([...lightweight, ...retainedLight]);
   try {
@@ -339,6 +353,16 @@ async function loadFirestoreListChapters(slug: string): Promise<ListChapterRecor
 async function loadListChapterSources(slug: string, title: string, source: "blogger" | "blogger2" | "firestore"): Promise<void> {
   let chapters: ListChapterRecord[] = [];
 
+  try {
+    const cached = await readSharedChapterCache<ListChapterRecord>(slug, source);
+    if (cached?.length) {
+      await cacheListChapterRecords(slug, cached);
+      return;
+    }
+  } catch (error) {
+    console.warn(`IndexedDB chapter cache could not be read for ${slug}.`, error);
+  }
+
   if (source !== "firestore" && title.trim()) {
     try {
       const params = new URLSearchParams({
@@ -383,6 +407,7 @@ async function loadListChapterSources(slug: string, title: string, source: "blog
     }
   }
 
+
   if (!chapters.length && source !== "firestore") {
     const titleKey = title.toLowerCase().replace(/[^a-z0-9]/g, "");
     const slugKey = slug.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -417,7 +442,7 @@ async function loadListChapterSources(slug: string, title: string, source: "blog
       console.warn(`Firestore fallback failed for homepage card ${slug}.`, error);
     }
   }
-  if (chapters.length) cacheListChapterRecords(slug, chapters);
+  if (chapters.length) await cacheListChapterRecords(slug, chapters);
 }
 
 function ensureListChapterSources(card: HTMLElement, slug: string, title: string, forceFirestore: boolean): void {
@@ -427,7 +452,15 @@ function ensureListChapterSources(card: HTMLElement, slug: string, title: string
     : selected === "sv2" ? "blogger2" : "blogger";
   const cached = readCachedChapterRecords(slug);
   const FULL_CACHE_THRESHOLD = 40;
-  if (cached.filter((record) => record.source === source).length >= FULL_CACHE_THRESHOLD) return;
+  if (cached.filter((record) => record.source === source).length >= FULL_CACHE_THRESHOLD) {
+    if (source !== "firestore") {
+      const matching = cached.filter((record) => record.source === source);
+      void mergeSharedChapterCache(slug, source, matching).catch((error: unknown) => {
+        console.warn(`Existing chapter cache could not be migrated to IndexedDB for ${slug}.`, error);
+      });
+    }
+    return;
+  }
   const key = `${slug}:${source}`;
   if (chapterLoadPromises.has(key)) return;
   const start = () => {

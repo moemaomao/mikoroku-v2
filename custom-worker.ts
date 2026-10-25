@@ -47,6 +47,11 @@ const BLOGGER_DOMAINS = {
 
 const BLOGGER_CHAPTERS_TTL = 20 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
+const MANGA_CATALOG_CACHE_KEY = "catalog:github:all-manga:v1";
+const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
+const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
+const MANGA_CATALOG_URL =
+  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -55,6 +60,108 @@ function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
 function bloggerChaptersCacheKey(source: string, title: string): string {
   const normalized = title.trim().toLowerCase().replace(/\s+/g, " ");
   return `blogger:chapters:${source}:${normalized}`;
+}
+
+function catalogResponse(data: unknown[], cacheStatus: string): Response {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "public, max-age=60, s-maxage=600, stale-while-revalidate=60",
+      "x-cache": cacheStatus,
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+async function fetchAndCacheMangaCatalog(
+  kv?: KVNamespace,
+  forceRefresh = false,
+): Promise<unknown[]> {
+  const upstreamUrl = new URL(MANGA_CATALOG_URL);
+  if (forceRefresh) upstreamUrl.searchParams.set("t", String(Date.now()));
+  const upstream = await fetch(upstreamUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "mikoroku-catalog-proxy/1.0",
+    },
+  });
+  if (!upstream.ok) {
+    throw new Error(`Manga catalog upstream returned HTTP ${upstream.status}.`);
+  }
+
+  const data: unknown = await upstream.json();
+  if (!Array.isArray(data)) {
+    throw new Error("Manga catalog upstream response must be an array.");
+  }
+
+  if (kv) {
+    try {
+      await kv.put(
+        MANGA_CATALOG_CACHE_KEY,
+        JSON.stringify({ cachedAt: Date.now(), data }),
+        { expirationTtl: MANGA_CATALOG_CACHE_TTL },
+      );
+    } catch (error) {
+      console.warn("[worker manga-catalog] KV put failed", error);
+    }
+  }
+  return data;
+}
+
+async function handleMangaCatalogProxy(
+  request: Request,
+  env: CloudflareEnv,
+  ctx: ExecutionContext,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/catalog/manga") return null;
+  if (request.method !== "GET") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  }
+
+  const kv = getCacheKv(env);
+  const forceRefresh = url.searchParams.get("refresh") === "1";
+  let cached: { cachedAt?: number; data?: unknown } | null = null;
+  if (kv) {
+    try {
+      cached = await kv.get(MANGA_CATALOG_CACHE_KEY, "json");
+      if (!Array.isArray(cached?.data)) cached = null;
+    } catch (error) {
+      console.warn("[worker manga-catalog] KV get failed", error);
+    }
+  }
+
+  if (cached && !forceRefresh) {
+    const age = Date.now() - Number(cached.cachedAt || 0);
+    if (age <= MANGA_CATALOG_FRESH_TTL) {
+      return catalogResponse(cached.data as unknown[], "HIT");
+    }
+
+    ctx.waitUntil(
+      fetchAndCacheMangaCatalog(kv).catch((error: unknown) => {
+        console.error("[worker manga-catalog] background refresh failed", error);
+      }),
+    );
+    return catalogResponse(cached.data as unknown[], "STALE");
+  }
+
+  try {
+    const data = await fetchAndCacheMangaCatalog(kv, forceRefresh);
+    return catalogResponse(data, forceRefresh ? "BYPASS" : "MISS");
+  } catch (error) {
+    console.error("[worker manga-catalog] upstream fetch failed", error);
+    if (cached) return catalogResponse(cached.data as unknown[], "STALE");
+    return new Response(
+      JSON.stringify({ error: "Manga catalog is temporarily unavailable." }),
+      {
+        status: 502,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      },
+    );
+  }
 }
 
 function getBloggerChapterNumber(title: string, url: string): string {
@@ -285,6 +392,8 @@ export default {
     env: CloudflareEnv,
     ctx: ExecutionContext,
   ): Promise<Response> {
+    const catalog = await handleMangaCatalogProxy(request, env, ctx);
+    if (catalog) return catalog;
     const proxied = await handleBloggerChaptersProxy(request, env);
     if (proxied) return proxied;
     return handler.fetch(request, env, ctx);

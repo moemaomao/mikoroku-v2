@@ -18,7 +18,11 @@ import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient } from "../lib/firebase-client";
-import { compactChapterCache } from "../lib/chapter-cache";
+import {
+  compactChapterCache,
+  mergeSharedChapterCache,
+  readSharedChapterCache,
+} from "../lib/chapter-cache";
 import {
   GLOBAL_APPEARANCE_KEY,
   readGlobalAppearance,
@@ -1319,7 +1323,26 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         const cached = memoryCache.get(key);
         // Reuse memory only when previews already exist (or ES list).
         if (cached && (chapterSource === "firestore" || chaptersHaveThumbnails(cached))) {
+          try {
+            await mergeSharedChapterCache(slug, chapterSource, cached);
+          } catch (error) {
+            console.warn(`IndexedDB chapter cache could not be updated for ${slug}.`, error);
+          }
           return cached;
+        }
+        let sharedCachedChapters: Chapter[] = [];
+        try {
+          sharedCachedChapters =
+            (await readSharedChapterCache<Chapter>(slug, chapterSource)) || [];
+          if (
+            sharedCachedChapters.length &&
+            (chapterSource === "firestore" || chaptersHaveThumbnails(sharedCachedChapters))
+          ) {
+            memoryCache.set(key, sharedCachedChapters);
+            return sharedCachedChapters;
+          }
+        } catch (error) {
+          console.warn(`IndexedDB chapter cache could not be read for ${slug}.`, error);
         }
         const loaded = chapterSource === "firestore"
           ? await loadFirestoreChapterSource(slug, controller.signal)
@@ -1329,8 +1352,15 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         if (controller.signal.aborted) {
           throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
         }
-        if (loaded.length) memoryCache.set(key, loaded);
-        return loaded;
+        if (!loaded.length) return sharedCachedChapters;
+        let sharedChapters = loaded;
+        try {
+          sharedChapters = await mergeSharedChapterCache(slug, chapterSource, loaded);
+        } catch (error) {
+          console.warn(`IndexedDB chapter cache could not be updated for ${slug}.`, error);
+        }
+        memoryCache.set(key, sharedChapters);
+        return sharedChapters;
       };
 
       const publishEarly = (list: Chapter[]) => {

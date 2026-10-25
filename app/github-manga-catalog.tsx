@@ -79,8 +79,7 @@ declare global {
 }
 
 const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
-const MANGA_LIST_URL = `${GITHUB_RAW}all-manga.json`;
-const CACHE_DURATION = 60 * 60 * 1000;
+const MANGA_LIST_URL = "/api/catalog/manga";
 const STALE_OK_DURATION = 24 * 60 * 60 * 1000;
 const HERO_CACHE_DURATION = 30 * 60 * 1000;
 const PAGE_SIZE = 24;
@@ -157,7 +156,14 @@ function sharedListLoader(force = false): Promise<MangaItem[]> {
   if (shared.loaded && !force && shared.list) return Promise.resolve(shared.list);
   if (shared.promise && !force) return shared.promise;
 
-  shared.promise = fetch(`${MANGA_LIST_URL}?t=${Date.now()}`)
+  const catalogUrl = new URL(MANGA_LIST_URL, window.location.origin);
+  if (force) catalogUrl.searchParams.set("refresh", "1");
+  shared.promise = fetch(catalogUrl)
+    .then((response) => {
+      if (response.ok) return response;
+      const fallbackUrl = `${GITHUB_RAW}all-manga.json${force ? `?t=${Date.now()}` : ""}`;
+      return fetch(fallbackUrl);
+    })
     .then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json() as Promise<unknown>;
@@ -501,10 +507,6 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
       const metadataPromise = loadFirestoreMetadata();
       const [list, freshMetadata] = await Promise.all([
         (async () => {
-          if (!force) {
-            const cached = safeGet<Cache<MangaItem[]>>("mangaGithubCache", {});
-            if (cached.data && Date.now() - (cached.time || 0) < CACHE_DURATION) return cached.data;
-          }
           const fresh = await (window.loadSharedMangaList || sharedListLoader)(force);
           safeSet("mangaGithubCache", { time: Date.now(), data: fresh });
           return fresh;
