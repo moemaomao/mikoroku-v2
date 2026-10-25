@@ -5,6 +5,7 @@ const CHAPTER_CACHE_TTL = 30 * 60 * 1000;
 const MAX_CACHED_CHAPTERS_PER_SERIES = 200;
 const MAX_CHAPTER_CACHE_ENTRY_BYTES = 128 * 1024;
 const MAX_TOTAL_CHAPTER_CACHE_BYTES = 1024 * 1024;
+const LOCAL_STORAGE_HEADROOM_BYTES = 64 * 1024;
 const SHARED_CHAPTER_CACHE_DB = "mikoroku-chapter-cache";
 const SHARED_CHAPTER_CACHE_STORE = "chapters";
 const SHARED_CHAPTER_CACHE_TTL = 30 * 60 * 1000;
@@ -244,5 +245,66 @@ export function pruneStoredChapterCaches(): void {
     }
   } catch (error) {
     console.warn("Stored chapter caches could not be compacted before Firestore initialization.", error);
+  }
+}
+
+export function ensureLocalStorageHeadroom(): boolean {
+  const probeKey = "mikoroku-storage-headroom-probe";
+  const probeValue = "x".repeat(LOCAL_STORAGE_HEADROOM_BYTES);
+  const hasHeadroom = () => {
+    try {
+      localStorage.setItem(probeKey, probeValue);
+      localStorage.removeItem(probeKey);
+      return true;
+    } catch {
+      try {
+        localStorage.removeItem(probeKey);
+      } catch {
+        // Storage is unavailable; Firestore will use its in-memory cache.
+      }
+      return false;
+    }
+  };
+
+  try {
+    if (hasHeadroom()) return true;
+
+    const cacheKeys = Object.keys(localStorage)
+      .filter((key) =>
+        key === "currentManga" ||
+        key === "currentChapter" ||
+        key.startsWith("mangaGithub") ||
+        key.startsWith("mangaFsMeta") ||
+        key.startsWith("manga_cache_") ||
+        key.startsWith("mk_hero_") ||
+        key.startsWith("detail_") ||
+        key.startsWith(CHAPTER_CACHE_PREFIX),
+      )
+      .map((key) => {
+        const priority =
+          key.startsWith("mangaGithub") || key.startsWith("mangaFsMeta") || key.startsWith("manga_cache_")
+            ? 0
+            : key.startsWith("detail_") || key.startsWith("mk_hero_")
+              ? 1
+              : key.startsWith(CHAPTER_CACHE_PREFIX)
+                ? 2
+                : 3;
+        return { key, priority, size: (localStorage.getItem(key) || "").length };
+      })
+      .sort((left, right) => left.priority - right.priority || right.size - left.size);
+
+    for (const { key } of cacheKeys) {
+      localStorage.removeItem(key);
+      if (hasHeadroom()) {
+        console.warn(`Browser storage was nearly full; removed rebuildable cache "${key}".`);
+        return true;
+      }
+    }
+
+    console.warn("Browser storage is full after removable Mikoroku caches were cleared.");
+    return false;
+  } catch (error) {
+    console.warn("Could not check browser storage capacity.", error);
+    return false;
   }
 }

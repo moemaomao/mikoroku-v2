@@ -26,7 +26,7 @@ import {
   getDocsFromServer,
 } from "firebase/firestore";
 import type { Firestore, QuerySnapshot, DocumentData } from "firebase/firestore";
-import { pruneStoredChapterCaches } from "./chapter-cache";
+import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
@@ -42,6 +42,7 @@ const FIREBASE_APP_NAME = "mikoroku-catalog";
 type FirebaseClient = { app: FirebaseApp; db: Database; firestore: Firestore };
 let initializedClient: FirebaseClient | undefined;
 let mangaCatalogPromise: Promise<QuerySnapshot<DocumentData>> | undefined;
+let persistentCacheEnabled = false;
 
 export function initializeFirebaseClient(): FirebaseClient {
   if (typeof window === "undefined") {
@@ -58,27 +59,22 @@ export function initializeFirebaseClient(): FirebaseClient {
 
   let firestore: Firestore;
   try {
-    let persistentStorageAvailable = false;
-    try {
-      const key = `mikoroku-storage-probe-${Date.now()}`;
-      localStorage.setItem(key, "1");
-      localStorage.removeItem(key);
-      persistentStorageAvailable = true;
-    } catch {
-      persistentStorageAvailable = false;
-    }
+    const persistentStorageAvailable = ensureLocalStorageHeadroom();
+    persistentCacheEnabled = persistentStorageAvailable;
 
     firestore = initializeFirestore(
       app,
       persistentStorageAvailable
         ? {
             localCache: persistentLocalCache({
+              cacheSizeBytes: 20 * 1024 * 1024,
               tabManager: persistentMultipleTabManager(),
             }),
           }
         : { localCache: memoryLocalCache() },
     );
   } catch {
+    persistentCacheEnabled = false;
     try {
       firestore = getFirestore(app);
     } catch (error) {
@@ -133,6 +129,7 @@ export function loadFirestoreMangaCatalog(): Promise<QuerySnapshot<DocumentData>
 }
 
 export async function clearFirestoreOfflineCache(): Promise<void> {
+  if (!persistentCacheEnabled) return;
   const { firestore } = initializeFirebaseClient();
   await terminate(firestore);
   await clearIndexedDbPersistence(firestore);

@@ -448,18 +448,57 @@ function jsonp<T>(url: string, signal: AbortSignal): Promise<T> {
 }
 
 function getCachedManga(slug: string): Manga | null {
-  const cached = localStorage.getItem(`detail_${slug}`);
-  if (!cached) return null;
   try {
+    const cached = localStorage.getItem(`detail_${slug}`);
+    if (!cached) return null;
     const parsed = JSON.parse(cached) as { time?: number; data?: Record<string, unknown> };
     if (parsed.data && Date.now() - (parsed.time || 0) < 15 * 60 * 1000) {
       return normalizeManga(parsed.data, slug);
     }
   } catch (error) {
     console.warn("Cache detail manga tidak valid dan akan diabaikan.", error);
-    localStorage.removeItem(`detail_${slug}`);
+    try {
+      localStorage.removeItem(`detail_${slug}`);
+    } catch (removeError) {
+      console.warn("Cache detail manga yang tidak valid tidak dapat dihapus.", removeError);
+    }
   }
   return null;
+}
+
+function cacheMangaDetail(slug: string, manga: Manga): void {
+  const detailPrefix = "detail_";
+  const cacheKey = `${detailPrefix}${slug}`;
+  try {
+    const existingKeys = Object.keys(localStorage)
+      .filter((key) => key.startsWith(detailPrefix) && key !== cacheKey)
+      .map((key) => {
+        try {
+          const cached = JSON.parse(localStorage.getItem(key) || "null") as { time?: number } | null;
+          return { key, time: cached?.time || 0 };
+        } catch {
+          return { key, time: 0 };
+        }
+      })
+      .sort((left, right) => left.time - right.time);
+    while (existingKeys.length >= 8) {
+      const oldest = existingKeys.shift();
+      if (oldest) localStorage.removeItem(oldest.key);
+    }
+  } catch (error) {
+    console.warn("Cache detail manga lama tidak dapat dibersihkan.", error);
+  }
+
+  try {
+    localStorage.setItem("currentManga", JSON.stringify(manga));
+  } catch (error) {
+    console.warn("Detail manga dimuat, tetapi cache saat ini tidak dapat disimpan.", error);
+  }
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data: manga }));
+  } catch (error) {
+    console.warn(`Detail manga ${slug} dimuat, tetapi cache-nya tidak dapat disimpan.`, error);
+  }
 }
 
 async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
@@ -499,8 +538,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   }
 
   if (manga) {
-    localStorage.setItem("currentManga", JSON.stringify(manga));
-    localStorage.setItem(`detail_${slug}`, JSON.stringify({ time: Date.now(), data: manga }));
+    cacheMangaDetail(slug, manga);
     return manga;
   }
 
@@ -512,8 +550,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     console.warn("Firestore SDK tidak dapat mengambil detail manga.", error);
   }
   if (firestore) {
-    localStorage.setItem("currentManga", JSON.stringify(firestore));
-    localStorage.setItem(`detail_${slug}`, JSON.stringify({ time: Date.now(), data: firestore }));
+    cacheMangaDetail(slug, firestore);
     return firestore;
   }
 
@@ -539,8 +576,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     genres: (entry as BloggerEntry & { category?: Array<{ term?: string }> }).category?.map((item) => item.term || "") || [],
     status: "UNKNOWN",
   }, slug);
-  localStorage.setItem("currentManga", JSON.stringify(result));
-  localStorage.setItem(`detail_${slug}`, JSON.stringify({ time: Date.now(), data: result }));
+  cacheMangaDetail(slug, result);
   return result;
 }
 
