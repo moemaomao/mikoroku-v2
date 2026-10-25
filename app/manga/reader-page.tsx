@@ -88,8 +88,20 @@ function imageList(input: unknown, allowAnyUrl = false): string[] {
     }
   }
 
-  const htmlImages = [...value.matchAll(/<img\b[^>]*?\b(?:src|data-src|data-original)=["']([^"']+)["']/gi)]
-    .map((match) => match[1]);
+  const htmlImages = [...value.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => {
+    const attributes = new Map(
+      [...tag.matchAll(/\b(data-lazy-src|data-src|data-original|data-srcset|srcset|src)\s*=\s*(["'])(.*?)\2/gi)]
+        .map(([, name, , url]) => [name.toLowerCase(), url]),
+    );
+    const srcset = attributes.get("data-srcset") || attributes.get("srcset");
+    const srcsetUrl = srcset?.split(",").at(-1)?.trim().split(/\s+/)[0];
+    const url = attributes.get("data-lazy-src") ||
+      attributes.get("data-src") ||
+      attributes.get("data-original") ||
+      srcsetUrl ||
+      attributes.get("src");
+    return url ? [url] : [];
+  });
   const candidates = htmlImages.length
     ? htmlImages
     : value.split(/[\r\n]+/).flatMap((line) =>
