@@ -57,6 +57,54 @@ function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
 }
 
+function isSocialCrawler(request: Request): boolean {
+  return /discordbot|facebookexternalhit|twitterbot|slackbot|telegrambot|whatsapp|opengraph/i
+    .test(request.headers.get("user-agent") || "");
+}
+
+function isSharePage(pathname: string): boolean {
+  return /^\/(?:series\/[^/]+|manga\/[^/]+\/[^/]+|novel\/[^/]+\/[^/]+)\/?$/.test(pathname);
+}
+
+async function serveSocialMetadataFallback(
+  request: Request,
+  response: Response,
+): Promise<Response> {
+  if (
+    response.status < 500 ||
+    !isSocialCrawler(request) ||
+    !isSharePage(new URL(request.url).pathname) ||
+    !response.headers.get("content-type")?.toLowerCase().includes("text/html")
+  ) {
+    return response;
+  }
+
+  const html = await response.text();
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  headers.delete("content-md5");
+  headers.delete("etag");
+  if (
+    !html.includes('property="og:title"') ||
+    !html.includes('property="og:image"') ||
+    !html.includes('property="og:description"')
+  ) {
+    return new Response(html, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+
+  headers.set("cache-control", "public, max-age=60, s-maxage=60");
+  console.warn(`[social preview] Serving OG metadata despite upstream HTTP ${response.status}.`);
+  return new Response(html.replace(' id="__next_error__"', ""), {
+    status: 200,
+    headers,
+  });
+}
+
 function bloggerChaptersCacheKey(source: string, title: string): string {
   const normalized = title.trim().toLowerCase().replace(/\s+/g, " ");
   return `blogger:chapters:${source}:${normalized}`;
@@ -222,10 +270,6 @@ function corsFor(request: Request): HeadersInit {
   };
 }
 
-/**
- * Fast path for Blogger chapter lists: serve from KV or fetch upstream
- * before handing the request to OpenNext. Keeps latency low on cache hits.
- */
 async function handleBloggerChaptersProxy(
   request: Request,
   env: CloudflareEnv,
@@ -396,7 +440,8 @@ export default {
     if (catalog) return catalog;
     const proxied = await handleBloggerChaptersProxy(request, env);
     if (proxied) return proxied;
-    return handler.fetch(request, env, ctx);
+    const response = await handler.fetch(request, env, ctx);
+    return serveSocialMetadataFallback(request, response);
   },
 
   async scheduled(
