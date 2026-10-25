@@ -17,7 +17,9 @@ type ChapterRecord = {
   num?: string | number;
   title?: string;
   postTitle?: string;
+  chapterTitle?: string;
   label?: string;
+  cover?: string;
   images?: unknown;
   pages?: unknown;
   content?: unknown;
@@ -187,20 +189,14 @@ function ReaderImage({
   }
 
   return (
-    <span className={`reader-image-frame relative block ${!loaded && !failed ? "min-h-[40vh]" : ""} ${wrapperClassName}`} aria-busy={!loaded && !failed}>
-      {!loaded && !failed && (
-        <span
-          className="absolute inset-0 min-h-[40vh] animate-pulse border-y border-slate-400/40 bg-slate-300 dark:border-zinc-600 dark:bg-zinc-700"
-          aria-hidden="true"
-        />
-      )}
+    <span className={`reader-image-frame relative block ${wrapperClassName}`} aria-busy={!loaded && !failed}>
       {failed ? (
         <span className="grid min-h-[40vh] place-items-center bg-black/[.04] px-4 text-sm text-slate-500 dark:bg-white/[.04] dark:text-slate-400" role="img" aria-label={`${alt} could not be loaded`}>
           Image could not be loaded
         </span>
       ) : (
         <img
-          className={`${className} relative transition-opacity duration-200 ${loaded ? "opacity-100" : "opacity-0"}`}
+          className={`${className} relative`}
           src={src}
           alt={alt}
           loading={loading}
@@ -242,6 +238,65 @@ function getCachedChapters(slug: string): ChapterRecord[] {
     console.warn("Stored chapter list is invalid.", error);
   }
   return [];
+}
+
+function getCachedReaderData(
+  slug: string,
+  chapter: string,
+  kind: ReaderKind,
+  forceSource?: "sv1" | "sv2" | "es" | null,
+): ReaderData | null {
+  if (kind !== "manga") return null;
+  const targetChapter = normalizeChapterNumber(chapter);
+  if (!targetChapter) return null;
+
+  const sourcePreference = forceSource || localStorage.getItem("chapterSourceMode");
+  const selectedSource = sourcePreference === "sv1"
+    ? "blogger"
+    : sourcePreference === "sv2"
+      ? "blogger2"
+      : sourcePreference === "es"
+        ? "firestore"
+        : undefined;
+  const cachedCurrent = getCurrentChapterCache(slug);
+  const cachedChapters = getCachedChapters(slug);
+  const matchesChapter = (record: ChapterRecord) =>
+    normalizeChapterNumber(chapterNumberFromRecord(record, record.id || "")) === targetChapter;
+  const matchesSource = (record: ChapterRecord) =>
+    !selectedSource || record.source === selectedSource;
+  const cachedChapter = cachedChapters.find((record) =>
+    matchesChapter(record) && matchesSource(record) && hasChapterPayload(record),
+  );
+  const currentChapterMatches = cachedCurrent &&
+    matchesChapter(cachedCurrent) &&
+    matchesSource(cachedCurrent) &&
+    hasChapterPayload(cachedCurrent);
+  const record = currentChapterMatches ? cachedCurrent : cachedChapter;
+  if (!record) return null;
+
+  const content = record.content || record.text || record.html;
+  const images = [...new Set([...chapterImages(record), ...imageList(content, true)])];
+  if (!images.length) return null;
+
+  const chapters = [...new Set([
+    ...cachedChapters.map((item) =>
+      normalizeChapterNumber(chapterNumberFromRecord(item, item.id || "")),
+    ),
+    targetChapter,
+  ].filter((value): value is string => Boolean(value)))];
+
+  return {
+    kind: "manga",
+    id: record.id,
+    title: String(cachedCurrent?.title || slug.replace(/-/g, " ")),
+    cover: String(cachedCurrent?.cover || ""),
+    chapterTitle: String(record.label || record.chapterTitle || record.postTitle || record.title || `Chapter ${targetChapter}`),
+    images,
+    text: novelText(content),
+    chapters,
+    chapter: targetChapter,
+    source: record.source,
+  };
 }
 
 type BloggerFeedEntry = {
@@ -916,7 +971,8 @@ export default function ReaderPage({
       const cached = getCurrentChapterCache(slug);
       if (cached?.num) targetChapter = String(cached.num);
     }
-    setData(null);
+    const cachedData = getCachedReaderData(slug, targetChapter, kind, forcedServer);
+    setData(cachedData);
     setError("");
     loadReaderData(slug, targetChapter, kind, controller.signal, forcedServer)
       .then((result) => {
@@ -985,7 +1041,9 @@ export default function ReaderPage({
       .catch((loadError: unknown) => {
         if (controller.signal.aborted || isAbortError(loadError)) return;
         console.error("Reader failed to load the chapter.", loadError);
-        setError(loadError instanceof Error ? loadError.message : "Failed to load chapter.");
+        if (!cachedData) {
+          setError(loadError instanceof Error ? loadError.message : "Failed to load chapter.");
+        }
       });
     return () => {
       if (!controller.signal.aborted) {
@@ -1027,8 +1085,8 @@ export default function ReaderPage({
 
   useEffect(() => {
     if (!data || kind !== "manga") return;
-    const start = mode === "single" ? page - 1 : 0;
-    const preloadCount = mode === "single" ? 4 : 3;
+    const start = Math.max(0, page - 1);
+    const preloadCount = mode === "single" ? 5 : 8;
     data.images.slice(start, start + preloadCount).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
@@ -1386,7 +1444,7 @@ export default function ReaderPage({
           </a>
           <div className="reader-title-block grid min-w-0 justify-items-center text-center leading-[1.35]">
             <span className="reader-kind-label text-[10px] font-bold uppercase tracking-[.12em] text-[var(--mikoroku-accent)]">{activeKind === "novel" ? "Novel Reader" : "Manga Reader"}</span>
-            <strong className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-bold sm:text-base">{data ? data.title : "Loading series..."}</strong>
+            <strong className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-bold sm:text-base">{data?.title || ""}</strong>
             <span className="text-xs text-[#777983] dark:text-[#a5a5ad]">{data ? data.chapterTitle : `Chapter ${chapter || ""}`}</span>
           </div>
           <span className="reader-header-actions">
@@ -1463,7 +1521,19 @@ export default function ReaderPage({
             <a className="rounded-lg border border-black/20 px-3 py-2 text-sm no-underline dark:border-white/20" href={`/series/${encodeURIComponent(slug)}`}>Back to series</a>
           </div>
         </section>
-        : !data ? null
+        : !data ? (
+          <section
+            className="reader-loading mx-auto flex min-h-[calc(100vh-180px)] w-full max-w-[1000px] flex-col items-center justify-center gap-3 px-4 text-center"
+            role="status"
+            aria-label={`Loading chapter ${chapter || ""}`}
+          >
+            <span
+              className="size-10 animate-spin rounded-full border-[3px] border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
+              aria-hidden="true"
+            />
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Loading series...</span>
+          </section>
+        )
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-white py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] dark:bg-[#0a0a0c] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
             {mode === "long-strip" ? data.images.map((image, index) => {
@@ -1475,7 +1545,7 @@ export default function ReaderPage({
                   key={`${src}:${index}`}
                   src={src}
                   alt={`Page ${index + 1}`}
-                  loading={index < 3 ? "eager" : "lazy"}
+                  loading={index < 6 ? "eager" : "lazy"}
                   fetchPriority={index < 3 ? "high" : "auto"}
                 />
               );
