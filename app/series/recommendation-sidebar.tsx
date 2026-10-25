@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { imageProxyUrl } from "../../lib/image-proxy";
 
 type CurrentManga = {
   slug: string;
@@ -90,8 +91,7 @@ function thumbnailUrl(value: string): string {
   ) {
     return value.replace(/\/s\d+(-c)?\//, "/s140/");
   }
-  if (value.includes("images.weserv.nl")) return value;
-  return `https://images.weserv.nl/?url=${encodeURIComponent(value)}&w=140&q=65&output=webp`;
+  return imageProxyUrl(value, "recommendation");
 }
 
 function asStringList(value: unknown): string[] {

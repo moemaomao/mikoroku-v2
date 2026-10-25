@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ImgHTMLAttributes } from "react";
+import { imageProxyUrl, type ImageProxyPreset } from "../../lib/image-proxy";
 
 const COVER_CACHE_DB = "mikoroku-cover-cache";
 const COVER_CACHE_STORE = "covers";
 const MAX_CACHED_COVERS = 500;
-const WESERV_ENDPOINT = "https://images.weserv.nl/";
 const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const pendingCoverRequests = new Map<string, Promise<Blob>>();
 
@@ -15,45 +15,21 @@ type CachedCover = {
   lastUsedAt: number;
 };
 
-function getOptimizedCoverUrl(source: string, width: number): string {
+function getOptimizedCoverUrl(source: string, preset: ImageProxyPreset): string {
   const trimmedSource = source.trim();
   if (!trimmedSource || trimmedSource === "-") return "";
-  const resolvedSource = /^https?:\/\//i.test(trimmedSource) ||
-    trimmedSource.startsWith("/") ||
-    /^(data|blob):/i.test(trimmedSource)
-    ? trimmedSource
-    : GITHUB_RAW + trimmedSource.replace(/^\//, "");
+  const resolvedSource = trimmedSource.startsWith("//")
+    ? `https:${trimmedSource}`
+    : /^https?:\/\//i.test(trimmedSource) ||
+      trimmedSource.startsWith("/") ||
+      /^(data|blob):/i.test(trimmedSource)
+      ? trimmedSource
+      : GITHUB_RAW + trimmedSource.replace(/^\//, "");
   if (resolvedSource.startsWith("/") || /^(data|blob):/i.test(resolvedSource)) {
     return resolvedSource;
   }
 
-  try {
-    let originalUrl = new URL(resolvedSource);
-    let requestedWidth = width;
-    let quality = 72;
-
-    if (originalUrl.hostname === "images.weserv.nl") {
-      const proxyParameters = originalUrl.searchParams;
-      const original = proxyParameters.get("url");
-      if (!original) return resolvedSource;
-      originalUrl = new URL(original);
-      const existingWidth = Number(proxyParameters.get("w"));
-      const existingQuality = Number(proxyParameters.get("q"));
-      if (existingWidth > 0) requestedWidth = Math.min(width, existingWidth);
-      if (existingQuality > 0) quality = Math.min(quality, existingQuality);
-    }
-
-    if (!["http:", "https:"].includes(originalUrl.protocol)) return resolvedSource;
-
-    const optimized = new URL(WESERV_ENDPOINT);
-    optimized.searchParams.set("url", originalUrl.toString());
-    optimized.searchParams.set("w", String(requestedWidth));
-    optimized.searchParams.set("q", String(quality));
-    optimized.searchParams.set("output", "webp");
-    return optimized.toString();
-  } catch {
-    return resolvedSource;
-  }
+  return imageProxyUrl(resolvedSource, preset);
 }
 
 function openCoverCache(): Promise<IDBDatabase> {
@@ -222,66 +198,58 @@ function loadCover(url: string): Promise<Blob> {
   return request;
 }
 
-export function useCoverImageSource(source: string, width = 400, enabled = true): string {
-  const [resolvedSource, setResolvedSource] = useState("");
+export function useCoverImageSource(source: string, preset: ImageProxyPreset = "cover", enabled = true): string {
+  const sourceKey = `${source}\u0000${preset}\u0000${enabled}`;
+  const [resolved, setResolved] = useState<{ key: string; source: string }>({ key: "", source: "" });
 
   useEffect(() => {
     if (!source) {
-      setResolvedSource("");
+      setResolved({ key: sourceKey, source: "" });
       return;
     }
 
-    const optimizedUrl = getOptimizedCoverUrl(source, width);
+    const optimizedUrl = getOptimizedCoverUrl(source, preset);
     if (optimizedUrl === source || !/^https?:\/\//i.test(optimizedUrl) || !enabled) {
-      setResolvedSource(enabled ? optimizedUrl : "");
+      setResolved({ key: sourceKey, source: enabled ? optimizedUrl : "" });
       return;
     }
 
     let active = true;
     let objectUrl = "";
-    setResolvedSource("");
+    setResolved({ key: sourceKey, source: "" });
 
     if (!("indexedDB" in window)) {
-      setResolvedSource(getCoverSourceUrl(source));
+      setResolved({ key: sourceKey, source: optimizedUrl });
       return;
     }
 
     void loadCover(optimizedUrl).then((blob) => {
       if (!active) return;
       objectUrl = URL.createObjectURL(blob);
-      setResolvedSource(objectUrl);
+      setResolved({ key: sourceKey, source: objectUrl });
     }).catch((error: unknown) => {
-      console.warn("Could not load the optimized cover image; using the original cover URL.", error);
-      if (active) setResolvedSource(getCoverSourceUrl(source));
+      console.warn("Could not cache the optimized cover image; loading its proxy URL directly.", error);
+      if (active) setResolved({ key: sourceKey, source: optimizedUrl });
     });
 
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [enabled, source, width]);
+  }, [enabled, source, sourceKey, preset]);
 
-  return resolvedSource || (enabled ? source : "");
-}
-
-function getCoverSourceUrl(source: string): string {
-  const trimmedSource = source.trim();
-  if (!trimmedSource || trimmedSource === "-") return "";
-  if (/^https?:\/\//i.test(trimmedSource) || trimmedSource.startsWith("/") || /^(data|blob):/i.test(trimmedSource)) {
-    return trimmedSource;
-  }
-  return GITHUB_RAW + trimmedSource.replace(/^\//, "");
+  return resolved.key === sourceKey ? resolved.source : "";
 }
 
 type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   src: string;
-  optimizeWidth?: number;
+  optimizePreset?: ImageProxyPreset;
 };
 
-export function CoverImage({ src, optimizeWidth = 400, loading = "lazy", ...props }: CoverImageProps) {
+export function CoverImage({ src, optimizePreset = "cover", loading = "lazy", ...props }: CoverImageProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [visible, setVisible] = useState(loading !== "lazy");
-  const resolvedSource = useCoverImageSource(src, optimizeWidth, visible);
+  const resolvedSource = useCoverImageSource(src, optimizePreset, visible);
 
   useEffect(() => {
     if (loading !== "lazy" || visible || !imageRef.current) return;

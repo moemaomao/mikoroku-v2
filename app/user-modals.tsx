@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { imageProxyUrl } from "../lib/image-proxy";
 
 type DataRecord = Record<string, unknown>;
 type CompatTimestamp = { toDate?: () => Date };
@@ -410,8 +411,7 @@ function resolveCover(value: unknown): string {
 function thumbUrl(value: unknown): string {
   const full = resolveCover(value);
   if (!full || full === FALLBACK_COVER) return FALLBACK_COVER;
-  if (full.includes("images.weserv.nl")) return full;
-  return `https://images.weserv.nl/?url=${encodeURIComponent(full)}&w=120&q=80&output=webp`;
+  return imageProxyUrl(full, "historyCover");
 }
 
 function createElement<K extends keyof HTMLElementTagNameMap>(

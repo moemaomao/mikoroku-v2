@@ -6,7 +6,8 @@ import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import SiteChrome from "../site-chrome";
 import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapter-number";
-import { originalReaderImageUrl } from "../../lib/reader-image-url";
+import { imageProxyUrl } from "../../lib/image-proxy";
+import { originalReaderImageUrl, readerImageUrlWithQuality } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 import { initializeFirebaseClient } from "../lib/firebase-client";
 
@@ -126,12 +127,7 @@ function chapterValue(value: string | number): number {
 }
 
 function imageWithQuality(url: string, quality: number): string {
-  const originalUrl = originalReaderImageUrl(url);
-  if (/blogger\.googleusercontent\.com|lh3\.googleusercontent\.com/i.test(url)) {
-    return originalUrl.replace(/\/s\d+(?:-c)?\//, `/s${quality}/`)
-      .replace(/=s0(?=$|[?#])/, `=s${quality}`);
-  }
-  return originalUrl;
+  return readerImageUrlWithQuality(url, quality);
 }
 
 function readerImageUrl(url: string, dataSaver: boolean, quality: number): string {
@@ -1185,7 +1181,7 @@ export default function ReaderPage({
           const candidates = [
             readerUrl,
             imageUrl,
-            `https://images.weserv.nl/?url=${encodeURIComponent(imageUrl)}&n=-1`,
+            imageProxyUrl(imageUrl, "readerFallback"),
           ];
           let imageBlob: Blob | undefined;
 
@@ -1293,7 +1289,7 @@ export default function ReaderPage({
       return;
     }
     image.dataset.fallbackTried = "true";
-    image.src = `https://images.weserv.nl/?url=${encodeURIComponent(image.src)}&n=-1`;
+    image.src = imageProxyUrl(image.src, "readerFallback");
   }
 
   return (

@@ -63,7 +63,7 @@ export default function MangaMetadataEditor({
             <button type="button" className={styles.secondaryButton} onClick={onUploadCover} disabled={busy}>Upload Cover</button>
           </div>
           {draft.cover && (
-            <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" optimizeWidth={200} />
+            <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" optimizePreset="coverAdmin" />
           )}
         </div>
         <label className={styles.field}>

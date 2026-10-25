@@ -2367,7 +2367,7 @@ export default function AdminPage() {
                     <article className={styles.mangaCard} key={item.slug}>
                       <button className={styles.mangaCoverButton} onClick={() => void openMangaChapters(item)} aria-label={`Open ${item.title}`}>
                         {item.cover ? (
-                          <CoverImage src={item.cover} alt="" optimizeWidth={200} />
+                          <CoverImage src={item.cover} alt="" optimizePreset="coverAdmin" />
                         ) : <span className={styles.coverPlaceholder}>M</span>}
                         <span className={styles.mangaSource}>{item.source === "hybrid" ? "HYBRID" : item.source.toUpperCase()}</span>
                         {item.isDraft && <span className={styles.mangaDraftBadge}>DRAFT</span>}
@@ -2392,7 +2392,7 @@ export default function AdminPage() {
             <section className={styles.panel}>
               <div className={styles.detailHeader}>
                 {selectedManga.cover ? (
-                  <CoverImage src={selectedManga.cover} alt="" loading="eager" optimizeWidth={200} />
+                  <CoverImage src={selectedManga.cover} alt="" loading="eager" optimizePreset="coverAdmin" />
                 ) : <span className={styles.coverPlaceholder}>M</span>}
                 <div className={styles.detailMeta}>
                   <div className={styles.detailBadges}>
@@ -2497,7 +2497,7 @@ export default function AdminPage() {
                           onDragEnd={handleVolumeDragEnd}
                         >
                           <div className={styles.coverGalleryImage} title="Drag to reorder">
-                            <CoverImage src={coverUrl} alt={`${selectedManga.title} volume ${selectedManga.coverNumbers?.[coverUrl] || index + 1}`} loading="lazy" optimizeWidth={200} />
+                            <CoverImage src={coverUrl} alt={`${selectedManga.title} volume ${selectedManga.coverNumbers?.[coverUrl] || index + 1}`} loading="lazy" optimizePreset="coverAdmin" />
                             <span className={styles.coverDragHint}>Drag</span>
                           </div>
                           <div className={styles.coverGalleryActions}>

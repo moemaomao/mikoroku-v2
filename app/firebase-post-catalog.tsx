@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
+import { imageProxyUrl } from "../lib/image-proxy";
 import {
   cardClass,
   cardCoverClass,
@@ -184,7 +185,7 @@ function CatalogCard({
     selectedCover || value(record, "cover") || value(record, "img") || "",
   );
   const thumbnail = cover
-    ? `https://images.weserv.nl/?url=${encodeURIComponent(cover)}&w=120&q=60`
+    ? imageProxyUrl(cover, "postCatalog")
     : "https://via.placeholder.com/80x110?text=No+Image";
   const status = String(value(record, "status") || "");
   const updatedAt = Number(record.updatedAt || 0);

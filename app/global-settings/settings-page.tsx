@@ -12,6 +12,16 @@ import {
   type GlobalAppearanceSettings,
   type GlobalAppearanceToggleSetting,
 } from "../lib/global-appearance";
+import {
+  COVER_IMAGE_QUALITY_KEY,
+  CHAPTER_THUMBNAIL_SIZE_KEY,
+  DEFAULT_CHAPTER_THUMBNAIL_SIZE,
+  DEFAULT_COVER_IMAGE_CONVERSION,
+  readChapterThumbnailSize,
+  readCoverImageConversion,
+  type CoverImageConversionPreset,
+  type CoverImageConversionSettings,
+} from "../../lib/image-proxy";
 
 const BOOKMARKS_KEY = "mangaBookmarks";
 const HISTORY_KEY = "readingHistory";
@@ -31,6 +41,8 @@ const PROTECTED_LOCAL_STORAGE_KEYS = new Set([
   BOOKMARKS_KEY,
   HISTORY_KEY,
   "mikoroku_global_appearance_v1",
+  COVER_IMAGE_QUALITY_KEY,
+  CHAPTER_THUMBNAIL_SIZE_KEY,
   "darkMode",
   "chapterSourceMode",
   "chapterSortMode",
@@ -375,6 +387,10 @@ function AccentColorWheel({
 
 export default function GlobalSettingsPage() {
   const [settings, setSettings] = useState(defaultGlobalAppearance);
+  const [coverConversion, setCoverConversion] = useState<CoverImageConversionSettings>(
+    DEFAULT_COVER_IMAGE_CONVERSION,
+  );
+  const [chapterThumbnailSize, setChapterThumbnailSize] = useState(DEFAULT_CHAPTER_THUMBNAIL_SIZE);
   const [notice, setNotice] = useState("");
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
   const [storageBusy, setStorageBusy] = useState(false);
@@ -384,6 +400,8 @@ export default function GlobalSettingsPage() {
     const saved = readGlobalAppearance();
     setSettings(saved);
     applyGlobalAppearance(saved);
+    setCoverConversion(readCoverImageConversion());
+    setChapterThumbnailSize(readChapterThumbnailSize());
     void refreshStorageReport();
   }, []);
 
@@ -595,6 +613,52 @@ export default function GlobalSettingsPage() {
     }
   }
 
+  function updateCoverConversion(updated: CoverImageConversionSettings) {
+    try {
+      localStorage.setItem(COVER_IMAGE_QUALITY_KEY, JSON.stringify(updated));
+      setCoverConversion(updated);
+      setNotice("Cover image conversion settings saved.");
+    } catch (error) {
+      console.error("Failed to save cover image conversion settings.", error);
+      setNotice("Image settings could not be saved. Check your browser storage permissions.");
+    }
+  }
+
+  function selectCoverConversionPreset(preset: CoverImageConversionPreset) {
+    updateCoverConversion({ ...coverConversion, preset });
+  }
+
+  function updateChapterThumbnailSize(size: number) {
+    try {
+      localStorage.setItem(CHAPTER_THUMBNAIL_SIZE_KEY, String(size));
+      setChapterThumbnailSize(size);
+      setNotice("Chapter list thumbnail size saved.");
+    } catch (error) {
+      console.error("Failed to save chapter thumbnail size.", error);
+      setNotice("Thumbnail size could not be saved. Check your browser storage permissions.");
+    }
+  }
+
+  function resetGlobalSettings() {
+    if (!window.confirm("Reset Global Settings to their defaults? Bookmarks, history, and caches will not be deleted.")) {
+      return;
+    }
+
+    try {
+      saveGlobalAppearance(defaultGlobalAppearance);
+      localStorage.setItem(COVER_IMAGE_QUALITY_KEY, JSON.stringify(DEFAULT_COVER_IMAGE_CONVERSION));
+      localStorage.setItem(CHAPTER_THUMBNAIL_SIZE_KEY, String(DEFAULT_CHAPTER_THUMBNAIL_SIZE));
+      applyGlobalAppearance(defaultGlobalAppearance);
+      setSettings(defaultGlobalAppearance);
+      setCoverConversion(DEFAULT_COVER_IMAGE_CONVERSION);
+      setChapterThumbnailSize(DEFAULT_CHAPTER_THUMBNAIL_SIZE);
+      setNotice("Global Settings reset to defaults.");
+    } catch (error) {
+      console.error("Failed to reset Global Settings.", error);
+      setNotice("Settings could not be reset. Check your browser storage permissions.");
+    }
+  }
+
   return (
     <>
       <SiteChrome showFooter={false} />
@@ -648,6 +712,135 @@ export default function GlobalSettingsPage() {
                   </button>
                 );
               })}
+            </div>
+          </section>
+
+          <section
+            className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
+            aria-labelledby="cover-quality-heading"
+          >
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h2 id="cover-quality-heading" className="text-lg font-bold">Cover image data saver</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Convert cover images to smaller versions, like the reader. Admin cover previews are not affected.
+                </p>
+              </div>
+              <label className="flex shrink-0 cursor-pointer items-center gap-2">
+                <span className="text-xs font-semibold">{coverConversion.enabled ? "On" : "Off"}</span>
+                <input
+                  type="checkbox"
+                  checked={coverConversion.enabled}
+                  onChange={(event) => updateCoverConversion({
+                    ...coverConversion,
+                    enabled: event.currentTarget.checked,
+                  })}
+                  aria-label="Enable cover image data saver"
+                  className="size-5 accent-[var(--mikoroku-accent)]"
+                />
+              </label>
+            </div>
+            <div className={`rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03] ${coverConversion.enabled ? "" : "opacity-50"}`}>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Cover conversion quality">
+                {([
+                  ["low", "Low", "100 px · save most data"],
+                  ["medium", "Medium", "200 px · balanced"],
+                  ["high", "High", "300 px · sharper"],
+                  ["custom", "Custom", `${coverConversion.customWidth} px`],
+                ] as const).map(([preset, title, description]) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    aria-pressed={coverConversion.preset === preset}
+                    disabled={!coverConversion.enabled}
+                    onClick={() => selectCoverConversionPreset(preset)}
+                    className={`rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] disabled:cursor-not-allowed ${
+                      coverConversion.preset === preset
+                        ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]"
+                        : "border-black/10 hover:border-[var(--mikoroku-accent)] dark:border-white/10"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">{title}</span>
+                    <span className="mt-1 block text-[10px] leading-4 text-slate-600 dark:text-slate-400">{description}</span>
+                  </button>
+                ))}
+              </div>
+              {coverConversion.preset === "custom" && (
+                <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Custom image size</p>
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                        Reader-style source width: {coverConversion.customWidth}px
+                      </p>
+                    </div>
+                    <output className="min-w-16 rounded-lg bg-[var(--mikoroku-accent-soft)] px-2 py-1 text-center text-sm font-bold text-[var(--mikoroku-accent)]">
+                      {coverConversion.customWidth}px
+                    </output>
+                  </div>
+                  <label className="mt-4 block">
+                    <span className="sr-only">Custom cover image width</span>
+                    <input
+                      type="range"
+                      min={10}
+                      max={1000}
+                      step={10}
+                      value={coverConversion.customWidth}
+                      disabled={!coverConversion.enabled}
+                      onChange={(event) => updateCoverConversion({
+                        ...coverConversion,
+                        customWidth: Number(event.currentTarget.value),
+                      })}
+                      aria-valuetext={`${coverConversion.customWidth} pixels`}
+                      className="h-2 w-full cursor-pointer accent-[var(--mikoroku-accent)] disabled:cursor-not-allowed"
+                    />
+                  </label>
+                  <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                    <span>10 px</span>
+                    <span>1000 px</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section
+            className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
+            aria-labelledby="chapter-thumbnail-heading"
+          >
+            <div>
+              <h2 id="chapter-thumbnail-heading" className="text-lg font-bold">Chapter list thumbnail size</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Set the converted source size for chapter thumbnails. Default: 40 px.
+              </p>
+            </div>
+            <div className="mt-4 rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="chapter-thumbnail-size" className="text-sm font-semibold">
+                  Custom size
+                </label>
+                <output
+                  htmlFor="chapter-thumbnail-size"
+                  className="min-w-16 rounded-lg bg-[var(--mikoroku-accent-soft)] px-2 py-1 text-center text-sm font-bold text-[var(--mikoroku-accent)]"
+                >
+                  {chapterThumbnailSize}px
+                </output>
+              </div>
+              <input
+                id="chapter-thumbnail-size"
+                type="range"
+                min={10}
+                max={200}
+                step={10}
+                value={chapterThumbnailSize}
+                onChange={(event) => updateChapterThumbnailSize(Number(event.currentTarget.value))}
+                aria-valuetext={`${chapterThumbnailSize} pixels`}
+                className="mt-4 h-2 w-full cursor-pointer accent-[var(--mikoroku-accent)]"
+              />
+              <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                <span>10 px</span>
+                <span>200 px</span>
+              </div>
             </div>
           </section>
 
@@ -803,6 +996,27 @@ export default function GlobalSettingsPage() {
                   />
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section
+            className="mt-5 rounded-3xl border border-rose-500/30 bg-rose-500/[0.04] p-4 shadow-sm sm:p-6"
+            aria-labelledby="reset-settings-heading"
+          >
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div>
+                <h2 id="reset-settings-heading" className="text-lg font-bold">Reset settings</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Restore Global Settings to their defaults. Bookmarks, reading history, and caches are kept.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={resetGlobalSettings}
+                className="shrink-0 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-500/20 dark:text-rose-300"
+              >
+                Reset settings
+              </button>
             </div>
           </section>
         </div>

@@ -22,6 +22,7 @@ import {
   upBadgeClass,
 } from "./lib/homepage-classes";
 import { getSeriesCoverPreference } from "./lib/series-cover-preferences";
+import { imageProxyUrl } from "../lib/image-proxy";
 
 type MangaItem = Record<string, unknown> & {
   title: string;
@@ -307,11 +308,9 @@ function makeHeroItem(item: MangaItem, source: string): MangaItem | null {
   };
 }
 
-function thumbnail(value: unknown, width: number, quality: number, version = 0): string {
+function thumbnail(value: unknown, version = 0): string {
   const cover = resolveCover(value);
-  return cover
-    ? `https://images.weserv.nl/?url=${encodeURIComponent(cover)}&w=${width}&q=${quality}&output=webp${version ? `&v=${version}` : ""}`
-    : "";
+  return cover ? imageProxyUrl(cover, "cover", version) : "";
 }
 
 function readHeroCache(): MangaItem[] {
@@ -401,7 +400,7 @@ function MangaCard({ item, metadata, priority, index }: {
   const manga = mangaForMetadata(item, meta);
   const slug = String(manga.slug || item.slug || slugify(item.title));
   const cover = String(manga.img || "");
-  const image = thumbnail(cover, 150, 60, meta?.updatedAt);
+  const image = thumbnail(cover, meta?.updatedAt);
   const status = String(manga.status || "").toLowerCase();
   const type = String(manga.type || "manga").toLowerCase();
   const chapter = chapterNumber(item, meta);
@@ -627,7 +626,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
           <>
             <div className="flex h-full min-h-[inherit] w-full transition-transform duration-[650ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] [will-change:transform]" style={{ transform: `translateX(-${heroPage * 100}%)` }}>
               {heroItems.map((item, index) => {
-                const image = thumbnail(item.img || item.cover, 150, 70, Number(item.updatedAt || 0));
+                const image = thumbnail(item.img || item.cover, Number(item.updatedAt || 0));
                 const manga = mangaForMetadata(item, getMetadata(item, metadata));
                 return (
                   <a

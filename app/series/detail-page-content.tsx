@@ -8,6 +8,7 @@ import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord } from "../../lib/chapter-number";
+import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 import { SERIES_COVER_PREFERENCE_STORAGE_KEY } from "../lib/series-cover-preferences";
@@ -392,7 +393,7 @@ function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source
       title,
       url,
       images,
-      thumbnail: (images[2] || images[0] || "").replace(/\/s\d+/, "/s100"),
+      thumbnail: (images[2] || images[0] || "").replace(/\/s\d+/, "/s50"),
       createdAt: entry.updated?.$t || entry.published?.$t || "",
       source,
     };
@@ -561,6 +562,7 @@ async function loadBloggerChapterSource(
   const params = new URLSearchParams({
     title: title.trim(),
     source: bloggerSource,
+    // full=1 includes content images so we can build real chapter thumbnails on the detail page
     full: "1",
   });
 
@@ -607,11 +609,7 @@ async function loadBloggerChapterSource(
       images[0] ||
       (typeof chapter.thumbnail === "string" ? chapter.thumbnail : "") ||
       "";
-    const thumbnail = rawThumb
-      ? rawThumb
-          .replace(/\/s\d+([/#?]|$)/, "/s220$1")
-          .replace(/=s\d+/, "=s220")
-      : "";
+    const thumbnail = rawThumb;
     return {
       num: chapter.num,
       title: chapter.title,
@@ -751,6 +749,7 @@ function chapterKey(chapter: Chapter): string {
 }
 
 function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapter[] {
+  // Primary source always wins for a chapter number. Supplemental only fills gaps.
   const merged: Chapter[] = [];
   const seen = new Set<string>();
   for (const chapter of [...primary, ...supplemental]) {
@@ -769,6 +768,7 @@ function chapterHasPreviewImage(chapter: Chapter): boolean {
   );
 }
 
+/** True when enough chapters already carry real preview images (not just numbers). */
 function chaptersHaveThumbnails(list: Chapter[]): boolean {
   if (!list.length) return false;
   const sample = list.slice(0, Math.min(list.length, 24));
@@ -785,6 +785,7 @@ function cachedChapterListForSource(
   slug: string,
   source: ChapterSource,
 ): Chapter[] | undefined {
+  // Never mix ES into SV1/SV2 lists — only return the selected source.
   return cache.get(chapterSourceCacheKey(slug, source));
 }
 
@@ -829,6 +830,11 @@ function formatDate(value?: string | number): string {
   return parseDateValue(value)?.toLocaleDateString("id-ID") || "-";
 }
 
+function chapterThumbProxyUrl(source: string): string {
+  const trimmed = source.trim();
+  return imageProxyUrl(trimmed, "chapterThumbnail");
+}
+
 function chapterPreviewThumbnail(images: string[], fallback = ""): string {
   const clean = images.filter(
     (src) =>
@@ -837,10 +843,11 @@ function chapterPreviewThumbnail(images: string[], fallback = ""): string {
       /^https?:\/\//i.test(src) &&
       !/favicon|emoji|icon|spacer|pixel|1x1/i.test(src),
   );
-
+  // Prefer 3rd page image (index 2), same rule as SV1/SV2 Blogger previews
   const raw = clean[2] || clean[1] || clean[0] || fallback || "";
   if (!raw) return "";
-  return raw.replace(/\/s\d+([/#?]|$)/, "/s220$1").replace(/=s\d+/, "=s220");
+  // Keep original URL in data; weserv resize is applied at render time so first paint is already small
+  return raw;
 }
 
 function extractChapterImages(raw: unknown): string[] {
@@ -902,7 +909,7 @@ const detailPageClasses = `
   [&_.view-btn]:box-border [&_.view-btn]:inline-flex [&_.view-btn]:h-[38px] [&_.view-btn]:w-[38px] [&_.view-btn]:min-w-[38px] [&_.view-btn]:shrink-0 [&_.view-btn]:items-center [&_.view-btn]:justify-center [&_.view-btn]:cursor-pointer [&_.view-btn]:rounded-[10px] [&_.view-btn]:border [&_.view-btn]:border-[rgba(0,0,0,0.1)] [&_.view-btn]:bg-[rgba(80,78,78,0.04)] [&_.view-btn]:p-0 [&_.view-btn]:text-[#050000] [&_.view-btn]:transition-[background,border-color,transform] [&_.view-btn]:duration-[250ms] dark:[&_.view-btn]:border-[rgba(255,255,255,0.08)] dark:[&_.view-btn]:bg-[rgba(156,7,7,0.06)] dark:[&_.view-btn]:text-white [&_.view-btn:hover]:bg-[rgba(0,0,0,0.06)] [&_.view-btn:active]:scale-[0.94]
   [&_#sourceSv1Btn]:border-[rgba(96,165,250,0.5)] [&_#sourceSv1Btn]:bg-[rgba(59,130,246,0.2)] [&_#sourceSv1Btn]:text-[#60a5fa] [&_#sourceSv2Btn]:border-[rgba(251,191,36,0.5)] [&_#sourceSv2Btn]:bg-[rgba(245,158,11,0.2)] [&_#sourceSv2Btn]:text-[#fbbf24] [&_#sourceEsBtn]:border-[rgba(239,68,68,0.5)] [&_#sourceEsBtn]:bg-[rgba(239,68,68,0.2)] [&_#sourceEsBtn]:text-[#f87171] [&_#sourceEsBtn_svg]:shrink-0
   [&_#sourceSv1Btn.active]:!border-[#3b82f6] [&_#sourceSv1Btn.active]:!bg-[#3b82f6] [&_#sourceSv1Btn.active]:!text-white [&_#sourceSv2Btn.active]:!border-[#f59e0b] [&_#sourceSv2Btn.active]:!bg-[#f59e0b] [&_#sourceSv2Btn.active]:!text-white [&_#sourceEsBtn.active]:!border-[#ef4444] [&_#sourceEsBtn.active]:!bg-[#ef4444] [&_#sourceEsBtn.active]:!text-white
-  [&_#gridViewBtn]:border-[rgba(96,165,250,0.5)] [&_#gridViewBtn]:bg-[rgba(59,130,246,0.2)] [&_#gridViewBtn]:text-[#60a5fa] [&_#gridViewBtn.active]:!border-[#3b82f6] [&_#gridViewBtn.active]:!bg-[#3b82f6] [&_#gridViewBtn.active]:!text-white [&_#textGridViewBtn]:border-[rgba(251,191,36,0.5)] [&_#textGridViewBtn]:bg-[rgba(245,158,11,0.2)] [&_#textGridViewBtn]:text-[#fbbf24] [&_#textGridViewBtn.active]:!border-[#f59e0b] [&_#textGridViewBtn.active]:!bg-[#f59e0b] [&_#textGridViewBtn.active]:!text-white [&_#listViewBtn]:border-[rgba(239,68,68,0.5)] [&_#listViewBtn]:bg-[rgba(239,68,68,0.2)] [&_#listViewBtn]:text-[#f87171] [&_#listViewBtn.active]:!border-[#ef4444] [&_#listViewBtn.active]:!bg-[#ef4444] [&_#listViewBtn.active]:!text-white
+  [&_#textGridViewBtn]:border-[rgba(96,165,250,0.5)] [&_#textGridViewBtn]:bg-[rgba(59,130,246,0.2)] [&_#textGridViewBtn]:text-[#60a5fa] [&_#textGridViewBtn.active]:!border-[#3b82f6] [&_#textGridViewBtn.active]:!bg-[#3b82f6] [&_#textGridViewBtn.active]:!text-white [&_#gridViewBtn]:border-[rgba(251,191,36,0.5)] [&_#gridViewBtn]:bg-[rgba(245,158,11,0.2)] [&_#gridViewBtn]:text-[#fbbf24] [&_#gridViewBtn.active]:!border-[#f59e0b] [&_#gridViewBtn.active]:!bg-[#f59e0b] [&_#gridViewBtn.active]:!text-white [&_#listViewBtn]:border-[rgba(239,68,68,0.5)] [&_#listViewBtn]:bg-[rgba(239,68,68,0.2)] [&_#listViewBtn]:text-[#f87171] [&_#listViewBtn.active]:!border-[#ef4444] [&_#listViewBtn.active]:!bg-[#ef4444] [&_#listViewBtn.active]:!text-white
   [&_#sortChapterBtn.active-newest]:border-[#fd6dfd] [&_#sortChapterBtn.active-newest]:bg-[#ed74f8] [&_#sortChapterBtn.active-newest]:text-white [&_#sortChapterBtn.active-oldest]:border-[#f59e0b] [&_#sortChapterBtn.active-oldest]:bg-[#f59e0b] [&_#sortChapterBtn.active-oldest]:text-white
   max-[380px]:[&_.chapter-header]:px-[10px] max-[380px]:[&_.chapter-header_.section-title]:mt-px max-[380px]:[&_.chapter-header_.section-title]:mb-2 max-[380px]:[&_.chapter-header-right]:gap-[5px] max-[380px]:[&_.chapter-header-right]:mb-2 max-[380px]:[&_.source-toggle]:gap-1 max-[380px]:[&_.view-toggle]:gap-1 max-[380px]:[&_.view-btn]:h-[33px] max-[380px]:[&_.view-btn]:w-[33px] max-[380px]:[&_.view-btn]:min-w-[33px] max-[380px]:[&_.view-btn]:rounded-lg
   max-[330px]:[&_.chapter-header]:px-2 max-[330px]:[&_.chapter-header-right]:gap-1 max-[330px]:[&_.source-toggle]:gap-[3px] max-[330px]:[&_.view-toggle]:gap-[3px] max-[330px]:[&_.view-btn]:h-[31px] max-[330px]:[&_.view-btn]:w-[31px] max-[330px]:[&_.view-btn]:min-w-[31px] max-[330px]:[&_.view-btn]:rounded-[7px]
@@ -961,8 +968,14 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   );
   const selectedCoverSlugRef = useRef("");
   const activeCoverUrl = selectedCoverUrl || baseCoverUrl;
-  const cover = useCoverImageSource(activeCoverUrl, 1200);
+  const cover = useCoverImageSource(activeCoverUrl, "coverDetail");
+  useEffect(() => {
+    setDetailCoverLoaded(false);
+    setDetailCoverFailed(false);
+  }, [activeCoverUrl]);
   const [state, setState] = useState<DetailState>("loading");
+  const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
+  const [detailCoverFailed, setDetailCoverFailed] = useState(false);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
@@ -971,7 +984,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [firestoreLatestUpdate, setFirestoreLatestUpdate] = useState("");
   const [chapterRetry, setChapterRetry] = useState(0);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
-  const [view, setView] = useState<"grid" | "list" | "text-grid">("grid");
+  const [view, setView] = useState<"grid" | "list" | "text-grid">("text-grid");
   const [detailTab, setDetailTab] = useState<"chapters" | "synopsis" | "covers" | "discussion">("chapters");
   const [hideDetailCoverBackground, setHideDetailCoverBackground] = useState(
     () => readGlobalAppearance().hideDetailCoverBackground,
@@ -1265,6 +1278,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           : [];
         cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
         cachedFirestoreChapters = valid.filter((chapter) => chapter.source === "firestore");
+        // Selected server only — never fall back to ES while SV1/SV2 is active
         cachedChapters = cachedSelectedChapters;
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
@@ -1283,6 +1297,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     } else if (cachedChapters.length > 0) {
       setChapters(cachedChapters);
       setChapterState("ready");
+      // Never seed SV1/SV2 memory cache with number-only records — that skips full=1 thumbnail fetch.
       const seedList = cachedSelectedChapters.length ? cachedSelectedChapters : cachedChapters;
       if (source === "firestore" || chaptersHaveThumbnails(seedList)) {
         chapterSourceCacheRef.current.set(chapterSourceCacheKey(slug, source), seedList);
@@ -1302,6 +1317,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         const key = chapterSourceCacheKey(slug, chapterSource);
         const memoryCache = chapterSourceCacheRef.current;
         const cached = memoryCache.get(key);
+        // Reuse memory only when previews already exist (or ES list).
         if (cached && (chapterSource === "firestore" || chaptersHaveThumbnails(cached))) {
           return cached;
         }
@@ -1334,6 +1350,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         return cachedSelectedChapters;
       }
 
+      // Primary server first. Parallel servers only fill missing chapter numbers
+      // (never replace a chapter that already exists on SV1/SV2).
       let selectedChapters = cachedSelectedChapters;
       let primaryError: unknown;
       const alternateBlogger: ChapterSource = source === "blogger" ? "blogger2" : "blogger";
@@ -1356,6 +1374,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         console.warn(`Chapter source ${source} failed for ${slug}.`, error);
       }
 
+      // Show primary immediately, then top up gaps from parallel servers.
       if (selectedChapters.length) publishEarly(selectedChapters);
 
       const [alternateChapters, firestoreChapters] = await Promise.all([
@@ -1466,6 +1485,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     })
     .sort((left, right) => {
       const order = chapterNumber(left.num) - chapterNumber(right.num);
+      // newest = chapter tertinggi di atas (high priority batch pertama)
       return sort === "newest" ? -order : order;
     }), [chapterSearch, chapters, sort]);
 
@@ -1479,6 +1499,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     setChapterWindow(CHAPTER_UI_BATCH);
   }, [slug, source, sort, chapterSearch]);
 
+  // Keep total in a ref so the observer effect does not thrash on every window expand
   const chapterTotalRef = useRef(filteredSortedChapters.length);
   chapterTotalRef.current = filteredSortedChapters.length;
 
@@ -1498,6 +1519,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       });
     };
 
+    // If the sentinel is already on screen (common when the first batch is short
+    // or the user is already at the bottom), IntersectionObserver may not fire
+    // until the next scroll — expand immediately in that case.
     const alreadyVisible = (() => {
       const rect = node.getBoundingClientRect();
       const viewport = window.innerHeight || document.documentElement.clientHeight;
@@ -1514,6 +1538,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       { root: null, rootMargin: "320px 0px", threshold: 0 },
     );
     observer.observe(node);
+
+    // Safety net: while the sentinel stays in view, keep expanding on a short timer
+    // so a missed intersection event cannot leave "Loading chapters..." stuck forever.
     const safety = window.setInterval(() => {
       if (cancelled) return;
       const rect = node.getBoundingClientRect();
@@ -1526,7 +1553,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       observer.disconnect();
       window.clearInterval(safety);
     };
-  
+    // Intentionally omit chapterWindow from deps — expanding should not rebuild the observer.
   }, [hasMoreChapters, chapterState, filteredSortedChapters.length]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
@@ -1665,6 +1692,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     let images = chapter.source === "firestore" && readerSource !== "firestore"
       ? []
       : chapter.images || [];
+    // List API slim (tanpa images) — hydrate saat buka chapter Blogger
     if (
       !isNovel &&
       !images.length &&
@@ -1782,13 +1810,29 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           <div className="content">
             <div className="main">
               <div className="left-column">
-                <div className="cover">
+                <div className="cover relative grid place-items-center bg-black/10 dark:bg-white/5">
                   <CoverImage
+                    key={activeCoverUrl}
                     src={activeCoverUrl || "/assets/icons/favicon.ico"}
-                    alt={`${manga.title} cover`}
+                    alt=""
                     loading="eager"
-                    onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
+                    onLoad={() => {
+                      setDetailCoverLoaded(true);
+                      setDetailCoverFailed(false);
+                    }}
+                    onError={(event) => {
+                      setDetailCoverFailed(true);
+                      event.currentTarget.src = "/assets/icons/favicon.ico";
+                    }}
                   />
+                  {!detailCoverLoaded && (
+                    <span
+                      className="pointer-events-none absolute inset-0 z-[1] grid place-items-center bg-black/35 px-2 text-center text-base font-semibold text-white"
+                      aria-live="polite"
+                    >
+                      {detailCoverFailed ? "Cover unavailable" : "Loading cover..."}
+                    </span>
+                  )}
                 </div>
                 <div className="rating" id="ratingBox">
                   <div className="stars" aria-label={`Rating ${ratingValue === undefined ? "N/A" : ratingValue}`}>
@@ -1951,7 +1995,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                       aria-pressed={activeCoverUrl === coverUrl}
                       aria-label={`Use volume ${manga.coverNumbers?.[coverUrl]?.trim() || index + 1} cover`}
                     >
-                      <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizeWidth={240} />
+                      <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizePreset="coverVolume" />
                       <span className="block truncate px-2 py-2 text-xs font-medium">Volume {manga.coverNumbers?.[coverUrl]?.trim() || index + 1}</span>
                       {activeCoverUrl === coverUrl && <span className="absolute right-2 top-2 rounded-full bg-[var(--mikoroku-detail-cover-accent)] px-2 py-1 text-[10px] font-bold text-white">Selected</span>}
                     </button>
@@ -2017,15 +2061,15 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     <button id="sortChapterBtn" className={`view-btn${sort === "oldest" ? " active-oldest" : " active-newest"}`} type="button" title={`Urutan: ${sort}`} aria-label={`Sort chapters ${sort === "newest" ? "oldest first" : "newest first"}`} onClick={() => { const next = sort === "newest" ? "oldest" : "newest"; localStorage.setItem("chapterSortMode", next); setSort(next); }}>
                       <i className={`fas ${sort === "newest" ? "fa-arrow-down-wide-short" : "fa-arrow-up-wide-short"}`} aria-hidden="true" />
                     </button>
-                    <button id="gridViewBtn" className={`view-btn${view === "grid" ? " active" : ""}`} type="button" title="Thumbnail grid" aria-label="Thumbnail grid" onClick={() => { localStorage.setItem("chapterViewMode", "grid"); setView("grid"); }}>
-                      <i className="fas fa-th-large" aria-hidden="true" />
-                    </button>
                     <button id="textGridViewBtn" className={`view-btn${view === "text-grid" ? " active" : ""}`} type="button" title="Text grid" aria-label="Text grid" onClick={() => { localStorage.setItem("chapterViewMode", "text-grid"); setView("text-grid"); }}>
                       <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
                         <rect x="3" y="4" width="18" height="4" rx="1" />
                         <rect x="3" y="10" width="18" height="4" rx="1" />
                         <rect x="3" y="16" width="18" height="4" rx="1" />
                       </svg>
+                    </button>
+                    <button id="gridViewBtn" className={`view-btn${view === "grid" ? " active" : ""}`} type="button" title="Thumbnail grid" aria-label="Thumbnail grid" onClick={() => { localStorage.setItem("chapterViewMode", "grid"); setView("grid"); }}>
+                      <i className="fas fa-th-large" aria-hidden="true" />
                     </button>
                     <button id="listViewBtn" className={`view-btn${view === "list" ? " active" : ""}`} type="button" title="List" aria-label="List" onClick={() => { localStorage.setItem("chapterViewMode", "list"); setView("list"); }}>
                       <i className="fas fa-list" aria-hidden="true" />
@@ -2093,22 +2137,30 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                         chapter.source === "firestore" ? cover : "",
                       ].filter((src): src is string => typeof src === "string" && src.length > 8);
                       const unique = [...new Set(candidates)];
-                      const thumbSrc = unique[0] || "";
+                      const proxied = unique.map(chapterThumbProxyUrl);
+                      const thumbSrc = proxied[0] || "";
                       return thumbSrc ? (
                         <img
-                          className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
+                          key={thumbSrc}
+                          className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 opacity-0 transition-opacity duration-150 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
+                          style={{ opacity: 0 }}
                           alt=""
                           loading={index < 12 ? "eager" : "lazy"}
                           fetchPriority={index < 4 ? "high" : undefined}
+                          decoding="async"
                           src={thumbSrc}
                           data-thumb-index="0"
                           referrerPolicy="no-referrer"
+                          onLoad={(event) => {
+                            event.currentTarget.style.opacity = "1";
+                          }}
                           onError={(event) => {
                             const image = event.currentTarget;
                             const next = Number(image.dataset.thumbIndex || "0") + 1;
-                            if (next < unique.length) {
+                            if (next < proxied.length) {
+                              image.style.opacity = "0";
                               image.dataset.thumbIndex = String(next);
-                              image.src = unique[next];
+                              image.src = proxied[next];
                               return;
                             }
                             image.style.visibility = "hidden";

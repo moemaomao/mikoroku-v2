@@ -1,5 +1,7 @@
 "use client";
 
+import { imageProxyUrl } from "../lib/image-proxy";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -96,7 +98,7 @@ function previewCover(value?: string): string {
   const url = /^https?:\/\//i.test(value)
     ? value
     : `${window.GITHUB_RAW || GITHUB_RAW_BASE}${value.replace(/^\//, "")}`;
-  return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=50&q=75&output=webp`;
+  return imageProxyUrl(url, "headerPreview");
 }
 
 function getMangaEntry(value: unknown): MangaEntry | undefined {

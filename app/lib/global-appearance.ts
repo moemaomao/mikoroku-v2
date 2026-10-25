@@ -383,7 +383,6 @@ async function loadListChapterSources(slug: string, title: string, source: "blog
     }
   }
 
-  // Fallback: shared recent feed (partial) then Firestore
   if (!chapters.length && source !== "firestore") {
     const titleKey = title.toLowerCase().replace(/[^a-z0-9]/g, "");
     const slugKey = slug.toLowerCase().replace(/[^a-z0-9]/g, "");
