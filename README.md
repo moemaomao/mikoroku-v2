@@ -1,62 +1,188 @@
-# Mikoroku Next.js
+# Mikoroku v2
 
-Next.js App Router deployment target: Cloudflare Workers through
-`@opennextjs/cloudflare`.
+Private rewrite of **Mikoroku** — personal manga & novel reading platform (Bahasa Indonesia).
 
-The homepage, manga details, bookmarks, catalogues, legal/information pages,
-commission form, profile settings, and manga/novel readers are rendered by the
-Next.js App Router. Existing browser scripts still provide shared Firebase,
-header, and footer integrations while those site-wide integrations are migrated.
-Legacy page URLs redirect to their Next.js routes where applicable.
+Built with **Next.js App Router** and deployed on **Cloudflare Workers** using `@opennextjs/cloudflare`.
 
-The admin panel is available in the App Router at `/admin`, with the original
-page retained at `/pages/admin.html` as a fallback. It includes Firebase
-sign-in, a searchable Firestore/GitHub manga catalogue with cover cards, manga
-metadata editing, and per-manga chapter management with reorder controls.
-Metadata descriptions and novel chapter content use Quill. Covers, chapter
-thumbnails, and multiple chapter pages can be uploaded directly from files;
-chapter page images can also be previewed, sorted, reordered, and removed.
-Image uploads continue to use the existing ImgBB integration.
+**Live site:** [https://mikoroku.top](https://mikoroku.top)
 
-The panel also includes chapter reports, summary rebuilds, and Firestore
-backups. Genres & Tags currently summarizes values from manga metadata rather
-than providing a separate taxonomy editor. Other moderation and utility pages
-remain in `public/`.
+> This is a **private personal project**. Not open source. All rights reserved.
 
-The migrated readers retain chapter navigation, manga page/scroll modes,
-chapter ZIP downloads and reports, comment and emoji widgets, and novel font,
-column, auto-scroll, and text-to-speech controls. Profile settings use the full
-legacy badge and game-role preset lists.
+---
 
-## Project structure
+## Tech Stack
 
-`app/` contains the App Router entry points, feature UI, and feature styles.
-Feature directories such as `admin/`, `bookmark/`, `catalog/`, `commission/`,
-`manga/`, `novel/`, `series/`, and `settings/` contain their route `page.tsx` alongside
-the implementation. Shared UI lives directly in `app/`, and non-UI helpers
-live in `lib/`. Image assets are grouped under `public/assets/` (`icons/` and
-`hakoroku/`); other static files remain under `public/`. Previous image URLs
-redirect to their new locations.
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 16 (App Router) + React 19 |
+| Styling | Tailwind CSS 4 |
+| Deploy | Cloudflare Workers + OpenNext |
+| Database / Auth | Firebase (Auth + Firestore) |
+| Cache | Cloudflare KV (`NEXT_INC_CACHE_KV`, `MIKOROKU_V2_CACHE`) |
+| Image Upload | ImgBB |
+| Rich Text | Quill |
+| ZIP Download | JSZip |
+| Cron | Cloudflare Cron Triggers (`*/20 * * * *`) |
+
+---
+
+## Features
+
+### Reader
+- Manga reader (page mode & scroll mode)
+- Novel reader (font, column, auto-scroll, text-to-speech)
+- Chapter navigation (prev/next)
+- Download chapter as ZIP
+- Report chapter
+- Emoji reaction & comment widget (Hakoroku)
+- Bookmark & History
+
+### Catalog & Navigation
+- Homepage with manga catalog
+- Manga List / Hentai List / Genre List
+- Series detail page
+- Search
+- Announcements
+
+### User
+- Login (Firebase Auth)
+- Profile settings (badge + game-role preset)
+- Bookmark page
+- Commission form
+
+### Admin Panel (`/admin`)
+- Firebase sign-in
+- Searchable manga catalogue (Firestore + GitHub)
+- Edit manga metadata
+- Chapter management (upload, reorder, preview, delete)
+- Rich text editor (Quill) for descriptions & novels
+- Upload cover / thumbnail / chapter pages (ImgBB)
+- Chapter reports
+- Summary rebuild
+- Firestore backup
+- Advertisement settings
+- Moderation tools
+
+### Others
+- Global Settings
+- Legal pages (About, Privacy, Terms, DMCA)
+- Community widgets
+- Advertisement manager
+- Legacy URL redirects to Next.js routes
+
+---
+
+## Project Structure
+
+```
+mikoroku-v2/
+├── app/                          # Next.js App Router
+│   ├── admin/                    # Admin panel + moderation
+│   ├── announcements/
+│   ├── api/blogger/chapters/     # API route for Blogger chapters
+│   ├── bookmark/
+│   ├── catalog/
+│   ├── commission/
+│   ├── genre-list/
+│   ├── global-settings/
+│   ├── hentai-list/
+│   ├── login/
+│   ├── manga/                    # Manga reader routes
+│   ├── manga-list/
+│   ├── novel/[slug]/[chapter]/  # Novel reader
+│   ├── series/                   # Series detail
+│   ├── settings/
+│   ├── about/, dmca/, privacy/, terms/
+│   ├── layout.tsx
+│   ├── page.tsx                  # Homepage
+│   └── ... (shared components)
+│
+├── lib/                          # Shared utilities & helpers
+├── public/                       # Static assets
+│   └── assets/
+│       ├── icons/
+│       └── hakoroku/             # Avatar frames, etc.
+│
+├── scripts/                      # Utility scripts
+├── custom-worker.ts              # Cloudflare Worker entry
+├── open-next.config.ts
+├── wrangler.jsonc                # Cloudflare config
+├── next.config.ts
+└── package.json
+```
+
+---
 
 ## Development
 
-From this directory:
-
-```sh
+```bash
+# Install dependencies
 npm install
+
+# Run local development server
 npm run dev
 ```
 
-## Cloudflare
+---
 
-Authenticate Wrangler with the intended Cloudflare account, then run:
+## Cloudflare Deployment
 
-```sh
-npm run preview
-npm run deploy
+1. Authenticate Wrangler:
+   ```bash
+   npx wrangler login
+   ```
+
+2. Preview locally (OpenNext + Workers):
+   ```bash
+   npm run preview
+   ```
+
+3. Deploy:
+   ```bash
+   npm run deploy
+   ```
+
+### Cloudflare Workers Git Integration
+Use this build command:
+
+```bash
+npm run cf:build
 ```
 
-For a Cloudflare Workers Git deployment, set the build command to
-`npm run cf:build` so OpenNext generates `.open-next/` before Wrangler deploys
-the Worker. Do not use `npm run build` as the Workers build command; it only
-builds the standalone Next.js app.
+Do **not** use `npm run build` for Workers — it only produces a standalone Next.js app.
+
+### Important Config (`wrangler.jsonc`)
+- **Main entry:** `./custom-worker.ts`
+- **KV Namespaces:** `NEXT_INC_CACHE_KV` + `MIKOROKU_V2_CACHE`
+- **Cron:** every 20 minutes (warm cache)
+- **Warm URL:** `https://mikoroku.top`
+
+---
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Next.js development server |
+| `npm run build` | Standalone Next.js build |
+| `npm run cf:build` | OpenNext build for Cloudflare |
+| `npm run preview` | Build + local Workers preview |
+| `npm run deploy` | Build + deploy to Cloudflare |
+| `npm run upload` | Build + upload (without full deploy) |
+| `npm run cf-typegen` | Generate Cloudflare Env types |
+
+---
+
+## Notes
+
+- Some legacy integrations (Firebase header/footer, comment widget, etc.) still run via browser scripts while being fully migrated to the App Router.
+- Old image asset URLs redirect to the new locations under `public/assets/`.
+- Full admin panel is available at `/admin` (App Router). Legacy HTML fallback exists at `public/pages/admin.html`.
+
+---
+
+## License
+
+**Private project.**  
+All rights reserved. Not open source. Do not use, copy, or redistribute without explicit permission.
+```
