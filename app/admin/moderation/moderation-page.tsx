@@ -16,7 +16,9 @@ import {
   collectionGroup,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
+  getDocsFromServer,
   getFirestore,
   orderBy,
   query,
@@ -27,6 +29,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
+import { normalizeChapterNumber } from "../../../lib/chapter-number";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
@@ -110,7 +113,8 @@ function targetPostIdFromLegacyId(sourcePostId: string): string | null {
   if (detailMatch) return `detail_${detailMatch[1]}`;
 
   const readerMatch = sourcePostId.match(/^reader_slug_(.+)-chapter-(.+)$/);
-  if (readerMatch) return `reader_${readerMatch[1]}_${readerMatch[2]}`;
+  const chapter = readerMatch && normalizeChapterNumber(readerMatch[2]);
+  if (readerMatch && chapter) return `reader_${readerMatch[1]}_${chapter}`;
 
   return null;
 }
@@ -135,7 +139,8 @@ function targetPostIdFromUrl(value: string): string {
     return `detail_${segments[1]}`.replace(/[^a-zA-Z0-9_-]/g, "_");
   }
   if ((segments[0] === "manga" || segments[0] === "novel") && segments[1] && segments[2]) {
-    return `reader_${segments[1]}_${segments[2]}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const chapter = normalizeChapterNumber(segments[2]) || segments[2];
+    return `reader_${segments[1]}_${chapter}`.replace(/[^a-zA-Z0-9_-]/g, "_");
   }
   throw new Error("URL tujuan harus berupa halaman detail atau reader Mikoroku yang baru.");
 }
@@ -157,22 +162,28 @@ function targetEmojiIdFromLegacyId(sourceId: string): string | null {
   if (!sourceId.startsWith("emoji_")) return null;
   const legacyKey = sourceId.slice("emoji_".length);
   if (legacyKey === "global_0") return null;
-  if (legacyKey.startsWith("detail_") || legacyKey.startsWith("reader_")) return sourceId;
 
   const oldWidgetDetail = legacyKey.match(/^detail_slug_(.+)$/);
   if (oldWidgetDetail) return `emoji_detail_${oldWidgetDetail[1]}`.replace(/\W/g, "_");
 
-  const oldWidgetReader = legacyKey.match(/^reader_slug_(.+)-chapter-(.+)$/);
+  const oldWidgetReader = legacyKey.match(/^reader_slug_(.+?)(?:-chapter-|_chapter_)(.+)$/i);
   if (oldWidgetReader) {
-    return `emoji_reader_${oldWidgetReader[1]}_${oldWidgetReader[2]}`.replace(/\W/g, "_");
+    const chapter = normalizeChapterNumber(oldWidgetReader[2]);
+    return chapter
+      ? `emoji_reader_${oldWidgetReader[1]}_${chapter}`.replace(/\W/g, "_")
+      : null;
   }
+
+  if (legacyKey.startsWith("detail_") || legacyKey.startsWith("reader_")) return sourceId;
 
   const oldUrlPageKey = legacyKey.match(/^(.+)_0$/);
   if (!oldUrlPageKey) return null;
-  const chapter = oldUrlPageKey[1].match(/^(.+)_chapter_(.+)$/);
+  const chapterMatch = oldUrlPageKey[1].match(/^(.+?)(?:-chapter-|_chapter_)(.+)$/i);
+  if (!chapterMatch) return `emoji_detail_${oldUrlPageKey[1]}`.replace(/\W/g, "_");
+  const chapter = normalizeChapterNumber(chapterMatch[2]);
   return chapter
-    ? `emoji_reader_${chapter[1]}_${chapter[2]}`.replace(/\W/g, "_")
-    : `emoji_detail_${oldUrlPageKey[1]}`.replace(/\W/g, "_");
+    ? `emoji_reader_${chapterMatch[1]}_${chapter}`.replace(/\W/g, "_")
+    : null;
 }
 
 function emojiDocumentId(pageId: string): string {
@@ -244,13 +255,13 @@ export default function ModerationPage() {
   const [emojiPreview, setEmojiPreview] = useState<GlobalEmojiPreview | null>(null);
   const [emojiPagePreview, setEmojiPagePreview] = useState<EmojiImportPreview | null>(null);
   const [importDataType, setImportDataType] = useState<"comments" | "emoji">("comments");
-  const [importMode, setImportMode] = useState<ImportMode>("site");
-  const [legacyUrl, setLegacyUrl] = useState("https://mikoroku.com/detail?slug=kichiku-eiyuu");
-  const [newUrl, setNewUrl] = useState("https://mikoroku.top/series/kichiku-eiyuu");
+  const [importMode, setImportMode] = useState<ImportMode>("page");
+  const [legacyUrl, setLegacyUrl] = useState("https://mikoroku.com/reader?slug=isekai-koushoku-musou-roku-chapter-01");
+  const [newUrl, setNewUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
   const [sourceIdOverride, setSourceIdOverride] = useState("");
   const [targetIdOverride, setTargetIdOverride] = useState("");
-  const [emojiLegacyUrl, setEmojiLegacyUrl] = useState("https://mikoroku.com/detail?slug=kichiku-eiyuu");
-  const [emojiNewUrl, setEmojiNewUrl] = useState("https://mikoroku.top/series/kichiku-eiyuu");
+  const [emojiLegacyUrl, setEmojiLegacyUrl] = useState("https://mikoroku.com/reader?slug=isekai-koushoku-musou-roku-chapter-01");
+  const [emojiNewUrl, setEmojiNewUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
   const [emojiSourceIdOverride, setEmojiSourceIdOverride] = useState("");
   const [emojiTargetIdOverride, setEmojiTargetIdOverride] = useState("");
   const [importBusy, setImportBusy] = useState(false);
@@ -349,7 +360,7 @@ export default function ModerationPage() {
     setPreview(null);
     setImportBusy(true);
     try {
-      const snapshot = await getDocs(collectionGroup(services.firestore, "postComments"));
+      const snapshot = await getDocsFromServer(collectionGroup(services.firestore, "postComments"));
       const commentsByPost = new Map<string, typeof snapshot.docs>();
       snapshot.docs.forEach((comment) => {
         const postId = comment.ref.parent.parent?.id;
@@ -424,8 +435,8 @@ export default function ModerationPage() {
         throw new Error("ID sumber dan tujuan sama. Periksa URL atau ID post.");
       }
       const [sourceSnapshot, targetSnapshot] = await Promise.all([
-        getDocs(collection(services.firestore, "comments", sourcePostId, "postComments")),
-        getDocs(collection(services.firestore, "comments", targetPostId, "postComments")),
+        getDocsFromServer(collection(services.firestore, "comments", sourcePostId, "postComments")),
+        getDocsFromServer(collection(services.firestore, "comments", targetPostId, "postComments")),
       ]);
       setPagePreview({
         sourcePostId,
@@ -458,8 +469,8 @@ export default function ModerationPage() {
     setActionStatus("");
     try {
       const [sourceSnapshot, targetSnapshot] = await Promise.all([
-        getDocs(collection(services.firestore, "comments", pagePreview.sourcePostId, "postComments")),
-        getDocs(collection(services.firestore, "comments", pagePreview.targetPostId, "postComments")),
+        getDocsFromServer(collection(services.firestore, "comments", pagePreview.sourcePostId, "postComments")),
+        getDocsFromServer(collection(services.firestore, "comments", pagePreview.targetPostId, "postComments")),
       ]);
       const targetIds = new Set(targetSnapshot.docs.map((comment) => comment.id));
       const missing = sourceSnapshot.docs.filter((comment) => !targetIds.has(comment.id));
@@ -503,7 +514,7 @@ export default function ModerationPage() {
     setPageError("");
     setActionStatus("");
     try {
-      const snapshot = await getDocs(collectionGroup(services.firestore, "postComments"));
+      const snapshot = await getDocsFromServer(collectionGroup(services.firestore, "postComments"));
       const commentsByPost = new Map<string, typeof snapshot.docs>();
       snapshot.docs.forEach((comment) => {
         const postId = comment.ref.parent.parent?.id;
@@ -563,7 +574,7 @@ export default function ModerationPage() {
     setImportBusy(true);
     try {
       const { firestore } = getEmojiServices();
-      const snapshot = await getDocs(collection(firestore, "emoji_reactions"));
+      const snapshot = await getDocsFromServer(collection(firestore, "emoji_reactions"));
       const allDocs = new Map(snapshot.docs.map((entry) => [entry.id, entry.data() as RecordData]));
       const entries: EmojiImportPreview[] = [];
       const unmapped: GlobalEmojiPreview["unmapped"] = [];
@@ -615,7 +626,7 @@ export default function ModerationPage() {
     setActionStatus("");
     try {
       const { firestore } = getEmojiServices();
-      const snapshot = await getDocs(collection(firestore, "emoji_reactions"));
+      const snapshot = await getDocsFromServer(collection(firestore, "emoji_reactions"));
       const allDocs = new Map(snapshot.docs.map((entry) => [entry.id, entry.data() as RecordData]));
       let copiedPages = 0;
       let skippedPages = 0;
@@ -665,8 +676,8 @@ export default function ModerationPage() {
       if (sourceId === targetId) throw new Error("ID sumber dan tujuan sama. Periksa URL atau ID dokumen.");
       const { firestore } = getEmojiServices();
       const [sourceSnapshot, targetSnapshot] = await Promise.all([
-        getDoc(doc(firestore, "emoji_reactions", sourceId)),
-        getDoc(doc(firestore, "emoji_reactions", targetId)),
+        getDocFromServer(doc(firestore, "emoji_reactions", sourceId)),
+        getDocFromServer(doc(firestore, "emoji_reactions", targetId)),
       ]);
       const sourceData = sourceSnapshot.exists() ? sourceSnapshot.data() as RecordData : {};
       const targetData = targetSnapshot.exists() ? targetSnapshot.data() as RecordData : {};
@@ -701,8 +712,8 @@ export default function ModerationPage() {
     try {
       const { firestore } = getEmojiServices();
       const [sourceSnapshot, targetSnapshot] = await Promise.all([
-        getDoc(doc(firestore, "emoji_reactions", emojiPagePreview.sourceId)),
-        getDoc(doc(firestore, "emoji_reactions", emojiPagePreview.targetId)),
+        getDocFromServer(doc(firestore, "emoji_reactions", emojiPagePreview.sourceId)),
+        getDocFromServer(doc(firestore, "emoji_reactions", emojiPagePreview.targetId)),
       ]);
       if (!sourceSnapshot.exists()) throw new Error("Dokumen count emoji sumber tidak ditemukan.");
       const sourceData = sourceSnapshot.data();
