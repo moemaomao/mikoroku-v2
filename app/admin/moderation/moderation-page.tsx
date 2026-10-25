@@ -115,12 +115,28 @@ function dateText(value: unknown): string {
   return date ? date.toLocaleString("id-ID") : "-";
 }
 
+function normalizeChapterPart(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  const separatedPart = raw.match(/^(\d+)[._-](\d+)$/);
+  if (separatedPart) {
+    return normalizeChapterNumber(`${separatedPart[1]}.${separatedPart[2]}`);
+  }
+
+  // Legacy reader slugs remove decimal separators, so chapter 23.3 is stored as 233.
+  const compactLegacyPart = raw.match(/^(\d{2,})(\d)$/);
+  if (compactLegacyPart) {
+    return normalizeChapterNumber(`${compactLegacyPart[1]}.${compactLegacyPart[2]}`);
+  }
+
+  return normalizeChapterNumber(raw);
+}
+
 function targetPostIdFromLegacyId(sourcePostId: string): string | null {
   const detailMatch = sourcePostId.match(/^detail_slug_(.+)$/);
   if (detailMatch) return `detail_${detailMatch[1]}`;
 
   const readerMatch = sourcePostId.match(/^reader_slug_(.+)-chapter-(.+)$/);
-  const chapter = readerMatch && normalizeChapterNumber(readerMatch[2]);
+  const chapter = readerMatch && normalizeChapterPart(readerMatch[2]);
   if (readerMatch && chapter) return `reader_${readerMatch[1]}_${chapter}`;
 
   return null;
@@ -146,7 +162,7 @@ function targetPostIdFromUrl(value: string): string {
     return `detail_${segments[1]}`.replace(/[^a-zA-Z0-9_-]/g, "_");
   }
   if ((segments[0] === "manga" || segments[0] === "novel") && segments[1] && segments[2]) {
-    const chapter = normalizeChapterNumber(segments[2]) || segments[2];
+    const chapter = normalizeChapterPart(segments[2]) || segments[2];
     return `reader_${segments[1]}_${chapter}`.replace(/[^a-zA-Z0-9_-]/g, "_");
   }
   throw new Error("URL tujuan harus berupa halaman detail atau reader Mikoroku yang baru.");
@@ -175,7 +191,7 @@ function targetEmojiIdFromLegacyId(sourceId: string): string | null {
 
   const oldWidgetReader = legacyKey.match(/^reader_slug_(.+?)(?:-chapter-|_chapter_)(.+)$/i);
   if (oldWidgetReader) {
-    const chapter = normalizeChapterNumber(oldWidgetReader[2]);
+    const chapter = normalizeChapterPart(oldWidgetReader[2]);
     return chapter
       ? `emoji_reader_${oldWidgetReader[1]}_${chapter}`.replace(/\W/g, "_")
       : null;
@@ -187,7 +203,7 @@ function targetEmojiIdFromLegacyId(sourceId: string): string | null {
   if (!oldUrlPageKey) return null;
   const chapterMatch = oldUrlPageKey[1].match(/^(.+?)(?:-chapter-|_chapter_)(.+)$/i);
   if (!chapterMatch) return `emoji_detail_${oldUrlPageKey[1]}`.replace(/\W/g, "_");
-  const chapter = normalizeChapterNumber(chapterMatch[2]);
+  const chapter = normalizeChapterPart(chapterMatch[2]);
   return chapter
     ? `emoji_reader_${chapterMatch[1]}_${chapter}`.replace(/\W/g, "_")
     : null;
