@@ -1411,7 +1411,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     })
     .sort((left, right) => {
       const order = chapterNumber(left.num) - chapterNumber(right.num);
-      // newest = chapter tertinggi di atas (high priority batch pertama)
       return sort === "newest" ? -order : order;
     }), [chapterSearch, chapters, sort]);
 
@@ -1425,23 +1424,54 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     setChapterWindow(CHAPTER_UI_BATCH);
   }, [slug, source, sort, chapterSearch]);
 
+  const chapterTotalRef = useRef(filteredSortedChapters.length);
+  chapterTotalRef.current = filteredSortedChapters.length;
+
   useEffect(() => {
     if (!hasMoreChapters || chapterState !== "ready") return;
     const node = chapterSentinelRef.current;
     if (!node) return;
+
+    let cancelled = false;
+
+    const expand = () => {
+      if (cancelled) return;
+      setChapterWindow((current) => {
+        const total = chapterTotalRef.current;
+        if (current >= total) return current;
+        return Math.min(current + CHAPTER_UI_BATCH, total);
+      });
+    };
+
+    const alreadyVisible = (() => {
+      const rect = node.getBoundingClientRect();
+      const viewport = window.innerHeight || document.documentElement.clientHeight;
+      return rect.top < viewport + 240 && rect.bottom > -40;
+    })();
+    if (alreadyVisible) {
+      expand();
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setChapterWindow((current) =>
-            Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
-          );
-        }
+        if (entries.some((entry) => entry.isIntersecting)) expand();
       },
-      { root: null, rootMargin: "240px 0px", threshold: 0 },
+      { root: null, rootMargin: "320px 0px", threshold: 0 },
     );
     observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasMoreChapters, chapterState, filteredSortedChapters.length, chapterWindow]);
+    const safety = window.setInterval(() => {
+      if (cancelled) return;
+      const rect = node.getBoundingClientRect();
+      const viewport = window.innerHeight || document.documentElement.clientHeight;
+      if (rect.top < viewport + 320 && rect.bottom > -40) expand();
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      window.clearInterval(safety);
+    };
+  }, [hasMoreChapters, chapterState, filteredSortedChapters.length]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
     setCoverPreferenceError("");
@@ -1579,7 +1609,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     let images = chapter.source === "firestore" && readerSource !== "firestore"
       ? []
       : chapter.images || [];
-    // List API slim (tanpa images) — hydrate saat buka chapter Blogger
     if (
       !isNovel &&
       !images.length &&
@@ -2066,13 +2095,23 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 {chapterState === "ready" && hasMoreChapters && (
                   <div
                     ref={chapterSentinelRef}
-                    className="col-span-full flex min-h-10 w-full items-center justify-center py-3 text-xs text-[#666] dark:text-white/50"
-                    aria-hidden="true"
+                    className="col-span-full flex min-h-12 w-full flex-col items-center justify-center gap-2 py-4 text-xs text-[#666] dark:text-white/50"
                   >
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2" aria-live="polite">
                       <i className="fas fa-spinner fa-spin" aria-hidden="true" />
-                      Memuat chapter…
+                      Loading more chapters…
                     </span>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-black/15 bg-white/80 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:border-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/5 dark:text-zinc-100"
+                      onClick={() =>
+                        setChapterWindow((current) =>
+                          Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
+                        )
+                      }
+                    >
+                      Load more
+                    </button>
                   </div>
                 )}
               </div>
