@@ -625,49 +625,122 @@ export default function ModerationPage() {
     setImportBusy(true);
     setPageError("");
     setActionStatus("");
+    const results = new Map<string, ImportPreview>();
     try {
       const commentsByPost = await scanPostComments(services.firestore, (count) => {
         setActionStatus(`Memuat ulang komentar dari server sebelum import... ${count} komentar dibaca.`);
       });
       let copiedTotal = 0;
       let skippedTotal = 0;
-      const results: ImportPreview[] = [];
-      for (const [index, entry] of preview.entries.entries()) {
-        let copied = 0;
-        try {
-          const sourceComments = commentsByPost.get(entry.sourcePostId) ?? [];
-          const targetComments = commentsByPost.get(entry.targetPostId) ?? [];
-          const targetIds = new Set(targetComments.map((comment) => comment.id));
-          const missing = sourceComments.filter((comment) => !targetIds.has(comment.id));
-          for (let offset = 0; offset < missing.length; offset += 400) {
-            const batch = writeBatch(services.firestore);
-            const chunk = missing.slice(offset, offset + 400);
-            chunk.forEach((comment) => {
-              batch.set(
-                doc(services.firestore, "comments", entry.targetPostId, "postComments", comment.id),
-                comment.data,
-              );
-            });
-            await batch.commit();
-            copied += chunk.length;
-            copiedTotal += chunk.length;
-          }
-          skippedTotal += sourceComments.length - copied;
-          results.push({ ...entry, sourceCount: sourceComments.length, existingCount: targetComments.length + copied, result: `${copied} disalin · ${sourceComments.length - copied} dilewati` });
-        } catch (error) {
-          console.error(`Comment batch import failed for ${entry.sourcePostId} -> ${entry.targetPostId}.`, error);
-          results.push({ ...entry, result: `Gagal (${copied} disalin sebelum gagal): ${errorMessage(error)}` });
-        }
-        setPreview({ ...preview, entries: [...results, ...preview.entries.slice(index + 1)] });
-        setActionStatus(`Memproses halaman ${index + 1}/${preview.entries.length}... ${copiedTotal} komentar disalin sejauh ini.`);
+      const copies: Array<{
+        sourcePostId: string;
+        targetPostId: string;
+        comment: ScannedComment;
+      }> = [];
+      const pageProgress = new Map<string, { sourceCount: number; existingCount: number; copied: number; skipped: number }>();
+
+      for (const entry of preview.entries) {
+        const sourceComments = commentsByPost.get(entry.sourcePostId) ?? [];
+        const targetComments = commentsByPost.get(entry.targetPostId) ?? [];
+        const targetIds = new Set(targetComments.map((comment) => comment.id));
+        const missing = sourceComments.filter((comment) => !targetIds.has(comment.id));
+        const skipped = sourceComments.length - missing.length;
+        skippedTotal += skipped;
+        pageProgress.set(entry.sourcePostId, {
+          sourceCount: sourceComments.length,
+          existingCount: targetComments.length,
+          copied: 0,
+          skipped,
+        });
+        results.set(entry.sourcePostId, {
+          ...entry,
+          sourceCount: sourceComments.length,
+          existingCount: targetComments.length,
+          result: missing.length ? `Menunggu batch · ${skipped} dilewati` : `0 disalin · ${skipped} dilewati`,
+        });
+        copies.push(...missing.map((comment) => ({
+          sourcePostId: entry.sourcePostId,
+          targetPostId: entry.targetPostId,
+          comment,
+        })));
       }
-      const failures = results.filter((entry) => entry.result?.startsWith("Gagal"));
+
+      const batchSize = 400;
+      const batchCount = Math.ceil(copies.length / batchSize);
+      let completedBatches = 0;
+      for (let offset = 0; offset < copies.length; offset += batchSize) {
+        const chunk = copies.slice(offset, offset + batchSize);
+        const batch = writeBatch(services.firestore);
+        chunk.forEach(({ targetPostId, comment }) => {
+          batch.set(
+            doc(services.firestore, "comments", targetPostId, "postComments", comment.id),
+            comment.data,
+          );
+        });
+
+        try {
+          await batch.commit();
+        } catch (error) {
+          console.error(`Comment import batch ${completedBatches + 1}/${batchCount} failed.`, error);
+          const failedPages = new Set(chunk.map((copy) => copy.sourcePostId));
+          failedPages.forEach((sourcePostId) => {
+            const entry = preview.entries.find((candidate) => candidate.sourcePostId === sourcePostId);
+            const progress = pageProgress.get(sourcePostId);
+            if (!entry || !progress) return;
+            results.set(sourcePostId, {
+              ...entry,
+              sourceCount: progress.sourceCount,
+              existingCount: progress.existingCount + progress.copied,
+              result: `Gagal: ${errorMessage(error)}. ${progress.copied} komentar dari halaman ini sudah disalin; batch gagal belum tersimpan.`,
+            });
+          });
+          throw error;
+        }
+        completedBatches += 1;
+        completedBatches += 1;
+        chunk.forEach(({ sourcePostId }) => {
+          const progress = pageProgress.get(sourcePostId);
+          const entry = preview.entries.find((candidate) => candidate.sourcePostId === sourcePostId);
+          if (!progress || !entry) return;
+          progress.copied += 1;
+          copiedTotal += 1;
+          results.set(sourcePostId, {
+            ...entry,
+            sourceCount: progress.sourceCount,
+            existingCount: progress.existingCount + progress.copied,
+            result: `${progress.copied} disalin · ${progress.skipped} dilewati`,
+          });
+        });
+
+        const updatedEntries = preview.entries.map((entry) =>
+          results.get(entry.sourcePostId) || entry,
+        );
+        setPreview({ ...preview, entries: updatedEntries });
+        setActionStatus(
+          `Menyimpan komentar dalam batch ${completedBatches}/${batchCount}... ${copiedTotal}/${copies.length} komentar disalin, ${skippedTotal} dilewati.`,
+        );
+        if (offset + batchSize < copies.length) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+        }
+      }
+
+      const updatedEntries = preview.entries.map((entry) =>
+        results.get(entry.sourcePostId) || entry,
+      );
+      setPreview({ ...preview, entries: updatedEntries });
+      const failures = updatedEntries.filter((entry) => entry.result?.startsWith("Gagal"));
       setActionStatus(
         `Import seluruh web selesai: ${copiedTotal} komentar disalin, ${skippedTotal} dilewati karena sudah ada.${failures.length ? ` ${failures.length} halaman gagal; lihat detail di daftar.` : ""} Komentar sumber tetap utuh.`,
       );
     } catch (error) {
       console.error("Comment import failed.", error);
-      setPageError(`Import komentar gagal: ${firestoreReadErrorMessage(error)}`);
+      setPreview({
+        ...preview,
+        entries: preview.entries.map((entry) => results.get(entry.sourcePostId) || entry),
+      });
+      setPageError(
+        `Import komentar terhenti: ${firestoreReadErrorMessage(error)}. Batch yang sudah tersimpan tetap aman; jalankan import lagi untuk melewati komentar yang sudah masuk dan melanjutkan sisanya.`,
+      );
     } finally {
       setImportBusy(false);
     }
