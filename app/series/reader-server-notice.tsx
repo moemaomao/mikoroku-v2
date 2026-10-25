@@ -39,6 +39,7 @@ function noticeDocument(code: string): string {
 export default function ReaderServerNotice() {
   const [visible, setVisible] = useState(true);
   const [config, setConfig] = useState(DEFAULT_READER_SERVER_NOTICE);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [frameHeight, setFrameHeight] = useState(160);
   const frameRef = useRef<HTMLIFrameElement>(null);
 
@@ -48,10 +49,12 @@ export default function ReaderServerNotice() {
       try {
         const { firestore } = initializeFirebaseClient();
         const snapshot = await getDoc(doc(firestore, "meta", "mangaSummary"));
-        if (active && snapshot.exists()) {
-          const settings = snapshot.data().readerServerNotice;
-          if (settings) setConfig(normalizeReaderServerNoticeConfig(settings));
+        if (!active) return;
+        const settings = snapshot.exists() ? snapshot.data().readerServerNotice : null;
+        if (settings) {
+          setConfig(normalizeReaderServerNoticeConfig(settings));
         }
+        setConfigLoaded(true);
       } catch (error) {
         console.error("Reader server notice settings could not be loaded.", error);
       }
@@ -74,7 +77,7 @@ export default function ReaderServerNotice() {
     return () => window.removeEventListener("message", handleFrameMessage);
   }, []);
 
-  if (!visible || !config.enabled) return null;
+  if (!configLoaded || !visible || !config.enabled) return null;
 
   return (
     <section
