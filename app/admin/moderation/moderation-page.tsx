@@ -14,20 +14,26 @@ import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
   collection,
   collectionGroup,
+  documentId,
   doc,
   getDoc,
   getDocFromServer,
   getDocs,
   getDocsFromServer,
   getFirestore,
+  limit,
   orderBy,
   query,
   serverTimestamp,
   runTransaction,
+  startAfter,
   updateDoc,
   where,
   writeBatch,
+  type DocumentData,
   type Firestore,
+  type QueryDocumentSnapshot,
+  type QuerySnapshot,
 } from "firebase/firestore";
 import { normalizeChapterNumber } from "../../../lib/chapter-number";
 
@@ -248,6 +254,57 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Terjadi kesalahan yang tidak diketahui.";
 }
 
+function firestoreReadErrorMessage(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "resource-exhausted"
+  ) {
+    return "Kuota baca Firestore habis (resource-exhausted). Pemindaian seluruh situs membaca setiap komentar dan dapat melewati kuota. Gunakan mode Per halaman atau coba lagi setelah kuota pulih.";
+  }
+  return errorMessage(error);
+}
+
+type ScannedComment = {
+  id: string;
+  data: RecordData;
+};
+
+async function scanPostComments(
+  firestore: Firestore,
+  onProgress: (commentCount: number) => void,
+): Promise<Map<string, ScannedComment[]>> {
+  const commentsByPost = new Map<string, ScannedComment[]>();
+  const commentsCollection = collectionGroup(firestore, "postComments");
+  const pageSize = 100;
+  let cursor: QueryDocumentSnapshot<DocumentData, DocumentData> | null = null;
+  let scannedCount = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const pageQuery = cursor
+      ? query(commentsCollection, orderBy(documentId()), startAfter(cursor), limit(pageSize))
+      : query(commentsCollection, orderBy(documentId()), limit(pageSize));
+    const snapshot: QuerySnapshot<DocumentData, DocumentData> = await getDocsFromServer(pageQuery);
+    for (const comment of snapshot.docs) {
+      const postId = comment.ref.parent.parent?.id;
+      if (!postId) continue;
+      const comments = commentsByPost.get(postId) ?? [];
+      comments.push({ id: comment.id, data: comment.data() });
+      commentsByPost.set(postId, comments);
+    }
+
+    scannedCount += snapshot.size;
+    onProgress(scannedCount);
+    cursor = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null;
+    hasMore = snapshot.size === pageSize;
+    if (hasMore) await new Promise((resolve) => window.setTimeout(resolve, 200));
+  }
+
+  return commentsByPost;
+}
+
 export default function ModerationPage() {
   const [services, setServices] = useState<ModeratorServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -288,6 +345,32 @@ export default function ModerationPage() {
   const isModerator = Boolean(
     user?.email && MODERATOR_EMAILS.includes(user.email.trim().toLowerCase()),
   );
+
+  useEffect(() => {
+    const applySavedTheme = () => {
+      let isDark = true;
+      try {
+        isDark = window.localStorage.getItem("darkMode") !== "false";
+      } catch (error) {
+        console.warn("Preferensi tema tidak dapat dibaca di halaman moderasi.", error);
+      }
+
+      const roots = [document.documentElement, document.body];
+      roots.forEach((root) => {
+        root.classList.toggle("dark", isDark);
+        root.classList.toggle("light", !isDark);
+      });
+      document.documentElement.style.backgroundColor = isDark ? "#0b0b0b" : "#f8f9fa";
+      document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "darkMode" || event.key === null) applySavedTheme();
+    };
+
+    applySavedTheme();
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   useEffect(() => {
     try {
@@ -378,14 +461,8 @@ export default function ModerationPage() {
     setPreview(null);
     setImportBusy(true);
     try {
-      const snapshot = await getDocsFromServer(collectionGroup(services.firestore, "postComments"));
-      const commentsByPost = new Map<string, typeof snapshot.docs>();
-      snapshot.docs.forEach((comment) => {
-        const postId = comment.ref.parent.parent?.id;
-        if (!postId) return;
-        const comments = commentsByPost.get(postId) ?? [];
-        comments.push(comment);
-        commentsByPost.set(postId, comments);
+      const commentsByPost = await scanPostComments(services.firestore, (count) => {
+        setActionStatus(`Memindai komentar dari server... ${count} komentar dibaca.`);
       });
 
       const entries: ImportPreview[] = [];
@@ -409,7 +486,7 @@ export default function ModerationPage() {
           existingCount: commentsByPost.get(targetPostId)?.length ?? 0,
           sample: comments.slice(0, 2).map((comment) => ({
             id: comment.id,
-            text: displayText(comment.data().text || comment.data().comment, "(Komentar tanpa teks)").slice(0, 180),
+            text: displayText(comment.data.text || comment.data.comment, "(Komentar tanpa teks)").slice(0, 180),
           })),
         });
       });
@@ -431,7 +508,7 @@ export default function ModerationPage() {
       );
     } catch (error) {
       console.error("Comment import preview failed.", error);
-      setPageError(`Pemindaian seluruh komentar gagal: ${errorMessage(error)}`);
+      setPageError(`Pemindaian seluruh komentar gagal: ${firestoreReadErrorMessage(error)}`);
     } finally {
       setImportBusy(false);
     }
@@ -532,14 +609,8 @@ export default function ModerationPage() {
     setPageError("");
     setActionStatus("");
     try {
-      const snapshot = await getDocsFromServer(collectionGroup(services.firestore, "postComments"));
-      const commentsByPost = new Map<string, typeof snapshot.docs>();
-      snapshot.docs.forEach((comment) => {
-        const postId = comment.ref.parent.parent?.id;
-        if (!postId) return;
-        const comments = commentsByPost.get(postId) ?? [];
-        comments.push(comment);
-        commentsByPost.set(postId, comments);
+      const commentsByPost = await scanPostComments(services.firestore, (count) => {
+        setActionStatus(`Memuat ulang komentar dari server sebelum import... ${count} komentar dibaca.`);
       });
       let copiedTotal = 0;
       let skippedTotal = 0;
@@ -557,7 +628,7 @@ export default function ModerationPage() {
             chunk.forEach((comment) => {
               batch.set(
                 doc(services.firestore, "comments", entry.targetPostId, "postComments", comment.id),
-                comment.data(),
+                comment.data,
               );
             });
             await batch.commit();
@@ -579,7 +650,7 @@ export default function ModerationPage() {
       );
     } catch (error) {
       console.error("Comment import failed.", error);
-      setPageError(`Import komentar gagal: ${errorMessage(error)}`);
+      setPageError(`Import komentar gagal: ${firestoreReadErrorMessage(error)}`);
     } finally {
       setImportBusy(false);
     }
