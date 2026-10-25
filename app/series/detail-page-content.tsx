@@ -337,7 +337,7 @@ function openSeriesCoverPreferences(): Promise<IDBDatabase> {
   });
 }
 
-async function r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(slug: string): Promise<string | null> {
+async function getSavedSeriesCoverUrl(slug: string): Promise<string | null> {
   const database = await openSeriesCoverPreferences();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(SERIES_COVER_PREFERENCE_STORE, "readonly");
@@ -357,7 +357,7 @@ async function r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(slug: string): Promise<string 
   });
 }
 
-async function wr9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(slug: string, url: string): Promise<void> {
+async function saveSeriesCoverUrl(slug: string, url: string): Promise<void> {
   const database = await openSeriesCoverPreferences();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(SERIES_COVER_PREFERENCE_STORE, "readwrite");
@@ -823,7 +823,6 @@ function cachedChapterListForSource(
   slug: string,
   source: ChapterSource,
 ): Chapter[] | undefined {
-  // Never mix ES into SV1/SV2 lists — only return the selected source.
   return cache.get(chapterSourceCacheKey(slug, source));
 }
 
@@ -881,10 +880,9 @@ function chapterPreviewThumbnail(images: string[], fallback = ""): string {
       /^https?:\/\//i.test(src) &&
       !/favicon|emoji|icon|spacer|pixel|1x1/i.test(src),
   );
-  // Prefer 3rd page image (index 2), same rule as SV1/SV2 Blogger previews
+
   const raw = clean[2] || clean[1] || clean[0] || fallback || "";
   if (!raw) return "";
-  // Keep original URL in data; weserv resize is applied at render time so first paint is already small
   return raw;
 }
 
@@ -1158,7 +1156,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       };
     }
     if (!("indexedDB" in window)) return;
-    void r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(mangaSlug).then((savedUrl) => {
+    void getSavedSeriesCoverUrl(mangaSlug).then((savedUrl) => {
       if (!active || !savedUrl) return;
       setSelectedCoverUrl(savedUrl);
       try {
@@ -1354,7 +1352,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         const key = chapterSourceCacheKey(slug, chapterSource);
         const memoryCache = chapterSourceCacheRef.current;
         const cached = memoryCache.get(key);
-        // Reuse memory only when previews already exist (or ES list).
         if (cached && (chapterSource === "firestore" || chaptersHaveThumbnails(cached))) {
           try {
             await mergeSharedChapterCache(slug, chapterSource, cached);
@@ -1545,7 +1542,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     })
     .sort((left, right) => {
       const order = chapterNumber(left.num) - chapterNumber(right.num);
-      // newest = chapter tertinggi di atas (high priority batch pertama)
       return sort === "newest" ? -order : order;
     }), [chapterSearch, chapters, sort]);
 
@@ -1559,7 +1555,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     setChapterWindow(CHAPTER_UI_BATCH);
   }, [slug, source, sort, chapterSearch]);
 
-  // Keep total in a ref so the observer effect does not thrash on every window expand
   const chapterTotalRef = useRef(filteredSortedChapters.length);
   chapterTotalRef.current = filteredSortedChapters.length;
 
@@ -1579,9 +1574,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       });
     };
 
-    // If the sentinel is already on screen (common when the first batch is short
-    // or the user is already at the bottom), IntersectionObserver may not fire
-    // until the next scroll — expand immediately in that case.
     const alreadyVisible = (() => {
       const rect = node.getBoundingClientRect();
       const viewport = window.innerHeight || document.documentElement.clientHeight;
@@ -1599,8 +1591,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     );
     observer.observe(node);
 
-    // Safety net: while the sentinel stays in view, keep expanding on a short timer
-    // so a missed intersection event cannot leave "Loading chapters..." stuck forever.
     const safety = window.setInterval(() => {
       if (cancelled) return;
       const rect = node.getBoundingClientRect();
@@ -1613,7 +1603,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       observer.disconnect();
       window.clearInterval(safety);
     };
-    // Intentionally omit chapterWindow from deps — expanding should not rebuild the observer.
+
   }, [hasMoreChapters, chapterState, filteredSortedChapters.length]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
@@ -1630,7 +1620,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       if (!localSaved) setCoverPreferenceError("Browser storage is unavailable; cover selection will not persist.");
       return;
     }
-    void wr9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(manga.slug, url).catch((error: unknown) => {
+    void saveSeriesCoverUrl(manga.slug, url).catch((error: unknown) => {
       console.error(`Could not save the selected cover for ${manga.slug}.`, error);
       if (!localSaved) setCoverPreferenceError("Cover changed for this visit, but could not be saved in this browser.");
     });
@@ -1752,7 +1742,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     let images = chapter.source === "firestore" && readerSource !== "firestore"
       ? []
       : chapter.images || [];
-    // List API slim (tanpa images) — hydrate saat buka chapter Blogger
+
     if (
       !isNovel &&
       !images.length &&
@@ -2184,11 +2174,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     type="button"
                   >
                     {view !== "text-grid" && (() => {
-                      // Prefer 3rd chapter page as preview. Never use series cover for SV1/SV2.
                       const pageImages = (chapter.images || []).filter(
                         (src): src is string => typeof src === "string" && src.length > 8,
                       );
-                      // Always prefer 3rd page image when available (SV1/SV2/ES)
+                    
                       const candidates = [
                         pageImages[2],
                         pageImages[1],
