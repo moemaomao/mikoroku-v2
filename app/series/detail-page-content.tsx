@@ -561,6 +561,7 @@ async function loadBloggerChapterSource(
   const params = new URLSearchParams({
     title: title.trim(),
     source: bloggerSource,
+    full: "1",
   });
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
@@ -590,15 +591,38 @@ async function loadBloggerChapterSource(
     }>;
   };
 
-  return (data.chapters || []).map((chapter) => ({
-    num: chapter.num,
-    title: chapter.title,
-    url: chapter.url,
-    images: chapter.images || [],
-    thumbnail: chapter.thumbnail || "",
-    createdAt: chapter.createdAt || "",
-    source: chapter.source === "blogger2" ? "blogger2" : "blogger",
-  }));
+  return (data.chapters || []).map((chapter) => {
+    const images = Array.isArray(chapter.images)
+      ? chapter.images.filter(
+          (src): src is string =>
+            typeof src === "string" &&
+            /^https?:\/\//i.test(src) &&
+            !/favicon|emoji|icon|spacer|pixel|1x1/i.test(src),
+        )
+      : [];
+    // 3rd page image is the usual chapter preview (skip header/logo frames)
+    const rawThumb =
+      images[2] ||
+      images[1] ||
+      images[0] ||
+      (typeof chapter.thumbnail === "string" ? chapter.thumbnail : "") ||
+      "";
+    const thumbnail = rawThumb
+      ? rawThumb
+          .replace(/\/s\d+([/#?]|$)/, "/s220$1")
+          .replace(/=s\d+/, "=s220")
+      : "";
+    return {
+      num: chapter.num,
+      title: chapter.title,
+      url: chapter.url,
+      // Keep a couple of alternates so the grid can recover if one URL fails
+      images: images.slice(0, 4),
+      thumbnail,
+      createdAt: chapter.createdAt || "",
+      source: chapter.source === "blogger2" ? "blogger2" : "blogger",
+    };
+  });
 }
 
 async function loadBloggerChapterImages(
@@ -651,8 +675,8 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
       id: document.id,
       num: chapterNumberFromRecord(data, document.id),
       title: asString(data.title, `Chapter ${document.id}`),
-      thumbnail: asString(data.thumbnail),
-      images: chapterImages,
+      thumbnail: chapterPreviewThumbnail(chapterImages, asString(data.thumbnail)),
+      images: chapterImages.slice(0, 4),
       isNovel: isNovelSeries(data) ||
         (typeof chapterText === "string" && Boolean(chapterText.trim()) && !chapterImages.length),
       createdAt,
@@ -693,8 +717,8 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
       id,
       num: chapterNumberFromRecord(data, id),
       title: asString(data.title, `Chapter ${id}`),
-      thumbnail: asString(data.thumbnail),
-      images: chapterImages,
+      thumbnail: chapterPreviewThumbnail(chapterImages, asString(data.thumbnail)),
+      images: chapterImages.slice(0, 4),
       isNovel: isNovelSeries(data) ||
         (typeof chapterText === "string" && Boolean(chapterText.trim()) && !chapterImages.length),
       createdAt,
@@ -738,6 +762,20 @@ function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapt
   return merged;
 }
 
+function chapterHasPreviewImage(chapter: Chapter): boolean {
+  return Boolean(
+    (typeof chapter.thumbnail === "string" && chapter.thumbnail.length > 8) ||
+    (Array.isArray(chapter.images) && chapter.images.some((src) => typeof src === "string" && src.length > 8)),
+  );
+}
+
+function chaptersHaveThumbnails(list: Chapter[]): boolean {
+  if (!list.length) return false;
+  const sample = list.slice(0, Math.min(list.length, 24));
+  const withThumb = sample.filter(chapterHasPreviewImage).length;
+  return withThumb >= Math.ceil(sample.length * 0.4);
+}
+
 function chapterSourceCacheKey(slug: string, source: ChapterSource): string {
   return JSON.stringify([slug, source]);
 }
@@ -747,14 +785,7 @@ function cachedChapterListForSource(
   slug: string,
   source: ChapterSource,
 ): Chapter[] | undefined {
-  if (source === "firestore") return cache.get(chapterSourceCacheKey(slug, source));
-
-  const sourceKey = chapterSourceCacheKey(slug, source);
-  if (!cache.has(sourceKey)) return undefined;
-  return mergeChapterSources(
-    cache.get(sourceKey) || [],
-    cache.get(chapterSourceCacheKey(slug, "firestore")) || [],
-  );
+  return cache.get(chapterSourceCacheKey(slug, source));
 }
 
 function cacheChapterList(slug: string, chapters: Chapter[]): void {
@@ -796,6 +827,20 @@ function parseDateValue(value?: string | number): Date | null {
 
 function formatDate(value?: string | number): string {
   return parseDateValue(value)?.toLocaleDateString("id-ID") || "-";
+}
+
+function chapterPreviewThumbnail(images: string[], fallback = ""): string {
+  const clean = images.filter(
+    (src) =>
+      typeof src === "string" &&
+      src.length > 8 &&
+      /^https?:\/\//i.test(src) &&
+      !/favicon|emoji|icon|spacer|pixel|1x1/i.test(src),
+  );
+
+  const raw = clean[2] || clean[1] || clean[0] || fallback || "";
+  if (!raw) return "";
+  return raw.replace(/\/s\d+([/#?]|$)/, "/s220$1").replace(/=s\d+/, "=s220");
 }
 
 function extractChapterImages(raw: unknown): string[] {
@@ -1220,11 +1265,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           : [];
         cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
         cachedFirestoreChapters = valid.filter((chapter) => chapter.source === "firestore");
-        cachedChapters = source === "firestore"
-          ? cachedSelectedChapters
-          : cachedSelectedChapters.length
-            ? mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters)
-            : cachedFirestoreChapters;
+        cachedChapters = cachedSelectedChapters;
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
         localStorage.removeItem(`chapters_${slug}`);
@@ -1242,10 +1283,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     } else if (cachedChapters.length > 0) {
       setChapters(cachedChapters);
       setChapterState("ready");
-      chapterSourceCacheRef.current.set(
-        chapterSourceCacheKey(slug, source),
-        cachedSelectedChapters.length ? cachedSelectedChapters : cachedChapters,
-      );
+      const seedList = cachedSelectedChapters.length ? cachedSelectedChapters : cachedChapters;
+      if (source === "firestore" || chaptersHaveThumbnails(seedList)) {
+        chapterSourceCacheRef.current.set(chapterSourceCacheKey(slug, source), seedList);
+      }
       if (cachedFirestoreChapters.length) {
         chapterSourceCacheRef.current.set(
           chapterSourceCacheKey(slug, "firestore"),
@@ -1260,7 +1301,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       const loadAndCache = async (chapterSource: ChapterSource): Promise<Chapter[]> => {
         const key = chapterSourceCacheKey(slug, chapterSource);
         const memoryCache = chapterSourceCacheRef.current;
-        if (memoryCache.has(key)) return memoryCache.get(key) || [];
+        const cached = memoryCache.get(key);
+        if (cached && (chapterSource === "firestore" || chaptersHaveThumbnails(cached))) {
+          return cached;
+        }
         const loaded = chapterSource === "firestore"
           ? await loadFirestoreChapterSource(slug, controller.signal)
           : mangaTitle
@@ -1269,7 +1313,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         if (controller.signal.aborted) {
           throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
         }
-        memoryCache.set(key, loaded);
+        if (loaded.length) memoryCache.set(key, loaded);
         return loaded;
       };
 
@@ -1290,12 +1334,19 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         return cachedSelectedChapters;
       }
 
-      const primaryPromise = loadAndCache(source);
-      const firestorePromise = loadAndCache("firestore");
-
       let selectedChapters = cachedSelectedChapters;
-      let firestoreChapters = cachedFirestoreChapters;
       let primaryError: unknown;
+      const alternateBlogger: ChapterSource = source === "blogger" ? "blogger2" : "blogger";
+
+      const primaryPromise = loadAndCache(source);
+      const alternatePromise = loadAndCache(alternateBlogger).catch((error: unknown) => {
+        console.warn(`Alternate chapter source ${alternateBlogger} failed for ${slug}.`, error);
+        return [] as Chapter[];
+      });
+      const firestorePromise = loadAndCache("firestore").catch((error: unknown) => {
+        console.warn(`Chapter source firestore failed for ${slug}.`, error);
+        return [] as Chapter[];
+      });
 
       try {
         const primary = await primaryPromise;
@@ -1305,18 +1356,22 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         console.warn(`Chapter source ${source} failed for ${slug}.`, error);
       }
 
-      const earlyMerge = mergeChapterSources(selectedChapters, firestoreChapters);
-      if (earlyMerge.length) publishEarly(earlyMerge);
+      if (selectedChapters.length) publishEarly(selectedChapters);
 
-      try {
-        const fsLoaded = await firestorePromise;
-        if (fsLoaded.length) firestoreChapters = fsLoaded;
-      } catch (error) {
-        console.warn(`Chapter source firestore failed for ${slug}.`, error);
+      const [alternateChapters, firestoreChapters] = await Promise.all([
+        alternatePromise,
+        firestorePromise,
+      ]);
+
+      const mergedChapters = mergeChapterSources(
+        selectedChapters,
+        mergeChapterSources(alternateChapters, firestoreChapters),
+      );
+
+      if (mergedChapters.length) {
+        publishEarly(mergedChapters);
+        return mergedChapters;
       }
-
-      const mergedChapters = mergeChapterSources(selectedChapters, firestoreChapters);
-      if (mergedChapters.length) return mergedChapters;
       if (primaryError) throw primaryError;
       return cachedSelectedChapters;
     };
@@ -1471,6 +1526,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       observer.disconnect();
       window.clearInterval(safety);
     };
+  
   }, [hasMoreChapters, chapterState, filteredSortedChapters.length]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
@@ -2023,15 +2079,48 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     onClick={() => openChapter(chapter)}
                     type="button"
                   >
-                    {view !== "text-grid" && (
-                      <img
-                        className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
-                        alt=""
-                        loading={index < 12 ? "eager" : "lazy"}
-                        fetchPriority={index < 4 ? "high" : undefined}
-                        src={chapter.thumbnail || cover || "/assets/icons/favicon.ico"}
-                      />
-                    )}
+                    {view !== "text-grid" && (() => {
+                      // Prefer 3rd chapter page as preview. Never use series cover for SV1/SV2.
+                      const pageImages = (chapter.images || []).filter(
+                        (src): src is string => typeof src === "string" && src.length > 8,
+                      );
+                      // Always prefer 3rd page image when available (SV1/SV2/ES)
+                      const candidates = [
+                        pageImages[2],
+                        pageImages[1],
+                        pageImages[0],
+                        chapter.thumbnail,
+                        chapter.source === "firestore" ? cover : "",
+                      ].filter((src): src is string => typeof src === "string" && src.length > 8);
+                      const unique = [...new Set(candidates)];
+                      const thumbSrc = unique[0] || "";
+                      return thumbSrc ? (
+                        <img
+                          className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
+                          alt=""
+                          loading={index < 12 ? "eager" : "lazy"}
+                          fetchPriority={index < 4 ? "high" : undefined}
+                          src={thumbSrc}
+                          data-thumb-index="0"
+                          referrerPolicy="no-referrer"
+                          onError={(event) => {
+                            const image = event.currentTarget;
+                            const next = Number(image.dataset.thumbIndex || "0") + 1;
+                            if (next < unique.length) {
+                              image.dataset.thumbIndex = String(next);
+                              image.src = unique[next];
+                              return;
+                            }
+                            image.style.visibility = "hidden";
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br from-zinc-800 to-zinc-950 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""}`}
+                          aria-hidden="true"
+                        />
+                      );
+                    })()}
                     {isRead && (
                       <span
                         className="pointer-events-none absolute inset-0 z-[1] bg-[rgba(0,0,0,0.22)]"

@@ -234,11 +234,34 @@ function readCachedChapterRecords(slug: string): ListChapterRecord[] {
   }
 }
 
+function toHomepageChapterRecord(record: ListChapterRecord): ListChapterRecord {
+  const num = normalizeChapterNumber(record.num ?? record.chapter ?? record.id);
+  return {
+    num: num || record.num,
+    id: typeof record.id === "string" ? record.id : undefined,
+    title: typeof record.title === "string" ? record.title : undefined,
+    postTitle: typeof record.postTitle === "string" ? record.postTitle : undefined,
+    label: typeof record.label === "string"
+      ? record.label
+      : num
+        ? `Chapter ${num}`
+        : undefined,
+    url: typeof record.url === "string" ? record.url : undefined,
+    source: typeof record.source === "string" ? record.source : undefined,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    date: record.date,
+    timestamp: record.timestamp,
+  };
+}
+
 function cacheListChapterRecords(slug: string, chapters: ListChapterRecord[]): void {
   const current = readCachedChapterRecords(slug);
   const source = String(chapters[0]?.source || "blogger");
   const retained = current.filter((record) => record.source !== source && record.source !== "firestore");
-  const data = compactChapterCache([...chapters, ...retained]);
+  const lightweight = chapters.map(toHomepageChapterRecord);
+  const retainedLight = retained.map(toHomepageChapterRecord);
+  const data = compactChapterCache([...lightweight, ...retainedLight]);
   try {
     localStorage.setItem(`chapters_${slug}`, JSON.stringify({ time: Date.now(), data }));
     window.dispatchEvent(new Event("mikoroku:chapters-updated"));
@@ -360,6 +383,7 @@ async function loadListChapterSources(slug: string, title: string, source: "blog
     }
   }
 
+  // Fallback: shared recent feed (partial) then Firestore
   if (!chapters.length && source !== "firestore") {
     const titleKey = title.toLowerCase().replace(/[^a-z0-9]/g, "");
     const slugKey = slug.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -403,7 +427,6 @@ function ensureListChapterSources(card: HTMLElement, slug: string, title: string
     ? "firestore"
     : selected === "sv2" ? "blogger2" : "blogger";
   const cached = readCachedChapterRecords(slug);
-  // Only skip if we already have a large primary list (partial ~10 from old feed is not enough)
   const FULL_CACHE_THRESHOLD = 40;
   if (cached.filter((record) => record.source === source).length >= FULL_CACHE_THRESHOLD) return;
   const key = `${slug}:${source}`;
