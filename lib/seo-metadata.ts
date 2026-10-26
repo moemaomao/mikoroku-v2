@@ -191,18 +191,22 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
   try {
-    const response = await fetch(
-      `${FIRESTORE_DOCUMENTS_URL}/manga/${encodeURIComponent(slug)}`,
-      {
-        signal: AbortSignal.timeout(3500),
-        headers: { Accept: "application/json" },
-        // @ts-expect-error Cloudflare fetch extension
-        cf: { cacheTtl: 300, cacheEverything: true },
-      },
-    );
-    if (response.ok) {
-      const document = decodeFirestoreDocument(await response.json());
-      return normalizeSeries(document, slug);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    try {
+      const response = await fetch(
+        `${FIRESTORE_DOCUMENTS_URL}/manga/${encodeURIComponent(slug)}`,
+        {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+        },
+      );
+      if (response.ok) {
+        const document = decodeFirestoreDocument(await response.json());
+        return normalizeSeries(document, slug);
+      }
+    } finally {
+      clearTimeout(timer);
     }
   } catch (error) {
     console.warn("[OG seo] Firestore failed", slug, error);

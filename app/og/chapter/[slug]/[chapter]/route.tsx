@@ -17,79 +17,129 @@ const CACHE_HEADERS: HeadersInit = {
   "Access-Control-Allow-Origin": "*",
 };
 
-export const runtime = "edge";
-
 function isUsableCover(url: string | null | undefined): url is string {
   return Boolean(
     url &&
+      typeof url === "string" &&
       url.startsWith("http") &&
       !url.includes("MIKOROKU.png") &&
       !url.includes("apple-touch-icon"),
   );
 }
 
+function isRenderableCover(url: string | null | undefined): url is string {
+  return Boolean(
+    url &&
+      typeof url === "string" &&
+      (url.startsWith("data:image/") || isUsableCover(url)),
+  );
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fallbackPng(): Promise<ArrayBuffer> {
+  const fallback = createMikorokuOgImage({
+    title: "Chapter - Mikoroku",
+    description: "Baca manga di Mikoroku.",
+    label: "Manga Chapter",
+    coverUrl: null,
+  });
+  return fallback.arrayBuffer();
+}
+
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ slug: string }> },
+  { params }: { params: Promise<{ slug: string; chapter: string }> },
 ) {
-  const { slug } = await params;
-  const cacheKey = CacheKeys.ogSeries(slug);
-
   try {
-    const cached = await kvGetArrayBuffer(cacheKey);
-    if (cached && cached.byteLength > 1000) {
-      return new Response(cached, { headers: CACHE_HEADERS });
-    }
-  } catch (error) {
-    console.warn("[OG series] KV read failed", error);
-  }
+    const { slug, chapter } = await params;
+    const cacheKey = CacheKeys.ogChapter(slug, chapter);
 
-  try {
-    const series = await getSeriesSeoDataForOg(slug);
-
-    // 1) Try prepare cover (data URL or verified remote)
-    // 2) Fallback: raw Firestore cover URL for ImageResponse
-    let coverUrl: string | null = null;
     try {
-      coverUrl = await Promise.race([
+      const cached = await kvGetArrayBuffer(cacheKey);
+      if (cached && cached.byteLength > 1000) {
+        return new Response(cached, { headers: CACHE_HEADERS });
+      }
+    } catch (error) {
+      console.warn("[OG chapter] KV read failed", error);
+    }
+
+    const series = await withTimeout(
+      getSeriesSeoDataForOg(slug),
+      4000,
+      {
+        title: slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        description: "Baca manga di Mikoroku.",
+        image: "",
+      },
+    );
+
+    const title = `Chapter ${chapter} - ${series.title}`;
+    const description =
+      series.description ||
+      `Baca Chapter ${chapter} ${series.title} di Mikoroku.`;
+
+    let coverUrl: string | null = null;
+    if (isUsableCover(series.image)) {
+      const prepared = await withTimeout(
         toOgCoverDataUrl(series.image),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-      ]);
-    } catch {
-      coverUrl = null;
-    }
-    if (!coverUrl && isUsableCover(series.image)) {
-      coverUrl = series.image;
+        2500,
+        series.image,
+      );
+      coverUrl = isRenderableCover(prepared) ? prepared : series.image;
     }
 
-    const buffer = await renderOgPng({
-      title: series.title,
-      description: series.description,
-      label: "Manga & Series",
-      coverUrl,
-    });
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await renderOgPng({
+        title,
+        description,
+        label: "Manga Chapter",
+        coverUrl,
+      });
+    } catch (error) {
+      console.warn("[OG chapter] render with cover failed", error);
+      buffer = await renderOgPng({
+        title,
+        description,
+        label: "Manga Chapter",
+        coverUrl: null,
+      });
+    }
 
-    if (buffer.byteLength < 1000) {
-      throw new Error("OG buffer too small");
+    if (!buffer || buffer.byteLength < 1000) {
+      buffer = await fallbackPng();
     }
 
     try {
       void kvSetArrayBuffer(cacheKey, buffer, CACHE_TTL);
     } catch (error) {
-      console.warn("[OG series] KV write failed", error);
+      console.warn("[OG chapter] KV write failed", error);
     }
 
-    return new Response(buffer, { headers: CACHE_HEADERS });
-  } catch (error) {
-    console.error("[OG series]", error);
-
-    const fallback = createMikorokuOgImage({
-      title: "Mikoroku",
-      description: "Platform baca manga bahasa Indonesia.",
-      label: "Manga & Series",
-      coverUrl: null,
-    });
-    const buffer = await fallback.arrayBuffer();
     return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
+  } catch (error) {
+    console.error("[OG chapter] fatal", error);
+    try {
+      const buffer = await fallbackPng();
+      return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
+    } catch {
+      return new Response("OG unavailable", {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
   }
 }

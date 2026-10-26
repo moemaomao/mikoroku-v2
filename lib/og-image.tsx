@@ -42,16 +42,18 @@ export async function toOgCoverDataUrl(
   const url = shrinkBloggerUrl(coverUrl);
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(url, {
       method: "GET",
-      signal: AbortSignal.timeout(2500),
+      signal: controller.signal,
       headers: {
         Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8",
         "User-Agent":
           "Mozilla/5.0 (compatible; MikorokuOG/1.2; +https://mikoroku.top)",
       },
       redirect: "follow",
-    });
+    }).finally(() => clearTimeout(timer));
 
     if (!res.ok) {
       console.warn("[OG] cover HTTP", res.status, url);

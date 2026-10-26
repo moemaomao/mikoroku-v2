@@ -17,40 +17,105 @@ const CACHE_HEADERS: HeadersInit = {
   "Access-Control-Allow-Origin": "*",
 };
 
-export const runtime = "edge";
+function isUsableCover(url: string | null | undefined): url is string {
+  return Boolean(
+    url &&
+      typeof url === "string" &&
+      url.startsWith("http") &&
+      !url.includes("MIKOROKU.png") &&
+      !url.includes("apple-touch-icon"),
+  );
+}
+
+function isRenderableCover(url: string | null | undefined): url is string {
+  return Boolean(
+    url &&
+      typeof url === "string" &&
+      (url.startsWith("data:image/") || isUsableCover(url)),
+  );
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fallbackPng(): Promise<ArrayBuffer> {
+  const fallback = createMikorokuOgImage({
+    title: "Mikoroku",
+    description: "Platform baca manga bahasa Indonesia.",
+    label: "Manga & Series",
+    coverUrl: null,
+  });
+  return fallback.arrayBuffer();
+}
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
-  const { slug } = await params;
-  const cacheKey = CacheKeys.ogSeries(slug);
-
   try {
-    const cached = await kvGetArrayBuffer(cacheKey);
-    if (cached && cached.byteLength > 1000) {
-      return new Response(cached, { headers: CACHE_HEADERS });
+    const { slug } = await params;
+    const cacheKey = CacheKeys.ogSeries(slug);
+
+    try {
+      const cached = await kvGetArrayBuffer(cacheKey);
+      if (cached && cached.byteLength > 1000) {
+        return new Response(cached, { headers: CACHE_HEADERS });
+      }
+    } catch (error) {
+      console.warn("[OG series] KV read failed", error);
     }
-  } catch (error) {
-    console.warn("[OG series] KV read failed", error);
-  }
 
-  try {
-    const series = await getSeriesSeoDataForOg(slug);
-    const coverDataUrl = await Promise.race([
-      toOgCoverDataUrl(series.image),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2200)),
-    ]);
+    const series = await withTimeout(
+      getSeriesSeoDataForOg(slug),
+      4000,
+      {
+        title: slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        description: "Baca manga di Mikoroku.",
+        image: "",
+      },
+    );
 
-    const buffer = await renderOgPng({
-      title: series.title,
-      description: series.description,
-      label: "Manga & Series",
-      coverUrl: coverDataUrl,
-    });
+    let coverUrl: string | null = null;
+    if (isUsableCover(series.image)) {
+      const prepared = await withTimeout(
+        toOgCoverDataUrl(series.image),
+        2500,
+        series.image,
+      );
+      coverUrl = isRenderableCover(prepared) ? prepared : series.image;
+    }
 
-    if (buffer.byteLength < 1000) {
-      throw new Error("OG buffer too small");
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await renderOgPng({
+        title: series.title,
+        description: series.description,
+        label: "Manga & Series",
+        coverUrl,
+      });
+    } catch (error) {
+      console.warn("[OG series] render with cover failed", error);
+      buffer = await renderOgPng({
+        title: series.title,
+        description: series.description,
+        label: "Manga & Series",
+        coverUrl: null,
+      });
+    }
+
+    if (!buffer || buffer.byteLength < 1000) {
+      buffer = await fallbackPng();
     }
 
     try {
@@ -61,15 +126,15 @@ export async function GET(
 
     return new Response(buffer, { headers: CACHE_HEADERS });
   } catch (error) {
-    console.error("[OG series]", error);
-
-    const fallback = createMikorokuOgImage({
-      title: "Mikoroku",
-      description: "Platform baca manga bahasa Indonesia.",
-      label: "Manga & Series",
-      coverUrl: null,
-    });
-    const buffer = await fallback.arrayBuffer();
-    return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
+    console.error("[OG series] fatal", error);
+    try {
+      const buffer = await fallbackPng();
+      return new Response(buffer, { status: 200, headers: CACHE_HEADERS });
+    } catch {
+      return new Response("OG unavailable", {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
   }
 }
