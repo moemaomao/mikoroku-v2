@@ -14,8 +14,6 @@ export async function generateMetadata({
     manga.description || `Baca ${manga.title} di Mikoroku.`
   ).slice(0, 200);
   const url = `https://mikoroku.top/series/${encodeURIComponent(slug)}`;
-
-  // Cache-bust OG image with updatedAt so Discord/Facebook pick up new cover after admin edit
   const v = manga.updatedAt ? `?v=${manga.updatedAt}` : "";
   const imageUrl = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}${v}`;
 

@@ -14,6 +14,11 @@ export type SeriesSeoData = {
   updatedAt?: number;
 };
 
+type CoverOverride = {
+  cover: string;
+  updatedAt?: number;
+};
+
 function decodeFirestoreValue(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
   const record = value as Record<string, unknown>;
@@ -149,6 +154,35 @@ function normalizeSeries(
   };
 }
 
+export function coverOverrideKey(slug: string): string {
+  return `cover:override:${slug}`;
+}
+
+async function readCoverOverride(slug: string): Promise<CoverOverride | null> {
+  try {
+    const { kvGet } = await import("./kv-cache");
+    const data = await kvGet<CoverOverride>(coverOverrideKey(slug));
+    if (data && typeof data.cover === "string" && data.cover.startsWith("http")) {
+      return data;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function applyCoverOverride(
+  series: SeriesSeoData,
+  override: CoverOverride | null,
+): SeriesSeoData {
+  if (!override) return series;
+  return {
+    ...series,
+    image: override.cover,
+    updatedAt: override.updatedAt ?? series.updatedAt ?? Date.now(),
+  };
+}
+
 async function getFirestoreDocument(
   path: string,
 ): Promise<Record<string, unknown> | null> {
@@ -166,12 +200,13 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
   const title = fallbackTitle(slug);
   let datasetError: unknown;
   let datasetSeries: SeriesSeoData | null = null;
+  const override = await readCoverOverride(slug);
 
   try {
     const document = await getFirestoreDocument(
       `manga/${encodeURIComponent(slug)}`,
     );
-    if (document) return normalizeSeries(document, slug);
+    if (document) return applyCoverOverride(normalizeSeries(document, slug), override);
   } catch (error) {
     console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
   }
@@ -192,16 +227,17 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
     datasetError = error;
   }
 
-  if (datasetSeries) return datasetSeries;
+  if (datasetSeries) return applyCoverOverride(datasetSeries, override);
 
   if (datasetError) {
     console.error("Metadata seri tidak dapat diambil dari dataset.", datasetError);
   }
-  return normalizeSeries({ title }, slug);
+  return applyCoverOverride(normalizeSeries({ title }, slug), override);
 }
 
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
-  // 1. Prefer Firestore (admin updates live here)
+  const override = await readCoverOverride(slug);
+
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3500);
@@ -215,7 +251,7 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
       );
       if (response.ok) {
         const document = decodeFirestoreDocument(await response.json());
-        return normalizeSeries(document, slug);
+        return applyCoverOverride(normalizeSeries(document, slug), override);
       }
     } finally {
       clearTimeout(timer);
@@ -224,7 +260,6 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
     console.warn("[OG seo] Firestore failed", slug, error);
   }
 
-  // 2. Fallback to all-manga.json so share still has a cover
   try {
     const response = await fetch(MANGA_DATA_URL, {
       next: { revalidate: 900 },
@@ -236,10 +271,19 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
           asText(item.slug) === slug ||
           slugKey(asText(item.title)) === slugKey(slug),
       );
-      if (manga) return normalizeSeries(manga, slug);
+      if (manga) return applyCoverOverride(normalizeSeries(manga, slug), override);
     }
   } catch (error) {
     console.warn("[OG seo] dataset fallback failed", slug, error);
+  }
+
+  if (override) {
+    return {
+      title: fallbackTitle(slug),
+      description: `Baca manga di Mikoroku.`,
+      image: override.cover,
+      updatedAt: override.updatedAt ?? Date.now(),
+    };
   }
 
   return normalizeSeries({ title: fallbackTitle(slug) }, slug);
@@ -248,7 +292,7 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
 export async function getChapterSeoTitle(
   slug: string,
   chapter: string,
-): Promise<{ title: string; description: string; image: string }> {
+): Promise<{ title: string; description: string; image: string; updatedAt?: number }> {
   const series = await getSeriesSeoData(slug);
   let chapterTitle = `Chapter ${chapter}`;
   let description = `Baca ${chapterTitle} ${series.title} di Mikoroku.`;
@@ -274,6 +318,7 @@ export async function getChapterSeoTitle(
     title: `${chapterTitle} - ${series.title} - Mikoroku`,
     description: description.slice(0, 300),
     image: series.image,
+    updatedAt: series.updatedAt,
   };
 }
 
