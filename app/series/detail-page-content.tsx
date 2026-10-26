@@ -111,6 +111,7 @@ const genreAccentColors = [
   { accent: "#59d7cf", lightText: "#14786f" },
 ] as const;
 
+
 type BloggerEntry = {
   title?: { $t?: string };
   link?: Array<{ rel?: string; href?: string }>;
@@ -787,7 +788,6 @@ function chapterKey(chapter: Chapter): string {
 }
 
 function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapter[] {
-  // Primary source always wins for a chapter number. Supplemental only fills gaps.
   const merged: Chapter[] = [];
   const seen = new Set<string>();
   for (const chapter of [...primary, ...supplemental]) {
@@ -806,12 +806,26 @@ function chapterHasPreviewImage(chapter: Chapter): boolean {
   );
 }
 
-/** True when enough chapters already carry real preview images (not just numbers). */
 function chaptersHaveThumbnails(list: Chapter[]): boolean {
   if (!list.length) return false;
   const sample = list.slice(0, Math.min(list.length, 24));
   const withThumb = sample.filter(chapterHasPreviewImage).length;
   return withThumb >= Math.ceil(sample.length * 0.4);
+}
+
+function chaptersNeedEmergencyFill(list: Chapter[]): boolean {
+  if (!list.length) return true;
+  const nums = [...new Set(
+    list
+      .map((chapter) => Math.floor(chapterNumber(chapter.num)))
+      .filter((value) => value > 0),
+  )].sort((left, right) => left - right);
+  if (!nums.length) return true;
+  if (nums[0] > 1) return true;
+  for (let index = 1; index < nums.length; index += 1) {
+    if (nums[index] - nums[index - 1] > 1) return true;
+  }
+  return false;
 }
 
 function chapterSourceCacheKey(slug: string, source: ChapterSource): string {
@@ -1332,7 +1346,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     } else if (cachedChapters.length > 0) {
       setChapters(cachedChapters);
       setChapterState("ready");
-      // Never seed SV1/SV2 memory cache with number-only records — that skips full=1 thumbnail fetch.
       const seedList = cachedSelectedChapters.length ? cachedSelectedChapters : cachedChapters;
       if (source === "firestore" || chaptersHaveThumbnails(seedList)) {
         chapterSourceCacheRef.current.set(chapterSourceCacheKey(slug, source), seedList);
@@ -1412,20 +1425,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
       let selectedChapters = cachedSelectedChapters;
       let primaryError: unknown;
-      const alternateBlogger: ChapterSource = source === "blogger" ? "blogger2" : "blogger";
-
-      const primaryPromise = loadAndCache(source);
-      const alternatePromise = loadAndCache(alternateBlogger).catch((error: unknown) => {
-        console.warn(`Alternate chapter source ${alternateBlogger} failed for ${slug}.`, error);
-        return [] as Chapter[];
-      });
-      const firestorePromise = loadAndCache("firestore").catch((error: unknown) => {
-        console.warn(`Chapter source firestore failed for ${slug}.`, error);
-        return [] as Chapter[];
-      });
 
       try {
-        const primary = await primaryPromise;
+        const primary = await loadAndCache(source);
         if (primary.length) selectedChapters = primary;
       } catch (error) {
         primaryError = error;
@@ -1434,15 +1436,18 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
       if (selectedChapters.length) publishEarly(selectedChapters);
 
-      const [alternateChapters, firestoreChapters] = await Promise.all([
-        alternatePromise,
-        firestorePromise,
-      ]);
+      if (!chaptersNeedEmergencyFill(selectedChapters)) {
+        return selectedChapters;
+      }
 
-      const mergedChapters = mergeChapterSources(
-        selectedChapters,
-        mergeChapterSources(alternateChapters, firestoreChapters),
-      );
+      let firestoreChapters: Chapter[] = [];
+      try {
+        firestoreChapters = await loadAndCache("firestore");
+      } catch (error) {
+        console.warn(`Chapter source firestore failed for ${slug}.`, error);
+      }
+
+      const mergedChapters = mergeChapterSources(selectedChapters, firestoreChapters);
 
       if (mergedChapters.length) {
         publishEarly(mergedChapters);
@@ -1996,26 +2001,33 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 )}
               </section>
             )}
-            <nav className="detail-tabs mx-3 flex w-[calc(100%-24px)] flex-nowrap items-stretch justify-between border-b border-black/15 text-sm dark:border-white/15 md:mx-[30px] md:w-auto md:justify-start lg:mx-10" role="tablist" aria-label="Series details">
+            <nav className="detail-tabs mx-3 flex w-[calc(100%-24px)] flex-nowrap items-center justify-between py-2 text-[11px] sm:text-[12px] md:mx-[30px] md:w-auto md:justify-start md:gap-4 md:text-[14px] lg:mx-10 lg:gap-5 lg:text-[15px]" role="tablist" aria-label="Series details">
               {([
                 ["chapters", `Chapters (${chapters.length})`],
                 ["synopsis", "Synopsis"],
                 ["covers", `Volumes (${coverOptions.length})`],
                 ["discussion", `Comments (${commentCount ?? "…" })`],
-              ] as const).map(([tab, label]) => (
-                <button
-                  className={`relative min-h-10 min-w-0 flex-1 truncate border-b-2 px-0.5 py-2 text-center text-[10px] font-medium leading-tight transition-colors sm:text-[11px] md:min-h-12 md:flex-none md:px-4 md:text-left md:text-sm ${detailTab === tab ? "border-[var(--mikoroku-detail-tab-accent)] text-[var(--mikoroku-detail-tab-accent)]" : "border-transparent text-[#666] hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white/60 dark:hover:text-[var(--mikoroku-detail-tab-accent)]"}`}
-                  type="button"
-                  key={tab}
-                  id={`detail-tab-${tab}`}
-                  role="tab"
-                  aria-selected={detailTab === tab}
-                  onClick={() => setDetailTab(tab)}
-                  title={label}
-                >
-                  {label}
-                </button>
-              ))}
+              ] as const).map(([tab, label]) => {
+                const isActive = detailTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    className={`relative min-h-8 shrink-0 origin-center border-0 bg-transparent px-0.5 py-1 text-center font-medium leading-tight transition-all duration-300 ease-out will-change-transform sm:px-1 md:text-left ${
+                      isActive
+                        ? "scale-110 text-[var(--mikoroku-detail-tab-accent)] font-bold underline underline-offset-4 sm:scale-125"
+                        : "scale-95 text-[#666] opacity-70 hover:scale-100 hover:opacity-100 hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white/55 dark:hover:text-[var(--mikoroku-detail-tab-accent)] sm:scale-90"
+                    }`}
+                    type="button"
+                    id={`detail-tab-${tab}`}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setDetailTab(tab)}
+                    title={label}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </nav>
 
             {detailTab === "synopsis" && <section className="synopsis max-[767px]:mt-4" role="tabpanel" aria-labelledby="detail-tab-synopsis">
