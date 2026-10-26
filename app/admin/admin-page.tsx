@@ -1053,6 +1053,19 @@ export default function AdminPage() {
       };
       await setDoc(mangaRef, data, { merge: true });
 
+      try {
+        await fetch("/api/admin/sync-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug,
+            cover: mainCover,
+            updatedAt,
+          }),
+        });
+      } catch {
+      }
+
       const savedManga = fromFirestore(slug, {
         ...data,
         slug,
@@ -1555,20 +1568,37 @@ export default function AdminPage() {
         .map((url) => [url, coverNumbers[url].trim()]),
     );
     const { firestore } = getAdminFirebase();
+    const mainCover = nextCovers[nextCovers.length - 1] || selectedManga.cover;
     await setDoc(
       doc(firestore, "manga", selectedManga.slug),
       {
         slug: selectedManga.slug,
         title: selectedManga.title,
-        cover: nextCovers[nextCovers.length - 1] || selectedManga.cover,
+        cover: mainCover,
         covers: nextCovers,
         coverNumbers: nextCoverNumbers,
       },
       { merge: true },
     );
+
+    try {
+      if (mainCover) {
+        await fetch("/api/admin/sync-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: selectedManga.slug,
+            cover: mainCover,
+            updatedAt: Date.now(),
+          }),
+        });
+      }
+    } catch {
+    }
+
     const updatedManga = {
       ...selectedManga,
-      cover: nextCovers[nextCovers.length - 1] || selectedManga.cover,
+      cover: mainCover,
       covers: nextCovers,
       coverNumbers: nextCoverNumbers,
     };
