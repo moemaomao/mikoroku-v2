@@ -1,7 +1,8 @@
-import { getSeriesSeoData } from "../../../../lib/seo-metadata";
+import { getSeriesSeoDataForOg } from "../../../../lib/seo-metadata";
 import {
   createMikorokuOgImage,
   toOgCoverDataUrl,
+  renderOgPng,
 } from "../../../../lib/og-image";
 import {
   CacheKeys,
@@ -15,6 +16,8 @@ const CACHE_HEADERS: HeadersInit = {
   "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
   "Access-Control-Allow-Origin": "*",
 };
+
+export const runtime = "edge";
 
 export async function GET(
   _request: Request,
@@ -33,17 +36,19 @@ export async function GET(
   }
 
   try {
-    const series = await getSeriesSeoData(slug);
-    const coverDataUrl = await toOgCoverDataUrl(series.image);
+    const series = await getSeriesSeoDataForOg(slug);
+    const coverDataUrl = await Promise.race([
+      toOgCoverDataUrl(series.image),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2200)),
+    ]);
 
-    const imageRes = createMikorokuOgImage({
+    const buffer = await renderOgPng({
       title: series.title,
       description: series.description,
       label: "Manga & Series",
       coverUrl: coverDataUrl,
     });
 
-    const buffer = await imageRes.arrayBuffer();
     if (buffer.byteLength < 1000) {
       throw new Error("OG buffer too small");
     }

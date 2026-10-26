@@ -5,47 +5,50 @@ const FAVICON_URL = "https://i.ibb.co/B5g000HF/apple-touch-icon.png";
 export const OG_IMAGE_WIDTH = 1200;
 export const OG_IMAGE_HEIGHT = 630;
 
-const COVER_W = 320;
-const COVER_H = 480;
+const COVER_W = 280;
+const COVER_H = 420;
+const MAX_COVER_BYTES = 280_000;
 
-function isSafeCoverHost(url: string): boolean {
-  try {
-    const host = new URL(url).hostname;
-    return (
-      host === "i.ibb.co" ||
-      host === "ibb.co" ||
-      host.endsWith(".ibb.co") ||
-      host === "image.ibb.co"
-    );
-  } catch {
-    return false;
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
   }
+  return btoa(binary);
+}
+
+function shrinkBloggerUrl(url: string): string {
+  if (!url.includes("blogger.googleusercontent.com")) return url;
+  return url.replace(/\/s\d+(-[cwcwhh\d]+)?\//, "/s300/");
+}
+
+function isPlaceholderCover(url: string): boolean {
+  return (
+    !url ||
+    url.includes("MIKOROKU.png") ||
+    url.includes("apple-touch-icon")
+  );
 }
 
 export async function toOgCoverDataUrl(
   coverUrl: string | null | undefined,
 ): Promise<string | null> {
-  if (
-    !coverUrl ||
-    !coverUrl.startsWith("http") ||
-    coverUrl.includes("MIKOROKU.png")
-  ) {
+  if (!coverUrl || !coverUrl.startsWith("http") || isPlaceholderCover(coverUrl)) {
     return null;
   }
 
-  let url = coverUrl;
-
-  if (url.includes("blogger.googleusercontent.com")) {
-    url = url.replace(/\/s\d+\//, "/s400/");
-  }
+  const url = shrinkBloggerUrl(coverUrl);
 
   try {
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(5000),
+      method: "GET",
+      signal: AbortSignal.timeout(2500),
       headers: {
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8",
         "User-Agent":
-          "Mozilla/5.0 (compatible; MikorokuOG/1.0; +https://mikoroku.top)",
+          "Mozilla/5.0 (compatible; MikorokuOG/1.2; +https://mikoroku.top)",
       },
       redirect: "follow",
     });
@@ -55,26 +58,22 @@ export async function toOgCoverDataUrl(
       return null;
     }
 
-    const contentType = (res.headers.get("content-type") || "image/jpeg")
-      .split(";")[0]
-      .trim();
-    if (!contentType.startsWith("image/")) return null;
-
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength < 100 || buf.byteLength > 1_200_000) {
-      console.warn("[OG] cover size odd", buf.byteLength, url);
+    const contentType = (res.headers.get("content-type") || "").split(";")[0].trim();
+    if (contentType && !contentType.startsWith("image/")) {
       return null;
     }
 
-    const bytes = new Uint8Array(buf);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]!);
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength < 100) return null;
+
+    if (buf.byteLength > MAX_COVER_BYTES) {
+      return url;
     }
-    return `data:${contentType};base64,${btoa(binary)}`;
+
+    return `data:${contentType || "image/jpeg"};base64,${arrayBufferToBase64(buf)}`;
   } catch (error) {
-    console.warn("[OG] cover fetch failed", url, error);
-    return null;
+    console.warn("[OG] cover fetch failed, trying remote URL", url, error);
+    return url;
   }
 }
 
@@ -89,11 +88,12 @@ function buildOgJsx({
   label: string;
   coverUrl?: string | null;
 }) {
-  const safeTitle = (title || "Mikoroku").slice(0, 80);
-  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 160);
+  const safeTitle = (title || "Mikoroku").slice(0, 72);
+  const safeDesc = (description || "Baca manga di Mikoroku.").slice(0, 120);
   const hasCover =
     typeof coverUrl === "string" &&
-    (coverUrl.startsWith("http") || coverUrl.startsWith("data:image/"));
+    (coverUrl.startsWith("http") || coverUrl.startsWith("data:image/")) &&
+    !isPlaceholderCover(coverUrl);
 
   return (
     <div
@@ -105,7 +105,7 @@ function buildOgJsx({
           "linear-gradient(135deg, #0f1115 0%, #17141a 55%, #241018 100%)",
         color: "#f5f5f5",
         fontFamily: "Arial, sans-serif",
-        padding: "40px 44px",
+        padding: "36px 40px",
         position: "relative",
         overflow: "hidden",
       }}
@@ -116,7 +116,7 @@ function buildOgJsx({
           left: 0,
           top: 0,
           bottom: 0,
-          width: 10,
+          width: 8,
           background: "linear-gradient(180deg, #e11d48 0%, #f59e0b 100%)",
         }}
       />
@@ -126,49 +126,49 @@ function buildOgJsx({
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          width: hasCover ? 760 : "100%",
+          width: hasCover ? 800 : "100%",
           height: "100%",
-          paddingRight: hasCover ? 28 : 0,
+          paddingRight: hasCover ? 24 : 0,
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
               src={FAVICON_URL}
-              width={52}
-              height={52}
+              width={44}
+              height={44}
               alt=""
-              style={{ width: 52, height: 52, borderRadius: 12 }}
+              style={{ width: 44, height: 44, borderRadius: 10 }}
             />
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span
                 style={{
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: 700,
-                  letterSpacing: 1.2,
+                  letterSpacing: 1,
                   color: "#fb7185",
                 }}
               >
                 MIKOROKU
               </span>
-              <span style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>
                 READ YOUR NEXT STORY
               </span>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", marginTop: 4 }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
             <span
               style={{
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 600,
-                letterSpacing: 0.7,
+                letterSpacing: 0.6,
                 textTransform: "uppercase",
                 color: "#fda4af",
                 background: "rgba(225, 29, 72, 0.18)",
                 border: "1px solid rgba(251, 113, 133, 0.35)",
                 borderRadius: 999,
-                padding: "6px 14px",
+                padding: "5px 12px",
               }}
             >
               {label || "Manga & Series"}
@@ -177,12 +177,12 @@ function buildOgJsx({
 
           <div
             style={{
-              fontSize: 48,
+              fontSize: 42,
               fontWeight: 800,
               lineHeight: 1.12,
               color: "#fff",
-              marginTop: 6,
-              maxHeight: 170,
+              marginTop: 4,
+              maxHeight: 150,
               overflow: "hidden",
             }}
           >
@@ -191,10 +191,10 @@ function buildOgJsx({
 
           <div
             style={{
-              fontSize: 24,
-              lineHeight: 1.4,
+              fontSize: 22,
+              lineHeight: 1.35,
               color: "rgba(255,255,255,0.72)",
-              maxHeight: 130,
+              maxHeight: 110,
               overflow: "hidden",
             }}
           >
@@ -206,8 +206,8 @@ function buildOgJsx({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 10,
-            fontSize: 18,
+            gap: 8,
+            fontSize: 16,
             color: "rgba(255,255,255,0.45)",
           }}
         >
@@ -222,13 +222,13 @@ function buildOgJsx({
           style={{
             position: "absolute",
             top: (OG_IMAGE_HEIGHT - COVER_H) / 2,
-            right: 44,
+            right: 40,
             width: COVER_W,
             height: COVER_H,
-            borderRadius: 18,
+            borderRadius: 16,
             overflow: "hidden",
             border: "1px solid rgba(255,255,255,0.18)",
-            boxShadow: "0 18px 48px rgba(0,0,0,0.5)",
+            boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
             background: "#24232a",
             display: "flex",
             alignItems: "center",

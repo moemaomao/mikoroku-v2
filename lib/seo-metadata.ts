@@ -85,6 +85,39 @@ function fallbackTitle(slug: string): string {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function pickCover(value: Record<string, unknown> | null | undefined): string | undefined {
+  if (!value) return undefined;
+
+  const direct =
+    safeImageUrl(value.cover) ||
+    safeImageUrl(value.img) ||
+    safeImageUrl(value.image) ||
+    safeImageUrl(value.thumbnail) ||
+    safeImageUrl(value.thumb);
+  if (direct) return direct;
+
+  const covers = value.covers;
+  if (Array.isArray(covers)) {
+    for (const item of covers) {
+      const url = safeImageUrl(item);
+      if (url) return url;
+    }
+  }
+
+  const info = value.info;
+  if (info && typeof info === "object") {
+    const record = info as Record<string, unknown>;
+    return (
+      safeImageUrl(record.cover) ||
+      safeImageUrl(record.img) ||
+      safeImageUrl(record.image) ||
+      safeImageUrl(record.thumbnail)
+    );
+  }
+
+  return undefined;
+}
+
 function normalizeSeries(
   value: Record<string, unknown> | null | undefined,
   slug: string,
@@ -94,19 +127,14 @@ function normalizeSeries(
   const description =
     asText(value?.desc) ||
     asText(value?.description) ||
+    asText(value?.synopsis) ||
+    asText(value?.sinopsis) ||
     `Baca manga ${title} di Mikoroku.`;
-
-  const image =
-    safeImageUrl(value?.img) ||
-    safeImageUrl(value?.cover) ||
-    safeImageUrl(value?.thumbnail) ||
-    safeImageUrl(value?.image) ||
-    DEFAULT_IMAGE;
 
   return {
     title,
-    description: description.slice(0, 300),
-    image,
+    description: description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300),
+    image: pickCover(value) || DEFAULT_IMAGE,
   };
 }
 
@@ -126,6 +154,16 @@ async function getFirestoreDocument(
 export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
   const title = fallbackTitle(slug);
   let datasetError: unknown;
+  let datasetSeries: SeriesSeoData | null = null;
+
+  try {
+    const document = await getFirestoreDocument(
+      `manga/${encodeURIComponent(slug)}`,
+    );
+    if (document) return normalizeSeries(document, slug);
+  } catch (error) {
+    console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
+  }
 
   try {
     const response = await fetch(MANGA_DATA_URL, { next: { revalidate: 900 } });
@@ -138,24 +176,39 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
         asText(item.slug) === slug ||
         slugKey(asText(item.title)) === slugKey(slug),
     );
-    if (manga) return normalizeSeries(manga, slug);
+    if (manga) datasetSeries = normalizeSeries(manga, slug);
   } catch (error) {
     datasetError = error;
   }
 
-  try {
-    const document = await getFirestoreDocument(
-      `manga/${encodeURIComponent(slug)}`,
-    );
-    if (document) return normalizeSeries(document, slug);
-  } catch (error) {
-    console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
-  }
+  if (datasetSeries) return datasetSeries;
 
   if (datasetError) {
     console.error("Metadata seri tidak dapat diambil dari dataset.", datasetError);
   }
   return normalizeSeries({ title }, slug);
+}
+
+export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
+  try {
+    const response = await fetch(
+      `${FIRESTORE_DOCUMENTS_URL}/manga/${encodeURIComponent(slug)}`,
+      {
+        signal: AbortSignal.timeout(3500),
+        headers: { Accept: "application/json" },
+        // @ts-expect-error Cloudflare fetch extension
+        cf: { cacheTtl: 300, cacheEverything: true },
+      },
+    );
+    if (response.ok) {
+      const document = decodeFirestoreDocument(await response.json());
+      return normalizeSeries(document, slug);
+    }
+  } catch (error) {
+    console.warn("[OG seo] Firestore failed", slug, error);
+  }
+
+  return normalizeSeries({ title: fallbackTitle(slug) }, slug);
 }
 
 export async function getChapterSeoTitle(
