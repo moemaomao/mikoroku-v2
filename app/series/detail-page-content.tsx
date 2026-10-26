@@ -1846,13 +1846,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       <SiteHeader />
       <BannerAdSlot placement="site-top" />
       <div
-        className="pointer-events-none fixed inset-0 z-0 scale-[1.05] bg-cover bg-center bg-no-repeat opacity-[0.22] blur-[1px] transition-[background-image,opacity] duration-500 dark:opacity-100"
+        className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-0 w-full bg-cover bg-center bg-no-repeat opacity-[0.22] transition-[background-image,opacity] duration-500 dark:opacity-100 max-md:h-[100dvh] max-md:min-h-[100dvh]"
         id="bgLayer"
         aria-hidden="true"
         style={{ backgroundImage: !hideDetailCoverBackground && cover ? `url("${cover}")` : undefined }}
       />
       <div
-        className="pointer-events-none fixed inset-0 z-[1] bg-[linear-gradient(180deg,rgba(20,20,30,0.18)_0%,rgba(20,20,30,0.12)_45%,rgba(35,12,25,0.24)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.92)_0%,rgba(5,5,10,0.55)_45%,rgba(5,5,10,0.55)_55%,rgba(15,5,12,0.94)_100%)]"
+        className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-[1] w-full bg-[linear-gradient(180deg,rgba(20,20,30,0.20)_0%,rgba(20,20,30,0.10)_40%,rgba(20,20,30,0.26)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.88)_0%,rgba(5,5,10,0.52)_40%,rgba(5,5,10,0.60)_70%,rgba(10,5,12,0.90)_100%)] max-md:h-[100dvh] max-md:min-h-[100dvh]"
         aria-hidden="true"
       />
       <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>

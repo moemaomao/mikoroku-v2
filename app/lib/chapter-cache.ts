@@ -260,7 +260,7 @@ export function ensureLocalStorageHeadroom(): boolean {
       try {
         localStorage.removeItem(probeKey);
       } catch {
-        // Storage is unavailable; Firestore will use its in-memory cache.
+
       }
       return false;
     }
