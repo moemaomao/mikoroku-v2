@@ -60,12 +60,14 @@ async function fallbackPng(): Promise<ArrayBuffer> {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await params;
-    const cacheKey = CacheKeys.ogSeries(slug);
+    const url = new URL(request.url);
+    const version = url.searchParams.get("v") || "0";
+    const cacheKey = `${CacheKeys.ogSeries(slug)}:v${version}`;
 
     try {
       const cached = await kvGetArrayBuffer(cacheKey);

@@ -11,6 +11,7 @@ export type SeriesSeoData = {
   title: string;
   description: string;
   image: string;
+  updatedAt?: number;
 };
 
 function decodeFirestoreValue(value: unknown): unknown {
@@ -131,10 +132,20 @@ function normalizeSeries(
     asText(value?.sinopsis) ||
     `Baca manga ${title} di Mikoroku.`;
 
+  const updatedAtRaw = value?.updatedAt ?? value?.latestUpdate;
+  let updatedAt: number | undefined;
+  if (typeof updatedAtRaw === "number" && Number.isFinite(updatedAtRaw)) {
+    updatedAt = updatedAtRaw;
+  } else if (typeof updatedAtRaw === "string") {
+    const n = Number(updatedAtRaw);
+    if (Number.isFinite(n)) updatedAt = n;
+  }
+
   return {
     title,
     description: description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300),
     image: pickCover(value) || DEFAULT_IMAGE,
+    updatedAt,
   };
 }
 
@@ -190,6 +201,7 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 }
 
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
+  // 1. Prefer Firestore (admin updates live here)
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3500);
@@ -210,6 +222,24 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
     }
   } catch (error) {
     console.warn("[OG seo] Firestore failed", slug, error);
+  }
+
+  // 2. Fallback to all-manga.json so share still has a cover
+  try {
+    const response = await fetch(MANGA_DATA_URL, {
+      next: { revalidate: 900 },
+    });
+    if (response.ok) {
+      const mangaList = (await response.json()) as Array<Record<string, unknown>>;
+      const manga = mangaList.find(
+        (item) =>
+          asText(item.slug) === slug ||
+          slugKey(asText(item.title)) === slugKey(slug),
+      );
+      if (manga) return normalizeSeries(manga, slug);
+    }
+  } catch (error) {
+    console.warn("[OG seo] dataset fallback failed", slug, error);
   }
 
   return normalizeSeries({ title: fallbackTitle(slug) }, slug);
