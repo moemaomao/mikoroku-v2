@@ -861,6 +861,8 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         webtoon: "#34d399",
         cg: "#2dd4bf",
       };
+      const badgeTint = (color: string) =>
+        `color-mix(in srgb, ${color} 30%, transparent)`;
       badgesRow.style.gap = isMobile ? "3px" : "5px";
       details.querySelectorAll<HTMLElement>(".status-badge, .type-badge").forEach((b) => {
         const label = (b.textContent || "").trim().toLowerCase().replace(/\s+/g, "-");
@@ -869,12 +871,13 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
           .split(/\s+/)
           .filter((c) => c && !c.startsWith("bg-") && !c.startsWith("!bg-"))
           .join(" ");
-        b.style.setProperty("background", "transparent", "important");
-        b.style.setProperty("background-color", "transparent", "important");
+        const tint = badgeTint(color);
+        b.style.setProperty("background", tint, "important");
+        b.style.setProperty("background-color", tint, "important");
         b.style.setProperty("background-image", "none", "important");
-        b.style.setProperty("border", `1px solid ${color}`, "important");
+        b.style.setProperty("border", `1px solid color-mix(in srgb, ${color} 55%, transparent)`, "important");
         b.style.setProperty("color", color, "important");
-        b.style.setProperty("border-radius", "999px", "important");
+        b.style.setProperty("border-radius", "3px", "important");
         b.style.fontSize = isMobile ? "8px" : "9px";
         b.style.padding = isMobile ? "1px 6px" : "2px 7px";
         b.style.lineHeight = "1.2";

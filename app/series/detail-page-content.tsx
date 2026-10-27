@@ -3,7 +3,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
-import { addDoc, collection, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, getFirestore, onSnapshot, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
@@ -1259,49 +1259,41 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
   useEffect(() => {
     if (!slug) return;
-    const controller = new AbortController();
     setFirestoreLatestUpdate("");
-    void (async () => {
-      try {
-        await waitForFirestoreSdk(controller.signal);
-        if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) {
-          throw new Error("Firestore document API is unavailable.");
-        }
-        const reference = window.fs.doc(window.firestore, "manga", slug);
-        const snapshot = await window.fs.getDoc(reference);
-        if (!snapshot.exists() || controller.signal.aborted) return;
-        const data = snapshot.data();
-        const firestoreCovers = asStringList(data.covers).map(resolveCover).filter(Boolean);
-        const hasFirestoreCovers = Array.isArray(data.covers);
-        const coverNumbers = data.coverNumbers && typeof data.coverNumbers === "object"
-          ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, asString(number)]))
-          : {};
-        setManga((current) => {
-          if (current?.slug !== slug) return current;
-          const currentCovers = current.covers || [];
-          const coversMatch = !hasFirestoreCovers ||
-            (firestoreCovers.length === currentCovers.length &&
-              firestoreCovers.every((cover, index) => cover === currentCovers[index]));
-          const currentCoverNumbers = current.coverNumbers || {};
-          const coverNumbersMatch =
-            Object.keys(coverNumbers).length === Object.keys(currentCoverNumbers).length &&
-            Object.entries(coverNumbers).every(([url, number]) => currentCoverNumbers[url] === number);
-          if (coversMatch && coverNumbersMatch) return current;
-          return {
-            ...current,
-            ...(hasFirestoreCovers ? { covers: firestoreCovers } : {}),
-            coverNumbers,
-          };
-        });
-        const latest = data.latestUpdate || data.updatedAt;
-        if (latest) setFirestoreLatestUpdate(firestoreDate(latest));
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          console.warn(`Firestore latest update date failed to load for ${slug}.`, error);
-        }
-      }
-    })();
-    return () => controller.abort();
+    try {
+      const { firestore } = initializeFirebaseClient();
+      return onSnapshot(
+        doc(firestore, "manga", slug),
+        (snapshot) => {
+          if (!snapshot.exists()) return;
+          const data = snapshot.data();
+          const firestoreCovers = asStringList(data.covers).map(resolveCover).filter(Boolean);
+          const hasFirestoreCovers = Array.isArray(data.covers);
+          const coverNumbers = data.coverNumbers && typeof data.coverNumbers === "object"
+            ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, asString(number)]))
+            : {};
+          setManga((current) => {
+            if (current?.slug !== slug) return current;
+            return {
+              ...current,
+              ...(hasFirestoreCovers ? { covers: firestoreCovers } : {}),
+              coverNumbers,
+              ...(typeof data.cover === "string" && data.cover
+                ? { cover: resolveCover(data.cover), img: resolveCover(data.cover) }
+                : {}),
+            };
+          });
+          const latest = data.latestUpdate || data.updatedAt;
+          setFirestoreLatestUpdate(latest ? firestoreDate(latest) : "");
+        },
+        (error) => {
+          console.warn(`Firestore detail updates failed to load for ${slug}.`, error);
+        },
+      );
+    } catch (error) {
+      console.warn(`Firestore detail updates could not start for ${slug}.`, error);
+      return undefined;
+    }
   }, [slug]);
 
   useEffect(() => {
@@ -2015,7 +2007,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     className={`relative min-h-8 shrink-0 origin-center border-0 bg-transparent px-0.5 py-1 text-center font-medium leading-tight transition-all duration-300 ease-out will-change-transform sm:px-1 md:text-left ${
                       isActive
                         ? "scale-110 text-[var(--mikoroku-detail-tab-accent)] font-bold underline underline-offset-4 sm:scale-125"
-                        : "scale-95 text-[#666] opacity-70 hover:scale-100 hover:opacity-100 hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white/55 dark:hover:text-[var(--mikoroku-detail-tab-accent)] sm:scale-90"
+                        : "scale-95 text-[#333] opacity-80 hover:scale-100 hover:opacity-100 hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white sm:scale-90"
                     }`}
                     type="button"
                     id={`detail-tab-${tab}`}
