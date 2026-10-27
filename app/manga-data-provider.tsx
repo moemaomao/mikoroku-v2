@@ -48,7 +48,7 @@ function applyMangaList(list: Record<string, unknown>[]) {
       ...item,
       title,
       slug,
-      img: resolveCover(item.img || item.cover),
+      img: resolveCover(item.cover || item.img),
       cover: resolveCover(item.cover || item.img),
       desc: item.desc || "",
       genres: Array.isArray(item.genres) ? item.genres : [],

@@ -889,7 +889,7 @@ function HeaderContents() {
                     className="flex w-full cursor-pointer items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-black/5 dark:hover:bg-white/[0.08]"
                   >
                     <img
-                      src={previewCover(manga.img || manga.cover)}
+                      src={previewCover(manga.cover || manga.img)}
                       alt=""
                       loading="lazy"
                       onError={(event) => { event.currentTarget.src = DEFAULT_THUMB; }}

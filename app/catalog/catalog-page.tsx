@@ -64,7 +64,7 @@ function mergeCatalogData(primary: Manga[], additions: Manga[]): Manga[] {
       ...existing,
       ...manga,
       title: manga.title || manga.name || existing.title || existing.name,
-      img: manga.img || manga.cover || existing.img || existing.cover,
+      img: manga.cover || manga.img || existing.cover || existing.img,
       cover: manga.cover || manga.img || existing.cover || existing.img,
     } : manga);
   }

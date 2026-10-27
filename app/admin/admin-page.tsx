@@ -603,12 +603,14 @@ function mergeGithubMetadata(
       merged.set(remote.slug, remote);
       continue;
     }
+    const preferredCover = text(current.cover) || text(current.img) || text(remote.cover) || text(remote.img);
     merged.set(remote.slug, {
       ...remote,
       ...current,
       title: fill(current.title, remote.title),
       altTitle: fill(current.altTitle, remote.altTitle),
-      cover: fill(current.cover, remote.cover),
+      cover: preferredCover,
+      img: preferredCover,
       desc: fill(current.desc, remote.desc),
       type: fill(current.type, remote.type),
       status: fill(current.status, remote.status),

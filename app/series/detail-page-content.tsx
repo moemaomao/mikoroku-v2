@@ -1523,11 +1523,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     document.querySelector('meta[name="description"]')?.setAttribute("content", description.slice(0, 200));
     document.querySelector('meta[property="og:title"]')?.setAttribute("content", `${manga.title} - Mikoroku`);
     document.querySelector('meta[property="og:description"]')?.setAttribute("content", description.slice(0, 200));
-    document.querySelector('meta[property="og:image"]')?.setAttribute("content", manga.img || manga.cover || "");
+    document.querySelector('meta[property="og:image"]')?.setAttribute("content", manga.cover || manga.img || "");
     document.querySelector('meta[property="og:url"]')?.setAttribute("content", window.location.href);
     document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", `${manga.title} - Mikoroku`);
     document.querySelector('meta[name="twitter:description"]')?.setAttribute("content", description.slice(0, 200));
-    document.querySelector('meta[name="twitter:image"]')?.setAttribute("content", manga.img || manga.cover || "");
+    document.querySelector('meta[name="twitter:image"]')?.setAttribute("content", manga.cover || manga.img || "");
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", window.location.href);
   }, [manga]);
 
@@ -1683,7 +1683,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     );
     const isSaved = next.length === current.length;
     if (isSaved) {
-      next.unshift({ title: manga.title, img: manga.img || manga.cover || "", slug, addedAt: Date.now() });
+      next.unshift({ title: manga.title, img: manga.cover || manga.img || "", slug, addedAt: Date.now() });
     }
     localStorage.setItem("mangaBookmarks", JSON.stringify(next));
     setBookmarked(isSaved);

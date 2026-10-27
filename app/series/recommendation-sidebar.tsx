@@ -235,7 +235,7 @@ function shuffle<T>(items: T[]): T[] {
 function recommendationPayload(item: Recommendation): Recommendation {
   return {
     ...item,
-    img: item.img || item.cover,
+    img: item.cover || item.img,
     cover: item.cover || item.img,
     genres: Array.isArray(item.genres) ? item.genres : [],
     updatedAt: item.updatedAt || 0,
@@ -277,8 +277,8 @@ export default function RecommendationSidebar({
         ? {
           ...previous,
           ...recommendation,
-          img: recommendation.img || previous.img,
-          cover: recommendation.cover || previous.cover,
+          img: recommendation.cover || recommendation.img || previous.cover || previous.img,
+          cover: recommendation.cover || recommendation.img || previous.cover || previous.img,
           desc: recommendation.desc.length > previous.desc.length
             ? recommendation.desc
             : previous.desc,
