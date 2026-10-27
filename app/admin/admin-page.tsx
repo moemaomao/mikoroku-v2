@@ -21,7 +21,6 @@ import {
   getFirestore,
   limit,
   query,
-  runTransaction,
   setDoc,
   updateDoc,
   where,
@@ -53,7 +52,7 @@ const firebaseConfig = {
 
 const ADMIN_APP_NAME = "mikoroku-admin";
 const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache";
-const ADMIN_MANGA_CACHE_DURATION = 45 * 60 * 1000;
+const ADMIN_MANGA_CACHE_DURATION = 2 * 60 * 60 * 1000;
 const GITHUB_JSON =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
@@ -521,15 +520,31 @@ function getTimestamp(value: unknown): number {
   return 0;
 }
 
+function isQuotaError(error: unknown): boolean {
+  const msg = getErrorMessage(error).toLowerCase();
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code.toLowerCase()
+      : "";
+  return (
+    code.includes("resource-exhausted") ||
+    msg.includes("quota exceeded") ||
+    msg.includes("resource-exhausted")
+  );
+}
+
 async function updateSummary(
   firestore: Firestore,
   manga: MangaRecord,
   remove = false,
-): Promise<void> {
+): Promise<"ok" | "skipped"> {
   const summaryRef = doc(firestore, "meta", "mangaSummary");
-  await runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(summaryRef);
-    const rawList: unknown = snapshot.data()?.list;
+  try {
+    const snapshot = await getDoc(summaryRef);
+    const rawList: unknown = snapshot.exists() ? snapshot.data()?.list : [];
     const list = Array.isArray(rawList) ? rawList.filter(isSummaryEntry) : [];
     const nextList = remove
       ? list.filter((entry) => entry.slug !== manga.slug)
@@ -537,13 +552,40 @@ async function updateSummary(
           ...list.filter((entry) => entry.slug !== manga.slug),
           toSummaryEntry(manga),
         ].sort((left, right) => right.updatedAt - left.updatedAt);
-    transaction.set(
+    await setDoc(
       summaryRef,
       { list: nextList, count: nextList.length, updatedAt: Date.now() },
       { merge: true },
     );
-  });
+    return "ok";
+  } catch (error) {
+    if (isQuotaError(error)) {
+      console.warn("[admin] summary skipped (quota)", error);
+      return "skipped";
+    }
+    throw error;
+  }
 }
+
+async function syncSeoToKv(payload: {
+  slug: string;
+  title: string;
+  description: string;
+  cover: string;
+  updatedAt: number;
+}): Promise<void> {
+  if (!payload.slug || !payload.cover || !/^https?:\/\//i.test(payload.cover)) return;
+  try {
+    await fetch("/api/admin/sync-cover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.warn("[admin] SEO KV sync failed", error);
+  }
+}
+
 
 function mapGithubRecord(raw: Record<string, unknown>): MangaRecord | null {
   const title = text(raw.title) || text(raw.name);
@@ -702,6 +744,12 @@ export default function AdminPage() {
   }, [uploadNotice]);
 
   useEffect(() => {
+    if (!message) return;
+    const timeout = window.setTimeout(() => setMessage(""), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
     if (!quickAddOpen) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (event.target instanceof Node && !quickAddRef.current?.contains(event.target)) {
@@ -857,7 +905,6 @@ export default function AdminPage() {
     body.classList.toggle("adminLight", Boolean(user) && isLightMode);
     html.classList.toggle("adminPageHtml", Boolean(user));
 
-    // Override layout body pt-14 (site header offset) — admin has no site header
     const prevPaddingTop = body.style.paddingTop;
     const prevHtmlPaddingTop = html.style.paddingTop;
     if (user) {
@@ -878,20 +925,14 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (activeSection === "reports" && user) void loadReports();
-    // Reports are refreshed whenever the Report section is opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, user]);
 
   useEffect(() => {
     if (activeSection === "announcements" && user) void loadAnnouncements();
-    // Announcements are refreshed whenever the section is opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, user]);
 
   useEffect(() => {
     if (activeSection === "settings" && user) void loadReaderNoticeConfig();
-    // Reader notice settings are refreshed whenever Settings is opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, user]);
 
   const filteredManga = useMemo(() => {
@@ -1055,38 +1096,39 @@ export default function AdminPage() {
       };
       await setDoc(mangaRef, data, { merge: true });
 
-      try {
-        await fetch("/api/admin/sync-cover", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            slug,
-            cover: mainCover,
-            updatedAt,
-          }),
-        });
-      } catch {
-      }
-
       const savedManga = fromFirestore(slug, {
         ...data,
         slug,
         source: data.source,
         origin: data.origin,
       });
-      setManga((current) =>
-        mergeGithubMetadata(
+
+      setManga((current) => {
+        const next = mergeGithubMetadata(
           current
             .filter((item) => item.slug !== editing?.slug && item.slug !== slug)
             .filter((item) => item.source !== "github" || item.slug !== slug),
           [savedManga],
-        ),
-      );
-      invalidateAdminMangaCache();
+        );
+        writeAdminMangaCache(next);
+        return next;
+      });
+
+      void syncSeoToKv({
+        slug,
+        title: draft.title.trim(),
+        description: draft.desc.trim(),
+        cover: mainCover,
+        updatedAt,
+      });
 
       try {
-        await updateSummary(firestore, savedManga);
-        setMessage("Manga saved successfully.");
+        const summaryResult = await updateSummary(firestore, savedManga);
+        setMessage(
+          summaryResult === "ok"
+            ? "Manga saved successfully."
+            : "Manga saved. Summary skipped (Firestore quota). Use Rebuild Summary later.",
+        );
       } catch (error) {
         console.error("Failed to update the manga summary.", error);
         setMessage(
@@ -1160,11 +1202,21 @@ export default function AdminPage() {
         ...current,
         updateDate: toDateTimeInput(updatedAt),
       }));
-      invalidateAdminMangaCache();
+      setManga((current) => {
+        const next = current.map((item) =>
+          item.slug === updatedManga.slug ? updatedManga : item,
+        );
+        writeAdminMangaCache(next);
+        return next;
+      });
 
       try {
-        await updateSummary(firestore, updatedManga);
-        setMessage("Manga timestamp updated successfully.");
+        const summaryResult = await updateSummary(firestore, updatedManga);
+        setMessage(
+          summaryResult === "ok"
+            ? "Manga timestamp updated successfully."
+            : "Timestamp saved. Summary skipped (Firestore quota).",
+        );
       } catch (error) {
         console.error("Failed to update the manga summary.", error);
         setMessage(`Timestamp saved, but the summary could not be updated: ${getErrorMessage(error)}`);
@@ -1192,11 +1244,18 @@ export default function AdminPage() {
         chapterBatch = await getDocs(query(chaptersRef, limit(450)));
       }
       await deleteDoc(doc(firestore, "manga", item.slug));
-      setManga((current) => current.filter((entry) => entry.slug !== item.slug));
-      invalidateAdminMangaCache();
+      setManga((current) => {
+        const next = current.filter((entry) => entry.slug !== item.slug);
+        writeAdminMangaCache(next);
+        return next;
+      });
       try {
-        await updateSummary(firestore, item, true);
-        setMessage(`Manga "${item.slug}" and its chapters were deleted successfully.`);
+        const summaryResult = await updateSummary(firestore, item, true);
+        setMessage(
+          summaryResult === "ok"
+            ? `Manga "${item.slug}" and its chapters were deleted successfully.`
+            : `Manga deleted. Summary skipped (Firestore quota). Rebuild Summary later.`,
+        );
       } catch (error) {
         console.error("Failed to update the manga summary after deletion.", error);
         setMessage(
@@ -1583,21 +1642,6 @@ export default function AdminPage() {
       { merge: true },
     );
 
-    try {
-      if (mainCover) {
-        await fetch("/api/admin/sync-cover", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            slug: selectedManga.slug,
-            cover: mainCover,
-            updatedAt: Date.now(),
-          }),
-        });
-      }
-    } catch {
-    }
-
     const updatedManga = {
       ...selectedManga,
       cover: mainCover,
@@ -1609,6 +1653,16 @@ export default function AdminPage() {
     const updatedCatalog = manga.map((item) => item.slug === updatedManga.slug ? updatedManga : item);
     setManga(updatedCatalog);
     writeAdminMangaCache(updatedCatalog);
+
+    if (mainCover) {
+      void syncSeoToKv({
+        slug: selectedManga.slug,
+        title: selectedManga.title,
+        description: selectedManga.desc || "",
+        cover: mainCover,
+        updatedAt: Date.now(),
+      });
+    }
   }
 
   async function uploadAdditionalCovers() {
@@ -1957,10 +2011,22 @@ export default function AdminPage() {
       };
       setSelectedManga(nextManga);
       setChapters(remaining);
-      setManga((current) => current.map((item) => item.slug === nextManga.slug ? nextManga : item));
-      invalidateAdminMangaCache();
-      await updateSummary(firestore, nextManga);
-      setMessage(`Chapter ${chapter.num} deleted successfully.`);
+      setManga((current) => {
+        const next = current.map((item) => item.slug === nextManga.slug ? nextManga : item);
+        writeAdminMangaCache(next);
+        return next;
+      });
+      try {
+        const summaryResult = await updateSummary(firestore, nextManga);
+        setMessage(
+          summaryResult === "ok"
+            ? `Chapter ${chapter.num} deleted successfully.`
+            : `Chapter ${chapter.num} deleted. Summary skipped (quota).`,
+        );
+      } catch (error) {
+        console.error("Failed to update summary after chapter delete.", error);
+        setMessage(`Chapter deleted, but summary could not be updated: ${getErrorMessage(error)}`);
+      }
     } catch (error) {
       console.error(`Failed to delete chapter ${chapter.num}.`, error);
       setMessage(`Failed to delete chapter: ${getErrorMessage(error)}`);
@@ -2096,7 +2162,6 @@ export default function AdminPage() {
           doc(firestore, "manga", mangaSlug, "chapters", oldChapterNumber),
         );
       }
-      invalidateAdminMangaCache();
 
       const isNewChapter = !existingChapterSnapshot.exists();
       const isRenamedChapter = Boolean(
@@ -2185,11 +2250,19 @@ export default function AdminPage() {
             managedByAdmin: true,
             source: currentManga.origin === "github" ? "hybrid" : currentManga.source,
           };
-          await updateSummary(firestore, nextManga);
+          try {
+            await updateSummary(firestore, nextManga);
+          } catch (error) {
+            console.warn("[admin] summary after chapter save skipped", error);
+          }
         }
       }
       if (nextManga) {
-        setManga((current) => current.map((item) => item.slug === mangaSlug ? nextManga : item));
+        setManga((current) => {
+          const next = current.map((item) => item.slug === mangaSlug ? nextManga! : item);
+          writeAdminMangaCache(next);
+          return next;
+        });
       }
       if (selectedManga?.slug === mangaSlug) {
         const nextChapters = refreshedChapters || [
@@ -2412,7 +2485,7 @@ export default function AdminPage() {
         </div>
 
         <div className={styles.content}>
-          {message && <p className={styles.notice}>{message}</p>}
+          
           {warning && <p className={styles.warning}>{warning}</p>}
           {loadError && (
             <div className={styles.errorBanner}>
@@ -2651,7 +2724,7 @@ export default function AdminPage() {
                 </section>
               ) : (
                 <>
-                  {message && <p className={styles.notice}>{message}</p>}
+                  
                   <div className={styles.chapterTools}>
                     <button className={styles.successButton} onClick={() => {
                       setChapterDraft({ ...emptyChapterDraft, mangaSlug: selectedManga.slug });
@@ -2992,6 +3065,47 @@ export default function AdminPage() {
           {quickAddOpen ? "×" : "+"}
         </button>
       </div>
+
+      {message && (
+        <div
+          className={styles.uploadNoticeBackdrop}
+          role="status"
+          aria-live="polite"
+          onClick={() => setMessage("")}
+        >
+          <div
+            className={styles.uploadNoticeCard}
+            data-status={
+              /fail|error|could not|skipped \(firestore quota\)/i.test(message)
+                ? "error"
+                : "success"
+            }
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className={styles.uploadNoticeIcon} aria-hidden="true">
+              {/fail|error|could not/i.test(message) ? "!" : "✓"}
+            </span>
+            <div className={styles.uploadNoticeContent}>
+              <strong>
+                {/fail|error|could not/i.test(message)
+                  ? "Notice"
+                  : /skipped/i.test(message)
+                    ? "Saved"
+                    : "Success"}
+              </strong>
+              <p>{message}</p>
+            </div>
+            <button
+              type="button"
+              className={styles.uploadNoticeClose}
+              onClick={() => setMessage("")}
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {uploadNotice && (
         <div

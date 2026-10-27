@@ -14,8 +14,10 @@ export type SeriesSeoData = {
   updatedAt?: number;
 };
 
-type CoverOverride = {
-  cover: string;
+export type SeriesSeoCache = {
+  title: string;
+  description: string;
+  image: string;
   updatedAt?: number;
 };
 
@@ -154,32 +156,76 @@ function normalizeSeries(
   };
 }
 
-export function coverOverrideKey(slug: string): string {
-  return `cover:override:${slug}`;
+export function seoCacheKey(slug: string): string {
+  return `seo:series:${slug}`;
 }
 
-async function readCoverOverride(slug: string): Promise<CoverOverride | null> {
+/** @deprecated */
+export function coverOverrideKey(slug: string): string {
+  return seoCacheKey(slug);
+}
+
+async function readSeoCache(slug: string): Promise<SeriesSeoCache | null> {
   try {
     const { kvGet } = await import("./kv-cache");
-    const data = await kvGet<CoverOverride>(coverOverrideKey(slug));
-    if (data && typeof data.cover === "string" && data.cover.startsWith("http")) {
-      return data;
+    const data = await kvGet<SeriesSeoCache & { cover?: string }>(seoCacheKey(slug));
+    if (!data) return null;
+
+    const image =
+      (typeof data.image === "string" && data.image.startsWith("http") && data.image) ||
+      (typeof data.cover === "string" && data.cover.startsWith("http") && data.cover) ||
+      "";
+
+    if (!image) return null;
+
+    const title =
+      typeof data.title === "string" && data.title.trim()
+        ? data.title.trim()
+        : "";
+
+    const description =
+      typeof data.description === "string" && data.description.trim()
+        ? data.description.trim().slice(0, 300)
+        : title
+          ? `Baca manga ${title} di Mikoroku.`
+          : "";
+
+    if (!title && !description) {
+      return {
+        title: "",
+        description: "",
+        image,
+        updatedAt:
+          typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt)
+            ? data.updatedAt
+            : undefined,
+      };
     }
+
+    return {
+      title: title || fallbackTitle(slug),
+      description: description || `Baca manga ${title || fallbackTitle(slug)} di Mikoroku.`,
+      image,
+      updatedAt:
+        typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt)
+          ? data.updatedAt
+          : undefined,
+    };
   } catch {
-    // ignore
+    return null;
   }
-  return null;
 }
 
-function applyCoverOverride(
+function mergeSeoCache(
   series: SeriesSeoData,
-  override: CoverOverride | null,
+  cache: SeriesSeoCache | null,
 ): SeriesSeoData {
-  if (!override) return series;
+  if (!cache) return series;
   return {
-    ...series,
-    image: override.cover,
-    updatedAt: override.updatedAt ?? series.updatedAt ?? Date.now(),
+    title: cache.title || series.title,
+    description: cache.description || series.description,
+    image: cache.image || series.image,
+    updatedAt: cache.updatedAt ?? series.updatedAt ?? Date.now(),
   };
 }
 
@@ -197,46 +243,55 @@ async function getFirestoreDocument(
 }
 
 export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
-  const title = fallbackTitle(slug);
-  let datasetError: unknown;
-  let datasetSeries: SeriesSeoData | null = null;
-  const override = await readCoverOverride(slug);
+  const cache = await readSeoCache(slug);
+
+  if (cache?.title && cache?.image) {
+    return {
+      title: cache.title,
+      description: cache.description,
+      image: cache.image,
+      updatedAt: cache.updatedAt,
+    };
+  }
 
   try {
     const document = await getFirestoreDocument(
       `manga/${encodeURIComponent(slug)}`,
     );
-    if (document) return applyCoverOverride(normalizeSeries(document, slug), override);
+    if (document) return mergeSeoCache(normalizeSeries(document, slug), cache);
   } catch (error) {
     console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
   }
 
   try {
     const response = await fetch(MANGA_DATA_URL, { next: { revalidate: 900 } });
-    if (!response.ok) {
-      throw new Error(`Manga dataset returned HTTP ${response.status}.`);
+    if (response.ok) {
+      const mangaList = (await response.json()) as Array<Record<string, unknown>>;
+      const manga = mangaList.find(
+        (item) =>
+          asText(item.slug) === slug ||
+          slugKey(asText(item.title)) === slugKey(slug),
+      );
+      if (manga) return mergeSeoCache(normalizeSeries(manga, slug), cache);
     }
-    const mangaList = (await response.json()) as Array<Record<string, unknown>>;
-    const manga = mangaList.find(
-      (item) =>
-        asText(item.slug) === slug ||
-        slugKey(asText(item.title)) === slugKey(slug),
-    );
-    if (manga) datasetSeries = normalizeSeries(manga, slug);
   } catch (error) {
-    datasetError = error;
+    console.error("Metadata seri tidak dapat diambil dari dataset.", error);
   }
 
-  if (datasetSeries) return applyCoverOverride(datasetSeries, override);
-
-  if (datasetError) {
-    console.error("Metadata seri tidak dapat diambil dari dataset.", datasetError);
-  }
-  return applyCoverOverride(normalizeSeries({ title }, slug), override);
+  return mergeSeoCache(normalizeSeries({ title: fallbackTitle(slug) }, slug), cache);
 }
 
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
-  const override = await readCoverOverride(slug);
+  const cache = await readSeoCache(slug);
+
+  if (cache?.title && cache?.image) {
+    return {
+      title: cache.title,
+      description: cache.description,
+      image: cache.image,
+      updatedAt: cache.updatedAt,
+    };
+  }
 
   try {
     const controller = new AbortController();
@@ -251,7 +306,7 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
       );
       if (response.ok) {
         const document = decodeFirestoreDocument(await response.json());
-        return applyCoverOverride(normalizeSeries(document, slug), override);
+        return mergeSeoCache(normalizeSeries(document, slug), cache);
       }
     } finally {
       clearTimeout(timer);
@@ -271,18 +326,18 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
           asText(item.slug) === slug ||
           slugKey(asText(item.title)) === slugKey(slug),
       );
-      if (manga) return applyCoverOverride(normalizeSeries(manga, slug), override);
+      if (manga) return mergeSeoCache(normalizeSeries(manga, slug), cache);
     }
   } catch (error) {
     console.warn("[OG seo] dataset fallback failed", slug, error);
   }
 
-  if (override) {
+  if (cache?.image) {
     return {
-      title: fallbackTitle(slug),
-      description: `Baca manga di Mikoroku.`,
-      image: override.cover,
-      updatedAt: override.updatedAt ?? Date.now(),
+      title: cache.title || fallbackTitle(slug),
+      description: cache.description || `Baca manga di Mikoroku.`,
+      image: cache.image,
+      updatedAt: cache.updatedAt ?? Date.now(),
     };
   }
 

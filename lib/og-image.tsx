@@ -21,7 +21,16 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 function shrinkBloggerUrl(url: string): string {
   if (!url.includes("blogger.googleusercontent.com")) return url;
-  return url.replace(/\/s\d+(-[cwcwhh\d]+)?\//, "/s300/");
+
+  // Format lama: .../s1600/... atau .../s1600-c/...
+  if (/\/s\d+(-[cwcwhh\d]+)?\//.test(url)) {
+    return url.replace(/\/s\d+(-[cwcwhh\d]+)?\//, "/s300/");
+  }
+
+  // Format baru /img/b/R29vZ2xl/...
+  // buang query/size lama, paksa ukuran kecil
+  const base = url.split(/[?=]/)[0].replace(/\/$/, "");
+  return `${base}=s300`;
 }
 
 function isPlaceholderCover(url: string): boolean {
@@ -39,44 +48,54 @@ export async function toOgCoverDataUrl(
     return null;
   }
 
-  const url = shrinkBloggerUrl(coverUrl);
+  // coba beberapa ukuran biar pasti kecil & berhasil fetch
+  const candidates = [
+    shrinkBloggerUrl(coverUrl),
+    shrinkBloggerUrl(coverUrl).replace(/=s\d+$/, "=s200"),
+    shrinkBloggerUrl(coverUrl).replace(/=s\d+$/, "=w280-h420"),
+    coverUrl, // original sebagai last resort
+  ];
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(url, {
-      method: "GET",
-      signal: controller.signal,
-      headers: {
-        Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8",
-        "User-Agent":
-          "Mozilla/5.0 (compatible; MikorokuOG/1.2; +https://mikoroku.top)",
-      },
-      redirect: "follow",
-    }).finally(() => clearTimeout(timer));
+  for (const url of candidates) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
 
-    if (!res.ok) {
-      console.warn("[OG] cover HTTP", res.status, url);
-      return null;
+      const res = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        headers: {
+          Accept: "image/jpeg,image/png,image/webp,image/*;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Referer: "https://www.blogger.com/",
+        },
+        redirect: "follow",
+      }).finally(() => clearTimeout(timer));
+
+      if (!res.ok) {
+        console.warn("[OG] cover HTTP", res.status, url);
+        continue;
+      }
+
+      const contentType = (res.headers.get("content-type") || "").split(";")[0].trim();
+      if (contentType && !contentType.startsWith("image/")) continue;
+
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength < 100 || buf.byteLength > MAX_COVER_BYTES) {
+        console.warn("[OG] cover size", buf.byteLength, url);
+        continue;
+      }
+
+      // sukses → selalu return data URL (jangan return remote URL)
+      return `data:${contentType || "image/jpeg"};base64,${arrayBufferToBase64(buf)}`;
+    } catch (error) {
+      console.warn("[OG] cover fetch failed", url, error);
     }
-
-    const contentType = (res.headers.get("content-type") || "").split(";")[0].trim();
-    if (contentType && !contentType.startsWith("image/")) {
-      return null;
-    }
-
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength < 100) return null;
-
-    if (buf.byteLength > MAX_COVER_BYTES) {
-      return url;
-    }
-
-    return `data:${contentType || "image/jpeg"};base64,${arrayBufferToBase64(buf)}`;
-  } catch (error) {
-    console.warn("[OG] cover fetch failed, trying remote URL", url, error);
-    return url;
   }
+
+  // semua gagal
+  return null;
 }
 
 function buildOgJsx({
