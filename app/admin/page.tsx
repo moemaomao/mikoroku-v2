@@ -1,12 +1,24 @@
-import type { Metadata } from "next";
-import AdminPage from "./admin-page";
+import dynamic from "next/dynamic";
 
-export const metadata: Metadata = {
-  title: "Admin Panel - Mikoroku",
-  description: "Manage Mikoroku manga content.",
-  robots: { index: false, follow: false },
-};
+const AdminPage = dynamic(() => import("./admin-page"), {
+  ssr: false,
+  loading: () => (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#0f1117",
+        color: "#e8eaed",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      Loading admin...
+    </div>
+  ),
+});
 
-export default function AdminRoute() {
+export default function Page() {
   return <AdminPage />;
 }
