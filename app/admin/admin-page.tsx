@@ -335,31 +335,60 @@ function extractChapterImageUrls(content: string): string[] {
   const candidates: string[] = [];
   const imageTags = normalized.match(/<img\b[^>]*>/gi) || [];
 
-  for (const tag of imageTags) {
-    const attributes = [...tag.matchAll(/\b(src|data-src|data-original|data-lazy-src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)];
-    for (const attribute of attributes) {
-      const value = attribute[2] || attribute[3] || attribute[4] || "";
-      if (attribute[1].toLowerCase() === "srcset") {
-        candidates.push(...value.split(",").map((item) => item.trim().split(/\s+/)[0]));
-      } else {
-        candidates.push(value);
+  const bestSrcsetUrl = (srcset: string): string => {
+    let bestUrl = "";
+    let bestSize = -1;
+    for (const candidate of srcset.split(",")) {
+      const match = candidate.trim().match(/^(\S+)(?:\s+([\d.]+)(w|x))?$/i);
+      if (!match) continue;
+      const size = match[2] ? Number(match[2]) : 0;
+      if (size >= bestSize) {
+        bestUrl = match[1];
+        bestSize = size;
       }
     }
+    return bestUrl;
+  };
+
+  for (const tag of imageTags) {
+    const attributes = new Map<string, string>();
+    for (const match of tag.matchAll(/\b([a-z][\w:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
+      attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? "");
+    }
+
+    const url = [
+      attributes.get("data-original"),
+      attributes.get("data-lazy-src"),
+      attributes.get("data-src"),
+      bestSrcsetUrl(attributes.get("data-srcset") || ""),
+      bestSrcsetUrl(attributes.get("srcset") || ""),
+      attributes.get("src"),
+    ].find((candidate) => {
+      if (!candidate) return false;
+      try {
+        const parsed = new URL(candidate);
+        return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
+      } catch {
+        return false;
+      }
+    });
+    if (url) candidates.push(url);
   }
 
-  if (!candidates.length) {
-    candidates.push(...(normalized.match(/https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|gif|webp|bmp|svg)(?:\?[^\s"'<>]*)?/gi) || []));
-  }
   if (!candidates.length) {
     candidates.push(...(normalized.match(/https?:\/\/[^\s"'<>]+/gi) || []));
   }
 
   return [...new Set(candidates
     .map((value) => value.replace(/["'<>),;}\]]+$/, "").trim())
-    .filter((value) => /^https?:\/\//i.test(value))
-    .map((value) => value
-      .replace(/\/s\d+\//i, "/s800/")
-      .replace(/\/w\d+-h\d+(?:-[a-z0-9-]+)?/i, "/s500")))];
+    .filter((value) => {
+      try {
+        const url = new URL(value);
+        return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+      } catch {
+        return false;
+      }
+    }))];
 }
 
 async function uploadToImgBB(file: File): Promise<string> {
@@ -1882,6 +1911,27 @@ export default function AdminPage() {
     }));
   }
 
+  function pasteChapterImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const clipboardHtml = event.clipboardData.getData("text/html");
+    const clipboardText = event.clipboardData.getData("text/plain");
+    const pastedContent = /<img\b/i.test(clipboardHtml) ? clipboardHtml : clipboardText;
+    const pastedUrls = extractChapterImageUrls(pastedContent);
+    if (!pastedUrls.length) return;
+
+    event.preventDefault();
+    setChapterDraft((current) => {
+      const images = [...new Set([
+        ...extractChapterImageUrls(current.images),
+        ...pastedUrls,
+      ])];
+      return {
+        ...current,
+        images: images.join("\n"),
+        thumbnail: current.thumbnail || images[Math.min(2, images.length - 1)] || "",
+      };
+    });
+  }
+
   function sortChapterImages() {
     const collator = new Intl.Collator(undefined, {
       numeric: true,
@@ -3186,7 +3236,7 @@ export default function AdminPage() {
                 <input ref={chapterFilesInput} type="file" accept="image/*" multiple />
                 <button type="button" className={styles.secondaryButton} onClick={() => void uploadChapterFiles()} disabled={busy}>Upload All</button>
               </div>
-              <textarea rows={4} placeholder="Or paste image URLs here (1 line = 1 image)" value={chapterDraft.images} onChange={(event) => setChapterDraft((current) => ({ ...current, images: event.target.value }))} />
+              <textarea rows={4} placeholder="Paste image URLs or copied image markup here (1 image = 1 page)" value={chapterDraft.images} onPaste={pasteChapterImages} onChange={(event) => setChapterDraft((current) => ({ ...current, images: event.target.value }))} />
               <div className={styles.imageListToolbar}>
                 <button type="button" className={styles.secondaryButton} onClick={addChapterImageUrls}>＋ Add to List</button>
                 <button type="button" className={styles.secondaryButton} onClick={sortChapterImages}>⇅ Sort by Name</button>
