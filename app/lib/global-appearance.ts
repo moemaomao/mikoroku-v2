@@ -52,17 +52,17 @@ const cardDetailsElements = [".global-card-details"];
 const cardModeScopeSelector = cardContainers.join(",");
 const cardModeClasses = {
   list: {
-    container: ["!grid-cols-1", "!gap-1.5", "!p-1.5", "md:!grid-cols-4", "md:!gap-2", "md:!p-2"],
+    container: ["!grid-cols-1", "!gap-1", "!p-1", "md:!grid-cols-4", "md:!gap-2", "md:!p-2"],
     card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-hidden", "!rounded-xl", "!border", "!border-black/10", "!bg-white", "!p-0", "dark:!border-white/10", "dark:!bg-[#191a20]"],
-    cover: ["!h-auto", "!w-[28%]", "!shrink-0", "!aspect-[3/4]", "!rounded-l-xl", "!rounded-r-none", "md:!w-[32%]", "md:!aspect-[2/3]"],
-    overlay: ["!static", "!order-first", "!w-full", "!bg-none", "!p-0", "!pb-0", "!text-left"],
+    cover: ["!h-auto", "!w-[72px]", "!min-w-[72px]", "!max-w-[72px]", "!shrink-0", "!aspect-square", "!rounded-[8px]", "md:!w-[96px]", "md:!min-w-[96px]", "md:!max-w-[96px]", "md:!aspect-square"],
+    overlay: ["!static", "!order-2", "!w-full", "!bg-none", "!p-0", "!pb-0", "!text-left"],
     title: [
-      "!relative", "!inset-auto", "!m-0", "!min-h-[2.75rem]", "!max-h-[2.75rem]", "!w-full", "!self-start",
-      "!overflow-hidden", "!rounded-none", "!bg-transparent", "!p-0", "!pb-2", "!mb-1",
-      "!text-left", "!text-[15px]", "!leading-5", "!font-semibold", "!text-slate-900", "!shadow-none",
-      "!line-clamp-2", "!border-b", "!border-black/10",
-      "md:!min-h-[2.5rem]", "md:!max-h-[2.5rem]", "md:!text-sm", "md:!leading-5", "md:!pb-1.5", "md:!mb-0.5", "md:!font-medium",
-      "dark:!text-slate-100", "dark:!border-white/10",
+      "!relative", "!inset-auto", "!m-0", "!min-h-0", "!max-h-none", "!w-full", "!self-start",
+      "!overflow-hidden", "!rounded-none", "!bg-transparent", "!p-0", "!pb-0", "!mb-0",
+      "!text-left", "!text-[12px]", "!leading-4", "!font-semibold", "!text-slate-900", "!shadow-none",
+      "![text-shadow:none]", "!line-clamp-1", "!whitespace-nowrap", "!text-ellipsis", "!border-0",
+      "md:!text-[13px]", "md:!leading-5", "md:!font-medium",
+      "dark:!text-slate-100",
     ],
     details: ["!flex", "!min-w-0", "!flex-1", "!flex-col", "!items-start", "!gap-2", "!p-2.5", "md:!gap-1.5", "md:!p-2"],
     chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1.5", "md:!gap-1"],
@@ -81,7 +81,7 @@ const BLOGGER_CHAPTER_SOURCES = {
   blogger: "https://www.mikodrive.my.id",
   blogger2: "https://www.yomidays.my.id",
 } as const;
-const LIST_CHAPTER_LIMIT = 3;
+const LIST_CHAPTER_LIMIT = 1;
 let appearanceObserver: MutationObserver | null = null;
 let appear9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8 = false;
 let chapterCardObserver: IntersectionObserver | null = null;
@@ -730,74 +730,212 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         details = document.createElement("div");
         details.className = "global-card-details";
       }
-      card.querySelectorAll<HTMLElement>(".global-card-badges .status-badge, .global-card-badges .type-badge")
-        .forEach((badge) => cover.append(badge));
-      card.querySelector(".global-card-badges")?.remove();
-      if (overlay.parentElement !== details) details.append(overlay);
-      // Keep cover first, details second (side-by-side, never stacked)
+
+      let badgesRow = details.querySelector<HTMLElement>(".global-card-badges");
+      if (!badgesRow) {
+        badgesRow = document.createElement("div");
+        badgesRow.className = "global-card-badges";
+      }
+  
+      badgesRow.style.display = "flex";
+      badgesRow.style.flexWrap = "wrap";
+      badgesRow.style.alignItems = "center";
+      badgesRow.style.gap = "5px";
+      badgesRow.style.margin = "0 0 4px 0";
+      badgesRow.style.padding = "0";
+      badgesRow.style.order = "0";
+
+      const statusBadge = cover.querySelector<HTMLElement>(".status-badge");
+      const typeBadge = cover.querySelector<HTMLElement>(".type-badge");
+      const chBadge = cover.querySelector<HTMLElement>(".ch-badge");
+      if (chBadge) chBadge.style.display = "none";
+
+      if (statusBadge) {
+        statusBadge.style.position = "static";
+        statusBadge.style.left = "auto";
+        statusBadge.style.top = "auto";
+        statusBadge.style.zIndex = "1";
+        statusBadge.style.fontSize = "9px";
+        statusBadge.style.padding = "2px 6px";
+        statusBadge.style.borderRadius = "4px";
+        badgesRow.append(statusBadge);
+      }
+      if (typeBadge) {
+        typeBadge.style.position = "static";
+        typeBadge.style.left = "auto";
+        typeBadge.style.bottom = "auto";
+        typeBadge.style.zIndex = "1";
+        typeBadge.style.fontSize = "9px";
+        typeBadge.style.padding = "2px 6px";
+        typeBadge.style.borderRadius = "4px";
+        badgesRow.append(typeBadge);
+      }
+
+      if (overlay.parentElement !== details) {
+        details.append(overlay);
+      }
+      details.insertBefore(badgesRow, details.firstChild);
+      if (overlay.previousElementSibling !== badgesRow) {
+        details.insertBefore(overlay, badgesRow.nextSibling);
+      }
+
       if (cover.parentElement !== card) card.insertBefore(cover, card.firstChild);
       if (details.parentElement !== card) card.append(details);
       else if (details.previousElementSibling !== cover) {
         card.insertBefore(cover, details);
       }
 
-      // Inline styles — Tailwind utilities added at runtime are not always present in CSS
       card.style.display = "flex";
       card.style.flexDirection = "row";
-      card.style.alignItems = "stretch";
+      card.style.alignItems = "flex-start";
       card.style.gap = "0";
       card.style.overflow = "hidden";
       card.style.boxSizing = "border-box";
+      card.style.borderRadius = "12px";
 
-      cover.style.flex = "0 0 100px";
-      cover.style.width = "100px";
-      cover.style.minWidth = "100px";
-      cover.style.maxWidth = "100px";
-      cover.style.height = "auto";
-      cover.style.aspectRatio = "2 / 3";
-      cover.style.alignSelf = "stretch";
-      cover.style.borderRadius = "12px 0 0 12px";
+      const isMobile = window.matchMedia("(max-width: 768px)").matches;
+      const coverSize = isMobile ? 72 : 96;
+      const coverRadius = isMobile ? "8px" : "10px";
+      cover.style.flex = `0 0 ${coverSize}px`;
+      cover.style.width = `${coverSize}px`;
+      cover.style.minWidth = `${coverSize}px`;
+      cover.style.maxWidth = `${coverSize}px`;
+      cover.style.height = `${coverSize}px`;
+      cover.style.aspectRatio = "1 / 1";
+      cover.style.alignSelf = "flex-start";
+      cover.style.borderRadius = coverRadius;
+      cover.style.overflow = "hidden";
+      cover.style.margin = isMobile ? "6px 0 6px 6px" : "8px 0 8px 8px";
+      const coverImg = cover.querySelector<HTMLImageElement>("img");
+      if (coverImg) {
+        coverImg.style.width = "100%";
+        coverImg.style.height = "100%";
+        coverImg.style.objectFit = "cover";
+        coverImg.style.display = "block";
+        coverImg.style.borderRadius = coverRadius;
+      }
 
       details.style.display = "flex";
       details.style.flexDirection = "column";
       details.style.flex = "1 1 auto";
       details.style.minWidth = "0";
       details.style.alignItems = "stretch";
-      details.style.justifyContent = "center";
-      details.style.gap = "6px";
-      details.style.padding = "10px 12px";
+      details.style.justifyContent = "flex-start";
+      details.style.gap = isMobile ? "2px" : "4px";
+      details.style.padding = isMobile ? "6px 8px 6px 8px" : "8px 12px 8px 10px";
       details.style.boxSizing = "border-box";
+      details.style.alignSelf = "stretch";
+
+      // badges ABOVE title
+      badgesRow.style.order = "0";
+      badgesRow.style.display = "flex";
+      badgesRow.style.flexWrap = "wrap";
+      badgesRow.style.gap = "5px";
+      badgesRow.style.margin = "0";
+      badgesRow.style.padding = "0";
 
       overlay.style.position = "static";
-      overlay.style.order = "0";
+      overlay.style.order = "1";
       overlay.style.width = "100%";
       overlay.style.background = "none";
       overlay.style.padding = "0";
+      overlay.style.margin = "0";
       overlay.style.textAlign = "left";
+      overlay.style.boxShadow = "none";
+      overlay.style.textShadow = "none";
+      overlay.style.filter = "none";
+
+      const badgeColorMap: Record<string, string> = {
+        ongoing: "#4ade80",
+        completed: "#60a5fa",
+        hiatus: "#fbbf24",
+        dropped: "#f87171",
+        canceled: "#a8a29e",
+        manga: "#f87171",
+        manhwa: "#60a5fa",
+        manhua: "#4ade80",
+        novel: "#c084fc",
+        "light-novel": "#818cf8",
+        "web-novel": "#e879f9",
+        doujinshi: "#fb7185",
+        webtoon: "#34d399",
+        cg: "#2dd4bf",
+      };
+      badgesRow.style.gap = isMobile ? "3px" : "5px";
+      details.querySelectorAll<HTMLElement>(".status-badge, .type-badge").forEach((b) => {
+        const label = (b.textContent || "").trim().toLowerCase().replace(/\s+/g, "-");
+        const color = badgeColorMap[label] || "#94a3b8";
+        b.className = b.className
+          .split(/\s+/)
+          .filter((c) => c && !c.startsWith("bg-") && !c.startsWith("!bg-"))
+          .join(" ");
+        b.style.setProperty("background", "transparent", "important");
+        b.style.setProperty("background-color", "transparent", "important");
+        b.style.setProperty("background-image", "none", "important");
+        b.style.setProperty("border", `1px solid ${color}`, "important");
+        b.style.setProperty("color", color, "important");
+        b.style.setProperty("border-radius", "999px", "important");
+        b.style.fontSize = isMobile ? "8px" : "9px";
+        b.style.padding = isMobile ? "1px 6px" : "2px 7px";
+        b.style.lineHeight = "1.2";
+        b.style.fontWeight = "600";
+        b.style.letterSpacing = "0.02em";
+        b.style.textShadow = "none";
+        b.style.boxShadow = "none";
+      });
 
       const title = overlay.querySelector<HTMLElement>(".title, .catalog-card-title");
       if (title) {
         title.style.position = "relative";
         title.style.inset = "auto";
-        title.style.margin = "0 0 4px";
+        title.style.margin = "0";
         title.style.minHeight = "0";
         title.style.maxHeight = "none";
         title.style.width = "100%";
         title.style.overflow = "hidden";
         title.style.textAlign = "left";
-        title.style.fontSize = "14px";
+        title.style.fontSize = isMobile ? "12px" : "13px";
         title.style.fontWeight = "600";
         title.style.lineHeight = "1.3";
-        title.style.borderBottom = "1px solid rgba(255,255,255,0.08)";
-        title.style.paddingBottom = "6px";
+        title.style.borderBottom = "none";
+        title.style.paddingBottom = "0";
         title.style.color = "#f1f5f9";
+        title.style.display = "block";
+        title.style.webkitLineClamp = "1";
+        title.style.webkitBoxOrient = "vertical";
+        title.style.whiteSpace = "nowrap";
+        title.style.textOverflow = "ellipsis";
+        title.style.textShadow = "none";
+        title.style.boxShadow = "none";
+        title.style.filter = "none";
       }
 
       updateListChapterLinks(card, details, true);
+
+      badgesRow.style.order = "0";
+      overlay.style.order = "1";
+      const chapterList = details.querySelector<HTMLElement>(".global-card-chapters");
+      if (chapterList) {
+        chapterList.style.order = "2";
+        chapterList.style.width = "100%";
+        chapterList.style.marginTop = isMobile ? "2px" : "4px";
+        chapterList.querySelectorAll<HTMLElement>(".global-card-chapter-item").forEach((item) => {
+          item.style.padding = isMobile ? "3px 6px" : "6px 10px";
+          item.style.fontSize = isMobile ? "11px" : "13px";
+          item.style.minHeight = "0";
+        });
+        chapterList.querySelectorAll<HTMLElement>(".global-card-update-date").forEach((d) => {
+          d.style.fontSize = isMobile ? "10px" : "11px";
+        });
+      }
+
+      details.insertBefore(badgesRow, details.firstChild);
+      if (overlay.parentElement === details) {
+        details.insertBefore(overlay, badgesRow.nextSibling);
+      }
       return;
     }
 
-    // restore grid mode
     clearListInlineStyles(card);
     clearListInlineStyles(cover);
     clearListInlineStyles(overlay);
@@ -812,8 +950,18 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         cover.append(upBadge);
       }
       details.querySelectorAll<HTMLElement>(".status-badge, .type-badge").forEach((badge) => {
+        badge.style.position = "";
+        badge.style.left = "";
+        badge.style.top = "";
+        badge.style.bottom = "";
+        badge.style.zIndex = "";
+        badge.style.fontSize = "";
+        badge.style.padding = "";
+        badge.style.borderRadius = "";
         cover.append(badge);
       });
+      const chBadge = cover.querySelector<HTMLElement>(".ch-badge");
+      if (chBadge) chBadge.style.display = "";
       if (overlay.parentElement === details) cover.append(overlay);
       details.remove();
     }
