@@ -31,7 +31,7 @@
   },
   "vars": {
     "WARM_BASE_URL": "https://mikoroku.top",
-    "OG_SERVICE_URL": "https://URL-VERCEL-KAMU.vercel.app/api/og"
+    "OG_SERVICE_URL": "https://mikoroku-og.vercel.app"
   },
   "observability": {
     "enabled": true

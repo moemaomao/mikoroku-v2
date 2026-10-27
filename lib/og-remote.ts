@@ -1,24 +1,38 @@
 /**
- * Remote OG image generator (Vercel microservice).
- * Workers hanya fetch + cache; tidak menjalankan Satori/Resvg lokal.
+ * Remote OG image client — panggil Vercel microservice.
+ * Env (Cloudflare Workers / wrangler):
+ *   OG_SERVICE_URL  e.g. https://mikoroku-og.vercel.app
+ *   OG_API_KEY      same secret as Vercel
  */
 
-const DEFAULT_OG_SERVICE_URL = "https://mikoroku-og.vercel.app/api/og";
+const CACHE_HEADERS: HeadersInit = {
+  "Content-Type": "image/png",
+  "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+  "Access-Control-Allow-Origin": "*",
+};
+
+function readEnv(name: string): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    const fromProcess =
+      typeof process !== "undefined" && process.env
+        ? process.env[name]
+        : undefined;
+    const fromGlobal = g?.[name] ?? g?.process?.env?.[name];
+    return String(fromProcess ?? fromGlobal ?? "").trim();
+  } catch {
+    return "";
+  }
+}
 
 function getOgServiceUrl(): string {
-  // Cloudflare Workers: env dari wrangler vars / secrets via process.env (OpenNext)
-  // atau globalThis (custom worker). Fallback ke default.
-  const fromEnv =
-    (typeof process !== "undefined" && process.env?.OG_SERVICE_URL) ||
-    (globalThis as { OG_SERVICE_URL?: string }).OG_SERVICE_URL;
-  return (fromEnv || DEFAULT_OG_SERVICE_URL).replace(/\/$/, "");
+  const v = readEnv("OG_SERVICE_URL");
+  return (v || "https://mikoroku-og.vercel.app").replace(/\/$/, "");
 }
 
 function getOgApiKey(): string {
-  const fromEnv =
-    (typeof process !== "undefined" && process.env?.OG_API_KEY) ||
-    (globalThis as { OG_API_KEY?: string }).OG_API_KEY;
-  return fromEnv || "";
+  return readEnv("OG_API_KEY");
 }
 
 export async function fetchRemoteOgPng(opts: {
@@ -26,55 +40,63 @@ export async function fetchRemoteOgPng(opts: {
   description: string;
   label: string;
   coverUrl?: string | null;
-}): Promise<ArrayBuffer> {
-  const url = new URL(getOgServiceUrl());
-  url.searchParams.set("title", (opts.title || "Mikoroku").slice(0, 120));
-  url.searchParams.set(
+}): Promise<ArrayBuffer | null> {
+  const base = getOgServiceUrl();
+  const key = getOgApiKey();
+  if (!base || !key) {
+    console.warn("[og-remote] OG_SERVICE_URL or OG_API_KEY missing");
+    return null;
+  }
+
+  const params = new URLSearchParams();
+  params.set("title", (opts.title || "Mikoroku").slice(0, 72));
+  params.set(
     "description",
-    (opts.description || "Baca manga di Mikoroku.").slice(0, 200),
+    (opts.description || "Baca manga di Mikoroku.").slice(0, 120),
   );
-  url.searchParams.set("label", opts.label || "Manga & Series");
+  params.set("label", opts.label || "Manga");
+  if (opts.coverUrl && opts.coverUrl.startsWith("http")) {
+    params.set("cover", opts.coverUrl);
+  }
 
-  if (
-    opts.coverUrl &&
-    typeof opts.coverUrl === "string" &&
-    opts.coverUrl.startsWith("http")
-  ) {
-    // shrink blogger cover agar ringan
-    let cover = opts.coverUrl;
-    if (cover.includes("blogger.googleusercontent.com")) {
-      cover = cover.replace(/\/s\d+(-[cwcwhh\d]+)?\//, "/s300/");
+  const url = `${base}/api/og?${params.toString()}`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "x-og-key": key,
+        Accept: "image/png",
+      },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+
+    if (!res.ok) {
+      console.warn(
+        "[og-remote] HTTP",
+        res.status,
+        await res.text().catch(() => ""),
+      );
+      return null;
     }
-    url.searchParams.set("cover", cover);
-  }
 
-  const headers: Record<string, string> = {
-    Accept: "image/png",
-    "User-Agent": "mikoroku-workers-og/1.0",
-  };
-  const apiKey = getOgApiKey();
-  if (apiKey) {
-    headers["x-og-key"] = apiKey;
+    const buf = await res.arrayBuffer();
+    if (!buf || buf.byteLength < 1000) {
+      console.warn("[og-remote] empty/small body", buf?.byteLength);
+      return null;
+    }
+    return buf;
+  } catch (error) {
+    console.warn("[og-remote] fetch failed", error);
+    return null;
   }
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers,
-    signal: AbortSignal.timeout(12_000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`OG service HTTP ${res.status}`);
-  }
-
-  const contentType = (res.headers.get("content-type") || "").toLowerCase();
-  if (!contentType.includes("image/")) {
-    throw new Error(`OG service returned non-image: ${contentType}`);
-  }
-
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength < 1000) {
-    throw new Error("OG buffer too small");
-  }
-  return buf;
 }
+
+export function ogResponse(buffer: ArrayBuffer, status = 200): Response {
+  return new Response(buffer, { status, headers: CACHE_HEADERS });
+}
+
+export { CACHE_HEADERS };
