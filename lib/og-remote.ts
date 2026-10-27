@@ -1,9 +1,9 @@
 /**
  * Remote OG image client — panggil Vercel microservice.
- * Env (Cloudflare Workers / wrangler):
- *   OG_SERVICE_URL  e.g. https://mikoroku-og.vercel.app
- *   OG_API_KEY      same secret as Vercel
+ * Env via Cloudflare: OG_SERVICE_URL (vars) + OG_API_KEY (secret)
  */
+
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 const CACHE_HEADERS: HeadersInit = {
   "Content-Type": "image/png",
@@ -13,17 +13,23 @@ const CACHE_HEADERS: HeadersInit = {
 
 function readEnv(name: string): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const g = globalThis as any;
-    const fromProcess =
-      typeof process !== "undefined" && process.env
-        ? process.env[name]
-        : undefined;
-    const fromGlobal = g?.[name] ?? g?.process?.env?.[name];
-    return String(fromProcess ?? fromGlobal ?? "").trim();
+    const ctx = getCloudflareContext();
+    const env = ctx?.env as Record<string, unknown> | undefined;
+    const fromCf = env?.[name];
+    if (typeof fromCf === "string" && fromCf.trim()) return fromCf.trim();
   } catch {
-    return "";
+    // ignore
   }
+
+  try {
+    if (typeof process !== "undefined" && process.env?.[name]) {
+      return String(process.env[name]).trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
 }
 
 function getOgServiceUrl(): string {
@@ -43,8 +49,9 @@ export async function fetchRemoteOgPng(opts: {
 }): Promise<ArrayBuffer | null> {
   const base = getOgServiceUrl();
   const key = getOgApiKey();
-  if (!base || !key) {
-    console.warn("[og-remote] OG_SERVICE_URL or OG_API_KEY missing");
+
+  if (!key) {
+    console.warn("[og-remote] OG_API_KEY missing");
     return null;
   }
 
@@ -60,6 +67,7 @@ export async function fetchRemoteOgPng(opts: {
   }
 
   const url = `${base}/api/og?${params.toString()}`;
+  console.log("[og-remote] fetch", base, "title=", opts.title?.slice(0, 40));
 
   try {
     const controller = new AbortController();
