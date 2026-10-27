@@ -405,49 +405,6 @@ function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source
   });
 }
 
-function jsonp<T>(url: string, signal: AbortSignal): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const callbackName = `mikorokuJsonp${Date.now()}${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement("script");
-    const timeout = window.setTimeout(
-      () => finish(new Error("Waktu tunggu sumber manga habis.")),
-      15000,
-    );
-    let settled = false;
-
-    const root = window as any;
-
-    function finish(error?: Error, data?: T) {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      signal.removeEventListener("abort", onAbort);
-      script.remove();
-      window.setTimeout(() => {
-        try {
-          delete root[callbackName];
-        } catch {
-          /* ignore */
-        }
-      }, 5000);
-      if (error) reject(error);
-      else resolve(data as T);
-    }
-
-    const onAbort = () => {
-      root[callbackName] = () => {};
-      finish(new DOMException("Permintaan dibatalkan.", "AbortError"));
-    };
-
-    root[callbackName] = (data: T) => finish(undefined, data);
-
-    script.onerror = () => finish(new Error("Sumber manga tidak dapat dimuat."));
-    signal.addEventListener("abort", onAbort, { once: true });
-    script.src = `${url}${url.includes("?") ? "&" : "?"}callback=${callbackName}`;
-    document.body.appendChild(script);
-  });
-}
-
 function getCachedManga(slug: string): Manga | null {
   try {
     const cached = localStorage.getItem(`detail_${slug}`);
@@ -555,30 +512,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     return firestore;
   }
 
-  const feed = await jsonp<{ feed?: { entry?: BloggerEntry[] } }>(
-    "https://www.mikoroku.top/feeds/posts/default?alt=json-in-script&max-results=200",
-    signal,
-  );
-  const entry = (feed.feed?.entry || []).find((item) => {
-    const title = item.title?.$t || "";
-    return normalizedSlug(title) === slug && !/(?:chapter|chap)\s*\d+/i.test(title);
-  });
-  if (!entry) return null;
-
-  const title = entry.title?.$t || slug;
-  const content = entry.content?.$t || "";
-  const cover = entry.link?.find((item) => item.rel === "enclosure")?.href ||
-    content.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
-  const result = normalizeManga({
-    title,
-    slug,
-    img: cover,
-    desc: content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
-    genres: (entry as BloggerEntry & { category?: Array<{ term?: string }> }).category?.map((item) => item.term || "") || [],
-    status: "UNKNOWN",
-  }, slug);
-  cacheMangaDetail(slug, result);
-  return result;
+  return null;
 }
 
 async function loadFirebaseDocument(slug: string, signal: AbortSignal): Promise<Manga | null> {
