@@ -30,7 +30,8 @@
     "crons": ["*/20 * * * *"]
   },
   "vars": {
-    "WARM_BASE_URL": "https://mikoroku.top"
+    "WARM_BASE_URL": "https://mikoroku.top",
+    "OG_SERVICE_URL": "https://URL-VERCEL-KAMU.vercel.app/api/og"
   },
   "observability": {
     "enabled": true

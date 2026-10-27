@@ -1,0 +1,16 @@
+// Gabungkan ke wrangler.jsonc milikmu.
+// 1. Tambahkan di "vars":
+//
+//   "OG_SERVICE_URL": "https://mikoroku-og.vercel.app/api/og"
+//
+// 2. Secret (jangan taruh plain text):
+//
+//   npx wrangler secret put OG_API_KEY
+//   # isi sama persis dengan OG_API_KEY di Vercel
+
+{
+  "vars": {
+    "WARM_BASE_URL": "https://mikoroku.top",
+    "OG_SERVICE_URL": "https://mikoroku-og.vercel.app/api/og"
+  }
+}
