@@ -18,3 +18,62 @@
     }
   }
 }
+
+html[data-card-display="list"] #githubManga .card,
+html[data-card-display="list"] #firebaseManga .card,
+html[data-card-display="list"] #firebaseNovel .card {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+html[data-card-display="list"] #githubManga .card > .thumb,
+html[data-card-display="list"] #firebaseManga .card > .thumb,
+html[data-card-display="list"] #firebaseNovel .card > .thumb {
+  flex: 0 0 100px !important;
+  width: 100px !important;
+  min-width: 100px !important;
+  max-width: 100px !important;
+  aspect-ratio: 2 / 3 !important;
+  border-radius: 12px 0 0 12px !important;
+}
+
+html[data-card-display="list"] #githubManga .card > .global-card-details,
+html[data-card-display="list"] #firebaseManga .card > .global-card-details,
+html[data-card-display="list"] #firebaseNovel .card > .global-card-details {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  justify-content: center !important;
+  padding: 10px 12px !important;
+  gap: 6px !important;
+}
+
+html[data-card-display="list"] #githubManga .card .overlay,
+html[data-card-display="list"] #firebaseManga .card .overlay,
+html[data-card-display="list"] #firebaseNovel .card .overlay {
+  position: static !important;
+  width: 100% !important;
+  background: none !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
+html[data-card-display="list"] #githubManga .card .title,
+html[data-card-display="list"] #firebaseManga .card .title,
+html[data-card-display="list"] #firebaseNovel .card .title {
+  position: relative !important;
+  inset: auto !important;
+  margin: 0 0 4px !important;
+  text-align: left !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  color: #f1f5f9 !important;
+  text-shadow: none !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: 6px;
+}

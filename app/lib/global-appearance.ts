@@ -682,6 +682,38 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
 
 }
 
+function clearListInlineStyles(el: HTMLElement): void {
+  el.style.removeProperty("display");
+  el.style.removeProperty("flex-direction");
+  el.style.removeProperty("align-items");
+  el.style.removeProperty("gap");
+  el.style.removeProperty("width");
+  el.style.removeProperty("min-width");
+  el.style.removeProperty("max-width");
+  el.style.removeProperty("flex");
+  el.style.removeProperty("flex-shrink");
+  el.style.removeProperty("flex-grow");
+  el.style.removeProperty("aspect-ratio");
+  el.style.removeProperty("height");
+  el.style.removeProperty("order");
+  el.style.removeProperty("position");
+  el.style.removeProperty("background");
+  el.style.removeProperty("padding");
+  el.style.removeProperty("text-align");
+  el.style.removeProperty("border-radius");
+  el.style.removeProperty("align-self");
+  el.style.removeProperty("min-height");
+  el.style.removeProperty("max-height");
+  el.style.removeProperty("overflow");
+  el.style.removeProperty("border-bottom");
+  el.style.removeProperty("margin");
+  el.style.removeProperty("color");
+  el.style.removeProperty("font-size");
+  el.style.removeProperty("font-weight");
+  el.style.removeProperty("line-height");
+  el.style.removeProperty("box-sizing");
+}
+
 function updateListCardStructure(root: ParentNode, isList: boolean): void {
   const cards = [
     ...root.querySelectorAll<HTMLElement>(".card"),
@@ -702,12 +734,78 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         .forEach((badge) => cover.append(badge));
       card.querySelector(".global-card-badges")?.remove();
       if (overlay.parentElement !== details) details.append(overlay);
+      // Keep cover first, details second (side-by-side, never stacked)
+      if (cover.parentElement !== card) card.insertBefore(cover, card.firstChild);
       if (details.parentElement !== card) card.append(details);
+      else if (details.previousElementSibling !== cover) {
+        card.insertBefore(cover, details);
+      }
+
+      // Inline styles — Tailwind utilities added at runtime are not always present in CSS
+      card.style.display = "flex";
+      card.style.flexDirection = "row";
+      card.style.alignItems = "stretch";
+      card.style.gap = "0";
+      card.style.overflow = "hidden";
+      card.style.boxSizing = "border-box";
+
+      cover.style.flex = "0 0 100px";
+      cover.style.width = "100px";
+      cover.style.minWidth = "100px";
+      cover.style.maxWidth = "100px";
+      cover.style.height = "auto";
+      cover.style.aspectRatio = "2 / 3";
+      cover.style.alignSelf = "stretch";
+      cover.style.borderRadius = "12px 0 0 12px";
+
+      details.style.display = "flex";
+      details.style.flexDirection = "column";
+      details.style.flex = "1 1 auto";
+      details.style.minWidth = "0";
+      details.style.alignItems = "stretch";
+      details.style.justifyContent = "center";
+      details.style.gap = "6px";
+      details.style.padding = "10px 12px";
+      details.style.boxSizing = "border-box";
+
+      overlay.style.position = "static";
+      overlay.style.order = "0";
+      overlay.style.width = "100%";
+      overlay.style.background = "none";
+      overlay.style.padding = "0";
+      overlay.style.textAlign = "left";
+
+      const title = overlay.querySelector<HTMLElement>(".title, .catalog-card-title");
+      if (title) {
+        title.style.position = "relative";
+        title.style.inset = "auto";
+        title.style.margin = "0 0 4px";
+        title.style.minHeight = "0";
+        title.style.maxHeight = "none";
+        title.style.width = "100%";
+        title.style.overflow = "hidden";
+        title.style.textAlign = "left";
+        title.style.fontSize = "14px";
+        title.style.fontWeight = "600";
+        title.style.lineHeight = "1.3";
+        title.style.borderBottom = "1px solid rgba(255,255,255,0.08)";
+        title.style.paddingBottom = "6px";
+        title.style.color = "#f1f5f9";
+      }
+
       updateListChapterLinks(card, details, true);
       return;
     }
 
+    // restore grid mode
+    clearListInlineStyles(card);
+    clearListInlineStyles(cover);
+    clearListInlineStyles(overlay);
+    const title = overlay.querySelector<HTMLElement>(".title, .catalog-card-title");
+    if (title) clearListInlineStyles(title);
+
     if (details) {
+      clearListInlineStyles(details);
       const upBadge = details.querySelector<HTMLElement>(".up-badge");
       if (upBadge) {
         listUpBadgeClasses.forEach((className) => upBadge.classList.remove(className));

@@ -60,7 +60,12 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark);root.style.backgroundColor=isDark?"#0b0b0b":"#f8f9fa";root.style.colorScheme=isDark?"dark":"light";try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}})();`,
+            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark);root.style.backgroundColor=isDark?"#0b0b0b":"#f8f9fa";root.style.colorScheme=isDark?"dark":"light";try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}document.documentElement.style.setProperty("--mk-page-bg",isDark?"#0b0b0b":"#f8f9fa");})();`,
+          }}
+        />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `html,body{background-color:var(--mk-page-bg,#0b0b0b)!important;}html.light body,body.light{background-color:#f8f9fa!important;color:#333!important;}html.dark body,body.dark{background-color:#0b0b0b!important;color:#fff!important;}#mainHeader{background:rgba(9,9,11,.92)!important;border-bottom:1px solid rgb(63 63 70)!important;color:#fff!important;}#mainHeader button,#mainHeader a,#mainHeader svg{color:inherit;}html.light #mainHeader{background:rgba(255,255,255,.88)!important;border-bottom-color:#d4d4d8!important;color:#18181b!important;}`,
           }}
         />
         <meta name="author" content="Mikoroku" />
@@ -87,7 +92,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           data-fa="true"
         />
       </head>
-      <body suppressHydrationWarning className="m-0 min-h-dvh overflow-x-clip bg-[#f8f9fa] pt-14! font-['Kodchasan',Arial,sans-serif] leading-[1.4] text-[#333] antialiased [text-rendering:optimizeLegibility] dark:bg-[#0b0b0b] dark:text-white">
+      <body suppressHydrationWarning className="m-0 min-h-dvh overflow-x-clip bg-[#0b0b0b] pt-14! font-['Kodchasan',Arial,sans-serif] leading-[1.4] text-white antialiased [text-rendering:optimizeLegibility] dark:bg-[#0b0b0b] dark:text-white">
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var root=document.documentElement;document.body.classList.toggle("dark",root.classList.contains("dark"));document.body.classList.toggle("light",root.classList.contains("light"))})();`,

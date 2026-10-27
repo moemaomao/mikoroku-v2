@@ -251,7 +251,7 @@ function SidebarLink({
   external?: boolean;
 }) {
   const classes =
-    "flex w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-slate-700 no-underline transition hover:bg-black/[0.06] hover:text-zinc-950 dark:text-indigo-100/80 dark:hover:bg-white/10 dark:hover:text-white";
+    "flex w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-indigo-100/80 no-underline transition hover:bg-white/10 hover:text-white";
   const content = <><Icon name={icon} className="h-5 w-5 shrink-0" />{children}</>;
   return external ? (
     <a className={classes} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{content}</a>
@@ -793,9 +793,9 @@ function HeaderContents() {
   };
 
   const classButton =
-    "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:text-white dark:hover:bg-white/10";
+    "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-white transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)]";
   const mainHeaderClass = [
-    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-300 bg-white/80 px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-zinc-950/75 dark:text-white",
+    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-700 bg-zinc-950/90 px-2 py-2 text-white shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5",
     !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
     headerHidden ? "-translate-y-full" : "translate-y-0",
   ].join(" ");
@@ -837,7 +837,6 @@ function HeaderContents() {
           </a>
         </div>
 
-        {/* Search: always visible on desktop; on mobile only when expanded, or icon in actions */}
         <div
           className={
             mobile
@@ -907,13 +906,11 @@ function HeaderContents() {
           </div>
         </div>
 
-        {/* Right actions — hidden while mobile search expanded */}
         <div
           className={`relative flex h-10 shrink-0 items-center justify-end gap-0 sm:gap-2 ${
             mobile && searchExpanded ? "hidden" : ""
           }`}
         >
-          {/* Mobile search toggle */}
           {mobile && (
             <button
               type="button"
