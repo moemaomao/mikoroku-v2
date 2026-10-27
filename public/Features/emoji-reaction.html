@@ -1,4 +1,3 @@
-<!-- ========= EMOJI REACTION FINAL (optimized + IndexedDB) ========= -->
 <div id="slime-container"></div>
 <svg style="position:absolute;width:0;height:0" aria-hidden="true">
   <defs>
@@ -31,6 +30,7 @@
   cursor:pointer;
   position:relative;
   padding:0;
+  overflow:visible;
 }
 .reaction svg {
   width: 100%;
@@ -50,6 +50,10 @@
   border-radius:999px;
   min-width:22px;
   z-index:3;
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.reaction span.count.pop{
+  transform: scale(1.35);
 }
 .reaction small{
   display:block;
@@ -93,7 +97,10 @@
   to{transform:translateY(-4px) scale(1.08)}
 }
 .manga-bubble{
-  position:fixed;
+  position:absolute;
+  left:50%;
+  bottom:calc(100% + 10px);
+  transform:translateX(-50%);
   background:#fff;
   color:#000;
   font-size:12px;
@@ -128,14 +135,14 @@
   border-top-color:#fff;
 }
 @keyframes bubbleFade{
-  0%{ transform:translate(-50%,-10px) scale(.8); opacity:0; }
-  100%{ transform:translate(-50%,0) scale(1); opacity:1; }
+  0%{ transform:translateX(-50%) translateY(8px) scale(.8); opacity:0; }
+  100%{ transform:translateX(-50%) translateY(0) scale(1); opacity:1; }
 }
 .manga-hide{
   animation:bubbleOut .4s ease forwards !important;
 }
 @keyframes bubbleOut{
-  to{ transform:translate(-50%,-10px) scale(.8); opacity:0; }
+  to{ transform:translateX(-50%) translateY(8px) scale(.8); opacity:0; }
 }
 #slime-container{
   position:fixed;
@@ -284,7 +291,6 @@
 
   enableIndexedDbPersistence(db).catch((err) => {
     if (err.code === "failed-precondition") {
-
       console.warn("Persistence failed: multiple tabs open");
     } else if (err.code === "unimplemented") {
       console.warn("Persistence is not available in this browser");
@@ -304,6 +310,9 @@
   const COUNTS_CACHE_KEY = "emojiReactionCounts_v1";
   const MAX_CACHED_PAGES = 20;
   const REACTION_KEYS = ["like", "haha", "wow", "sad", "angry2"];
+
+  let liveCounts = Object.fromEntries(REACTION_KEYS.map((k) => [k, 0]));
+  const pendingOptimistic = new Map();
 
   function getPageRef() {
     const url = new URL(location.href);
@@ -341,17 +350,59 @@
     }
   }
 
-  function renderCounts(counts) {
+  function renderCounts(counts, { animateKey = null } = {}) {
     const widget = document.getElementById("emoji-reaction-widget");
     if (!widget) return;
+    liveCounts = { ...liveCounts, ...counts };
     widget.querySelectorAll("button[data-k]").forEach((button) => {
       const key = button.dataset.k;
-      const value = counts[key];
+      const value = liveCounts[key];
       const count = typeof value === "number" && Number.isFinite(value) ? value : 0;
       const countEl = button.querySelector(".count");
-      if (countEl) countEl.textContent = count;
+      if (countEl) {
+        countEl.textContent = String(count);
+        if (animateKey === key) {
+          countEl.classList.remove("pop");
+          void countEl.offsetWidth;
+          countEl.classList.add("pop");
+          setTimeout(() => countEl.classList.remove("pop"), 220);
+        }
+      }
       button.classList.toggle("fire", count >= 10);
     });
+  }
+
+  function bumpCountLocal(key) {
+    const next = (liveCounts[key] || 0) + 1;
+    liveCounts[key] = next;
+    renderCounts({ [key]: next }, { animateKey: key });
+    saveCachedCounts(pageId, { ...liveCounts });
+    return next;
+  }
+
+  function rollbackCountLocal(key) {
+    const next = Math.max(0, (liveCounts[key] || 0) - 1);
+    liveCounts[key] = next;
+    renderCounts({ [key]: next });
+    saveCachedCounts(pageId, { ...liveCounts });
+  }
+
+  function playReactionEffect(key, button) {
+    if (key === "wow") {
+      const animationsDisabled =
+        document.documentElement.classList.contains("no-animations") ||
+        document.body.classList.contains("no-animations") ||
+        document.getElementById("comment-widget")?.classList.contains("no-animations");
+      if (!animationsDisabled) slimeEffect(button);
+    } else if (key === "like") {
+      likeEffect(button);
+    } else if (key === "angry2") {
+      angryEffect(button);
+    } else if (key === "haha") {
+      pinballEffect(button);
+    } else if (key === "sad") {
+      sadEffect(button);
+    }
   }
 
   function startListener(targetRef) {
@@ -361,17 +412,32 @@
     }
     const targetPageId = pageId;
     currentRef = targetRef;
+    pendingOptimistic.clear();
+
     const cachedCounts = readCachedCounts(targetPageId);
-    if (cachedCounts) renderCounts(cachedCounts);
+    if (cachedCounts) {
+      const normalized = Object.fromEntries(
+        REACTION_KEYS.map((key) => [
+          key,
+          typeof cachedCounts[key] === "number" && Number.isFinite(cachedCounts[key])
+            ? cachedCounts[key]
+            : 0,
+        ]),
+      );
+      renderCounts(normalized);
+    }
 
     unsubscribe = onSnapshot(targetRef, (s) => {
       if (currentRef !== targetRef) return;
       const d = s.data() || {};
       const counts = Object.fromEntries(
-        REACTION_KEYS.map((key) => [
-          key,
-          typeof d[key] === "number" && Number.isFinite(d[key]) ? d[key] : 0
-        ])
+        REACTION_KEYS.map((key) => {
+          const server = typeof d[key] === "number" && Number.isFinite(d[key]) ? d[key] : 0;
+          if (pendingOptimistic.has(key) && (liveCounts[key] || 0) > server) {
+            return [key, liveCounts[key]];
+          }
+          return [key, server];
+        }),
       );
       renderCounts(counts);
       saveCachedCounts(targetPageId, counts);
@@ -402,7 +468,6 @@
   window.addEventListener("hashchange", checkUrlChange);
   setInterval(checkUrlChange, 2000);
 
-  /* ===== Click ===== */
   document.querySelectorAll(".reaction button").forEach((b) => {
     b.onclick = async () => {
       const key = b.dataset.k;
@@ -426,7 +491,11 @@
         }
 
         if (!currentRef) throw new Error("Emoji reaction page is not ready.");
-        await setDoc(currentRef, { [key]: increment(1) }, { merge: true });
+
+        bumpCountLocal(key);
+        playReactionEffect(key, b);
+        navigator.vibrate?.(30);
+
         if (!isAdmin()) {
           try {
             localStorage.setItem(lock, "1");
@@ -435,24 +504,23 @@
           }
         }
 
-        if (key === "wow") {
-          const animationsDisabled =
-            document.documentElement.classList.contains("no-animations") ||
-            document.body.classList.contains("no-animations") ||
-            document.getElementById("comment-widget")?.classList.contains("no-animations");
-          if (!animationsDisabled) {
-            slimeEffect(b);
+        pendingOptimistic.set(key, Date.now());
+        try {
+          await setDoc(currentRef, { [key]: increment(1) }, { merge: true });
+        } catch (writeError) {
+          console.error("Failed to save emoji reaction.", writeError);
+          rollbackCountLocal(key);
+          if (!isAdmin()) {
+            try { localStorage.removeItem(lock); } catch (_) {}
           }
+          showBubble(b, "Failed to save. Try again.");
+          throw writeError;
+        } finally {
+          setTimeout(() => pendingOptimistic.delete(key), 1500);
         }
-        else if (key === "like") likeEffect(b);
-        else if (key === "angry2") angryEffect(b);
-        else if (key === "haha") pinballEffect(b);
-        else if (key === "sad") sadEffect(b);
-
-        navigator.vibrate?.(30);
       } catch (error) {
-        console.error("Failed to save emoji reaction.", error);
-        showBubble(b, "Gagal menyimpan. Coba lagi.");
+        if (error && error.message !== "Failed to save emoji reaction.") {
+        }
       } finally {
         clickLock.delete(voteKey);
       }
@@ -534,17 +602,12 @@
     );
   }
 
-  function showBubble(btn, text) {
-    const r = btn.getBoundingClientRect();
+  function showBubble(btn, message) {
+    btn.querySelectorAll(".manga-bubble").forEach((el) => el.remove());
     const bubble = document.createElement("div");
     bubble.className = "manga-bubble";
-    bubble.textContent = text;
-    bubble.style.left = r.left + r.width / 2 + "px";
-    bubble.style.top = r.top - 8 + "px";
-    document.body.appendChild(bubble);
-    requestAnimationFrame(() => {
-      bubble.style.top = r.top - bubble.offsetHeight - 10 + "px";
-    });
+    bubble.textContent = message;
+    btn.appendChild(bubble);
     setTimeout(() => {
       bubble.classList.add("manga-hide");
       setTimeout(() => bubble.remove(), 400);
