@@ -46,7 +46,9 @@ const BLOGGER_DOMAINS = {
 } as const;
 
 const BLOGGER_CHAPTERS_TTL = 20 * 60;
+const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
+const UPSTREAM_TIMEOUT_MS = 8_000;
 const MANGA_CATALOG_CACHE_KEY = "catalog:github:all-manga:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
@@ -55,6 +57,19 @@ const MANGA_CATALOG_URL =
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
+}
+
+async function fetchUpstream(
+  input: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function isSocialCrawler(request: Request): boolean {
@@ -127,7 +142,7 @@ async function fetchAndCacheMangaCatalog(
 ): Promise<unknown[]> {
   const upstreamUrl = new URL(MANGA_CATALOG_URL);
   if (forceRefresh) upstreamUrl.searchParams.set("t", String(Date.now()));
-  const upstream = await fetch(upstreamUrl, {
+  const upstream = await fetchUpstream(upstreamUrl.toString(), {
     headers: {
       Accept: "application/json",
       "User-Agent": "mikoroku-catalog-proxy/1.0",
@@ -245,6 +260,55 @@ function parseBloggerFeed(data: any, source: string) {
   });
 }
 
+async function fetchAndCacheBloggerChapters(
+  kv: KVNamespace | undefined,
+  source: keyof typeof BLOGGER_DOMAINS,
+  title: string,
+) {
+  const domain = BLOGGER_DOMAINS[source];
+  const feedUrl = `${domain}/feeds/posts/default?alt=json&max-results=500&q=${encodeURIComponent(title)}`;
+  const upstream = await fetchUpstream(feedUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "mikoroku-blogger-proxy/1.0",
+    },
+  });
+
+  if (!upstream.ok) {
+    throw new Error(`Blogger HTTP ${upstream.status}`);
+  }
+
+  const chapters = parseBloggerFeed(await upstream.json(), source);
+  const payload = {
+    chapters,
+    cachedAt: new Date().toISOString(),
+    source,
+    title,
+  };
+
+  if (kv && chapters.length > 0) {
+    try {
+      await kv.put(bloggerChaptersCacheKey(source, title), JSON.stringify(payload), {
+        expirationTtl: BLOGGER_CHAPTERS_STALE_TTL,
+      });
+    } catch (error) {
+      console.warn("[worker blogger-proxy] KV put failed", error);
+    }
+  }
+
+  return payload;
+}
+
+function bloggerCacheAge(cachedAt: unknown): number {
+  const timestamp =
+    typeof cachedAt === "number"
+      ? cachedAt
+      : typeof cachedAt === "string"
+        ? Date.parse(cachedAt)
+        : Number.NaN;
+  return Number.isFinite(timestamp) ? Date.now() - timestamp : Number.POSITIVE_INFINITY;
+}
+
 function corsFor(request: Request): HeadersInit {
   const origin = request.headers.get("origin");
   let allow = "https://mikoroku.top";
@@ -273,6 +337,7 @@ function corsFor(request: Request): HeadersInit {
 async function handleBloggerChaptersProxy(
   request: Request,
   env: CloudflareEnv,
+  ctx: ExecutionContext,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   if (url.pathname !== "/api/blogger/chapters") return null;
@@ -323,107 +388,90 @@ async function handleBloggerChaptersProxy(
   const source = sourceRaw as keyof typeof BLOGGER_DOMAINS;
   const kv = getCacheKv(env);
   const cacheKey = bloggerChaptersCacheKey(source, title);
+  let cached: {
+    chapters: unknown[];
+    cachedAt?: unknown;
+    source?: string;
+    title?: string;
+  } | null = null;
 
   const respond = (body: unknown, cacheStatus: string, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
       headers: {
         "content-type": "application/json; charset=utf-8",
-        "cache-control": `public, max-age=${BLOGGER_CHAPTERS_BROWSER_MAX_AGE}, s-maxage=${BLOGGER_CHAPTERS_TTL}, stale-while-revalidate=60`,
+        "cache-control":
+          cacheStatus === "STALE"
+            ? "public, max-age=60, s-maxage=60, stale-while-revalidate=60"
+            : `public, max-age=${BLOGGER_CHAPTERS_BROWSER_MAX_AGE}, s-maxage=${BLOGGER_CHAPTERS_TTL}, stale-while-revalidate=60`,
         "x-cache": cacheStatus,
         "x-content-type-options": "nosniff",
         ...corsFor(request),
       },
     });
 
-  if (kv && !forceRefresh) {
+  if (kv) {
     try {
-      const cached = await kv.get(cacheKey, "json");
-      if (cached?.chapters && Array.isArray(cached.chapters)) {
-        return respond(
-          {
-            chapters: cached.chapters,
-            source: cached.source ?? source,
-            title: cached.title ?? title,
-            cachedAt: cached.cachedAt,
-            count: cached.chapters.length,
-          },
-          "HIT",
-        );
+      const value = await kv.get(cacheKey, "json");
+      if (Array.isArray(value?.chapters)) {
+        cached = value as typeof cached;
       }
     } catch (e) {
       console.warn("[worker blogger-proxy] KV get failed", e);
     }
   }
 
-  try {
-    const domain = BLOGGER_DOMAINS[source];
-    const feedUrl = `${domain}/feeds/posts/default?alt=json&max-results=500&q=${encodeURIComponent(title)}`;
-    const upstream = await fetch(feedUrl, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "mikoroku-blogger-proxy/1.0",
-      },
-    });
-
-    if (!upstream.ok) {
-      throw new Error(`Blogger HTTP ${upstream.status}`);
-    }
-
-    const data = await upstream.json();
-    const chapters = parseBloggerFeed(data, source);
-    const payload = {
-      chapters,
-      cachedAt: new Date().toISOString(),
-      source,
-      title,
+  if (cached && !forceRefresh) {
+    const body = {
+      chapters: cached.chapters,
+      source: cached.source ?? source,
+      title: cached.title ?? title,
+      cachedAt: cached.cachedAt,
+      count: cached.chapters.length,
     };
 
-    if (kv && chapters.length > 0) {
-      try {
-        await kv.put(cacheKey, JSON.stringify(payload), {
-          expirationTtl: BLOGGER_CHAPTERS_TTL,
-        });
-      } catch (e) {
-        console.warn("[worker blogger-proxy] KV put failed", e);
-      }
+    if (bloggerCacheAge(cached.cachedAt) <= BLOGGER_CHAPTERS_TTL * 1000) {
+      return respond(body, "HIT");
     }
+
+    ctx.waitUntil(
+      fetchAndCacheBloggerChapters(kv, source, title).catch((error: unknown) => {
+        console.error("[worker blogger-proxy] background refresh failed", error);
+      }),
+    );
+    return respond({ ...body, stale: true }, "STALE");
+  }
+
+  try {
+    const payload = await fetchAndCacheBloggerChapters(kv, source, title);
 
     return respond(
       {
-        chapters,
+        chapters: payload.chapters,
         source,
         title,
         cachedAt: payload.cachedAt,
-        count: chapters.length,
+        count: payload.chapters.length,
       },
       forceRefresh ? "BYPASS" : "MISS",
     );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Gagal memuat feed Blogger.";
-    console.error("[worker blogger-proxy]", message);
+    console.error("[worker blogger-proxy] upstream fetch failed", error);
 
-    if (kv && forceRefresh) {
-      try {
-        const stale = await kv.get(cacheKey, "json");
-        if (stale?.chapters?.length) {
-          return respond(
-            {
-              chapters: stale.chapters,
-              source: stale.source ?? source,
-              title: stale.title ?? title,
-              cachedAt: stale.cachedAt,
-              count: stale.chapters.length,
-              stale: true,
-              warning: message,
-            },
-            "HIT",
-          );
-        }
-      } catch {
-        /* ignore */
-      }
+    if (cached) {
+      return respond(
+        {
+          chapters: cached.chapters,
+          source: cached.source ?? source,
+          title: cached.title ?? title,
+          cachedAt: cached.cachedAt,
+          count: cached.chapters.length,
+          stale: true,
+        },
+        "STALE",
+      );
     }
 
     return respond({ error: message, chapters: [] }, "ERROR", 502);
@@ -438,7 +486,7 @@ export default {
   ): Promise<Response> {
     const catalog = await handleMangaCatalogProxy(request, env, ctx);
     if (catalog) return catalog;
-    const proxied = await handleBloggerChaptersProxy(request, env);
+    const proxied = await handleBloggerChaptersProxy(request, env, ctx);
     if (proxied) return proxied;
     const response = await handler.fetch(request, env, ctx);
     return serveSocialMetadataFallback(request, response);
@@ -470,7 +518,7 @@ export default {
     const results = await Promise.allSettled(
       pagesToWarm.map(async (path) => {
         const url = `${base}${path}`;
-        const res = await fetch(url, {
+        const res = await fetchUpstream(url, {
           headers: {
             "x-cron-warm": "1",
             "user-agent": "mikoroku-cron-warmer/1.0",
