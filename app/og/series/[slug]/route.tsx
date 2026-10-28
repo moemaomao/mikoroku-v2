@@ -9,11 +9,23 @@ import {
 } from "../../../../lib/kv-cache";
 import {
   fetchRemoteOgPng,
-  ogResponse,
   CACHE_HEADERS,
 } from "../../../../lib/og-remote";
 
 const CACHE_TTL = 86400;
+const SERIES_OG_HEADERS = {
+  ...CACHE_HEADERS,
+  "Cache-Control": "public, max-age=0, s-maxage=0, must-revalidate",
+};
+
+function coverCacheVersion(coverUrl: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < coverUrl.length; index += 1) {
+    hash ^= coverUrl.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 export async function GET(
   request: Request,
@@ -23,23 +35,25 @@ export async function GET(
     const { slug } = await params;
     const url = new URL(request.url);
     const version = url.searchParams.get("v") || "0";
-    const cacheKey = `${CacheKeys.ogSeries(slug)}:v${version}`;
+    const series = await getSeriesSeoDataForOg(slug);
+    const coverUrl = isUsableSeriesCover(series.image) ? series.image : "";
+    const cacheKey =
+      `${CacheKeys.ogSeries(slug)}:v${version}:c${coverCacheVersion(coverUrl)}`;
 
     try {
       const cached = await kvGetArrayBuffer(cacheKey);
       if (cached && cached.byteLength > 1000) {
-        return new Response(cached, { headers: CACHE_HEADERS });
+        return new Response(cached, { headers: SERIES_OG_HEADERS });
       }
     } catch (error) {
       console.warn("[OG series] KV read failed", error);
     }
 
-    const series = await getSeriesSeoDataForOg(slug);
     const buffer = await fetchRemoteOgPng({
       title: series.title,
       description: series.description,
       label: "Manga & Series",
-      coverUrl: isUsableSeriesCover(series.image) ? series.image : null,
+      coverUrl: coverUrl || null,
     });
 
     if (!buffer) {
@@ -55,7 +69,7 @@ export async function GET(
       console.warn("[OG series] KV write failed", error);
     }
 
-    return ogResponse(buffer);
+    return new Response(buffer, { headers: SERIES_OG_HEADERS });
   } catch (error) {
     console.error("[OG series] fatal", error);
     return new Response("OG image service is unavailable.", {

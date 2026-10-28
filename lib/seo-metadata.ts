@@ -236,7 +236,9 @@ function mergeSeoCache(
   return {
     title: cache.title || series.title,
     description: cache.description || series.description,
-    image: isUsableSeriesCover(cache.image) ? cache.image : series.image,
+    image: isUsableSeriesCover(series.image)
+      ? series.image
+      : cache.image || series.image,
     updatedAt: cache.updatedAt ?? series.updatedAt ?? Date.now(),
   };
 }
@@ -247,7 +249,13 @@ async function cacheResolvedSeries(
   cache: SeriesSeoCache | null,
 ): Promise<SeriesSeoData> {
   const resolved = mergeSeoCache(series, cache);
-  if (cache && isUsableSeriesCover(cache.image)) return resolved;
+  if (
+    cache?.image === resolved.image &&
+    cache.title === resolved.title &&
+    cache.description === resolved.description
+  ) {
+    return resolved;
+  }
 
   try {
     const { kvSet } = await import("./kv-cache");
@@ -317,15 +325,6 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
   const cache = await readSeoCache(slug);
 
-  if (cache?.title && isUsableSeriesCover(cache.image)) {
-    return {
-      title: cache.title,
-      description: cache.description,
-      image: cache.image,
-      updatedAt: cache.updatedAt,
-    };
-  }
-
   let firestoreSeries: SeriesSeoData | null = null;
   try {
     const controller = new AbortController();
@@ -336,6 +335,7 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
         {
           signal: controller.signal,
           headers: { Accept: "application/json" },
+          next: { revalidate: 60 },
         },
       );
       if (response.ok) {
@@ -353,6 +353,19 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
     }
   } catch (error) {
     console.warn("[OG seo] Firestore failed", slug, error);
+  }
+
+  if (firestoreSeries && isUsableSeriesCover(firestoreSeries.image)) {
+    return cacheResolvedSeries(slug, firestoreSeries, cache);
+  }
+
+  if (cache?.title && isUsableSeriesCover(cache.image)) {
+    return {
+      title: cache.title,
+      description: cache.description,
+      image: cache.image,
+      updatedAt: cache.updatedAt,
+    };
   }
 
   try {
