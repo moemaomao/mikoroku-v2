@@ -1,7 +1,4 @@
-import {
-  getSeriesSeoDataForOg,
-  isUsableSeriesCover,
-} from "../../../../lib/seo-metadata";
+import { getSeriesSeoDataForOg } from "../../../../lib/seo-metadata";
 import {
   CacheKeys,
   kvGetArrayBuffer,
@@ -9,27 +6,38 @@ import {
 } from "../../../../lib/kv-cache";
 import {
   fetchRemoteOgPng,
+  ogResponse,
   CACHE_HEADERS,
 } from "../../../../lib/og-remote";
 
 const CACHE_TTL = 86400;
-const SERIES_OG_HEADERS = {
-  ...CACHE_HEADERS,
-  "Cache-Control": "public, max-age=0, s-maxage=0, must-revalidate",
-};
 
-function coverCacheVersion(
-  coverUrl: string,
-  title: string,
-  description: string,
-): string {
-  const value = `${coverUrl}\u0000${title}\u0000${description}`;
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+function isUsableCover(url: string | null | undefined): url is string {
+  return Boolean(
+    url &&
+      typeof url === "string" &&
+      url.startsWith("http") &&
+      !url.includes("MIKOROKU.png") &&
+      !url.includes("apple-touch-icon"),
+  );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback: T,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  return (hash >>> 0).toString(36);
 }
 
 export async function GET(
@@ -40,35 +48,38 @@ export async function GET(
     const { slug } = await params;
     const url = new URL(request.url);
     const version = url.searchParams.get("v") || "0";
-    const series = await getSeriesSeoDataForOg(slug);
-    const coverUrl = isUsableSeriesCover(series.image) ? series.image : "";
-    const cacheKey =
-      `${CacheKeys.ogSeries(slug)}:v${version}:c${coverCacheVersion(
-        coverUrl,
-        series.title,
-        series.description,
-      )}`;
+    const cacheKey = `${CacheKeys.ogSeries(slug)}:v${version}`;
 
     try {
       const cached = await kvGetArrayBuffer(cacheKey);
       if (cached && cached.byteLength > 1000) {
-        return new Response(cached, { headers: SERIES_OG_HEADERS });
+        return new Response(cached, { headers: CACHE_HEADERS });
       }
     } catch (error) {
       console.warn("[OG series] KV read failed", error);
     }
 
+    const series = await withTimeout(getSeriesSeoDataForOg(slug), 4000, {
+      title: slug
+        .replace(/[-_]+/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase()),
+      description: "Baca manga di Mikoroku.",
+      image: "",
+    });
+
+    const coverUrl = isUsableCover(series.image) ? series.image : null;
+
     const buffer = await fetchRemoteOgPng({
       title: series.title,
       description: series.description,
       label: "Manga & Series",
-      coverUrl: coverUrl || null,
+      coverUrl,
     });
 
     if (!buffer) {
-      return new Response("OG image service is unavailable.", {
-        status: 502,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      return new Response("OG unavailable", {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
       });
     }
 
@@ -78,12 +89,12 @@ export async function GET(
       console.warn("[OG series] KV write failed", error);
     }
 
-    return new Response(buffer, { headers: SERIES_OG_HEADERS });
+    return ogResponse(buffer);
   } catch (error) {
     console.error("[OG series] fatal", error);
-    return new Response("OG image service is unavailable.", {
-      status: 502,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    return new Response("OG unavailable", {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
     });
   }
 }

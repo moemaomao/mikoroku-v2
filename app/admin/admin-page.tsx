@@ -605,14 +605,11 @@ async function syncSeoToKv(payload: {
 }): Promise<void> {
   if (!payload.slug || !payload.cover || !/^https?:\/\//i.test(payload.cover)) return;
   try {
-    const response = await fetch("/api/admin/sync-cover", {
+    await fetch("/api/admin/sync-cover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) {
-      throw new Error(`Metadata cover sync returned HTTP ${response.status}.`);
-    }
   } catch (error) {
     console.warn("[admin] SEO KV sync failed", error);
   }
