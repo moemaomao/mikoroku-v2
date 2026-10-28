@@ -1,10 +1,18 @@
-const MANGA_DATA_URL =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+/**
+ * SEO metadata helpers — optimized for Cloudflare Workers free plan (~10ms CPU).
+ *
+ * Rules:
+ * - NEVER parse all-manga.json on the request path (CPU bomb).
+ * - Prefer KV SEO cache.
+ * - Firestore only with short timeout; failures are soft.
+ * - Instant slug fallback if everything misses.
+ */
+
 const FIRESTORE_DOCUMENTS_URL =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
 const COVER_BASE =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
-const SERIES_SEO_CACHE_TTL = 15 * 60;
+const SERIES_SEO_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days sticky
 const DEFAULT_IMAGE =
   "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
 
@@ -177,7 +185,7 @@ async function readSeoCache(slug: string): Promise<SeriesSeoCache | null> {
       (typeof data.cover === "string" && data.cover.startsWith("http") && data.cover) ||
       "";
 
-    if (!image) return null;
+    if (!image && !data.title) return null;
 
     const title =
       typeof data.title === "string" && data.title.trim()
@@ -191,22 +199,10 @@ async function readSeoCache(slug: string): Promise<SeriesSeoCache | null> {
           ? `Baca manga ${title} di Mikoroku.`
           : "";
 
-    if (!title && !description) {
-      return {
-        title: "",
-        description: "",
-        image,
-        updatedAt:
-          typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt)
-            ? data.updatedAt
-            : undefined,
-      };
-    }
-
     return {
       title: title || fallbackTitle(slug),
       description: description || `Baca manga ${title || fallbackTitle(slug)} di Mikoroku.`,
-      image,
+      image: image || DEFAULT_IMAGE,
       updatedAt:
         typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt)
           ? data.updatedAt
@@ -236,34 +232,42 @@ async function cacheResolvedSeries(
   cache: SeriesSeoCache | null,
 ): Promise<SeriesSeoData> {
   const resolved = mergeSeoCache(series, cache);
-  if (cache) return resolved;
+  if (cache?.image && cache.image !== DEFAULT_IMAGE) return resolved;
+  if (resolved.image === DEFAULT_IMAGE && !resolved.title) return resolved;
 
   try {
     const { kvSet } = await import("./kv-cache");
     await kvSet(seoCacheKey(slug), resolved, SERIES_SEO_CACHE_TTL);
-  } catch (error) {
-    console.warn("Metadata seri tidak dapat disimpan ke cache.", error);
+  } catch {
   }
   return resolved;
 }
 
-async function getFirestoreDocument(
+async function getFirestoreDocumentFast(
   path: string,
+  timeoutMs = 1200,
 ): Promise<Record<string, unknown> | null> {
-  const response = await fetch(`${FIRESTORE_DOCUMENTS_URL}/${path}`, {
-    next: { revalidate: 900 },
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Firestore metadata request returned HTTP ${response.status}.`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${FIRESTORE_DOCUMENTS_URL}/${path}`, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) return null;
+    return decodeFirestoreDocument(await response.json());
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
-  return decodeFirestoreDocument(await response.json());
 }
 
 export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
   const cache = await readSeoCache(slug);
 
-  if (cache?.title && cache?.image) {
+  if (cache?.title && cache?.image && cache.image !== DEFAULT_IMAGE) {
     return {
       title: cache.title,
       description: cache.description,
@@ -272,32 +276,21 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
     };
   }
 
-  try {
-    const document = await getFirestoreDocument(
-      `manga/${encodeURIComponent(slug)}`,
-    );
-    if (document) {
-      return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
-    }
-  } catch (error) {
-    console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
+  if (cache?.title) {
+    return {
+      title: cache.title,
+      description: cache.description || `Baca manga ${cache.title} di Mikoroku.`,
+      image: cache.image || DEFAULT_IMAGE,
+      updatedAt: cache.updatedAt,
+    };
   }
 
-  try {
-    const response = await fetch(MANGA_DATA_URL, { next: { revalidate: 900 } });
-    if (response.ok) {
-      const mangaList = (await response.json()) as Array<Record<string, unknown>>;
-      const manga = mangaList.find(
-        (item) =>
-          asText(item.slug) === slug ||
-          slugKey(asText(item.title)) === slugKey(slug),
-      );
-      if (manga) {
-        return cacheResolvedSeries(slug, normalizeSeries(manga, slug), cache);
-      }
-    }
-  } catch (error) {
-    console.error("Metadata seri tidak dapat diambil dari dataset.", error);
+  const document = await getFirestoreDocumentFast(
+    `manga/${encodeURIComponent(slug)}`,
+    1200,
+  );
+  if (document) {
+    return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
   }
 
   return mergeSeoCache(normalizeSeries({ title: fallbackTitle(slug) }, slug), cache);
@@ -315,52 +308,19 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
     };
   }
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
-    try {
-      const response = await fetch(
-        `${FIRESTORE_DOCUMENTS_URL}/manga/${encodeURIComponent(slug)}`,
-        {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        },
-      );
-      if (response.ok) {
-        const document = decodeFirestoreDocument(await response.json());
-        return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch (error) {
-    console.warn("[OG seo] Firestore failed", slug, error);
+  const document = await getFirestoreDocumentFast(
+    `manga/${encodeURIComponent(slug)}`,
+    800,
+  );
+  if (document) {
+    return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
   }
 
-  try {
-    const response = await fetch(MANGA_DATA_URL, {
-      next: { revalidate: 900 },
-    });
-    if (response.ok) {
-      const mangaList = (await response.json()) as Array<Record<string, unknown>>;
-      const manga = mangaList.find(
-        (item) =>
-          asText(item.slug) === slug ||
-          slugKey(asText(item.title)) === slugKey(slug),
-      );
-      if (manga) {
-        return cacheResolvedSeries(slug, normalizeSeries(manga, slug), cache);
-      }
-    }
-  } catch (error) {
-    console.warn("[OG seo] dataset fallback failed", slug, error);
-  }
-
-  if (cache?.image) {
+  if (cache?.image || cache?.title) {
     return {
       title: cache.title || fallbackTitle(slug),
       description: cache.description || `Baca manga di Mikoroku.`,
-      image: cache.image,
+      image: cache.image || DEFAULT_IMAGE,
       updatedAt: cache.updatedAt ?? Date.now(),
     };
   }
@@ -375,23 +335,6 @@ export async function getChapterSeoTitle(
   const series = await getSeriesSeoData(slug);
   let chapterTitle = `Chapter ${chapter}`;
   let description = `Baca ${chapterTitle} ${series.title} di Mikoroku.`;
-
-  try {
-    const document = await getFirestoreDocument(
-      `manga/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(chapter)}`,
-    );
-    const label =
-      asText(document?.label) ||
-      asText(document?.chapterTitle) ||
-      asText(document?.title);
-    if (label && slugKey(label) !== slugKey(series.title)) {
-      chapterTitle = label;
-    }
-    const text = asText(document?.desc) || asText(document?.description);
-    if (text) description = text;
-  } catch (error) {
-    console.error("Metadata chapter tidak dapat diambil dari Firestore.", error);
-  }
 
   return {
     title: `${chapterTitle} - ${series.title} - Mikoroku`,
