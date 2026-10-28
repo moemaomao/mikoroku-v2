@@ -15,16 +15,21 @@ type CachedCover = {
   lastUsedAt: number;
 };
 
-function getOptimizedCoverUrl(source: string, preset: ImageProxyPreset): string {
+function resolveCoverSource(source: string): string {
   const trimmedSource = source.trim();
   if (!trimmedSource || trimmedSource === "-") return "";
-  const resolvedSource = trimmedSource.startsWith("//")
+  return trimmedSource.startsWith("//")
     ? `https:${trimmedSource}`
     : /^https?:\/\//i.test(trimmedSource) ||
       trimmedSource.startsWith("/") ||
       /^(data|blob):/i.test(trimmedSource)
       ? trimmedSource
       : GITHUB_RAW + trimmedSource.replace(/^\//, "");
+}
+
+function getOptimizedCoverUrl(source: string, preset: ImageProxyPreset): string {
+  const resolvedSource = resolveCoverSource(source);
+  if (!resolvedSource) return "";
   if (resolvedSource.startsWith("/") || /^(data|blob):/i.test(resolvedSource)) {
     return resolvedSource;
   }
@@ -246,10 +251,24 @@ type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   optimizePreset?: ImageProxyPreset;
 };
 
-export function CoverImage({ src, optimizePreset = "cover", loading = "lazy", ...props }: CoverImageProps) {
+export function CoverImage({
+  src,
+  optimizePreset = "cover",
+  loading = "lazy",
+  onError,
+  ...props
+}: CoverImageProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [visible, setVisible] = useState(loading !== "lazy");
   const resolvedSource = useCoverImageSource(src, optimizePreset, visible);
+  const fallbackKey = `${src}\u0000${optimizePreset}`;
+  const [fallback, setFallback] = useState<{ key: string; enabled: boolean }>({
+    key: "",
+    enabled: false,
+  });
+  const originalSource = resolveCoverSource(src);
+  const fallbackEnabled = fallback.key === fallbackKey && fallback.enabled;
+  const displaySource = fallbackEnabled ? originalSource : resolvedSource;
 
   useEffect(() => {
     if (loading !== "lazy" || visible || !imageRef.current) return;
@@ -269,5 +288,19 @@ export function CoverImage({ src, optimizePreset = "cover", loading = "lazy", ..
     return () => observer.disconnect();
   }, [loading, visible]);
 
-  return <img {...props} ref={imageRef} loading={loading} src={resolvedSource || undefined} />;
+  return (
+    <img
+      {...props}
+      ref={imageRef}
+      loading={loading}
+      src={displaySource || undefined}
+      onError={(event) => {
+        if (displaySource && displaySource !== originalSource && !fallbackEnabled) {
+          setFallback({ key: fallbackKey, enabled: true });
+          return;
+        }
+        onError?.(event);
+      }}
+    />
+  );
 }
