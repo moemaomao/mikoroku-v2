@@ -508,6 +508,25 @@ async function loadBloggerChapterFromFeeds(
   return settled.flatMap((result) => result.status === "fulfilled" ? result.value : [])[0] || null;
 }
 
+async function getBloggerChapterNumbers(
+  title: string,
+  source: "blogger" | "blogger2",
+  signal: AbortSignal,
+): Promise<string[]> {
+  const params = new URLSearchParams({ title: title.trim(), source, full: "1" });
+  const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Blogger chapter list returned HTTP ${response.status}.`);
+  }
+  const payload = await response.json() as { chapters?: Array<{ num?: unknown }> };
+  return [...new Set((payload.chapters || [])
+    .map(({ num }) => normalizeChapterNumber(num))
+    .filter((num): num is string => Boolean(num)))];
+}
+
 async function getBloggerChapterImages(
   chapter: ChapterRecord,
   signal: AbortSignal,
@@ -832,10 +851,10 @@ async function loadReaderData(
   let chapters = cachedChapters
     .map((item) => chapterNumberFromRecord(item, item.id || ""))
     .filter(Boolean);
-  if (!isBloggerSource && (!chapters.length ||
+  if (chapters.length <= 1 ||
     (resolvedKind === "manga" &&
       !chapterImages(chapterData).length &&
-      !imageList(chapterData?.content || chapterData?.html).length))) {
+      !imageList(chapterData?.content || chapterData?.html).length)) {
     try {
       if (!chapterListAttempted) {
         chapterListAttempted = true;
@@ -846,11 +865,11 @@ async function loadReaderData(
       const fetchedChapters = documents
         .map(({ id, data }) => chapterNumberFromRecord(data, id))
         .filter(Boolean);
-      if (!chapters.length) chapters = fetchedChapters;
+      if (fetchedChapters.length > chapters.length) chapters = fetchedChapters;
       const current = documents.find(({ id, data }) =>
         chapterNumberFromRecord(data, id) === targetChapter,
       ) || documents.find(({ id }) => id === targetChapter);
-      if (current) {
+      if (!isBloggerSource && current) {
         const currentImages = chapterImages(current.data);
         const currentContent = current.data.content || current.data.text || current.data.html;
         if (currentImages.length || imageList(currentContent).length || !chapterData) {
@@ -862,6 +881,24 @@ async function loadReaderData(
       if (signal.aborted) throw error;
       if (!chapterData) throw error;
       console.warn("The Firestore chapter list failed; using the cached chapter.", error);
+    }
+  }
+  if (isBloggerSource && chapters.length <= 1) {
+    try {
+      const source = chapterData?.source === "blogger2" || requestedSource === "blogger2"
+        ? "blogger2"
+        : "blogger";
+      const bloggerChapters = await getBloggerChapterNumbers(
+        String(manga?.title || manga?.name || slug.replace(/-/g, " ")),
+        source,
+        signal,
+      );
+      if (bloggerChapters.length > chapters.length) {
+        chapters = [...new Set([...chapters, ...bloggerChapters])];
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      console.warn(`The Blogger chapter list failed for ${slug}; using the available chapter list.`, error);
     }
   }
   const resolvedChapter = chapterNumberFromRecord(chapterData || {}, targetChapter);
