@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -71,6 +70,7 @@
     }
     .meta { font-size: 0.85rem; line-height: 1.4; }
     .meta strong { display: block; margin-bottom: 4px; }
+    .src { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
     .out {
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -81,7 +81,6 @@
       padding: 10px;
       min-height: 44px;
     }
-    a { color: #a78bfa; }
     .ok { color: var(--ok); }
     .err { color: var(--err); }
     .muted { color: var(--muted); }
@@ -91,18 +90,13 @@
   <div class="wrap">
     <h1>OG cepat</h1>
     <p class="sub">
-      Tempel URL series → cover otomatis. Bisa buka OG langsung atau sync ke KV
-      (supaya <code>/og/series/...</code> tanpa query juga benar).
+      Cover diambil prioritas dari <b>Firestore (admin)</b>, baru catalog/GitHub.
+      Tempel URL series saja.
     </p>
 
     <div class="card">
       <label>URL series</label>
-      <input
-        id="series"
-        placeholder="https://mikoroku.top/series/nama-slug"
-        value=""
-        autofocus
-      />
+      <input id="series" placeholder="https://mikoroku.top/series/nama-slug" value="" autofocus />
 
       <div class="actions">
         <button class="primary" id="btnFetch">1. Ambil data</button>
@@ -111,8 +105,8 @@
         <button class="secondary" id="btnCopy" disabled>Salin URL</button>
       </div>
       <p class="hint">
-        Urutan: <b>Ambil data</b> → <b>Sync ke KV</b> (kalau kuota put masih ada) → <b>Buka OG</b>.
-        Kalau KV limit habis, skip sync; tetap bisa Buka OG lewat query <code>?cover=</code>.
+        Sumber cover: Firestore admin → catalog → halaman series.
+        Override hanya jika deteksi masih salah.
       </p>
 
       <label style="margin-top:14px">Cover override (opsional)</label>
@@ -125,6 +119,7 @@
         <div class="meta">
           <strong id="titleView">—</strong>
           <div id="status" class="muted">Tempel URL lalu klik Ambil data.</div>
+          <div id="srcView" class="src"></div>
         </div>
       </div>
     </div>
@@ -137,6 +132,8 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const FS =
+      "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
     let last = null;
 
     function parseSlug(input) {
@@ -160,19 +157,55 @@
         .replace(/\b\w/g, (c) => c.toUpperCase());
     }
 
+    function isHttp(u) {
+      return typeof u === "string" && /^https?:\/\//i.test(u.trim());
+    }
+
+    function decodeFsValue(value) {
+      if (!value || typeof value !== "object") return value;
+      if ("stringValue" in value) return value.stringValue;
+      if ("integerValue" in value) return Number(value.integerValue);
+      if ("doubleValue" in value) return Number(value.doubleValue);
+      if ("booleanValue" in value) return value.booleanValue;
+      if ("nullValue" in value) return null;
+      if ("arrayValue" in value) {
+        return (value.arrayValue.values || []).map(decodeFsValue);
+      }
+      if ("mapValue" in value) {
+        const fields = value.mapValue.fields || {};
+        return Object.fromEntries(
+          Object.entries(fields).map(([k, v]) => [k, decodeFsValue(v)]),
+        );
+      }
+      return value;
+    }
+
+    function decodeFsDoc(doc) {
+      const fields = doc?.fields || {};
+      return Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, decodeFsValue(v)]),
+      );
+    }
+
     function pickCover(item) {
       if (!item || typeof item !== "object") return "";
-      const keys = ["cover", "img", "image", "thumbnail", "thumb"];
-      for (const k of keys) {
-        const v = item[k];
-        if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
+      for (const k of ["cover", "img", "image", "thumbnail", "thumb"]) {
+        if (isHttp(item[k])) return String(item[k]).trim();
       }
       if (Array.isArray(item.covers)) {
-        for (const c of item.covers) {
-          if (typeof c === "string" && /^https?:\/\//i.test(c)) return c;
+        // admin often puts latest cover last or first — prefer last non-empty http
+        for (let i = item.covers.length - 1; i >= 0; i--) {
+          if (isHttp(item.covers[i])) return String(item.covers[i]).trim();
         }
       }
       return "";
+    }
+
+    function stripHtml(s) {
+      return String(s || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
     function slugKey(s) {
@@ -182,29 +215,50 @@
         .replace(/[^a-z0-9]/g, "");
     }
 
+    /** 1) Admin data — prioritas tertinggi */
+    async function fetchFromFirestore(slug) {
+      const res = await fetch(
+        FS + "/manga/" + encodeURIComponent(slug),
+        { headers: { Accept: "application/json" } },
+      );
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Firestore HTTP " + res.status);
+      const data = decodeFsDoc(await res.json());
+      const title = String(data.title || data.name || "").trim();
+      const cover = pickCover(data);
+      const description = stripHtml(
+        data.desc || data.description || data.synopsis || data.sinopsis || "",
+      ).slice(0, 300);
+      if (!title && !cover) return null;
+      return {
+        title: title || titleFromSlug(slug),
+        cover,
+        description,
+        source: "firestore (admin)",
+      };
+    }
+
+    /** 2) Catalog / GitHub — sering cover lama */
     async function fetchFromCatalog(slug) {
       const res = await fetch("/api/catalog/manga", { credentials: "omit" });
       if (!res.ok) throw new Error("catalog HTTP " + res.status);
       const data = await res.json();
       const list = Array.isArray(data) ? data : data?.data;
-      if (!Array.isArray(list)) throw new Error("catalog bukan array");
+      if (!Array.isArray(list)) return null;
 
       const sk = slugKey(slug);
       const hit =
         list.find((x) => slugKey(x?.slug) === sk) ||
         list.find((x) => slugKey(x?.title) === sk);
-
       if (!hit) return null;
+
       return {
         title: String(hit.title || hit.name || titleFromSlug(slug)).trim(),
         cover: pickCover(hit),
-        description: String(
+        description: stripHtml(
           hit.desc || hit.description || hit.synopsis || hit.sinopsis || "",
-        )
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 300),
+        ).slice(0, 300),
+        source: "catalog (github)",
       };
     }
 
@@ -229,20 +283,17 @@
       let cover = ogImage?.[1] || "";
       if (cover.includes("/og/series/")) cover = "";
 
-      if (!cover) {
-        const img =
-          html.match(/https?:\/\/i\.ibb\.co\/[^"'\s>]+/i) ||
-          html.match(/https?:\/\/[^"'\s>]+\.(?:jpg|jpeg|png|webp)/i);
-        if (img) cover = img[0];
-      }
+      // prefer ibb from page HTML (admin cover) over random blogger
+      const ibb = html.match(/https?:\/\/i\.ibb\.co\/[^"'\s>]+/i);
+      if (ibb) cover = ibb[0];
 
-      let title = ogTitle?.[1] || "";
-      title = title.replace(/\s*[-|]\s*Mikoroku\s*$/i, "").trim();
+      let title = (ogTitle?.[1] || "").replace(/\s*[-|]\s*Mikoroku\s*$/i, "").trim();
 
       return {
         title: title || titleFromSlug(slug),
         cover,
         description: (ogDesc?.[1] || "").slice(0, 300),
+        source: "series page",
       };
     }
 
@@ -253,35 +304,62 @@
       let title = titleFromSlug(slug);
       let cover = "";
       let description = "";
+      let source = "";
 
+      // 1) Firestore admin (cover terbaru)
       try {
-        const cat = await fetchFromCatalog(slug);
-        if (cat) {
-          title = cat.title || title;
-          cover = cat.cover || cover;
-          description = cat.description || description;
+        const fs = await fetchFromFirestore(slug);
+        if (fs) {
+          title = fs.title || title;
+          if (fs.cover) {
+            cover = fs.cover;
+            source = fs.source;
+          }
+          description = fs.description || description;
         }
       } catch (e) {
-        console.warn("catalog", e);
+        console.warn("firestore", e);
       }
 
+      // 2) catalog hanya jika cover masih kosong
+      if (!cover) {
+        try {
+          const cat = await fetchFromCatalog(slug);
+          if (cat) {
+            title = title || cat.title;
+            if (cat.cover) {
+              cover = cat.cover;
+              source = cat.source;
+            }
+            description = description || cat.description;
+          }
+        } catch (e) {
+          console.warn("catalog", e);
+        }
+      }
+
+      // 3) halaman series
       if (!cover) {
         try {
           const page = await fetchFromSeriesPage(slug);
-          title = page.title || title;
-          cover = page.cover || cover;
-          description = page.description || description;
+          title = title || page.title;
+          if (page.cover) {
+            cover = page.cover;
+            source = page.source;
+          }
+          description = description || page.description;
         } catch (e) {
-          console.warn("series page", e);
+          console.warn("page", e);
         }
       }
 
       const override = $("coverOverride").value.trim();
-      if (override && /^https?:\/\//i.test(override)) cover = override;
-
-      if (!cover) {
-        throw new Error("Cover tidak ketemu. Isi Cover override.");
+      if (override && isHttp(override)) {
+        cover = override;
+        source = "override manual";
       }
+
+      if (!cover) throw new Error("Cover tidak ketemu. Isi Cover override.");
 
       return {
         slug,
@@ -289,17 +367,16 @@
         cover,
         description: description || ("Baca " + title + " di Mikoroku."),
         updatedAt: Date.now(),
+        source,
       };
     }
 
-    function buildOgUrl(data, withCoverQuery) {
+    function buildOgUrl(data) {
       const q = new URLSearchParams();
       q.set("v", String(data.updatedAt || Date.now()));
-      if (withCoverQuery) {
-        q.set("title", data.title.slice(0, 72));
-        q.set("description", data.description.slice(0, 120));
-        q.set("cover", data.cover);
-      }
+      q.set("title", data.title.slice(0, 72));
+      q.set("description", data.description.slice(0, 120));
+      q.set("cover", data.cover);
       return (
         "https://mikoroku.top/og/series/" +
         encodeURIComponent(data.slug) +
@@ -308,10 +385,10 @@
       );
     }
 
-    function setActions(enabled) {
-      $("btnSync").disabled = !enabled;
-      $("btnOpen").disabled = !enabled;
-      $("btnCopy").disabled = !enabled;
+    function setActions(on) {
+      $("btnSync").disabled = !on;
+      $("btnOpen").disabled = !on;
+      $("btnCopy").disabled = !on;
     }
 
     function show(data) {
@@ -319,22 +396,22 @@
       $("img").hidden = false;
       $("img").src = data.cover;
       $("titleView").textContent = data.title;
-      $("out").textContent = buildOgUrl(data, true);
+      $("srcView").textContent = "Sumber cover: " + (data.source || "—");
+      $("out").textContent = buildOgUrl(data);
       setActions(true);
     }
 
     $("btnFetch").onclick = async () => {
       $("btnFetch").disabled = true;
-      $("status").innerHTML = '<span class="muted">Mengambil data…</span>';
+      $("status").innerHTML = '<span class="muted">Mengambil data (Firestore dulu)…</span>';
       try {
         const data = await resolveSeries($("series").value);
         show(data);
         $("status").innerHTML =
-          '<span class="ok">Cover ketemu. Lanjut Sync ke KV atau Buka OG.</span>';
+          '<span class="ok">Cover ketemu. Lanjut Sync / Buka OG.</span>';
       } catch (e) {
         setActions(false);
-        $("status").innerHTML =
-          '<span class="err">' + (e.message || e) + "</span>";
+        $("status").innerHTML = '<span class="err">' + (e.message || e) + "</span>";
       } finally {
         $("btnFetch").disabled = false;
       }
@@ -365,7 +442,6 @@
             " — tetap bisa Buka OG</span>";
           return;
         }
-        // optional purge
         try {
           await fetch("/api/admin/purge-og", {
             method: "POST",
@@ -377,12 +453,10 @@
             }),
           });
         } catch {}
-        $("status").innerHTML =
-          '<span class="ok">KV tersimpan. Klik Buka OG.</span>';
+        $("status").innerHTML = '<span class="ok">KV OK. Klik Buka OG.</span>';
         if (data.ogUrl) $("out").textContent = data.ogUrl;
       } catch (e) {
-        $("status").innerHTML =
-          '<span class="err">' + (e.message || e) + "</span>";
+        $("status").innerHTML = '<span class="err">' + (e.message || e) + "</span>";
       } finally {
         $("btnSync").disabled = false;
       }
@@ -390,14 +464,14 @@
 
     $("btnOpen").onclick = () => {
       if (!last) return;
-      const url = buildOgUrl(last, true);
+      const url = buildOgUrl(last);
       $("out").textContent = url;
       window.open(url, "_blank", "noopener");
     };
 
     $("btnCopy").onclick = async () => {
       if (!last) return;
-      const url = buildOgUrl(last, true);
+      const url = buildOgUrl(last);
       $("out").textContent = url;
       try {
         await navigator.clipboard.writeText(url);
