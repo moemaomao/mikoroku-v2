@@ -85,13 +85,38 @@
     .err { color: var(--err); }
     .muted { color: var(--muted); }
   </style>
+  <!-- Firebase client SDK (sama config app) — hindari REST 429 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
+      authDomain: "mikoroku.firebaseapp.com",
+      projectId: "mikoroku",
+      storageBucket: "mikoroku.firebasestorage.app",
+      messagingSenderId: "271920446600",
+      appId: "1:271920446600:web:974b11c707ebc11a7bf33d",
+    };
+
+    const app = initializeApp(firebaseConfig, "mikoroku-og-tool");
+    const db = getFirestore(app);
+
+    window.__mikorokuFs = {
+      async getManga(slug) {
+        const snap = await getDoc(doc(db, "manga", slug));
+        if (!snap.exists()) return null;
+        return { id: snap.id, ...snap.data() };
+      },
+    };
+    window.dispatchEvent(new Event("mikoroku-fs-ready"));
+  </script>
 </head>
 <body>
   <div class="wrap">
     <h1>OG cepat</h1>
     <p class="sub">
-      Cover diambil prioritas dari <b>Firestore (admin)</b>, baru catalog/GitHub.
-      Tempel URL series saja.
+      Cover dari <b>Firestore via Firebase SDK</b> (data admin), bukan REST yang kena 429.
     </p>
 
     <div class="card">
@@ -105,12 +130,12 @@
         <button class="secondary" id="btnCopy" disabled>Salin URL</button>
       </div>
       <p class="hint">
-        Sumber cover: Firestore admin → catalog → halaman series.
-        Override hanya jika deteksi masih salah.
+        Jangan spam Ambil data — Firestore &amp; series page bisa limit.
+        Cover override = tempel URL dari field Cover di admin.
       </p>
 
       <label style="margin-top:14px">Cover override (opsional)</label>
-      <input id="coverOverride" placeholder="kosongkan = otomatis" value="" />
+      <input id="coverOverride" placeholder="https://i.ibb.co/..." value="" />
     </div>
 
     <div class="card">
@@ -132,8 +157,6 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const FS =
-      "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
     let last = null;
 
     function parseSlug(input) {
@@ -161,44 +184,25 @@
       return typeof u === "string" && /^https?:\/\//i.test(u.trim());
     }
 
-    function decodeFsValue(value) {
-      if (!value || typeof value !== "object") return value;
-      if ("stringValue" in value) return value.stringValue;
-      if ("integerValue" in value) return Number(value.integerValue);
-      if ("doubleValue" in value) return Number(value.doubleValue);
-      if ("booleanValue" in value) return value.booleanValue;
-      if ("nullValue" in value) return null;
-      if ("arrayValue" in value) {
-        return (value.arrayValue.values || []).map(decodeFsValue);
-      }
-      if ("mapValue" in value) {
-        const fields = value.mapValue.fields || {};
-        return Object.fromEntries(
-          Object.entries(fields).map(([k, v]) => [k, decodeFsValue(v)]),
-        );
-      }
-      return value;
-    }
-
-    function decodeFsDoc(doc) {
-      const fields = doc?.fields || {};
-      return Object.fromEntries(
-        Object.entries(fields).map(([k, v]) => [k, decodeFsValue(v)]),
-      );
+    function preferCover(urls) {
+      const list = urls.filter(isHttp).map((u) => u.trim());
+      const ibb = list.find((u) => /i\.ibb\.co/i.test(u));
+      if (ibb) return ibb;
+      const imgbb = list.find((u) => /ibb\.co|imgbb/i.test(u));
+      if (imgbb) return imgbb;
+      return list[0] || "";
     }
 
     function pickCover(item) {
       if (!item || typeof item !== "object") return "";
+      const candidates = [];
       for (const k of ["cover", "img", "image", "thumbnail", "thumb"]) {
-        if (isHttp(item[k])) return String(item[k]).trim();
+        if (isHttp(item[k])) candidates.push(item[k]);
       }
       if (Array.isArray(item.covers)) {
-        // admin often puts latest cover last or first — prefer last non-empty http
-        for (let i = item.covers.length - 1; i >= 0; i--) {
-          if (isHttp(item.covers[i])) return String(item.covers[i]).trim();
-        }
+        for (const c of item.covers) if (isHttp(c)) candidates.push(c);
       }
-      return "";
+      return preferCover(candidates);
     }
 
     function stripHtml(s) {
@@ -208,6 +212,41 @@
         .trim();
     }
 
+    function waitFs(timeoutMs = 8000) {
+      if (window.__mikorokuFs) return Promise.resolve(window.__mikorokuFs);
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(
+          () => reject(new Error("Firebase SDK gagal load")),
+          timeoutMs,
+        );
+        window.addEventListener(
+          "mikoroku-fs-ready",
+          () => {
+            clearTimeout(t);
+            resolve(window.__mikorokuFs);
+          },
+          { once: true },
+        );
+      });
+    }
+
+    async function fetchFromFirestoreSdk(slug) {
+      const fs = await waitFs();
+      const data = await fs.getManga(slug);
+      if (!data) return null;
+      const title = String(data.title || data.name || "").trim();
+      const cover = pickCover(data);
+      const description = stripHtml(
+        data.desc || data.description || data.synopsis || data.sinopsis || "",
+      ).slice(0, 300);
+      return {
+        title: title || titleFromSlug(slug),
+        cover,
+        description,
+        source: "firestore SDK (admin)",
+      };
+    }
+
     function slugKey(s) {
       return String(s || "")
         .normalize("NFKC")
@@ -215,43 +254,17 @@
         .replace(/[^a-z0-9]/g, "");
     }
 
-    /** 1) Admin data — prioritas tertinggi */
-    async function fetchFromFirestore(slug) {
-      const res = await fetch(
-        FS + "/manga/" + encodeURIComponent(slug),
-        { headers: { Accept: "application/json" } },
-      );
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error("Firestore HTTP " + res.status);
-      const data = decodeFsDoc(await res.json());
-      const title = String(data.title || data.name || "").trim();
-      const cover = pickCover(data);
-      const description = stripHtml(
-        data.desc || data.description || data.synopsis || data.sinopsis || "",
-      ).slice(0, 300);
-      if (!title && !cover) return null;
-      return {
-        title: title || titleFromSlug(slug),
-        cover,
-        description,
-        source: "firestore (admin)",
-      };
-    }
-
-    /** 2) Catalog / GitHub — sering cover lama */
     async function fetchFromCatalog(slug) {
       const res = await fetch("/api/catalog/manga", { credentials: "omit" });
       if (!res.ok) throw new Error("catalog HTTP " + res.status);
       const data = await res.json();
       const list = Array.isArray(data) ? data : data?.data;
       if (!Array.isArray(list)) return null;
-
       const sk = slugKey(slug);
       const hit =
         list.find((x) => slugKey(x?.slug) === sk) ||
         list.find((x) => slugKey(x?.title) === sk);
       if (!hit) return null;
-
       return {
         title: String(hit.title || hit.name || titleFromSlug(slug)).trim(),
         cover: pickCover(hit),
@@ -259,41 +272,6 @@
           hit.desc || hit.description || hit.synopsis || hit.sinopsis || "",
         ).slice(0, 300),
         source: "catalog (github)",
-      };
-    }
-
-    async function fetchFromSeriesPage(slug) {
-      const res = await fetch("/series/" + encodeURIComponent(slug), {
-        credentials: "omit",
-        headers: { Accept: "text/html" },
-      });
-      if (!res.ok) throw new Error("series page HTTP " + res.status);
-      const html = await res.text();
-
-      const ogImage =
-        html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
-        html.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i);
-      const ogTitle =
-        html.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
-        html.match(/content=["']([^"']+)["']\s+property=["']og:title["']/i);
-      const ogDesc =
-        html.match(/property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
-        html.match(/content=["']([^"']+)["']\s+property=["']og:description["']/i);
-
-      let cover = ogImage?.[1] || "";
-      if (cover.includes("/og/series/")) cover = "";
-
-      // prefer ibb from page HTML (admin cover) over random blogger
-      const ibb = html.match(/https?:\/\/i\.ibb\.co\/[^"'\s>]+/i);
-      if (ibb) cover = ibb[0];
-
-      let title = (ogTitle?.[1] || "").replace(/\s*[-|]\s*Mikoroku\s*$/i, "").trim();
-
-      return {
-        title: title || titleFromSlug(slug),
-        cover,
-        description: (ogDesc?.[1] || "").slice(0, 300),
-        source: "series page",
       };
     }
 
@@ -306,50 +284,35 @@
       let description = "";
       let source = "";
 
-      // 1) Firestore admin (cover terbaru)
+      // 1) Firebase SDK — data admin
       try {
-        const fs = await fetchFromFirestore(slug);
+        const fs = await fetchFromFirestoreSdk(slug);
         if (fs) {
           title = fs.title || title;
+          description = fs.description || description;
           if (fs.cover) {
             cover = fs.cover;
             source = fs.source;
           }
-          description = fs.description || description;
         }
       } catch (e) {
-        console.warn("firestore", e);
+        console.warn("firestore sdk", e);
       }
 
-      // 2) catalog hanya jika cover masih kosong
-      if (!cover) {
+      // 2) catalog hanya pelengkap title/desc; cover catalog hanya jika belum ada
+      if (!cover || !title) {
         try {
           const cat = await fetchFromCatalog(slug);
           if (cat) {
-            title = title || cat.title;
-            if (cat.cover) {
+            if (!title || title === titleFromSlug(slug)) title = cat.title || title;
+            description = description || cat.description;
+            if (!cover && cat.cover) {
               cover = cat.cover;
               source = cat.source;
             }
-            description = description || cat.description;
           }
         } catch (e) {
           console.warn("catalog", e);
-        }
-      }
-
-      // 3) halaman series
-      if (!cover) {
-        try {
-          const page = await fetchFromSeriesPage(slug);
-          title = title || page.title;
-          if (page.cover) {
-            cover = page.cover;
-            source = page.source;
-          }
-          description = description || page.description;
-        } catch (e) {
-          console.warn("page", e);
         }
       }
 
@@ -359,7 +322,11 @@
         source = "override manual";
       }
 
-      if (!cover) throw new Error("Cover tidak ketemu. Isi Cover override.");
+      if (!cover) {
+        throw new Error(
+          "Cover tidak ketemu di Firestore. Buka admin → salin Cover URL ke override.",
+        );
+      }
 
       return {
         slug,
@@ -403,7 +370,7 @@
 
     $("btnFetch").onclick = async () => {
       $("btnFetch").disabled = true;
-      $("status").innerHTML = '<span class="muted">Mengambil data (Firestore dulu)…</span>';
+      $("status").innerHTML = '<span class="muted">Ambil dari Firestore…</span>';
       try {
         const data = await resolveSeries($("series").value);
         show(data);
@@ -453,7 +420,7 @@
             }),
           });
         } catch {}
-        $("status").innerHTML = '<span class="ok">KV OK. Klik Buka OG.</span>';
+        $("status").innerHTML = '<span class="ok">KV OK.</span>';
         if (data.ogUrl) $("out").textContent = data.ogUrl;
       } catch (e) {
         $("status").innerHTML = '<span class="err">' + (e.message || e) + "</span>";
