@@ -1,4 +1,7 @@
-import { getSeriesSeoDataForOg } from "../../../../lib/seo-metadata";
+import {
+  getSeriesSeoDataForOg,
+  isUsableSeriesCover,
+} from "../../../../lib/seo-metadata";
 import {
   CacheKeys,
   kvGetArrayBuffer,
@@ -11,15 +14,6 @@ import {
 } from "../../../../lib/og-remote";
 
 const CACHE_TTL = 86400;
-
-function isUsableCover(url: string | null | undefined): url is string {
-  return Boolean(
-    url &&
-      url.startsWith("http") &&
-      !url.includes("MIKOROKU.png") &&
-      !url.includes("apple-touch-icon"),
-  );
-}
 
 export async function GET(
   request: Request,
@@ -45,7 +39,7 @@ export async function GET(
       title: series.title,
       description: series.description,
       label: "Manga & Series",
-      coverUrl: isUsableCover(series.image) ? series.image : null,
+      coverUrl: isUsableSeriesCover(series.image) ? series.image : null,
     });
 
     if (!buffer) {

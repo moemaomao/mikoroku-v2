@@ -22,6 +22,17 @@ export type SeriesSeoCache = {
   updatedAt?: number;
 };
 
+export function isUsableSeriesCover(
+  image: string | null | undefined,
+): image is string {
+  return Boolean(
+    image &&
+      image.startsWith("http") &&
+      !image.toLowerCase().includes("mikoroku.png") &&
+      !image.toLowerCase().includes("apple-touch-icon"),
+  );
+}
+
 function decodeFirestoreValue(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
   const record = value as Record<string, unknown>;
@@ -225,7 +236,7 @@ function mergeSeoCache(
   return {
     title: cache.title || series.title,
     description: cache.description || series.description,
-    image: cache.image || series.image,
+    image: isUsableSeriesCover(cache.image) ? cache.image : series.image,
     updatedAt: cache.updatedAt ?? series.updatedAt ?? Date.now(),
   };
 }
@@ -236,7 +247,7 @@ async function cacheResolvedSeries(
   cache: SeriesSeoCache | null,
 ): Promise<SeriesSeoData> {
   const resolved = mergeSeoCache(series, cache);
-  if (cache) return resolved;
+  if (cache && isUsableSeriesCover(cache.image)) return resolved;
 
   try {
     const { kvSet } = await import("./kv-cache");
@@ -306,7 +317,7 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
   const cache = await readSeoCache(slug);
 
-  if (cache?.title && cache?.image) {
+  if (cache?.title && isUsableSeriesCover(cache.image)) {
     return {
       title: cache.title,
       description: cache.description,
@@ -315,6 +326,7 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
     };
   }
 
+  let firestoreSeries: SeriesSeoData | null = null;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3500);
@@ -328,7 +340,10 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
       );
       if (response.ok) {
         const document = decodeFirestoreDocument(await response.json());
-        return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
+        firestoreSeries = normalizeSeries(document, slug);
+        if (isUsableSeriesCover(firestoreSeries.image)) {
+          return cacheResolvedSeries(slug, firestoreSeries, cache);
+        }
       }
       if (response.status !== 404) {
         throw new Error(`Firestore metadata request returned HTTP ${response.status}.`);
@@ -340,16 +355,29 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
     console.warn("[OG seo] Firestore failed", slug, error);
   }
 
-  if (cache?.image) {
-    return {
-      title: cache.title || fallbackTitle(slug),
-      description: cache.description || `Baca manga di Mikoroku.`,
-      image: cache.image,
-      updatedAt: cache.updatedAt ?? Date.now(),
-    };
+  try {
+    const response = await fetch(MANGA_DATA_URL, { next: { revalidate: 900 } });
+    if (response.ok) {
+      const mangaList = (await response.json()) as Array<Record<string, unknown>>;
+      const manga = mangaList.find(
+        (item) =>
+          asText(item.slug) === slug ||
+          slugKey(asText(item.title)) === slugKey(slug),
+      );
+      if (manga) {
+        return cacheResolvedSeries(slug, normalizeSeries(manga, slug), cache);
+      }
+    } else {
+      throw new Error(`Manga dataset request returned HTTP ${response.status}.`);
+    }
+  } catch (error) {
+    console.warn("[OG seo] dataset lookup failed", slug, error);
   }
 
-  return normalizeSeries({ title: fallbackTitle(slug) }, slug);
+  return mergeSeoCache(
+    firestoreSeries || normalizeSeries({ title: fallbackTitle(slug) }, slug),
+    cache,
+  );
 }
 
 export async function getChapterSeoTitle(
