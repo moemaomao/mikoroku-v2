@@ -1,3 +1,4 @@
+import { getSeriesSeoDataForOg } from "../../../../lib/seo-metadata";
 import {
   CacheKeys,
   kvGetArrayBuffer,
@@ -10,6 +11,15 @@ import {
 } from "../../../../lib/og-remote";
 
 const CACHE_TTL = 86400;
+
+function isUsableCover(url: string | null | undefined): url is string {
+  return Boolean(
+    url &&
+      url.startsWith("http") &&
+      !url.includes("MIKOROKU.png") &&
+      !url.includes("apple-touch-icon"),
+  );
+}
 
 export async function GET(
   request: Request,
@@ -30,10 +40,12 @@ export async function GET(
       console.warn("[OG series] KV read failed", error);
     }
 
+    const series = await getSeriesSeoDataForOg(slug);
     const buffer = await fetchRemoteOgPng({
-      title: slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      description: "Baca manga dan series di Mikoroku.",
+      title: series.title,
+      description: series.description,
       label: "Manga & Series",
+      coverUrl: isUsableCover(series.image) ? series.image : null,
     });
 
     if (!buffer) {
