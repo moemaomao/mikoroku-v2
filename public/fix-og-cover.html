@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -57,6 +58,7 @@
     }
     .primary { background: var(--accent); color: #fff; }
     .secondary { background: #2a2f3d; color: var(--text); }
+    .sync { background: #0d9488; color: #fff; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .hint { font-size: 0.78rem; color: var(--muted); margin-top: 10px; line-height: 1.45; }
     .preview { display: flex; gap: 12px; align-items: center; }
@@ -89,7 +91,8 @@
   <div class="wrap">
     <h1>OG cepat</h1>
     <p class="sub">
-      Tempel URL series saja. Cover &amp; judul diambil otomatis dari catalog / halaman series.
+      Tempel URL series → cover otomatis. Bisa buka OG langsung atau sync ke KV
+      (supaya <code>/og/series/...</code> tanpa query juga benar).
     </p>
 
     <div class="card">
@@ -102,12 +105,14 @@
       />
 
       <div class="actions">
-        <button class="primary" id="btnGo">Ambil data + buka OG</button>
-        <button class="secondary" id="btnCopy">Salin URL OG</button>
+        <button class="primary" id="btnFetch">1. Ambil data</button>
+        <button class="sync" id="btnSync" disabled>2. Sync ke KV</button>
+        <button class="secondary" id="btnOpen" disabled>3. Buka OG</button>
+        <button class="secondary" id="btnCopy" disabled>Salin URL</button>
       </div>
       <p class="hint">
-        Jalankan di <code>https://mikoroku.top/...</code> (same-origin).
-        Override cover manual hanya jika deteksi salah.
+        Urutan: <b>Ambil data</b> → <b>Sync ke KV</b> (kalau kuota put masih ada) → <b>Buka OG</b>.
+        Kalau KV limit habis, skip sync; tetap bisa Buka OG lewat query <code>?cover=</code>.
       </p>
 
       <label style="margin-top:14px">Cover override (opsional)</label>
@@ -119,7 +124,7 @@
         <img id="img" alt="" src="" hidden />
         <div class="meta">
           <strong id="titleView">—</strong>
-          <div id="status" class="muted">Tempel URL lalu klik tombol.</div>
+          <div id="status" class="muted">Tempel URL lalu klik Ambil data.</div>
         </div>
       </div>
     </div>
@@ -199,7 +204,7 @@
           .replace(/<[^>]+>/g, " ")
           .replace(/\s+/g, " ")
           .trim()
-          .slice(0, 120),
+          .slice(0, 300),
       };
     }
 
@@ -237,7 +242,7 @@
       return {
         title: title || titleFromSlug(slug),
         cover,
-        description: (ogDesc?.[1] || "").slice(0, 120),
+        description: (ogDesc?.[1] || "").slice(0, 300),
       };
     }
 
@@ -275,9 +280,7 @@
       if (override && /^https?:\/\//i.test(override)) cover = override;
 
       if (!cover) {
-        throw new Error(
-          "Cover tidak ketemu otomatis. Isi Cover override sekali.",
-        );
+        throw new Error("Cover tidak ketemu. Isi Cover override.");
       }
 
       return {
@@ -285,15 +288,18 @@
         title,
         cover,
         description: description || ("Baca " + title + " di Mikoroku."),
+        updatedAt: Date.now(),
       };
     }
 
-    function buildOgUrl(data) {
+    function buildOgUrl(data, withCoverQuery) {
       const q = new URLSearchParams();
-      q.set("v", String(Date.now()));
-      q.set("title", data.title.slice(0, 72));
-      q.set("description", data.description.slice(0, 120));
-      q.set("cover", data.cover);
+      q.set("v", String(data.updatedAt || Date.now()));
+      if (withCoverQuery) {
+        q.set("title", data.title.slice(0, 72));
+        q.set("description", data.description.slice(0, 120));
+        q.set("cover", data.cover);
+      }
       return (
         "https://mikoroku.top/og/series/" +
         encodeURIComponent(data.slug) +
@@ -302,48 +308,107 @@
       );
     }
 
-    function show(data, ogUrl) {
+    function setActions(enabled) {
+      $("btnSync").disabled = !enabled;
+      $("btnOpen").disabled = !enabled;
+      $("btnCopy").disabled = !enabled;
+    }
+
+    function show(data) {
       last = data;
       $("img").hidden = false;
       $("img").src = data.cover;
       $("titleView").textContent = data.title;
-      $("out").textContent = ogUrl;
+      $("out").textContent = buildOgUrl(data, true);
+      setActions(true);
     }
 
-    $("btnGo").onclick = async () => {
-      const btn = $("btnGo");
-      btn.disabled = true;
+    $("btnFetch").onclick = async () => {
+      $("btnFetch").disabled = true;
       $("status").innerHTML = '<span class="muted">Mengambil data…</span>';
       try {
         const data = await resolveSeries($("series").value);
-        const ogUrl = buildOgUrl(data);
-        show(data, ogUrl);
+        show(data);
         $("status").innerHTML =
-          '<span class="ok">Cover ketemu. Membuka OG…</span>';
-        window.open(ogUrl, "_blank", "noopener");
+          '<span class="ok">Cover ketemu. Lanjut Sync ke KV atau Buka OG.</span>';
+      } catch (e) {
+        setActions(false);
+        $("status").innerHTML =
+          '<span class="err">' + (e.message || e) + "</span>";
+      } finally {
+        $("btnFetch").disabled = false;
+      }
+    };
+
+    $("btnSync").onclick = async () => {
+      if (!last) return;
+      $("btnSync").disabled = true;
+      $("status").innerHTML = '<span class="muted">Sync ke KV…</span>';
+      try {
+        const res = await fetch("/api/admin/sync-cover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            slug: last.slug,
+            title: last.title,
+            cover: last.cover,
+            description: last.description,
+            updatedAt: last.updatedAt,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          $("status").innerHTML =
+            '<span class="err">Sync gagal: ' +
+            (data.detail || data.error || res.status) +
+            " — tetap bisa Buka OG</span>";
+          return;
+        }
+        // optional purge
+        try {
+          await fetch("/api/admin/purge-og", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              slug: last.slug,
+              versions: [last.updatedAt, 0],
+            }),
+          });
+        } catch {}
+        $("status").innerHTML =
+          '<span class="ok">KV tersimpan. Klik Buka OG.</span>';
+        if (data.ogUrl) $("out").textContent = data.ogUrl;
       } catch (e) {
         $("status").innerHTML =
           '<span class="err">' + (e.message || e) + "</span>";
       } finally {
-        btn.disabled = false;
+        $("btnSync").disabled = false;
       }
     };
 
+    $("btnOpen").onclick = () => {
+      if (!last) return;
+      const url = buildOgUrl(last, true);
+      $("out").textContent = url;
+      window.open(url, "_blank", "noopener");
+    };
+
     $("btnCopy").onclick = async () => {
+      if (!last) return;
+      const url = buildOgUrl(last, true);
+      $("out").textContent = url;
       try {
-        const data = last || (await resolveSeries($("series").value));
-        const ogUrl = buildOgUrl(data);
-        show(data, ogUrl);
-        await navigator.clipboard.writeText(ogUrl);
-        $("status").innerHTML = '<span class="ok">URL OG disalin.</span>';
-      } catch (e) {
-        $("status").innerHTML =
-          '<span class="err">' + (e.message || e) + "</span>";
+        await navigator.clipboard.writeText(url);
+        $("status").innerHTML = '<span class="ok">URL disalin.</span>';
+      } catch {
+        $("status").innerHTML = '<span class="err">Gagal salin.</span>';
       }
     };
 
     $("series").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") $("btnGo").click();
+      if (e.key === "Enter") $("btnFetch").click();
     });
   </script>
 </body>
