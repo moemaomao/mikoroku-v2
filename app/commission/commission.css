@@ -227,6 +227,15 @@ html.dark .commission-faq > div {
   background: rgba(255, 255, 255, .025);
 }
 
+html.light .commission-page,
+body.light .commission-page {
+  color: #1e293b;
+  background-color: #f8f9fa !important;
+  background-image:
+    radial-gradient(ellipse at top, rgba(217, 70, 239, .12), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(244, 63, 94, .1), transparent 40%) !important;
+}
+
 @media (max-width: 480px) {
   .commission-page { padding: 15px; }
   .commission-card { padding: 28px 20px; }
