@@ -155,6 +155,41 @@ function readerImageUrl(url: string, dataSaver: boolean, quality: number): strin
   return dataSaver ? imageWithQuality(url, quality) : originalReaderImageUrl(url);
 }
 
+const READER_IMAGE_CACHE_NAME = "mikoroku-reader-images-v1";
+const READER_IMAGE_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const READER_IMAGE_CACHE_MAX_ENTRIES = 100;
+const READER_IMAGE_CACHE_MAX_BYTES = 120 * 1024 * 1024;
+const READER_IMAGE_CACHE_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+async function pruneReaderImageCache(cache: Cache): Promise<void> {
+  const keys = await cache.keys();
+  const entries = await Promise.all(keys.map(async (request) => {
+    const response = await cache.match(request);
+    const cachedAt = Number(response?.headers.get("x-mikoroku-cached-at"));
+    const size = Number(response?.headers.get("x-mikoroku-cache-size"));
+    return {
+      request,
+      cachedAt,
+      size: Number.isFinite(size) ? size : 0,
+      expired: !response || !Number.isFinite(cachedAt) || Date.now() - cachedAt > READER_IMAGE_CACHE_MAX_AGE,
+    };
+  }));
+  const retained = entries.filter((entry) => !entry.expired)
+    .sort((left, right) => left.cachedAt - right.cachedAt);
+  let totalBytes = retained.reduce((total, entry) => total + entry.size, 0);
+  let totalEntries = retained.length;
+
+  for (const entry of entries) {
+    if (entry.expired) await cache.delete(entry.request);
+  }
+  for (const entry of retained) {
+    if (totalEntries <= READER_IMAGE_CACHE_MAX_ENTRIES && totalBytes <= READER_IMAGE_CACHE_MAX_BYTES) break;
+    await cache.delete(entry.request);
+    totalEntries -= 1;
+    totalBytes -= entry.size;
+  }
+}
+
 function ReaderImage({
   src,
   alt,
@@ -1310,6 +1345,17 @@ export default function ReaderPage({
     let completed = 0;
     let succeeded = 0;
     let failed = 0;
+    let imageCache: Cache | null = null;
+
+    if ("caches" in window) {
+      try {
+        imageCache = await window.caches.open(READER_IMAGE_CACHE_NAME);
+        await pruneReaderImageCache(imageCache);
+      } catch (cacheError) {
+        console.warn("Reader image cache is unavailable; downloading from the network.", cacheError);
+        imageCache = null;
+      }
+    }
 
     try {
       let nextIndex = 0;
@@ -1326,6 +1372,22 @@ export default function ReaderPage({
           let imageBlob: Blob | undefined;
 
           for (const candidate of [...new Set(candidates)]) {
+            if (imageCache) {
+              try {
+                const cachedResponse = await imageCache.match(candidate);
+                if (cachedResponse) {
+                  const cachedBlob = await cachedResponse.blob();
+                  if (cachedBlob.size >= 100) {
+                    imageBlob = cachedBlob;
+                    break;
+                  }
+                  await imageCache.delete(candidate);
+                }
+              } catch (cacheError) {
+                console.warn(`Could not read cached page ${index + 1}; trying the network.`, cacheError);
+              }
+            }
+
             const controller = new AbortController();
             const timeout = window.setTimeout(() => controller.abort(), 40000);
             try {
@@ -1340,6 +1402,20 @@ export default function ReaderPage({
               const blob = await response.blob();
               if (blob.size < 100) throw new Error("Image is empty or invalid.");
               imageBlob = blob;
+              if (imageCache && blob.size <= READER_IMAGE_CACHE_MAX_IMAGE_BYTES) {
+                try {
+                  const headers = new Headers({
+                    "content-type": blob.type || "application/octet-stream",
+                    "x-mikoroku-cached-at": String(Date.now()),
+                    "x-mikoroku-cache-size": String(blob.size),
+                  });
+                  void imageCache.put(candidate, new Response(blob, { headers })).catch((cacheError: unknown) => {
+                    console.warn(`Could not cache downloaded page ${index + 1}.`, cacheError);
+                  });
+                } catch (cacheError) {
+                  console.warn(`Could not cache downloaded page ${index + 1}.`, cacheError);
+                }
+              }
               break;
             } catch (downloadError) {
               if (candidate === candidates[candidates.length - 1]) {
