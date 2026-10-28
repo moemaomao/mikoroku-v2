@@ -1,4 +1,3 @@
-import { getSeriesSeoDataForOg } from "../../../../lib/seo-metadata";
 import {
   CacheKeys,
   kvGetArrayBuffer,
@@ -11,34 +10,6 @@ import {
 } from "../../../../lib/og-remote";
 
 const CACHE_TTL = 86400;
-
-function isUsableCover(url: string | null | undefined): url is string {
-  return Boolean(
-    url &&
-      typeof url === "string" &&
-      url.startsWith("http") &&
-      !url.includes("MIKOROKU.png") &&
-      !url.includes("apple-touch-icon"),
-  );
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  fallback: T,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((resolve) => {
-        timer = setTimeout(() => resolve(fallback), ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 export async function GET(
   request: Request,
@@ -59,27 +30,16 @@ export async function GET(
       console.warn("[OG series] KV read failed", error);
     }
 
-    const series = await withTimeout(getSeriesSeoDataForOg(slug), 4000, {
-      title: slug
-        .replace(/[-_]+/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase()),
-      description: "Baca manga di Mikoroku.",
-      image: "",
-    });
-
-    const coverUrl = isUsableCover(series.image) ? series.image : null;
-
     const buffer = await fetchRemoteOgPng({
-      title: series.title,
-      description: series.description,
+      title: slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      description: "Baca manga dan series di Mikoroku.",
       label: "Manga & Series",
-      coverUrl,
     });
 
     if (!buffer) {
-      return new Response("OG unavailable", {
-        status: 200,
-        headers: { "Content-Type": "text/plain" },
+      return new Response("OG image service is unavailable.", {
+        status: 502,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
 
@@ -92,9 +52,9 @@ export async function GET(
     return ogResponse(buffer);
   } catch (error) {
     console.error("[OG series] fatal", error);
-    return new Response("OG unavailable", {
-      status: 200,
-      headers: { "Content-Type": "text/plain" },
+    return new Response("OG image service is unavailable.", {
+      status: 502,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
 }
