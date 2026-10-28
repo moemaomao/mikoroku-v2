@@ -26,11 +26,7 @@
       "preview_id": "4cf3f06d81e544e4ac88eb261d936cd7"
     }
   ],
-  "triggers": {
-    "crons": ["*/20 * * * *"]
-  },
   "vars": {
-    "WARM_BASE_URL": "https://mikoroku.top",
     "OG_SERVICE_URL": "https://mikoroku-og.vercel.app"
   },
   "observability": {
