@@ -302,6 +302,8 @@ function HeaderContents() {
       root.classList.toggle("light", !isDark);
     });
     document.documentElement.style.setProperty("--mk-page-bg", isDark ? "#0b0b0b" : "#f8f9fa");
+    document.documentElement.style.setProperty("--mk-bookmark-container", isDark ? "#0f0f1e" : "#ffffff");
+    document.documentElement.style.setProperty("--mk-bookmark-text", isDark ? "#ffffff" : "#111827");
     document.documentElement.style.backgroundColor = isDark ? "#0b0b0b" : "#f8f9fa";
     document.documentElement.style.colorScheme = isDark ? "dark" : "light";
     setDark(isDark);
@@ -1146,6 +1148,8 @@ function applyTheme(isDark: boolean): void {
     root.classList.toggle("light", !isDark);
   });
   document.documentElement.style.setProperty("--mk-page-bg", isDark ? "#0b0b0b" : "#f8f9fa");
+  document.documentElement.style.setProperty("--mk-bookmark-container", isDark ? "#0f0f1e" : "#ffffff");
+  document.documentElement.style.setProperty("--mk-bookmark-text", isDark ? "#ffffff" : "#111827");
   document.documentElement.style.backgroundColor = isDark ? "#0b0b0b" : "#f8f9fa";
   document.documentElement.style.colorScheme = isDark ? "dark" : "light";
 }

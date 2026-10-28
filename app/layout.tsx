@@ -60,7 +60,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark);root.style.backgroundColor=isDark?"#0b0b0b":"#f8f9fa";root.style.colorScheme=isDark?"dark":"light";try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}document.documentElement.style.setProperty("--mk-page-bg",isDark?"#0b0b0b":"#f8f9fa");})();`,
+            __html: `(function(){var isDark=true;try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}var root=document.documentElement;root.classList.toggle("dark",isDark);root.classList.toggle("light",!isDark);root.style.backgroundColor=isDark?"#0b0b0b":"#f8f9fa";root.style.colorScheme=isDark?"dark":"light";try{var appearance=JSON.parse(localStorage.getItem("mikoroku_global_appearance_v1")||"null");root.dataset.cardDisplay=appearance&&appearance.cardDisplay==="list"?"list":"default"}catch(e){root.dataset.cardDisplay="default"}root.style.setProperty("--mk-page-bg",isDark?"#0b0b0b":"#f8f9fa");root.style.setProperty("--mk-bookmark-container",isDark?"#0f0f1e":"#ffffff");root.style.setProperty("--mk-bookmark-text",isDark?"#ffffff":"#111827");})();`,
           }}
         />
         <style
