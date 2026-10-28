@@ -4,6 +4,7 @@ const FIRESTORE_DOCUMENTS_URL =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
 const COVER_BASE =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
+const SERIES_SEO_CACHE_TTL = 15 * 60;
 const DEFAULT_IMAGE =
   "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s1000/MIKOROKU.png";
 
@@ -229,6 +230,23 @@ function mergeSeoCache(
   };
 }
 
+async function cacheResolvedSeries(
+  slug: string,
+  series: SeriesSeoData,
+  cache: SeriesSeoCache | null,
+): Promise<SeriesSeoData> {
+  const resolved = mergeSeoCache(series, cache);
+  if (cache) return resolved;
+
+  try {
+    const { kvSet } = await import("./kv-cache");
+    await kvSet(seoCacheKey(slug), resolved, SERIES_SEO_CACHE_TTL);
+  } catch (error) {
+    console.warn("Metadata seri tidak dapat disimpan ke cache.", error);
+  }
+  return resolved;
+}
+
 async function getFirestoreDocument(
   path: string,
 ): Promise<Record<string, unknown> | null> {
@@ -258,7 +276,9 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
     const document = await getFirestoreDocument(
       `manga/${encodeURIComponent(slug)}`,
     );
-    if (document) return mergeSeoCache(normalizeSeries(document, slug), cache);
+    if (document) {
+      return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
+    }
   } catch (error) {
     console.error("Metadata seri tidak dapat diambil dari Firestore.", error);
   }
@@ -272,7 +292,9 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
           asText(item.slug) === slug ||
           slugKey(asText(item.title)) === slugKey(slug),
       );
-      if (manga) return mergeSeoCache(normalizeSeries(manga, slug), cache);
+      if (manga) {
+        return cacheResolvedSeries(slug, normalizeSeries(manga, slug), cache);
+      }
     }
   } catch (error) {
     console.error("Metadata seri tidak dapat diambil dari dataset.", error);
@@ -306,7 +328,7 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
       );
       if (response.ok) {
         const document = decodeFirestoreDocument(await response.json());
-        return mergeSeoCache(normalizeSeries(document, slug), cache);
+        return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
       }
     } finally {
       clearTimeout(timer);
@@ -326,7 +348,9 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
           asText(item.slug) === slug ||
           slugKey(asText(item.title)) === slugKey(slug),
       );
-      if (manga) return mergeSeoCache(normalizeSeries(manga, slug), cache);
+      if (manga) {
+        return cacheResolvedSeries(slug, normalizeSeries(manga, slug), cache);
+      }
     }
   } catch (error) {
     console.warn("[OG seo] dataset fallback failed", slug, error);

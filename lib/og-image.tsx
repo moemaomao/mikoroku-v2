@@ -22,13 +22,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 function shrinkBloggerUrl(url: string): string {
   if (!url.includes("blogger.googleusercontent.com")) return url;
 
-  // Format lama: .../s1600/... atau .../s1600-c/...
   if (/\/s\d+(-[cwcwhh\d]+)?\//.test(url)) {
     return url.replace(/\/s\d+(-[cwcwhh\d]+)?\//, "/s300/");
   }
 
-  // Format baru /img/b/R29vZ2xl/...
-  // buang query/size lama, paksa ukuran kecil
   const base = url.split(/[?=]/)[0].replace(/\/$/, "");
   return `${base}=s300`;
 }
@@ -48,12 +45,11 @@ export async function toOgCoverDataUrl(
     return null;
   }
 
-  // coba beberapa ukuran biar pasti kecil & berhasil fetch
   const candidates = [
     shrinkBloggerUrl(coverUrl),
     shrinkBloggerUrl(coverUrl).replace(/=s\d+$/, "=s200"),
     shrinkBloggerUrl(coverUrl).replace(/=s\d+$/, "=w280-h420"),
-    coverUrl, // original sebagai last resort
+    coverUrl,
   ];
 
   for (const url of candidates) {
@@ -87,14 +83,12 @@ export async function toOgCoverDataUrl(
         continue;
       }
 
-      // sukses → selalu return data URL (jangan return remote URL)
       return `data:${contentType || "image/jpeg"};base64,${arrayBufferToBase64(buf)}`;
     } catch (error) {
       console.warn("[OG] cover fetch failed", url, error);
     }
   }
 
-  // semua gagal
   return null;
 }
 

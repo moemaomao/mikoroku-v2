@@ -163,7 +163,7 @@ function AppearanceToggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white/70 p-4 transition hover:border-[var(--mikoroku-accent)] dark:border-white/10 dark:bg-white/[0.04]">
+    <label data-route-card="settings-toggle" className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white/70 p-4 transition hover:border-[var(--mikoroku-accent)] dark:border-white/10 dark:bg-white/[0.04]">
       <span className="min-w-0">
         <span className="block text-sm font-semibold">{title}</span>
         <span className="mt-1 block text-xs leading-5 text-slate-600 dark:text-slate-400">{description}</span>
@@ -677,6 +677,7 @@ export default function GlobalSettingsPage() {
 
           {/* Layout — moved to top */}
           <section
+            data-route-card="settings"
             className="rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
             aria-labelledby="layout-heading"
           >
@@ -702,6 +703,7 @@ export default function GlobalSettingsPage() {
                   <button
                     key={value}
                     type="button"
+                    data-route-card={selected ? undefined : "settings-option"}
                     aria-pressed={selected}
                     onClick={() => updateCardDisplay(value)}
                     className={`rounded-2xl border p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] ${
@@ -719,6 +721,7 @@ export default function GlobalSettingsPage() {
           </section>
 
           <section
+            data-route-card="settings"
             className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
             aria-labelledby="cover-quality-heading"
           >
@@ -743,7 +746,7 @@ export default function GlobalSettingsPage() {
                 />
               </label>
             </div>
-            <div className={`rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03] ${coverConversion.enabled ? "" : "opacity-50"}`}>
+            <div data-route-card="settings-inset" className={`rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03] ${coverConversion.enabled ? "" : "opacity-50"}`}>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Cover conversion quality">
                 {([
                   ["low", "Low", "100 px · save most data"],
@@ -808,6 +811,7 @@ export default function GlobalSettingsPage() {
           </section>
 
           <section
+            data-route-card="settings"
             className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
             aria-labelledby="chapter-thumbnail-heading"
           >
@@ -817,7 +821,7 @@ export default function GlobalSettingsPage() {
                 Set the converted source size for chapter thumbnails. Default: 40 px.
               </p>
             </div>
-            <div className="mt-4 rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <div data-route-card="settings-inset" className="mt-4 rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03]">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="chapter-thumbnail-size" className="text-sm font-semibold">
                   Custom size
@@ -849,6 +853,7 @@ export default function GlobalSettingsPage() {
 
           {/* Appearance */}
           <section
+            data-route-card="settings"
             className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
             aria-labelledby="appearance-heading"
           >
@@ -889,6 +894,7 @@ export default function GlobalSettingsPage() {
 
           {/* Data & storage tools */}
           <section
+            data-route-card="settings"
             className="mt-5 rounded-3xl border border-black/10 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-[#191a20] sm:p-6"
             aria-labelledby="storage-heading"
           >
@@ -901,7 +907,7 @@ export default function GlobalSettingsPage() {
               </p>
             </div>
 
-            <div className="mb-5 grid gap-3 rounded-2xl bg-black/[0.03] p-4 text-sm dark:bg-white/[0.04] sm:grid-cols-2">
+            <div data-route-card="settings-toggle" className="mb-5 grid gap-3 rounded-2xl bg-black/[0.03] p-4 text-sm dark:bg-white/[0.04] sm:grid-cols-2">
               <p>
                 localStorage: <strong>{formatBytes(storageReport?.localStorageBytes ?? null)}</strong>
               </p>

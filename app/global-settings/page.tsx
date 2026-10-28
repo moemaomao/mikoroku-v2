@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import GlobalSettingsPage from "./settings-page";
+import GlobalSettingsClient from "./settings-client";
 
 export const metadata: Metadata = {
   title: "Global Settings - Mikoroku",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function GlobalSettingsRoute() {
-  return <GlobalSettingsPage />;
+  return <GlobalSettingsClient />;
 }
