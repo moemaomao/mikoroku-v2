@@ -206,10 +206,24 @@ main.route-page-background [data-route-card="settings"] button,
 main.route-page-background [data-route-card="settings-inset"] button,
 main.route-page-background [data-route-card="settings-option"] button {
   border-color: rgba(255, 255, 255, .35) !important;
-  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 94%, transparent) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 42%, transparent) !important;
   color: var(--mikoroku-accent-foreground, #ffffff) !important;
 }
 
+main.route-page-background [data-route-card="settings"] button[aria-pressed="true"],
+main.route-page-background [data-route-card="settings-inset"] button[aria-pressed="true"],
+main.route-page-background [data-route-card="settings-option"] button[aria-pressed="true"] {
+  border-color: rgba(255, 255, 255, .8) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 96%, transparent) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+}
+
 main.route-page-background [data-route-card="settings"] button:hover {
-  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 82%, #000000 18%) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 70%, transparent) !important;
+}
+
+main.route-page-background [data-route-card="settings"] button[aria-pressed="true"]:hover,
+main.route-page-background [data-route-card="settings-inset"] button[aria-pressed="true"]:hover,
+main.route-page-background [data-route-card="settings-option"] button[aria-pressed="true"]:hover {
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 96%, transparent) !important;
 }
