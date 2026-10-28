@@ -502,7 +502,7 @@ export default function BookmarkPage() {
       <UserModals />
       <MangaDataProvider />
       <SiteHeader />
-      <main className="bookmark-route">
+      <main className="bookmark-route route-page-background">
         <section className="bookmark-container" aria-labelledby="bookmark-title">
           <header className="bookmark-header">
             <h1 id="bookmark-title"><i className="fas fa-bookmark" aria-hidden="true" /> Bookmark</h1>

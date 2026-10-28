@@ -665,7 +665,7 @@ export default function GlobalSettingsPage() {
   return (
     <>
       <SiteChrome showFooter={false} />
-      <main className="min-h-[calc(100vh-56px)] bg-slate-100 px-4 py-8 text-slate-900 dark:bg-[#111216] dark:text-slate-100 sm:px-6 sm:py-12">
+      <main className="route-page-background min-h-[calc(100vh-56px)] bg-slate-100 px-4 py-8 text-slate-900 dark:bg-[#111216] dark:text-slate-100 sm:px-6 sm:py-12">
         <div className="mx-auto max-w-3xl">
           <header className="mb-7">
             <p className="text-xs font-bold uppercase tracking-[.18em] text-[var(--mikoroku-accent)]">Mikoroku</p>

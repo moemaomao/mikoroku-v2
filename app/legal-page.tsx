@@ -61,7 +61,7 @@ export default function LegalPage({ kind }: { kind: LegalKind }) {
   return (
     <>
       <SiteChrome showFooter={false} />
-      <main className="min-h-[calc(100vh-70px)] px-4 pt-px pb-10 text-[#1f2937] dark:text-slate-200">
+      <main className="route-page-background min-h-[calc(100vh-70px)] px-4 pt-px pb-10 text-[#1f2937] dark:text-slate-200">
         <article className="mx-auto my-[30px] max-w-[850px] rounded-xl border border-[rgba(15,23,42,0.08)] bg-[rgba(255,255,255,0.86)] p-5 leading-[1.8] shadow-[0_4px_20px_rgba(0,0,0,0.18)] max-[600px]:my-[15px] max-[600px]:p-[15px] dark:border-[rgba(203,213,225,0.12)] dark:bg-[rgba(20,20,24,0.82)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.32)] [&_h1]:mt-0 [&_h1]:mb-[30px] [&_h1]:text-center max-[600px]:[&_h1]:text-[22px] [&_h2]:mt-[25px] [&_h3]:mt-5 [&_p]:text-[15px] [&_li]:text-[15px] max-[600px]:[&_p]:text-[14px] max-[600px]:[&_li]:text-[14px] [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:font-semibold [&_a]:text-[#ff4d4f] dark:[&_h1]:text-slate-50 dark:[&_h2]:text-slate-50 dark:[&_h3]:text-slate-50 dark:[&_strong]:text-slate-50 dark:[&_a]:text-[#fb7185]">
           <h1>{page.title}</h1>
           {page.children}

@@ -42,7 +42,7 @@ export default function CommissionPage() {
   return (
     <>
       <SiteChrome showFooter={false} />
-      <main className="commission-page">
+      <main className="commission-page route-page-background">
         <section className="commission-card">
           <header>
             <h1>Form Komisi Terjemahan</h1>

@@ -65,7 +65,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         />
         <style
           dangerouslySetInnerHTML={{
-            __html: `html,body{background-color:var(--mk-page-bg,#0b0b0b)!important;}html.light body,body.light{background-color:#f8f9fa!important;color:#333!important;}html.dark body,body.dark{background-color:#0b0b0b!important;color:#fff!important;}#mainHeader{background:rgba(9,9,11,.92)!important;border-bottom:1px solid rgb(63 63 70)!important;color:#fff!important;}#mainHeader button,#mainHeader a,#mainHeader svg{color:inherit;}html.light #mainHeader{background:rgba(255,255,255,.88)!important;border-bottom-color:#d4d4d8!important;color:#18181b!important;}`,
+            __html: `html,body{background-color:var(--mk-page-bg,#0b0b0b)!important;}html .route-page-background{background-color:var(--mk-page-bg,#0b0b0b)!important;}html.light body,body.light{background-color:#f8f9fa!important;color:#333!important;}html.dark body,body.dark{background-color:#0b0b0b!important;color:#fff!important;}#mainHeader{background:rgba(9,9,11,.92)!important;border-bottom:1px solid rgb(63 63 70)!important;color:#fff!important;}#mainHeader button,#mainHeader a,#mainHeader svg{color:inherit;}html.light #mainHeader{background:rgba(255,255,255,.88)!important;border-bottom-color:#d4d4d8!important;color:#18181b!important;}`,
           }}
         />
         <meta name="author" content="Mikoroku" />
