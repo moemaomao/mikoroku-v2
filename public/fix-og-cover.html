@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mikoroku — Fix OG Cover</title>
+  <title>Mikoroku — OG cepat</title>
   <style>
     :root {
       color-scheme: dark;
@@ -20,242 +20,331 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: radial-gradient(1200px 600px at 20% -10%, #2a1f55 0%, transparent 50%), var(--bg);
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
       color: var(--text);
-      padding: 32px 16px;
+      padding: 28px 16px;
     }
-    .wrap { max-width: 720px; margin: 0 auto; }
-    h1 { font-size: 1.4rem; margin: 0 0 6px; }
-    p.sub { color: var(--muted); margin: 0 0 24px; font-size: 0.92rem; }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 20px; line-height: 1.45; }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 20px;
-      margin-bottom: 16px;
+      padding: 18px;
+      margin-bottom: 14px;
     }
-    label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 6px; }
-    input, textarea {
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin: 0 0 6px; }
+    input {
       width: 100%;
       background: #12151e;
       border: 1px solid var(--border);
       border-radius: 10px;
       color: var(--text);
-      padding: 10px 12px;
+      padding: 11px 12px;
       font-size: 0.95rem;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
-    textarea { min-height: 72px; resize: vertical; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     button {
-      appearance: none;
       border: 0;
       border-radius: 10px;
-      padding: 11px 16px;
+      padding: 11px 14px;
       font-weight: 600;
       cursor: pointer;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
     }
-    .primary { background: var(--accent); color: white; }
+    .primary { background: var(--accent); color: #fff; }
     .secondary { background: #2a2f3d; color: var(--text); }
-    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
-    .log {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.8rem;
-      white-space: pre-wrap;
-      background: #0c0e14;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px;
-      min-height: 120px;
-      color: #c5d0e6;
-    }
-    .preview {
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
-      flex-wrap: wrap;
-    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hint { font-size: 0.78rem; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+    .preview { display: flex; gap: 12px; align-items: center; }
     .preview img {
-      width: 120px;
-      height: auto;
+      width: 96px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: #000;
+      object-fit: cover;
     }
+    .meta { font-size: 0.85rem; line-height: 1.4; }
+    .meta strong { display: block; margin-bottom: 4px; }
+    .out {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      word-break: break-all;
+      background: #0c0e14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 44px;
+    }
+    a { color: #a78bfa; }
     .ok { color: var(--ok); }
     .err { color: var(--err); }
-    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 8px; line-height: 1.45; }
-    a { color: #a78bfa; }
+    .muted { color: var(--muted); }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Fix OG Cover — Mikoroku</h1>
+    <h1>OG cepat</h1>
     <p class="sub">
-      Jalankan di tab yang sudah login admin di <code>mikoroku.top</code>
-      (same-origin). Tool ini menulis SEO KV + purge cache OG, lalu warm image baru.
+      Tempel URL series saja. Cover &amp; judul diambil otomatis dari catalog / halaman series.
     </p>
 
     <div class="card">
-      <label>Base URL</label>
-      <input id="base" value="https://mikoroku.top" />
-
-      <div class="row">
-        <div>
-          <label>Slug *</label>
-          <input id="slug" value="ore-wa-seikan-kokka-no-akutoku-ryoshu" />
-        </div>
-        <div>
-          <label>Title</label>
-          <input id="title" value="Ore wa Seikan Kokka no Akutoku Ryoshu" />
-        </div>
-      </div>
-
-      <label>Cover URL * (harus https, cover yang benar)</label>
-      <input id="cover" value="https://i.ibb.co/1YDnX4Fp/81-Pz-alu-EL-SL1500.jpg" />
-
-      <label>Description (opsional)</label>
-      <textarea id="desc">Setelah menjalani kehidupan yang penuh pengkhianatan di Bumi, Liam bereinkarnasi sebagai bangsawan di sebuah kekaisaran antarbintang.</textarea>
+      <label>URL series</label>
+      <input
+        id="series"
+        placeholder="https://mikoroku.top/series/nama-slug"
+        value=""
+        autofocus
+      />
 
       <div class="actions">
-        <button class="primary" id="btnFix">1. Sync + Purge</button>
-        <button class="secondary" id="btnWarm">2. Warm OG baru</button>
-        <button class="secondary" id="btnOpen">Buka OG di tab baru</button>
+        <button class="primary" id="btnGo">Ambil data + buka OG</button>
+        <button class="secondary" id="btnCopy">Salin URL OG</button>
       </div>
       <p class="hint">
-        Setelah Sync, klik <b>Warm OG baru</b> supaya PNG di-generate ulang.
-        Kalau masih lama, hard-refresh / incognito URL OG dengan query <code>?v=...</code> dari log.
+        Jalankan di <code>https://mikoroku.top/...</code> (same-origin).
+        Override cover manual hanya jika deteksi salah.
       </p>
+
+      <label style="margin-top:14px">Cover override (opsional)</label>
+      <input id="coverOverride" placeholder="kosongkan = otomatis" value="" />
     </div>
 
     <div class="card">
-      <label>Preview cover sumber</label>
       <div class="preview">
-        <img id="coverPreview" alt="cover" src="" />
-        <div>
-          <div id="status" class="hint">Siap.</div>
+        <img id="img" alt="" src="" hidden />
+        <div class="meta">
+          <strong id="titleView">—</strong>
+          <div id="status" class="muted">Tempel URL lalu klik tombol.</div>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <label>Log</label>
-      <div class="log" id="log"></div>
+      <label>URL OG</label>
+      <div class="out" id="out">—</div>
     </div>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const logEl = $("log");
-    let lastOgUrl = "";
+    let last = null;
 
-    function log(msg, cls) {
-      const line = document.createElement("div");
-      if (cls) line.className = cls;
-      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      logEl.appendChild(line);
-      logEl.scrollTop = logEl.scrollHeight;
+    function parseSlug(input) {
+      const raw = (input || "").trim();
+      if (!raw) return "";
+      try {
+        if (/^https?:\/\//i.test(raw)) {
+          const u = new URL(raw);
+          const m = u.pathname.match(/\/(?:series|manga)\/([^/]+)/i);
+          if (m) return decodeURIComponent(m[1]);
+          const parts = u.pathname.split("/").filter(Boolean);
+          return decodeURIComponent(parts[parts.length - 1] || "");
+        }
+      } catch {}
+      return raw.replace(/^\/+|\/+$/g, "");
     }
 
-    function refreshPreview() {
-      const url = $("cover").value.trim();
-      $("coverPreview").src = url || "";
+    function titleFromSlug(slug) {
+      return decodeURIComponent(slug)
+        .replace(/[-_]+/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
     }
-    $("cover").addEventListener("input", refreshPreview);
-    refreshPreview();
 
-    async function postJson(path, body) {
-      const base = $("base").value.replace(/\/$/, "");
-      const res = await fetch(base + path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
+    function pickCover(item) {
+      if (!item || typeof item !== "object") return "";
+      const keys = ["cover", "img", "image", "thumbnail", "thumb"];
+      for (const k of keys) {
+        const v = item[k];
+        if (typeof v === "string" && /^https?:\/\//i.test(v.trim())) return v.trim();
+      }
+      if (Array.isArray(item.covers)) {
+        for (const c of item.covers) {
+          if (typeof c === "string" && /^https?:\/\//i.test(c)) return c;
+        }
+      }
+      return "";
+    }
+
+    function slugKey(s) {
+      return String(s || "")
+        .normalize("NFKC")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+    }
+
+    async function fetchFromCatalog(slug) {
+      const res = await fetch("/api/catalog/manga", { credentials: "omit" });
+      if (!res.ok) throw new Error("catalog HTTP " + res.status);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data?.data;
+      if (!Array.isArray(list)) throw new Error("catalog bukan array");
+
+      const sk = slugKey(slug);
+      const hit =
+        list.find((x) => slugKey(x?.slug) === sk) ||
+        list.find((x) => slugKey(x?.title) === sk);
+
+      if (!hit) return null;
+      return {
+        title: String(hit.title || hit.name || titleFromSlug(slug)).trim(),
+        cover: pickCover(hit),
+        description: String(
+          hit.desc || hit.description || hit.synopsis || hit.sinopsis || "",
+        )
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 120),
+      };
+    }
+
+    async function fetchFromSeriesPage(slug) {
+      const res = await fetch("/series/" + encodeURIComponent(slug), {
+        credentials: "omit",
+        headers: { Accept: "text/html" },
       });
-      const text = await res.text();
-      let data;
-      try { data = JSON.parse(text); } catch { data = { raw: text }; }
-      if (!res.ok) {
-        throw new Error(`${path} → HTTP ${res.status}: ${text.slice(0, 300)}`);
+      if (!res.ok) throw new Error("series page HTTP " + res.status);
+      const html = await res.text();
+
+      const ogImage =
+        html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+        html.match(/content=["']([^"']+)["']\s+property=["']og:image["']/i);
+      const ogTitle =
+        html.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
+        html.match(/content=["']([^"']+)["']\s+property=["']og:title["']/i);
+      const ogDesc =
+        html.match(/property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+        html.match(/content=["']([^"']+)["']\s+property=["']og:description["']/i);
+
+      let cover = ogImage?.[1] || "";
+      if (cover.includes("/og/series/")) cover = "";
+
+      if (!cover) {
+        const img =
+          html.match(/https?:\/\/i\.ibb\.co\/[^"'\s>]+/i) ||
+          html.match(/https?:\/\/[^"'\s>]+\.(?:jpg|jpeg|png|webp)/i);
+        if (img) cover = img[0];
       }
-      return data;
+
+      let title = ogTitle?.[1] || "";
+      title = title.replace(/\s*[-|]\s*Mikoroku\s*$/i, "").trim();
+
+      return {
+        title: title || titleFromSlug(slug),
+        cover,
+        description: (ogDesc?.[1] || "").slice(0, 120),
+      };
     }
 
-    $("btnFix").onclick = async () => {
-      const slug = $("slug").value.trim();
-      const cover = $("cover").value.trim();
-      const title = $("title").value.trim();
-      const description = $("desc").value.trim();
-      const updatedAt = Date.now();
+    async function resolveSeries(seriesInput) {
+      const slug = parseSlug(seriesInput);
+      if (!slug) throw new Error("URL series tidak valid");
 
-      if (!slug || !cover) {
-        log("slug dan cover wajib diisi", "err");
-        return;
-      }
-      if (!/^https?:\/\//i.test(cover)) {
-        log("cover harus URL http(s)", "err");
-        return;
-      }
+      let title = titleFromSlug(slug);
+      let cover = "";
+      let description = "";
 
-      $("status").textContent = "Menulis SEO cache + purge OG...";
       try {
-        log(`sync-cover slug=${slug}`);
-        const sync = await postJson("/api/admin/sync-cover", {
-          slug,
-          title,
-          description,
-          cover,
-          updatedAt,
-        });
-        log("sync-cover OK: " + JSON.stringify(sync), "ok");
-        lastOgUrl = sync.ogUrl || `${$("base").value.replace(/\/$/, "")}/og/series/${encodeURIComponent(slug)}?v=${updatedAt}`;
-
-        log("purge-og ekstra...");
-        const purge = await postJson("/api/admin/purge-og", {
-          slug,
-          versions: [updatedAt, 0],
-        });
-        log("purge-og OK: deleted=" + (purge.deletedCount || 0), "ok");
-
-        $("status").innerHTML = `Selesai sync. OG URL: <a href="${lastOgUrl}" target="_blank" rel="noopener">${lastOgUrl}</a>`;
-        log("Lanjut klik Warm OG baru", "ok");
-      } catch (e) {
-        log(String(e.message || e), "err");
-        $("status").textContent = "Gagal. Pastikan kamu buka tool ini dari origin mikoroku.top (atau allow CORS) dan sudah login admin.";
-      }
-    };
-
-    $("btnWarm").onclick = async () => {
-      const slug = $("slug").value.trim();
-      const base = $("base").value.replace(/\/$/, "");
-      const v = Date.now();
-      const url = lastOgUrl || `${base}/og/series/${encodeURIComponent(slug)}?v=${v}`;
-      lastOgUrl = url;
-      $("status").textContent = "Warming OG...";
-      log("GET " + url);
-      try {
-        const res = await fetch(url, { cache: "no-store", credentials: "omit" });
-        const buf = await res.arrayBuffer();
-        log(`warm HTTP ${res.status}, bytes=${buf.byteLength}`, res.ok && buf.byteLength > 1000 ? "ok" : "err");
-        if (res.ok && buf.byteLength > 1000) {
-          $("status").innerHTML = `OG regenerated. <a href="${url}" target="_blank" rel="noopener">Buka gambar</a>`;
-        } else {
-          $("status").textContent = "Warm gagal / body kosong. Cek log Worker & OG service.";
+        const cat = await fetchFromCatalog(slug);
+        if (cat) {
+          title = cat.title || title;
+          cover = cat.cover || cover;
+          description = cat.description || description;
         }
       } catch (e) {
-        log(String(e.message || e), "err");
+        console.warn("catalog", e);
+      }
+
+      if (!cover) {
+        try {
+          const page = await fetchFromSeriesPage(slug);
+          title = page.title || title;
+          cover = page.cover || cover;
+          description = page.description || description;
+        } catch (e) {
+          console.warn("series page", e);
+        }
+      }
+
+      const override = $("coverOverride").value.trim();
+      if (override && /^https?:\/\//i.test(override)) cover = override;
+
+      if (!cover) {
+        throw new Error(
+          "Cover tidak ketemu otomatis. Isi Cover override sekali.",
+        );
+      }
+
+      return {
+        slug,
+        title,
+        cover,
+        description: description || ("Baca " + title + " di Mikoroku."),
+      };
+    }
+
+    function buildOgUrl(data) {
+      const q = new URLSearchParams();
+      q.set("v", String(Date.now()));
+      q.set("title", data.title.slice(0, 72));
+      q.set("description", data.description.slice(0, 120));
+      q.set("cover", data.cover);
+      return (
+        "https://mikoroku.top/og/series/" +
+        encodeURIComponent(data.slug) +
+        "?" +
+        q.toString()
+      );
+    }
+
+    function show(data, ogUrl) {
+      last = data;
+      $("img").hidden = false;
+      $("img").src = data.cover;
+      $("titleView").textContent = data.title;
+      $("out").textContent = ogUrl;
+    }
+
+    $("btnGo").onclick = async () => {
+      const btn = $("btnGo");
+      btn.disabled = true;
+      $("status").innerHTML = '<span class="muted">Mengambil data…</span>';
+      try {
+        const data = await resolveSeries($("series").value);
+        const ogUrl = buildOgUrl(data);
+        show(data, ogUrl);
+        $("status").innerHTML =
+          '<span class="ok">Cover ketemu. Membuka OG…</span>';
+        window.open(ogUrl, "_blank", "noopener");
+      } catch (e) {
+        $("status").innerHTML =
+          '<span class="err">' + (e.message || e) + "</span>";
+      } finally {
+        btn.disabled = false;
       }
     };
 
-    $("btnOpen").onclick = () => {
-      const slug = $("slug").value.trim();
-      const base = $("base").value.replace(/\/$/, "");
-      const url = lastOgUrl || `${base}/og/series/${encodeURIComponent(slug)}?v=${Date.now()}`;
-      window.open(url, "_blank", "noopener");
+    $("btnCopy").onclick = async () => {
+      try {
+        const data = last || (await resolveSeries($("series").value));
+        const ogUrl = buildOgUrl(data);
+        show(data, ogUrl);
+        await navigator.clipboard.writeText(ogUrl);
+        $("status").innerHTML = '<span class="ok">URL OG disalin.</span>';
+      } catch (e) {
+        $("status").innerHTML =
+          '<span class="err">' + (e.message || e) + "</span>";
+      }
     };
+
+    $("series").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("btnGo").click();
+    });
   </script>
 </body>
 </html>
