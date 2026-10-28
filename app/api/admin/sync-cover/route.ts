@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { kvSet, kvDelete, CacheKeys } from "../../../../lib/kv-cache";
 import { seoCacheKey } from "../../../../lib/seo-metadata";
 
-const SEO_TTL = 365 * 24 * 3600;
+const SEO_TTL = 30 * 24 * 60 * 60;
 
 function stripHtml(text: string): string {
   return text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -48,28 +48,32 @@ export async function POST(req: NextRequest) {
       updatedAt,
     };
 
-    await kvSet(seoCacheKey(slug), payload, SEO_TTL);
+    try {
+      await kvSet(seoCacheKey(slug), payload, SEO_TTL);
+    } catch (error) {
+      console.error("[sync-cover] kvSet failed", error);
+      return NextResponse.json(
+        {
+          error: "failed to write seo cache",
+          detail: error instanceof Error ? error.message : String(error),
+        },
+        { status: 500 },
+      );
+    }
 
     const ogKeys = [
       CacheKeys.ogSeries(slug),
       `${CacheKeys.ogSeries(slug)}:v0`,
       `${CacheKeys.ogSeries(slug)}:v${updatedAt}`,
-      `${CacheKeys.ogSeries(slug)}:vundefined`,
-      `${CacheKeys.ogSeries(slug)}:vnull`,
     ];
-
-    const now = Date.now();
-    for (const offset of [0, 60_000, 300_000, 3_600_000, 86_400_000]) {
-      ogKeys.push(`${CacheKeys.ogSeries(slug)}:v${now - offset}`);
-    }
 
     const purged: string[] = [];
     for (const key of ogKeys) {
       try {
         await kvDelete(key);
         purged.push(key);
-      } catch {
-        // ignore
+      } catch (error) {
+        console.warn("[sync-cover] kvDelete failed", key, error);
       }
     }
 
@@ -82,7 +86,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("[sync-seo]", error);
-    return NextResponse.json({ error: "failed to sync seo" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "failed to sync seo",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }
 
@@ -97,7 +107,13 @@ export async function DELETE(req: NextRequest) {
     await kvDelete(CacheKeys.ogSeries(slug));
     await kvDelete(`${CacheKeys.ogSeries(slug)}:v0`);
     return NextResponse.json({ ok: true, slug });
-  } catch {
-    return NextResponse.json({ error: "failed" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: "failed",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }
