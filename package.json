@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "cf:build": "opennextjs-cloudflare build --config wrangler.jsonc",
-    "preview": "opennextjs-cloudflare build --config wrangler.jsonc && opennextjs-cloudflare preview --config wrangler.jsonc",
-    "deploy": "opennextjs-cloudflare build --config wrangler.jsonc && opennextjs-cloudflare deploy --config wrangler.jsonc",
-    "upload": "opennextjs-cloudflare build --config wrangler.jsonc && opennextjs-cloudflare upload --config wrangler.jsonc",
+    "cf:build": "opennextjs-cloudflare build --config wrangler.jsonc && node scripts/copy-homepage-asset.mjs",
+    "preview": "npm run cf:build && opennextjs-cloudflare preview --config wrangler.jsonc",
+    "deploy": "npm run cf:build && opennextjs-cloudflare deploy --config wrangler.jsonc",
+    "upload": "npm run cf:build && opennextjs-cloudflare upload --config wrangler.jsonc",
     "cf-typegen": "wrangler types --config wrangler.jsonc --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

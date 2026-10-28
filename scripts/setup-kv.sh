@@ -9,7 +9,7 @@ echo "$PREVIEW"
 
 echo ""
 echo "Copy the 'id' values into wrangler.jsonc:"
-echo "  - NEXT_INC_CACHE_KV  (bisa pakai namespace yang sama atau buat terpisah)"
+echo "  - NEXT_INC_CACHE_KV (used by Next.js)"
 echo "  - MIKOROKU_V2_CACHE"
 echo ""
 echo "Example:"

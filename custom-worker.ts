@@ -25,6 +25,9 @@ interface KVNamespace {
 }
 
 interface CloudflareEnv {
+  ASSETS?: {
+    fetch(request: Request): Promise<Response>;
+  };
   /** Prefer this binding (matches wrangler.jsonc). */
   MIKOROKU_V2_CACHE?: KVNamespace;
   /** Legacy alias kept for older deploys. */
@@ -477,6 +480,30 @@ export default {
     env: CloudflareEnv,
     ctx: ExecutionContext,
   ): Promise<Response> {
+    const url = new URL(request.url);
+    const isHomepageDocument =
+      url.pathname === "/" &&
+      (request.method === "GET" || request.method === "HEAD") &&
+      request.headers.get("rsc") !== "1" &&
+      !url.searchParams.has("_rsc");
+
+    if (isHomepageDocument && env.ASSETS) {
+      const assetRequest = new Request(url, request);
+      const response = await env.ASSETS.fetch(assetRequest);
+      if (response.status !== 404) {
+        const headers = new Headers(response.headers);
+        headers.set(
+          "cache-control",
+          "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+        );
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
+    }
+
     const catalog = await handleMangaCatalogProxy(request, env, ctx);
     if (catalog) return catalog;
     const proxied = await handleBloggerChaptersProxy(request, env, ctx);
