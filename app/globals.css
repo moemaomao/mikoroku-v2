@@ -62,6 +62,40 @@ html.light .legal-page-card {
 
 html.light #mainFooter .site-footer-card {
   border-color: rgba(15, 23, 42, .12);
-  background-color: rgba(255, 255, 255, .86);
+  background-color: rgba(255, 255, 255, .94);
   color: #334155;
+}
+
+html.light,
+body.light {
+  --mk-page-bg: #f8f9fa;
+  color-scheme: light;
+  background-color: #f8f9fa !important;
+}
+
+html.light body,
+body.light {
+  color: #1e293b;
+  background-color: #f8f9fa !important;
+}
+
+html.light .route-page-background,
+body.light .route-page-background {
+  color: #1e293b;
+  background-color: #f8f9fa !important;
+}
+
+html.light #mainFooter,
+body.light #mainFooter {
+  color: #475569;
+}
+
+html.light #mainFooter nav a,
+body.light #mainFooter nav a {
+  color: #be123c;
+}
+
+html.light #mainFooter p,
+body.light #mainFooter p {
+  color: #475569;
 }

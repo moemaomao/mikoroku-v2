@@ -301,6 +301,9 @@ function HeaderContents() {
       root.classList.toggle("dark", isDark);
       root.classList.toggle("light", !isDark);
     });
+    document.documentElement.style.setProperty("--mk-page-bg", isDark ? "#0b0b0b" : "#f8f9fa");
+    document.documentElement.style.backgroundColor = isDark ? "#0b0b0b" : "#f8f9fa";
+    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
     setDark(isDark);
   }, []);
 
@@ -1142,6 +1145,9 @@ function applyTheme(isDark: boolean): void {
     root.classList.toggle("dark", isDark);
     root.classList.toggle("light", !isDark);
   });
+  document.documentElement.style.setProperty("--mk-page-bg", isDark ? "#0b0b0b" : "#f8f9fa");
+  document.documentElement.style.backgroundColor = isDark ? "#0b0b0b" : "#f8f9fa";
+  document.documentElement.style.colorScheme = isDark ? "dark" : "light";
 }
 
 function readBookmarks(): HeaderBookmark[] {
