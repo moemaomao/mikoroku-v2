@@ -78,9 +78,13 @@ async function initializeSiteChrome(showChrome: boolean): Promise<void> {
 export default function SiteChrome({
   showChrome = true,
   showFooter = true,
+  footerBackgroundColor,
+  removeFooterTopGap = false,
 }: {
   showChrome?: boolean;
   showFooter?: boolean;
+  footerBackgroundColor?: string;
+  removeFooterTopGap?: boolean;
 }) {
   useEffect(() => {
     void initializeSiteChrome(showChrome).catch((error: unknown) => {
@@ -95,7 +99,12 @@ export default function SiteChrome({
       {showChrome && <GlobalAuth />}
       {showChrome && <UserModals />}
       {showChrome && <MangaDataProvider />}
-      {showFooter && <SiteFooter />}
+      {showFooter && (
+        <SiteFooter
+          backgroundColor={footerBackgroundColor}
+          removeTopGap={removeFooterTopGap}
+        />
+      )}
     </>
   ) : null;
 }

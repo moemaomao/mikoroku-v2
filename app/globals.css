@@ -56,6 +56,46 @@ html.light [data-route-card="settings-option"] {
   background-color: #f1f5f9;
 }
 
+html.light main.route-page-background [data-route-card="settings"] {
+  border-color: rgba(15, 23, 42, .1) !important;
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+html.light main.route-page-background [data-route-card="settings"] * {
+  color: #1e293b !important;
+}
+
+html.light main.route-page-background [data-route-card="settings-inset"],
+html.light main.route-page-background [data-route-card="settings-toggle"],
+html.light main.route-page-background [data-route-card="settings-option"] {
+  border-color: rgba(15, 23, 42, .1) !important;
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+html.light main.route-page-background [data-route-card="settings-inset"] *,
+html.light main.route-page-background [data-route-card="settings-toggle"] *,
+html.light main.route-page-background [data-route-card="settings-option"] * {
+  color: #1e293b !important;
+}
+
+html.light main.route-page-background [data-route-card="settings"] button,
+html.light main.route-page-background [data-route-card="settings-inset"] button,
+html.light main.route-page-background [data-route-card="settings-option"] button {
+  border-color: rgba(15, 23, 42, .12) !important;
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+html.light main.route-page-background [data-route-card="settings"] button[aria-pressed="true"],
+html.light main.route-page-background [data-route-card="settings-inset"] button[aria-pressed="true"],
+html.light main.route-page-background [data-route-card="settings-option"] button[aria-pressed="true"] {
+  border-color: #94a3b8 !important;
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
 html.light .legal-page-card {
   background-color: #ffffff;
 }

@@ -1908,7 +1908,11 @@ export default function ReaderPage({
         </form>
       </div>}
       </main>
-      <SiteChrome showChrome={false} />
+      <SiteChrome
+        showChrome={false}
+        footerBackgroundColor="light-dark(#f1f2f4, #111216)"
+        removeFooterTopGap
+      />
     </>
   );
 }

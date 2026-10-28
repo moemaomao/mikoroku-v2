@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import "quill/dist/quill.snow.css";
 import styles from "./admin.module.css";
 import AdvertisementSettings from "./advertisement-settings";
+import OgCoverTool from "./og-cover-tool";
 import { CoverImage } from "../lib/cover-image";
 import RichTextEditor from "./rich-text-editor";
 import MangaMetadataEditor from "./manga-metadata-editor";
@@ -717,7 +718,7 @@ export default function AdminPage() {
   const [warning, setWarning] = useState("");
   const [queryText, setQueryText] = useState("");
   const [activeSection, setActiveSection] = useState<
-    "dashboard" | "manga-list" | "editor" | "manga-detail" | "reports" | "announcements" | "genres" | "advertisements" | "settings"
+    "dashboard" | "manga-list" | "editor" | "manga-detail" | "reports" | "announcements" | "genres" | "advertisements" | "settings" | "og-cover"
   >("dashboard");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [editing, setEditing] = useState<MangaRecord | null>(null);
@@ -2471,6 +2472,20 @@ export default function AdminPage() {
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
             Settings
           </button>
+          <button
+            className={activeSection === "og-cover" ? styles.activeNav : ""}
+            onClick={() => {
+              setActiveSection("og-cover");
+              setMobileNavOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+            OG Cover Tool
+          </button>
           <button className={styles.sidebarAction} type="button" onClick={toggleTheme}>
             {isLightMode ? (
               <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
@@ -3090,6 +3105,9 @@ export default function AdminPage() {
               </div>
               {settingsStatus && <p className={styles.inlineStatus}>{settingsStatus}</p>}
             </section>
+          )}
+          {activeSection === "og-cover" && (
+            <OgCoverTool firestore={getAdminFirebase().firestore} />
           )}
           {activeSection === "advertisements" && (
             <AdvertisementSettings firestore={getAdminFirebase().firestore} />

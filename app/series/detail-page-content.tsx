@@ -960,6 +960,15 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [state, setState] = useState<DetailState>("loading");
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
+  const [metadataExpanded, setMetadataExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("seriesMetadataExpanded") === "true";
+    } catch (error) {
+      console.warn("Could not read the series metadata display preference.", error);
+      return false;
+    }
+  });
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
@@ -1734,7 +1743,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             <span className="detail-route-spinner" aria-hidden="true" />
           </div>
         </main>
-        <SiteFooter />
+        <SiteFooter backgroundColor="transparent" removeTopGap />
         <RouteIntegrations />
       </>
     );
@@ -1747,7 +1756,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
           <p className="detail-route-message" role="status">Manga tidak ditemukan.</p>
         </main>
-        <SiteFooter />
+        <SiteFooter backgroundColor="transparent" removeTopGap />
         <RouteIntegrations />
       </>
     );
@@ -1760,7 +1769,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         <main className={`detail-route ${detailPageClasses}`}>
           <p className="detail-route-message" role="alert">Detail manga gagal dimuat. Coba muat ulang halaman.</p>
         </main>
-        <SiteFooter />
+        <SiteFooter backgroundColor="transparent" removeTopGap />
         <RouteIntegrations />
       </>
     );
@@ -1829,27 +1838,29 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   </div>
                   <div className="rating-number">{ratingValue === undefined ? "N/A" : ratingValue.toFixed(1)}</div>
                 </div>
-                <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-1 py-2 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] lg:px-3 lg:text-sm" type="button" onClick={() => {
-                  if (latestChapter) void openChapter(latestChapter);
-                }} disabled={!latestChapter || chapterState !== "ready"}>
-                  <i className="fas fa-book-open" aria-hidden="true" />
-                  <span>{chapterState === "loading" ? "Loading..." : "Read now"}</span>
-                </button>
-                <button className={`bookmark-btn${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
-                  <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
-                  <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
-                </button>
-                <button
-                  className="detail-report-btn inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-500/60 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] max-[767px]:text-[10px] md:text-sm"
-                  type="button"
-                  onClick={() => {
-                    setReportMessage("");
-                    setReportOpen(true);
-                  }}
-                >
-                  <i className="fas fa-flag" aria-hidden="true" />
-                  <span>Report</span>
-                </button>
+                <div className={`flex w-full flex-col gap-3 ${metadataExpanded ? "max-[767px]:flex" : "max-[767px]:hidden"}`}>
+                  <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-1 py-2 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] lg:px-3 lg:text-sm" type="button" onClick={() => {
+                    if (latestChapter) void openChapter(latestChapter);
+                  }} disabled={!latestChapter || chapterState !== "ready"}>
+                    <i className="fas fa-book-open" aria-hidden="true" />
+                    <span>{chapterState === "loading" ? "Loading..." : "Read now"}</span>
+                  </button>
+                  <button className={`bookmark-btn${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
+                    <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
+                    <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
+                  </button>
+                  <button
+                    className="detail-report-btn inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-500/60 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] max-[767px]:text-[10px] md:text-sm"
+                    type="button"
+                    onClick={() => {
+                      setReportMessage("");
+                      setReportOpen(true);
+                    }}
+                  >
+                    <i className="fas fa-flag" aria-hidden="true" />
+                    <span>Report</span>
+                  </button>
+                </div>
               </div>
               <div className="info">
                 <div className={`status ${status.toLowerCase()}`}>
@@ -1858,26 +1869,86 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 <h1 className="title">{manga.title}</h1>
                 <div className="title-divider" />
                 {manga.altTitle && <div className="alt-title">{manga.altTitle}</div>}
-                <MetaTag label="Type" value={manga.type} icon="fa-layer-group" />
-                <MetaTag label="Series" value={manga.series} icon="fa-bookmark" />
-                <MetaTag label="Characters" value={asStringList(manga.characters).join(", ")} icon="fa-user-group" />
-                <div className="detail-item"><i className="fas fa-book" aria-hidden="true" /><span><strong>Chapter:</strong> {chapterCount}</span></div>
-                <MetaTag label="Publication" value={manga.publication} icon="fa-calendar-alt" />
-                <MetaTag label="Serialization" value={manga.serialization} icon="fa-newspaper" />
-                <MetaTag label="Author" value={manga.author} icon="fa-user" />
-                <MetaTag label="Artist" value={manga.artist} icon="fa-palette" />
-                <MetaTag label="Group" value={manga.group} icon="fa-people-group" />
-                <MetaTag label="Circle" value={manga.circle} icon="fa-users" />
-                <div className="detail-item latest-update"><i className="fas fa-clock" aria-hidden="true" /><span><strong>Latest Update:</strong> {formatDate(latestUpdate)}</span></div>
-                {demographics.length > 0 && (
-                  <div className="detail-item demographic-item">
-                    <i className="fas fa-tags" aria-hidden="true" />
-                    <strong>Demographic:</strong>
-                    <div className="demographic-tags">{demographics.map((item) => <span className="demographic-tag" key={item}>{item}</span>)}</div>
-                  </div>
-                )}
+                <div
+                  id="series-metadata"
+                  className="overflow-hidden transition-[max-height,mask-image] duration-500 ease-in-out motion-reduce:transition-none"
+                  style={{
+                    maxHeight: metadataExpanded ? "480px" : "27px",
+                    maskImage: metadataExpanded
+                      ? "none"
+                      : "linear-gradient(to bottom, #000 35%, transparent 100%)",
+                  }}
+                >
+                  <MetaTag label="Type" value={manga.type} icon="fa-layer-group" />
+                  <MetaTag label="Series" value={manga.series} icon="fa-bookmark" />
+                  <MetaTag label="Characters" value={asStringList(manga.characters).join(", ")} icon="fa-user-group" />
+                  <div className="detail-item"><i className="fas fa-book" aria-hidden="true" /><span><strong>Chapter:</strong> {chapterCount}</span></div>
+                  <MetaTag label="Publication" value={manga.publication} icon="fa-calendar-alt" />
+                  <MetaTag label="Serialization" value={manga.serialization} icon="fa-newspaper" />
+                  <MetaTag label="Author" value={manga.author} icon="fa-user" />
+                  <MetaTag label="Artist" value={manga.artist} icon="fa-palette" />
+                  <MetaTag label="Group" value={manga.group} icon="fa-people-group" />
+                  <MetaTag label="Circle" value={manga.circle} icon="fa-users" />
+                  <div className="detail-item latest-update"><i className="fas fa-clock" aria-hidden="true" /><span><strong>Latest Update:</strong> {formatDate(latestUpdate)}</span></div>
+                  {demographics.length > 0 && (
+                    <div className="detail-item demographic-item">
+                      <i className="fas fa-tags" aria-hidden="true" />
+                      <strong>Demographic:</strong>
+                      <div className="demographic-tags">{demographics.map((item) => <span className="demographic-tag" key={item}>{item}</span>)}</div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="my-1 flex w-full items-center gap-2 rounded px-1 py-1 text-sm font-semibold text-[#555] transition-colors hover:text-[#111] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:text-white/70 dark:hover:text-white sm:text-base"
+                  aria-expanded={metadataExpanded}
+                  aria-controls="series-metadata"
+                  onClick={() => {
+                    const expanded = !metadataExpanded;
+                    setMetadataExpanded(expanded);
+                    try {
+                      window.localStorage.setItem("seriesMetadataExpanded", String(expanded));
+                    } catch (error) {
+                      console.warn("Could not save the series metadata display preference.", error);
+                    }
+                  }}
+                >
+                  <span className="h-px flex-1 bg-current opacity-35" aria-hidden="true" />
+                  <span>{metadataExpanded ? "Show less" : "Show more"}</span>
+                  <i
+                    className={`fas fa-chevron-down text-[11px] transition-transform duration-300 motion-reduce:transition-none ${metadataExpanded ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span className="h-px flex-1 bg-current opacity-35" aria-hidden="true" />
+                </button>
               </div>
             </div>
+
+            {!metadataExpanded && (
+              <div className="mx-3 mb-3 grid grid-cols-3 items-center gap-2 md:hidden">
+                <button className="start-reading-btn inline-flex min-h-9 w-full items-center justify-center gap-1 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-2 py-1.5 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => {
+                  if (latestChapter) void openChapter(latestChapter);
+                }} disabled={!latestChapter || chapterState !== "ready"}>
+                  <i className="fas fa-book-open shrink-0" aria-hidden="true" />
+                  <span className="whitespace-nowrap">{chapterState === "loading" ? "Loading..." : "Read now"}</span>
+                </button>
+                <button className={`bookmark-btn min-h-9 w-full gap-1 px-2 py-1.5 text-[10px]${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
+                  <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
+                  <span className="whitespace-nowrap">{bookmarked ? "Bookmarked" : "Bookmark"}</span>
+                </button>
+                <button
+                  className="detail-report-btn inline-flex min-h-9 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-red-500/60 bg-red-500/15 px-2 py-1.5 text-[10px] font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
+                  type="button"
+                  onClick={() => {
+                    setReportMessage("");
+                    setReportOpen(true);
+                  }}
+                >
+                  <i className="fas fa-flag shrink-0" aria-hidden="true" />
+                  <span>Report</span>
+                </button>
+              </div>
+            )}
 
             <div className="genres">
               {genreList.map((genre, index) => {
@@ -2012,7 +2083,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 />
               </label>
               <div className="chapter-header">
-                <h2 className="section-title">Chapters</h2>
+                <h2 className="section-title">
+                  <span className="whitespace-nowrap rounded-[15px] border border-[#aaa] bg-transparent px-[10px] py-1">
+                    Chapters
+                  </span>
+                </h2>
                 <div className="chapter-header-right">
                   <div className="source-toggle" aria-label="Sumber chapter">
                     <button id="sourceSv1Btn" className={`view-btn server-btn${source === "blogger" ? " active" : ""}`} type="button" title="Server 1 — Mikodrive" aria-label="Server 1 — Mikodrive" aria-pressed={source === "blogger"} onClick={() => changeChapterSource("blogger", "sv1")}>
@@ -2386,7 +2461,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         document.body,
       )}
       <div className="relative z-[2]">
-        <SiteFooter />
+        <SiteFooter backgroundColor="transparent" removeTopGap />
       </div>
       <RouteIntegrations />
     </>
