@@ -18,10 +18,15 @@ const SERIES_OG_HEADERS = {
   "Cache-Control": "public, max-age=0, s-maxage=0, must-revalidate",
 };
 
-function coverCacheVersion(coverUrl: string): string {
+function coverCacheVersion(
+  coverUrl: string,
+  title: string,
+  description: string,
+): string {
+  const value = `${coverUrl}\u0000${title}\u0000${description}`;
   let hash = 2166136261;
-  for (let index = 0; index < coverUrl.length; index += 1) {
-    hash ^= coverUrl.charCodeAt(index);
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
@@ -38,7 +43,11 @@ export async function GET(
     const series = await getSeriesSeoDataForOg(slug);
     const coverUrl = isUsableSeriesCover(series.image) ? series.image : "";
     const cacheKey =
-      `${CacheKeys.ogSeries(slug)}:v${version}:c${coverCacheVersion(coverUrl)}`;
+      `${CacheKeys.ogSeries(slug)}:v${version}:c${coverCacheVersion(
+        coverUrl,
+        series.title,
+        series.description,
+      )}`;
 
     try {
       const cached = await kvGetArrayBuffer(cacheKey);

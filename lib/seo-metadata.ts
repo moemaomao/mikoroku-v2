@@ -172,15 +172,22 @@ export function seoCacheKey(slug: string): string {
   return `seo:series:${slug}`;
 }
 
+export function adminSeoCacheKey(slug: string): string {
+  return `seo:series:admin:${slug}`;
+}
+
 /** @deprecated */
 export function coverOverrideKey(slug: string): string {
   return seoCacheKey(slug);
 }
 
-async function readSeoCache(slug: string): Promise<SeriesSeoCache | null> {
+async function readSeoCache(
+  slug: string,
+  key = seoCacheKey(slug),
+): Promise<SeriesSeoCache | null> {
   try {
     const { kvGet } = await import("./kv-cache");
-    const data = await kvGet<SeriesSeoCache & { cover?: string }>(seoCacheKey(slug));
+    const data = await kvGet<SeriesSeoCache & { cover?: string }>(key);
     if (!data) return null;
 
     const image =
@@ -323,6 +330,11 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 }
 
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
+  const adminCache = await readSeoCache(slug, adminSeoCacheKey(slug));
+  if (adminCache?.title && isUsableSeriesCover(adminCache.image)) {
+    return adminCache;
+  }
+
   const cache = await readSeoCache(slug);
 
   let firestoreSeries: SeriesSeoData | null = null;

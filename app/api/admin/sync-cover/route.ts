@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kvSet, kvDelete, CacheKeys } from "../../../../lib/kv-cache";
-import { seoCacheKey } from "../../../../lib/seo-metadata";
+import {
+  adminSeoCacheKey,
+  seoCacheKey,
+} from "../../../../lib/seo-metadata";
 
 const SEO_TTL = 365 * 24 * 3600;
 
@@ -48,7 +51,10 @@ export async function POST(req: NextRequest) {
       updatedAt,
     };
 
-    await kvSet(seoCacheKey(slug), payload, SEO_TTL);
+    await Promise.all([
+      kvSet(adminSeoCacheKey(slug), payload, SEO_TTL),
+      kvSet(seoCacheKey(slug), payload, SEO_TTL),
+    ]);
 
     try {
       await kvDelete(CacheKeys.ogSeries(slug));
@@ -72,7 +78,10 @@ export async function DELETE(req: NextRequest) {
     if (!slug) {
       return NextResponse.json({ error: "slug required" }, { status: 400 });
     }
-    await kvDelete(seoCacheKey(slug));
+    await Promise.all([
+      kvDelete(adminSeoCacheKey(slug)),
+      kvDelete(seoCacheKey(slug)),
+    ]);
     await kvDelete(CacheKeys.ogSeries(slug));
     return NextResponse.json({ ok: true, slug });
   } catch {
