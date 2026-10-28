@@ -330,30 +330,14 @@ export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData
         const document = decodeFirestoreDocument(await response.json());
         return cacheResolvedSeries(slug, normalizeSeries(document, slug), cache);
       }
+      if (response.status !== 404) {
+        throw new Error(`Firestore metadata request returned HTTP ${response.status}.`);
+      }
     } finally {
       clearTimeout(timer);
     }
   } catch (error) {
     console.warn("[OG seo] Firestore failed", slug, error);
-  }
-
-  try {
-    const response = await fetch(MANGA_DATA_URL, {
-      next: { revalidate: 900 },
-    });
-    if (response.ok) {
-      const mangaList = (await response.json()) as Array<Record<string, unknown>>;
-      const manga = mangaList.find(
-        (item) =>
-          asText(item.slug) === slug ||
-          slugKey(asText(item.title)) === slugKey(slug),
-      );
-      if (manga) {
-        return cacheResolvedSeries(slug, normalizeSeries(manga, slug), cache);
-      }
-    }
-  } catch (error) {
-    console.warn("[OG seo] dataset fallback failed", slug, error);
   }
 
   if (cache?.image) {
