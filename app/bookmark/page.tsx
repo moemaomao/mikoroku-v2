@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import BookmarkPage from "./bookmark-page";
+import BookmarkClient from "./bookmark-client";
 import "./bookmark.css";
 
 export const metadata: Metadata = {
@@ -11,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function BookmarkRoute() {
-  return <BookmarkPage />;
+  return <BookmarkClient />;
 }

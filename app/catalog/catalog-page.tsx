@@ -33,7 +33,7 @@ type Manga = {
   isDraft?: boolean;
 };
 
-type CatalogKind = "manga" | "hentai" | "genre";
+export type CatalogKind = "manga" | "hentai" | "genre";
 type SortOrder = "latest" | "az" | "za";
 type DateValue = string | number | { toMillis?: () => number; seconds?: number };
 type MangaDataWindow = Window & { mangaData?: Record<string, Manga> };

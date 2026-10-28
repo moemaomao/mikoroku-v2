@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import CatalogPage from "../catalog/catalog-page";
+import CatalogClient from "../catalog/catalog-client";
 
 export const metadata: Metadata = {
   title: "Genre List - Mikoroku",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function GenreListRoute() {
-  return <CatalogPage kind="genre" title="Genre List" />;
+  return <CatalogClient kind="genre" title="Genre List" />;
 }

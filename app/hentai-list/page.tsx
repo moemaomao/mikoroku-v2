@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import CatalogPage from "../catalog/catalog-page";
+import CatalogClient from "../catalog/catalog-client";
 
 export const metadata: Metadata = {
   title: "Hentai List - Mikoroku",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function HentaiListRoute() {
-  return <CatalogPage kind="hentai" title="Hentai List" />;
+  return <CatalogClient kind="hentai" title="Hentai List" />;
 }
