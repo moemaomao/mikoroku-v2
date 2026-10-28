@@ -1873,10 +1873,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   id="series-metadata"
                   className="overflow-hidden transition-[max-height,mask-image] duration-500 ease-in-out motion-reduce:transition-none"
                   style={{
-                    maxHeight: metadataExpanded ? "480px" : "27px",
+                    maxHeight: metadataExpanded ? "480px" : "0px",
                     maskImage: metadataExpanded
                       ? "none"
-                      : "linear-gradient(to bottom, #000 35%, transparent 100%)",
+                      : "none",
                   }}
                 >
                   <MetaTag label="Type" value={manga.type} icon="fa-layer-group" />
