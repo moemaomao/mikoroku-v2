@@ -60,14 +60,22 @@ export default function SiteFooter() {
       <footer
         id="mainFooter"
         className="relative mt-10 w-full overflow-hidden bg-transparent py-[50px] text-[#858585] transition-[margin,width] duration-300 max-[600px]:mt-[30px] max-[600px]:px-[15px] max-[600px]:pt-10 max-[600px]:pb-[30px] min-[768px]:py-[60px]"
+        style={{ backgroundColor: "var(--mk-footer-bg, #0b0b0b)" }}
       >
-        <div className="site-footer-card mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 bg-black/10 px-[30px] py-[22px] backdrop-blur-xl max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7">
+        <div
+          className="site-footer-card mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 bg-black/10 px-[30px] py-[22px] backdrop-blur-xl max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7"
+          style={{
+            backgroundColor: "var(--mk-footer-card-bg, rgba(23, 23, 37, .96))",
+            borderColor: "var(--mk-footer-card-border, rgba(255, 255, 255, .1))",
+            color: "var(--mk-footer-card-text, #d4d4d8)",
+          }}
+        >
         <nav className="flex flex-wrap gap-4 max-[600px]:justify-center" aria-label="Informasi situs">
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="/privacy">Privacy Policy</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="/dmca">DMCA</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="/terms">Terms</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="/about">About</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="mailto:mikorokuscan@gmail.com">Contact</a>
+          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/privacy">Privacy Policy</a>
+          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/dmca">DMCA</a>
+          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/terms">Terms</a>
+          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/about">About</a>
+          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="mailto:mikorokuscan@gmail.com">Contact</a>
         </nav>
 
         <div className="flex flex-col items-center text-center">

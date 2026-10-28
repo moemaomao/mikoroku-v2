@@ -42,8 +42,17 @@ export default function CommissionPage() {
   return (
     <>
       <SiteChrome showFooter={false} />
-      <main className="commission-page route-page-background">
-        <section className="commission-card">
+      <main
+        className="commission-page route-page-background"
+        style={{ backgroundColor: "var(--mk-page-bg, #0b0b0b)" }}
+      >
+        <section
+          className="commission-card"
+          style={{
+            backgroundColor: "var(--mk-commission-card-bg, #171725)",
+            color: "var(--mk-commission-card-text, #e2e8f0)",
+          }}
+        >
           <header>
             <h1>Form Komisi Terjemahan</h1>
             <p>Doujinshi Translation Commission</p>
