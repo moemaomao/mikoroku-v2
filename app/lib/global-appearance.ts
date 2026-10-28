@@ -1007,6 +1007,27 @@ export function saveGlobalAppearance(settings: GlobalAppearanceSettings): void {
   localStorage.setItem(GLOBAL_APPEARANCE_KEY, JSON.stringify(settings));
 }
 
+function getContrastSafeAccent(hexColor: string): string {
+  const channels = [1, 3, 5].map((offset) =>
+    Number.parseInt(hexColor.slice(offset, offset + 2), 16),
+  );
+  const luminance = () => {
+    const linear = channels.map((channel) => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  };
+
+  while (1.05 / (luminance() + 0.05) < 10) {
+    channels.forEach((channel, index) => {
+      channels[index] = Math.floor(channel * 0.9);
+    });
+  }
+
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void {
   currentAppearance = settings;
   document.documentElement.dataset.cardDisplay = settings.cardDisplay;
@@ -1017,7 +1038,10 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
   };
   const accentSoft = accent ? `color-mix(in srgb, ${accent} 10%, transparent)` : null;
   const accentBorder = accent ? `color-mix(in srgb, ${accent} 28%, transparent)` : null;
+  const globalAccent = accent || "#9d1018";
   const readerAccent = accent || "#e8798f";
+  const globalAccentSurface = getContrastSafeAccent(globalAccent);
+  const readerAccentSurface = getContrastSafeAccent(readerAccent);
   const readerAccentSoft = accentSoft || "rgba(232, 121, 143, 0.12)";
   const readerAccentBorder = accentBorder || "rgba(232, 121, 143, 0.3)";
   setAccentVariable("--mikoroku-accent", accent, "#9d1018");
@@ -1056,7 +1080,11 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
   setAccentVariable("--mikoroku-sort-newest", accent, "#ed74f8");
   setAccentVariable("--mikoroku-sort-newest-border", accent, "#fd6dfd");
   setAccentVariable("--mikoroku-sort-oldest", accent, "#f59e0b");
+  rootStyle.setProperty("--mikoroku-accent-surface", globalAccentSurface);
+  rootStyle.setProperty("--mikoroku-accent-foreground", "#ffffff");
   rootStyle.setProperty("--mikoroku-reader-accent", readerAccent);
+  rootStyle.setProperty("--mikoroku-reader-accent-surface", readerAccentSurface);
+  rootStyle.setProperty("--mikoroku-reader-accent-foreground", "#ffffff");
   rootStyle.setProperty("--mikoroku-reader-accent-soft", readerAccentSoft);
   rootStyle.setProperty("--mikoroku-reader-accent-border", readerAccentBorder);
   setAccentVariable("--mikoroku-reader-page-accent", accent, "#e8798f");

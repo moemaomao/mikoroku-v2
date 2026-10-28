@@ -28,9 +28,8 @@ interface CloudflareEnv {
   ASSETS?: {
     fetch(request: Request): Promise<Response>;
   };
-  /** Prefer this binding (matches wrangler.jsonc). */
+
   MIKOROKU_V2_CACHE?: KVNamespace;
-  /** Legacy alias kept for older deploys. */
   MIKOROKU_CACHE?: KVNamespace;
   NEXT_INC_CACHE_KV?: KVNamespace;
   [key: string]: unknown;

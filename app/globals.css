@@ -99,3 +99,117 @@ html.light #mainFooter p,
 body.light #mainFooter p {
   color: #475569;
 }
+
+.reader-settings-panel {
+  border-color: rgba(255, 255, 255, .28) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 96%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-settings-panel,
+.reader-settings-panel * {
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-settings-panel button,
+.reader-settings-panel select,
+.reader-settings-panel option {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 94%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-settings-panel button:hover,
+.reader-settings-panel select:hover {
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 82%, #000000 18%) !important;
+}
+
+.reader-settings-panel .reader-setting-row,
+.reader-settings-panel .reader-setting-block {
+  border-color: rgba(255, 255, 255, .3) !important;
+}
+
+.reader-settings-panel .reader-settings-divider {
+  background-color: rgba(255, 255, 255, .38) !important;
+}
+
+.reader-bottom-nav {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 96%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-bottom-nav .reader-bottom-previous,
+.reader-bottom-nav .reader-bottom-next {
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 94%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-bottom-nav button,
+.reader-bottom-nav button i,
+.reader-bottom-nav button svg {
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-bottom-nav .reader-bottom-button:hover,
+.reader-bottom-nav > button:hover {
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 82%, #000000 18%) !important;
+}
+
+.reader-bottom-chapter-menu,
+.reader-bottom-page-menu {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 98%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-bottom-menu-heading {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 99%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-bottom-nav .reader-bottom-chapter-menu button,
+.reader-bottom-nav .reader-bottom-page-menu button {
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-floating-controls > button {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 96%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-bottom-nav button:disabled {
+  opacity: .78 !important;
+}
+
+main.route-page-background [data-route-card="settings"] {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 96%, transparent) !important;
+  color: var(--mikoroku-accent-foreground, #ffffff) !important;
+}
+
+main.route-page-background [data-route-card="settings"] * {
+  color: var(--mikoroku-accent-foreground, #ffffff) !important;
+}
+
+main.route-page-background [data-route-card="settings-inset"],
+main.route-page-background [data-route-card="settings-toggle"],
+main.route-page-background [data-route-card="settings-option"] {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 94%, transparent) !important;
+  color: var(--mikoroku-accent-foreground, #ffffff) !important;
+}
+
+main.route-page-background [data-route-card="settings"] button,
+main.route-page-background [data-route-card="settings-inset"] button,
+main.route-page-background [data-route-card="settings-option"] button {
+  border-color: rgba(255, 255, 255, .35) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 94%, transparent) !important;
+  color: var(--mikoroku-accent-foreground, #ffffff) !important;
+}
+
+main.route-page-background [data-route-card="settings"] button:hover {
+  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 82%, #000000 18%) !important;
+}
