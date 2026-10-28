@@ -50,15 +50,36 @@ export async function POST(req: NextRequest) {
 
     await kvSet(seoCacheKey(slug), payload, SEO_TTL);
 
-    try {
-      await kvDelete(CacheKeys.ogSeries(slug));
-      await kvDelete(`${CacheKeys.ogSeries(slug)}:v0`);
-      await kvDelete(`${CacheKeys.ogSeries(slug)}:v${updatedAt}`);
-    } catch {
-      // ignore
+    const ogKeys = [
+      CacheKeys.ogSeries(slug),
+      `${CacheKeys.ogSeries(slug)}:v0`,
+      `${CacheKeys.ogSeries(slug)}:v${updatedAt}`,
+      `${CacheKeys.ogSeries(slug)}:vundefined`,
+      `${CacheKeys.ogSeries(slug)}:vnull`,
+    ];
+
+    const now = Date.now();
+    for (const offset of [0, 60_000, 300_000, 3_600_000, 86_400_000]) {
+      ogKeys.push(`${CacheKeys.ogSeries(slug)}:v${now - offset}`);
     }
 
-    return NextResponse.json({ ok: true, slug, ...payload });
+    const purged: string[] = [];
+    for (const key of ogKeys) {
+      try {
+        await kvDelete(key);
+        purged.push(key);
+      } catch {
+        // ignore
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      slug,
+      ...payload,
+      purgedCount: purged.length,
+      ogUrl: `https://mikoroku.top/og/series/${encodeURIComponent(slug)}?v=${updatedAt}`,
+    });
   } catch (error) {
     console.error("[sync-seo]", error);
     return NextResponse.json({ error: "failed to sync seo" }, { status: 500 });
@@ -74,6 +95,7 @@ export async function DELETE(req: NextRequest) {
     }
     await kvDelete(seoCacheKey(slug));
     await kvDelete(CacheKeys.ogSeries(slug));
+    await kvDelete(`${CacheKeys.ogSeries(slug)}:v0`);
     return NextResponse.json({ ok: true, slug });
   } catch {
     return NextResponse.json({ error: "failed" }, { status: 500 });

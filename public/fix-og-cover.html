@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mikoroku — Fix OG Cover</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --border: #2a2f3d;
+      --text: #e8eaf0;
+      --muted: #9aa3b5;
+      --accent: #7c5cff;
+      --ok: #3dd68c;
+      --err: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #2a1f55 0%, transparent 50%), var(--bg);
+      color: var(--text);
+      padding: 32px 16px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.4rem; margin: 0 0 6px; }
+    p.sub { color: var(--muted); margin: 0 0 24px; font-size: 0.92rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 6px; }
+    input, textarea {
+      width: 100%;
+      background: #12151e;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      margin-bottom: 14px;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .primary { background: var(--accent); color: white; }
+    .secondary { background: #2a2f3d; color: var(--text); }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+    .log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      background: #0c0e14;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      min-height: 120px;
+      color: #c5d0e6;
+    }
+    .preview {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .preview img {
+      width: 120px;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #000;
+    }
+    .ok { color: var(--ok); }
+    .err { color: var(--err); }
+    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+    a { color: #a78bfa; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Fix OG Cover — Mikoroku</h1>
+    <p class="sub">
+      Jalankan di tab yang sudah login admin di <code>mikoroku.top</code>
+      (same-origin). Tool ini menulis SEO KV + purge cache OG, lalu warm image baru.
+    </p>
+
+    <div class="card">
+      <label>Base URL</label>
+      <input id="base" value="https://mikoroku.top" />
+
+      <div class="row">
+        <div>
+          <label>Slug *</label>
+          <input id="slug" value="ore-wa-seikan-kokka-no-akutoku-ryoshu" />
+        </div>
+        <div>
+          <label>Title</label>
+          <input id="title" value="Ore wa Seikan Kokka no Akutoku Ryoshu" />
+        </div>
+      </div>
+
+      <label>Cover URL * (harus https, cover yang benar)</label>
+      <input id="cover" value="https://i.ibb.co/1YDnX4Fp/81-Pz-alu-EL-SL1500.jpg" />
+
+      <label>Description (opsional)</label>
+      <textarea id="desc">Setelah menjalani kehidupan yang penuh pengkhianatan di Bumi, Liam bereinkarnasi sebagai bangsawan di sebuah kekaisaran antarbintang.</textarea>
+
+      <div class="actions">
+        <button class="primary" id="btnFix">1. Sync + Purge</button>
+        <button class="secondary" id="btnWarm">2. Warm OG baru</button>
+        <button class="secondary" id="btnOpen">Buka OG di tab baru</button>
+      </div>
+      <p class="hint">
+        Setelah Sync, klik <b>Warm OG baru</b> supaya PNG di-generate ulang.
+        Kalau masih lama, hard-refresh / incognito URL OG dengan query <code>?v=...</code> dari log.
+      </p>
+    </div>
+
+    <div class="card">
+      <label>Preview cover sumber</label>
+      <div class="preview">
+        <img id="coverPreview" alt="cover" src="" />
+        <div>
+          <div id="status" class="hint">Siap.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Log</label>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const logEl = $("log");
+    let lastOgUrl = "";
+
+    function log(msg, cls) {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function refreshPreview() {
+      const url = $("cover").value.trim();
+      $("coverPreview").src = url || "";
+    }
+    $("cover").addEventListener("input", refreshPreview);
+    refreshPreview();
+
+    async function postJson(path, body) {
+      const base = $("base").value.replace(/\/$/, "");
+      const res = await fetch(base + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) {
+        throw new Error(`${path} → HTTP ${res.status}: ${text.slice(0, 300)}`);
+      }
+      return data;
+    }
+
+    $("btnFix").onclick = async () => {
+      const slug = $("slug").value.trim();
+      const cover = $("cover").value.trim();
+      const title = $("title").value.trim();
+      const description = $("desc").value.trim();
+      const updatedAt = Date.now();
+
+      if (!slug || !cover) {
+        log("slug dan cover wajib diisi", "err");
+        return;
+      }
+      if (!/^https?:\/\//i.test(cover)) {
+        log("cover harus URL http(s)", "err");
+        return;
+      }
+
+      $("status").textContent = "Menulis SEO cache + purge OG...";
+      try {
+        log(`sync-cover slug=${slug}`);
+        const sync = await postJson("/api/admin/sync-cover", {
+          slug,
+          title,
+          description,
+          cover,
+          updatedAt,
+        });
+        log("sync-cover OK: " + JSON.stringify(sync), "ok");
+        lastOgUrl = sync.ogUrl || `${$("base").value.replace(/\/$/, "")}/og/series/${encodeURIComponent(slug)}?v=${updatedAt}`;
+
+        log("purge-og ekstra...");
+        const purge = await postJson("/api/admin/purge-og", {
+          slug,
+          versions: [updatedAt, 0],
+        });
+        log("purge-og OK: deleted=" + (purge.deletedCount || 0), "ok");
+
+        $("status").innerHTML = `Selesai sync. OG URL: <a href="${lastOgUrl}" target="_blank" rel="noopener">${lastOgUrl}</a>`;
+        log("Lanjut klik Warm OG baru", "ok");
+      } catch (e) {
+        log(String(e.message || e), "err");
+        $("status").textContent = "Gagal. Pastikan kamu buka tool ini dari origin mikoroku.top (atau allow CORS) dan sudah login admin.";
+      }
+    };
+
+    $("btnWarm").onclick = async () => {
+      const slug = $("slug").value.trim();
+      const base = $("base").value.replace(/\/$/, "");
+      const v = Date.now();
+      const url = lastOgUrl || `${base}/og/series/${encodeURIComponent(slug)}?v=${v}`;
+      lastOgUrl = url;
+      $("status").textContent = "Warming OG...";
+      log("GET " + url);
+      try {
+        const res = await fetch(url, { cache: "no-store", credentials: "omit" });
+        const buf = await res.arrayBuffer();
+        log(`warm HTTP ${res.status}, bytes=${buf.byteLength}`, res.ok && buf.byteLength > 1000 ? "ok" : "err");
+        if (res.ok && buf.byteLength > 1000) {
+          $("status").innerHTML = `OG regenerated. <a href="${url}" target="_blank" rel="noopener">Buka gambar</a>`;
+        } else {
+          $("status").textContent = "Warm gagal / body kosong. Cek log Worker & OG service.";
+        }
+      } catch (e) {
+        log(String(e.message || e), "err");
+      }
+    };
+
+    $("btnOpen").onclick = () => {
+      const slug = $("slug").value.trim();
+      const base = $("base").value.replace(/\/$/, "");
+      const url = lastOgUrl || `${base}/og/series/${encodeURIComponent(slug)}?v=${Date.now()}`;
+      window.open(url, "_blank", "noopener");
+    };
+  </script>
+</body>
+</html>
