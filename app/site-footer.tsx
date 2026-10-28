@@ -61,7 +61,7 @@ export default function SiteFooter() {
         id="mainFooter"
         className="relative mt-10 w-full overflow-hidden bg-transparent py-[50px] text-[#858585] transition-[margin,width] duration-300 max-[600px]:mt-[30px] max-[600px]:px-[15px] max-[600px]:pt-10 max-[600px]:pb-[30px] min-[768px]:py-[60px]"
       >
-        <div className="mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 bg-black/10 px-[30px] py-[22px] backdrop-blur-xl max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7">
+        <div className="site-footer-card mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 bg-black/10 px-[30px] py-[22px] backdrop-blur-xl max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7">
         <nav className="flex flex-wrap gap-4 max-[600px]:justify-center" aria-label="Informasi situs">
           <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="/privacy">Privacy Policy</a>
           <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" href="/dmca">DMCA</a>

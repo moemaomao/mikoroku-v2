@@ -18,3 +18,50 @@
     }
   }
 }
+
+html.light .bookmark-route {
+  --bookmark-bg: #f8f9fa;
+  --bookmark-text: #111827;
+  --bookmark-container: #ffffff;
+  --bookmark-header: #ffffff;
+  --bookmark-card: rgba(15, 23, 42, 0.05);
+  --bookmark-card-hover: rgba(15, 23, 42, 0.1);
+  --bookmark-muted: #666666;
+  --bookmark-cover: #dddddd;
+}
+
+html.light .bookmark-route .bookmark-container {
+  background-color: var(--bookmark-container);
+}
+
+html.light .commission-page {
+  color: #1e293b;
+  background:
+    radial-gradient(ellipse at top, rgba(217, 70, 239, .12), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(244, 63, 94, .1), transparent 40%),
+    #f8f9fa;
+}
+
+html.light .commission-card,
+html.light [data-route-card="settings"] {
+  background-color: #ffffff;
+}
+
+html.light [data-route-card="settings-inset"] {
+  background-color: #f8fafc;
+}
+
+html.light [data-route-card="settings-toggle"],
+html.light [data-route-card="settings-option"] {
+  background-color: #f1f5f9;
+}
+
+html.light .legal-page-card {
+  background-color: #ffffff;
+}
+
+html.light #mainFooter .site-footer-card {
+  border-color: rgba(15, 23, 42, .12);
+  background-color: rgba(255, 255, 255, .86);
+  color: #334155;
+}

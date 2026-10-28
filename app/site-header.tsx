@@ -251,7 +251,7 @@ function SidebarLink({
   external?: boolean;
 }) {
   const classes =
-    "flex w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-indigo-100/80 no-underline transition hover:bg-white/10 hover:text-white";
+    "flex w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-slate-900 no-underline transition hover:bg-white/75 hover:text-black dark:text-indigo-50/90 dark:hover:bg-white/10 dark:hover:text-white";
   const content = <><Icon name={icon} className="h-5 w-5 shrink-0" />{children}</>;
   return external ? (
     <a className={classes} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{content}</a>
@@ -1089,7 +1089,7 @@ function HeaderContents() {
         aria-hidden={!sidebarOpen}
         inert={!sidebarOpen}
         aria-label="Navigation menu"
-        className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto border-r border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.74)_0%,rgba(248,250,252,0.96)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[18px_14px] text-indigo-950 transition-transform duration-300 ease-in-out dark:border-white/15 dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] min-[769px]:transition-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto border-r border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.92)_0%,rgba(248,250,252,0.98)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[18px_14px] text-indigo-950 transition-transform duration-300 ease-in-out dark:border-white/15 dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] min-[769px]:transition-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5 pb-[18px] pt-1">
           <a href="/" aria-label="Mikoroku home" onClick={() => mobile && closeSidebar()} className="flex h-[42px] shrink-0 items-center">
