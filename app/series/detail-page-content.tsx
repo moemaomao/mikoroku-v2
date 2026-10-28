@@ -2176,8 +2176,30 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                       }`}
                       aria-hidden="true"
                     >
-                      <span className={`text-[13px] ${isRead ? "text-[#22c55e]" : "text-[#f59e0b]"}`}>
-                        <i className={`fas ${isRead ? "fa-eye" : "fa-eye-slash"}`} />
+                      <span className={`inline-flex ${isRead ? "text-[#22c55e]" : "text-[#f59e0b]"}`}>
+                        <svg
+                          viewBox="0 0 32 32"
+                          width="18"
+                          height="18"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          {isRead ? (
+                            <>
+                              <path d="M7 10 3 6M16 9V3M25 10l4-4" />
+                              <path d="M3 17Q16 5 29 17Q16 29 3 17Z" />
+                              <circle cx="16" cy="17" r="3" />
+                            </>
+                          ) : (
+                            <>
+                              <path d="M4 14Q16 27 28 14" />
+                              <path d="M7 21 5 26M16 21v7M25 21l2 5" />
+                            </>
+                          )}
+                        </svg>
                       </span>
                       <span className={`chapter-source-badge text-[9px] font-extrabold uppercase leading-none tracking-[0.2px] [text-shadow:0_0_2px_rgba(0,0,0,0.9),0_1px_2px_rgba(0,0,0,0.85)] max-[480px]:text-[8px] ${chapter.source === "blogger" ? "text-[#60a5fa]" : chapter.source === "blogger2" ? "text-[#fbbf24]" : "text-[#ef4444]"} ${view === "list" ? "text-[10px] [text-shadow:none]" : ""}`}
                       >
@@ -2193,10 +2215,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     }`}>
                       <span className={`chapter-title block font-bold leading-[1.15] ${
                         view === "list"
-                          ? `!text-sm ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
+                            ? `!text-sm ${isRead ? "!text-[#a1a1aa] dark:!text-[#71717a]" : "text-[#111] dark:text-white"}`
                           : view === "text-grid"
-                            ? `text-[12px] md:text-[12px] ${isRead ? "text-white" : "text-[#111] dark:text-white"}`
-                            : "text-[9px]"
+                              ? `text-[12px] md:text-[12px] ${isRead ? "!text-[#a1a1aa] dark:!text-[#71717a]" : "text-[#111] dark:text-white"}`
+                              : `text-[9px] ${isRead ? "opacity-60" : ""}`
                       }`}>
                         {view === "text-grid" ? (
                           <>
@@ -2209,10 +2231,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                       </span>
                       <span className={`chapter-date mt-0 block opacity-80 ${
                         view === "list"
-                          ? `text-[11px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
+                            ? `text-[11px] ${isRead ? "!text-[#71717a] dark:!text-[#52525b]" : "text-[#444] dark:text-[#ddd]"}`
                           : view === "text-grid"
-                            ? `text-[10px] opacity-70 md:text-[10px] ${isRead ? "text-[#ddd]" : "text-[#444] dark:text-[#ddd]"}`
-                            : "text-[7px]"
+                              ? `text-[10px] opacity-70 md:text-[10px] ${isRead ? "!text-[#71717a] dark:!text-[#52525b]" : "text-[#444] dark:text-[#ddd]"}`
+                              : `text-[7px] ${isRead ? "opacity-60" : ""}`
                       }`}>
                         {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
                       </span>
