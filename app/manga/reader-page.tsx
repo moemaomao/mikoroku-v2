@@ -1602,13 +1602,13 @@ export default function ReaderPage({
         <div className={`reader-bottom-middle grid min-w-0 w-full items-stretch ${data.kind === "manga" && data.images.length > 0 ? "grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] min-[761px]:grid-cols-3" : "grid-cols-1"}`}>
           <div className="reader-bottom-chapters relative z-[2] flex min-w-0 w-full border-r border-black/10 dark:border-white/10" ref={bottomChaptersRef}>
             <button className={`reader-bottom-button reader-bottom-list flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold text-[var(--mikoroku-accent)] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
-              <span className="reader-bottom-label min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"><strong aria-label={`Chapter ${data.chapter}`}><span className="reader-bottom-chapter-prefix hidden">Chapter </span>{data.chapter}</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron hidden sm:inline`} aria-hidden="true" />
+              <span className="reader-bottom-label min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"><strong aria-label={`Chapter ${data.chapter}`}>Ch. {data.chapter}</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron hidden sm:inline`} aria-hidden="true" />
             </button>
             {bottomChapterListOpen && <div className="reader-bottom-chapter-menu fixed bottom-[calc(100%+10px)] left-1/2 z-30 max-h-[min(58vh,440px)] w-[min(320px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-[15px] border border-black/10 bg-white p-2 shadow-xl min-[761px]:absolute min-[761px]:w-[min(320px,calc(100vw-32px))] dark:border-white/10 dark:bg-[#191a20]" role="listbox" aria-label="Chapter list">
               <div className="reader-bottom-menu-heading sticky top-[-8px] -mx-2 -mt-2 mb-1.5 flex min-h-[42px] items-center justify-between border-b border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-[#191a20]"><strong>{data.chapters.length} chapters</strong><button className="size-7 rounded-lg bg-black/5 text-lg dark:bg-white/10" type="button" onClick={() => setBottomChapterListOpen(false)} aria-label="Close chapter list">×</button></div>
               {[...data.chapters].reverse().map((item) => (
                 <button type="button" role="option" aria-selected={item === data.chapter} key={item} className={`flex min-h-[38px] w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-[var(--mikoroku-accent-soft)] font-bold text-[var(--mikoroku-accent)]" : ""}`} onClick={() => changeChapter(item)}>
-                  <span>Chapter {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
+                  <span>Ch. {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
                 </button>
               ))}
             </div>}
@@ -1639,7 +1639,7 @@ export default function ReaderPage({
                 aria-expanded={bottomPageListOpen}
                 onClick={() => setBottomPageListOpen((open) => !open)}
               >
-                <span className="reader-bottom-label"><strong>{page} / {data.images.length}</strong></span>
+                <span className="reader-bottom-label"><strong>Pg. {page}/{data.images.length}</strong></span>
                 <i className={`fas ${bottomPageListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
               </button>
               {bottomPageListOpen && <div className="reader-bottom-page-menu fixed bottom-[calc(100%+8px)] left-1/2 z-30 max-h-[min(58vh,420px)] w-[min(280px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-xl border border-[var(--mikoroku-reader-page-soft)] bg-white p-2 shadow-xl min-[761px]:absolute dark:bg-[#191a20]" role="listbox" aria-label="Jump to page">

@@ -181,7 +181,7 @@ body.light #mainFooter p {
 }
 
 .reader-bottom-nav button:disabled {
-  opacity: .78 !important;
+  opacity: .4 !important;
 }
 
 main.route-page-background [data-route-card="settings"] {
