@@ -488,6 +488,36 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    const isSeriesShellDocument =
+      url.pathname === "/series-shell" &&
+      (request.method === "GET" || request.method === "HEAD") &&
+      request.headers.get("rsc") !== "1" &&
+      !url.searchParams.has("_rsc");
+
+    if (env.ASSETS && isSeriesShellDocument) {
+      const assetUrl = new URL("/series-shell.html", url.origin);
+      const assetRequest = new Request(assetUrl, request);
+      const response = await env.ASSETS.fetch(assetRequest);
+      if (response.status === 404) {
+        await response.body?.cancel();
+        return new Response("Static series shell is missing. Rebuild and deploy the Worker assets.", {
+          status: 503,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+
+      const headers = new Headers(response.headers);
+      headers.set(
+        "cache-control",
+        "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+      );
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+
     if (env.ASSETS && shouldServeSeriesShell(request, url)) {
       const encodedSlug = url.pathname.match(/^\/series\/([^/]+)\/?$/)?.[1];
       if (!encodedSlug) return new Response("Invalid series URL.", { status: 400 });
