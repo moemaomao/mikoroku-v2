@@ -15,7 +15,6 @@ import { SERIES_COVER_PREFERENCE_STORAGE_KEY } from "../lib/series-cover-prefere
 import RecommendationSidebar from "./recommendation-sidebar";
 import ReaderServerNotice from "./reader-server-notice";
 import SiteFooter from "../site-footer";
-import SiteHeader from "../site-header";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient } from "../lib/firebase-client";
 import {
@@ -1736,8 +1735,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   if (state === "loading") {
     return (
       <>
-        <SiteHeader />
-        <BannerAdSlot placement="site-top" />
         <main className={`detail-route ${detailPageClasses}`}>
           <div className="detail-route-loading" role="status" aria-label="Memuat detail manga">
             <span className="detail-route-spinner" aria-hidden="true" />
@@ -1751,8 +1748,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   if (state === "not-found") {
     return (
       <>
-        <SiteHeader />
-        <BannerAdSlot placement="site-top" />
         <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
           <p className="detail-route-message" role="status">Manga tidak ditemukan.</p>
         </main>
@@ -1764,8 +1759,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   if (state === "error" || !manga) {
     return (
       <>
-        <SiteHeader />
-        <BannerAdSlot placement="site-top" />
         <main className={`detail-route ${detailPageClasses}`}>
           <p className="detail-route-message" role="alert">Detail manga gagal dimuat. Coba muat ulang halaman.</p>
         </main>
@@ -1783,8 +1776,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
   return (
     <>
-      <SiteHeader />
-      <BannerAdSlot placement="site-top" />
       <div
         className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-0 w-full bg-cover bg-center bg-no-repeat opacity-[0.22] transition-[background-image,opacity] duration-500 dark:opacity-100 max-md:h-[100dvh] max-md:min-h-[100dvh]"
         id="bgLayer"
