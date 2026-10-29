@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import {
   cardClass,
@@ -704,7 +703,6 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
   refreshRef.current = refresh;
 
   useEffect(() => {
-    setHeroContainer(document.getElementById("home-hero-container"));
     window.mangaData ||= {};
     window.chapterMap ||= {};
     window.chapterDateMap ||= {};
@@ -800,55 +798,6 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
 
   return (
     <>
-      {heroContainer && createPortal(
-        <div
-          id="heroSection"
-          className="relative mx-[10px] mb-6 block aspect-[21/6] h-auto max-h-[260px] min-h-[230px] w-[calc(100%-20px)] overflow-hidden rounded-[18px] bg-[#0d0d0d] shadow-[0_12px_40px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,255,255,0.06)] [contain:layout_style_size] transition-[margin-left,width] duration-300 max-[767px]:mb-4 max-[767px]:min-h-[220px] max-[767px]:rounded-[14px] min-[769px]:[body.sidebar-open_&]:ml-[calc(var(--sidebar-width)+10px)] min-[769px]:[body.sidebar-open_&]:mr-[10px] min-[769px]:[body.sidebar-open_&]:w-[calc(100%-var(--sidebar-width)-20px)] min-[769px]:[body:not(.sidebar-open)_&]:mx-[10px] min-[769px]:[body:not(.sidebar-open)_&]:w-[calc(100%-20px)] [&_.hero-nav]:!bg-[var(--mikoroku-hero-nav)] [&_.hero-nav]:!text-white [&_.hero-dot]:!bg-[var(--mikoroku-hero-dot)] [&_.hero-dot.is-active]:!bg-[var(--mikoroku-hero-dot-active)]"
-        >
-          {heroItems.length > 0 && (
-            <>
-              <div className="flex h-full min-h-[inherit] w-full transition-transform duration-[650ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] [will-change:transform]" style={{ transform: `translateX(-${heroPage * 100}%)` }}>
-                {heroItems.map((item, index) => {
-                  const image = thumbnail(item.img || item.cover, Number(item.updatedAt || 0));
-                  const manga = mangaForMetadata(item, getMetadata(item, metadata));
-                  return (
-                    <a
-                      className="group/hero relative box-border flex h-full min-h-[inherit] basis-1/3 min-w-1/3 shrink-0 overflow-hidden border-r border-white/[0.08] text-white no-underline last:border-r-0 max-[1199px]:min-[768px]:basis-1/2 max-[1199px]:min-[768px]:min-w-1/2 max-[767px]:min-h-[220px] max-[767px]:basis-full max-[767px]:min-w-full max-[767px]:border-r-0"
-                      href={`/series/${encodeURIComponent(String(item.slug || slugify(item.title)))}`}
-                      key={`${normalize(item.title)}-${index}`}
-                      onClick={() => {
-                        try { localStorage.setItem("currentManga", JSON.stringify(manga)); } catch { /* ignore */ }
-                      }}
-                    >
-                      <div className="absolute inset-0 scale-[1.05] bg-cover bg-center transition-transform duration-500 group-hover/hero:scale-110" style={{ backgroundImage: `url("${image}")` }} />
-                      <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(to_top,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.65)_35%,rgba(0,0,0,0.25)_60%,rgba(0,0,0,0.1)_100%)]" />
-                      <div className="relative z-[2] flex h-full min-h-[inherit] items-center gap-[14px] p-[14px_18px] max-[767px]:min-h-[220px] max-[767px]:p-4">
-                        <img className="h-[140px] w-24 shrink-0 rounded-[9px] object-cover shadow-[0_10px_28px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.1)] transition-[transform,box-shadow] duration-300 group-hover/hero:scale-105 group-hover/hero:shadow-[0_12px_32px_rgba(0,0,0,0.65)] max-[767px]:h-[136px] max-[767px]:w-[92px] max-[767px]:rounded-lg" src={image} alt={item.title} width="108" height="158" loading={index < heroVisibleCount ? "eager" : "lazy"} decoding="async" fetchPriority={index < heroVisibleCount ? "high" : "auto"} />
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                          <h2 className="mb-1.5 line-clamp-2 break-words text-[16.5px] font-bold leading-[1.3] tracking-[-0.01em] [text-shadow:0_2px_12px_rgba(0,0,0,0.6)] max-[767px]:text-base">{item.title}</h2>
-                          {item.desc && <p className="m-0 line-clamp-3 break-words text-xs leading-[1.4] opacity-[0.85] [text-shadow:0_1px_8px_rgba(0,0,0,0.5)]">{String(item.desc).slice(0, 140)}</p>}
-                        </div>
-                      </div>
-                    </a>
-                  );
-                })}
-              </div>
-              {heroItems.length > heroVisibleCount && (
-                <>
-                  <button type="button" className="absolute left-[10px] top-1/2 z-[15] flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-xl leading-none text-white opacity-[0.85] backdrop-blur-[10px] transition-all duration-200 hover:scale-[1.08] hover:border-white/35 hover:bg-white/[0.18] hover:opacity-100 active:scale-[0.96] max-[767px]:left-2 max-[767px]:h-[34px] max-[767px]:w-[34px]" aria-label="Prev" onClick={() => setHeroPage((page) => page <= 0 ? maxHeroPage : page - 1)}>‹</button>
-                  <button type="button" className="absolute right-[10px] top-1/2 z-[15] flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/45 text-xl leading-none text-white opacity-[0.85] backdrop-blur-[10px] transition-all duration-200 hover:scale-[1.08] hover:border-white/35 hover:bg-white/[0.18] hover:opacity-100 active:scale-[0.96] max-[767px]:right-2 max-[767px]:h-[34px] max-[767px]:w-[34px]" aria-label="Next" onClick={() => setHeroPage((page) => page >= maxHeroPage ? 0 : page + 1)}>›</button>
-                  <div className="absolute inset-x-0 bottom-[10px] z-[15] flex justify-center gap-[7px]">
-                    {Array.from({ length: maxHeroPage + 1 }, (_, index) => (
-                      <button type="button" key={index} className={`h-[7px] w-[7px] rounded-full border-0 bg-white/30 p-0 transition-all duration-300 hover:scale-[1.2] hover:bg-white/[0.55] ${index === heroPage ? "!w-5 !rounded-[10px] !bg-white shadow-[0_0_10px_rgba(255,255,255,0.4)]" : ""}`} aria-label={`Slide ${index + 1}`} onClick={() => setHeroPage(index)} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>,
-        heroContainer,
-      )}
       {children}
       <div id="githubManga" className={catalogGridClass}>
         {error ? (
