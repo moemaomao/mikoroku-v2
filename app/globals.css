@@ -185,6 +185,27 @@ body.light #mainFooter p {
   color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
 }
 
+.reader-bottom-nav .reader-bottom-previous {
+  border-top-left-radius: 10px !important;
+  border-bottom-left-radius: 10px !important;
+}
+
+.reader-bottom-nav .reader-bottom-next {
+  border-top-right-radius: 10px !important;
+  border-bottom-right-radius: 10px !important;
+}
+
+@media (min-width: 761px) {
+  .reader-bottom-nav .reader-bottom-previous {
+    border-top-left-radius: 14px !important;
+    border-bottom-left-radius: 14px !important;
+  }
+  .reader-bottom-nav .reader-bottom-next {
+    border-top-right-radius: 14px !important;
+    border-bottom-right-radius: 14px !important;
+  }
+}
+
 .reader-bottom-nav button,
 .reader-bottom-nav button i,
 .reader-bottom-nav button svg {

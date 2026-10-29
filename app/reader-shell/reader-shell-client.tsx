@@ -67,7 +67,13 @@ export default function ReaderShellClient() {
   if (!reader) {
     return (
       <main className="grid min-h-screen place-items-center" role="status" aria-label="Loading reader">
-        <span className="size-10 animate-spin rounded-full border-[3px] border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />
+        <div className="flex flex-col items-center gap-3">
+          <span
+            className="size-10 animate-spin rounded-full border-[3px] border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
+            aria-hidden="true"
+          />
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Loading series...</span>
+        </div>
       </main>
     );
   }

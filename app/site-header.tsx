@@ -981,7 +981,7 @@ function HeaderContents() {
               }}
               className={classButton}
             >
-              <svg id="headerBookmarkIcon" className="h-6 w-6" viewBox="0 0 24 24" fill={hasBookmarks ? "#ffcc00" : "none"} stroke={hasBookmarks ? "none" : "currentColor"} strokeWidth="2" aria-hidden="true">
+              <svg id="headerBookmarkIcon" className="h-6 w-6" viewBox="0 0 24 24" fill={hasBookmarks ? "#ffcc00" : "none"} stroke={hasBookmarks ? (dark ? "#ffffff" : "#111827") : "currentColor"} strokeWidth="2" aria-hidden="true">
                 <path d="M6 4h12v18l-6-4-6 4V4z" />
               </svg>
             </button>

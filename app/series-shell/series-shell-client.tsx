@@ -37,8 +37,11 @@ export default function SeriesShellClient() {
 
   if (!slug) {
     return (
-      <main className="grid min-h-screen place-items-center" role="status" aria-label="Loading series">
-        <span className="size-10 animate-spin rounded-full border-[3px] border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />
+      <main className="grid min-h-screen place-items-center" role="status" aria-label="Memuat detail manga">
+        <span
+          className="h-[42px] w-[42px] animate-spin rounded-full border-4 border-[rgba(128,128,128,0.25)] border-t-current"
+          aria-hidden="true"
+        />
       </main>
     );
   }

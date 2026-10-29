@@ -1852,7 +1852,7 @@ export default function ReaderPage({
         {downloading && <span className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 overflow-hidden rounded-t-[10px] bg-black/10 min-[761px]:rounded-t-[14px] dark:bg-white/10" aria-hidden="true">
           <span className="block h-full bg-[var(--mikoroku-accent)] transition-[width] duration-200" style={{ width: `${downloadProgress}%` }} />
         </span>}
-        <button className="reader-bottom-button reader-bottom-previous flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-r border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 min-[761px]:text-sm dark:border-white/10" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
+        <button className="reader-bottom-button reader-bottom-previous flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-r border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 min-[761px]:text-sm dark:border-white/10 rounded-l-[10px] min-[761px]:rounded-l-[14px]" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
           <i className="fas fa-chevron-left" aria-hidden="true" /><span className="reader-bottom-label"><strong>Prev</strong></span>
         </button>
         <div className={`reader-bottom-middle grid min-w-0 w-full items-stretch ${data.kind === "manga" && data.images.length > 0 ? "grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] min-[761px]:grid-cols-3" : "grid-cols-1"}`}>
@@ -1924,7 +1924,7 @@ export default function ReaderPage({
             </div>
           )}
         </div>
-        <button className="reader-bottom-button reader-bottom-next flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-l border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 dark:border-white/10" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
+        <button className="reader-bottom-button reader-bottom-next flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-l border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 dark:border-white/10 rounded-r-[10px] min-[761px]:rounded-r-[14px]" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
           <span className="reader-bottom-label"><strong>Next</strong></span><i className="fas fa-chevron-right" aria-hidden="true" />
         </button>
       </nav>}
