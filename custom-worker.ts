@@ -76,6 +76,14 @@ function isSharePage(pathname: string): boolean {
   return /^\/(?:series\/[^/]+|manga\/[^/]+\/[^/]+|novel\/[^/]+\/[^/]+)\/?$/.test(pathname);
 }
 
+function shouldServeSeriesShell(request: Request, url: URL): boolean {
+  return request.method === "GET" &&
+    /^\/series\/[^/]+\/?$/.test(url.pathname) &&
+    request.headers.get("rsc") !== "1" &&
+    !url.searchParams.has("_rsc") &&
+    !isSocialCrawler(request);
+}
+
 async function serveSocialMetadataFallback(
   request: Request,
   response: Response,
@@ -480,6 +488,20 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    if (env.ASSETS && shouldServeSeriesShell(request, url)) {
+      const encodedSlug = url.pathname.match(/^\/series\/([^/]+)\/?$/)?.[1];
+      if (!encodedSlug) return new Response("Invalid series URL.", { status: 400 });
+      let slug: string;
+      try {
+        slug = decodeURIComponent(encodedSlug);
+      } catch {
+        return new Response("Invalid series slug.", { status: 400 });
+      }
+      const shellUrl = new URL("/series-shell", url.origin);
+      shellUrl.searchParams.set("slug", slug);
+      return Response.redirect(shellUrl, 307);
+    }
+
     const isHomepageDocument =
       url.pathname === "/" &&
       (request.method === "GET" || request.method === "HEAD") &&
