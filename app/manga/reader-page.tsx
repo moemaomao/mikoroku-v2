@@ -1157,7 +1157,7 @@ export default function ReaderPage({
         }
         setData(result);
         if (result.kind === "manga") {
-          void writeCachedReaderData(slug, result).catch((cacheError: unknown) => {
+          void writeCachedReaderData(slug, { ...result, kind: "manga" }).catch((cacheError: unknown) => {
             console.warn("Could not cache the loaded reader chapter.", cacheError);
           });
         }
