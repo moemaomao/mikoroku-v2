@@ -1517,7 +1517,7 @@ export default function AdminPage() {
         doc(firestore, "meta", "mangaSummary"),
         {
           readerServerNotice: readerNoticeConfig,
-          readerServerNoticeUpdatedAt: Date.now(),
+          r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8: Date.now(),
         },
         { merge: true },
       );
@@ -2024,7 +2024,6 @@ export default function AdminPage() {
     try {
       const clipboardHtml = event.clipboardData.getData("text/html") || "";
       const clipboardText = event.clipboardData.getData("text/plain") || "";
-      // Prefer plain text for long Blogger URLs to avoid heavy HTML parsing
       const preferText = clipboardText.length > 0 && (
         clipboardText.includes("blogger.googleusercontent.com") ||
         clipboardText.includes("http") && clipboardHtml.length > 100_000
@@ -2054,7 +2053,6 @@ export default function AdminPage() {
       });
     } catch (err) {
       console.error("pasteChapterImages failed:", err);
-      // Let default paste happen so user still gets the text
     }
   }
 
@@ -2082,6 +2080,24 @@ export default function AdminPage() {
       ...current,
       images: chapterImageUrls.filter((_, imageIndex) => imageIndex !== index).join("\n"),
     }));
+  }
+
+  function updateChapterImageUrl(index: number, newUrl: string) {
+    const next = [...chapterImageUrls];
+    next[index] = newUrl.trim();
+    setChapterDraft((current) => ({
+      ...current,
+      images: next.join("\n"),
+    }));
+  }
+
+  async function copyChapterImageUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setUploadNotice({ status: "success", message: "URL copied to clipboard." });
+    } catch {
+      setUploadNotice({ status: "error", message: "Failed to copy URL." });
+    }
   }
 
   async function openMangaChapters(item: MangaRecord) {
@@ -3379,14 +3395,83 @@ export default function AdminPage() {
                 <input ref={chapterFilesInput} type="file" accept="image/*" multiple />
                 <button type="button" className={styles.secondaryButton} onClick={() => void uploadChapterFiles()} disabled={busy}>Upload All</button>
               </div>
-              <textarea rows={4} placeholder="Paste image URLs or copied image markup here (1 image = 1 page)" value={chapterDraft.images} onPaste={pasteChapterImages} onChange={(event) => setChapterDraft((current) => ({ ...current, images: event.target.value }))} />
+              <textarea
+                rows={3}
+                placeholder="Paste image URLs or copied image markup here (1 image = 1 page). Then click Clean & List."
+                value={chapterDraft.images}
+                onPaste={pasteChapterImages}
+                onChange={(event) => setChapterDraft((current) => ({ ...current, images: event.target.value }))}
+              />
               <div className={styles.imageListToolbar}>
-                <button type="button" className={styles.secondaryButton} onClick={addChapterImageUrls}>＋ Add to List</button>
+                <button type="button" className={styles.secondaryButton} onClick={addChapterImageUrls}>＋ Clean &amp; List</button>
                 <button type="button" className={styles.secondaryButton} onClick={sortChapterImages}>⇅ Sort by Name</button>
                 <button type="button" className={styles.secondaryButton} onClick={() => setChapterDraft((c) => ({ ...c, images: "", thumbnail: c.thumbnail }))}>Clear Images</button>
                 <button type="button" className={styles.secondaryButton} onClick={() => setImageReloadKey((k) => k + 1)} title="Hard reload all preview images">↻ Reload Previews</button>
                 <span>{chapterImageUrls.length ? `${chapterImageUrls.length} images` : ""}</span>
               </div>
+
+              {/* Separate URL fields (one per image) — scrollable */}
+              {chapterImageUrls.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                    marginBottom: "12px",
+                    maxHeight: "180px",
+                    overflowY: "auto",
+                    paddingRight: "4px",
+                  }}
+                >
+                  {chapterImageUrls.map((url, index) => (
+                    <div
+                      key={`url-row-${index}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 8px",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(128,128,128,0.25)",
+                        background: "rgba(0,0,0,0.15)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{ minWidth: "22px", fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>{index + 1}</span>
+                      <input
+                        type="text"
+                        value={url}
+                        onChange={(event) => updateChapterImageUrl(index, event.target.value)}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: "12px",
+                          padding: "5px 8px",
+                          borderRadius: "5px",
+                          border: "1px solid rgba(128,128,128,0.35)",
+                          background: "rgba(0,0,0,0.2)",
+                          color: "inherit",
+                        }}
+                        aria-label={`Image URL page ${index + 1}`}
+                      />
+                      <button
+                        type="button"
+                        className={styles.secondaryButton}
+                        style={{ padding: "4px 10px", fontSize: "11px", whiteSpace: "nowrap" }}
+                        onClick={() => void copyChapterImageUrl(url)}
+                        title="Copy URL"
+                      >
+                        Copy
+                      </button>
+                      <button type="button" className={styles.secondaryButton} style={{ padding: "4px 6px", fontSize: "12px" }} onClick={() => moveChapterImage(index, -1)} aria-label="Move up">↑</button>
+                      <button type="button" className={styles.secondaryButton} style={{ padding: "4px 6px", fontSize: "12px" }} onClick={() => moveChapterImage(index, 1)} aria-label="Move down">↓</button>
+                      <button type="button" className={styles.deleteButton} style={{ padding: "4px 6px", fontSize: "12px" }} onClick={() => removeChapterImage(index)} aria-label="Remove">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Image previews (original style) */}
               <div className={styles.uploadedImageGrid}>
                 {chapterImageUrls.map((url, index) => (
                   <div
@@ -3418,7 +3503,6 @@ export default function AdminPage() {
                         const el = e.currentTarget;
                         const attempt = Number(el.dataset.attempt || "0");
                         if (attempt === 0) {
-                          // 1st fail → try weserv proxy
                           el.dataset.attempt = "1";
                           try {
                             const proxy = new URL("https://images.weserv.nl/");
@@ -3432,7 +3516,6 @@ export default function AdminPage() {
                             el.src = adminPreviewSrc(url, imageReloadKey + 1);
                           }
                         } else if (attempt === 1) {
-                          // 2nd fail → cache-bust direct
                           el.dataset.attempt = "2";
                           el.src = adminPreviewSrc(url, imageReloadKey + 2);
                         }
