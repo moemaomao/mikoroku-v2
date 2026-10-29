@@ -11,6 +11,7 @@ type ReaderRoute = {
 
 export default function ReaderShellClient() {
   const [reader, setReader] = useState<ReaderRoute | null>(null);
+  const [invalidRoute, setInvalidRoute] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -22,6 +23,7 @@ export default function ReaderShellClient() {
       !slug ||
       !chapter
     ) {
+      setInvalidRoute(true);
       return;
     }
 
@@ -33,6 +35,18 @@ export default function ReaderShellClient() {
     window.history.replaceState(null, "", query ? `${path}?${query}` : path);
     setReader({ kind, slug, chapter });
   }, []);
+
+  if (invalidRoute) {
+    return (
+      <main className="grid min-h-screen place-items-center px-6 text-center">
+        <div>
+          <h1 className="text-xl font-semibold">Reader page could not be opened</h1>
+          <p className="mt-2 text-sm text-white/70">Open a chapter from its manga or novel page.</p>
+          <a className="mt-4 inline-block underline" href="/">Go to homepage</a>
+        </div>
+      </main>
+    );
+  }
 
   if (!reader) {
     return (

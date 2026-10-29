@@ -177,6 +177,7 @@ async function serveStaticPage(
   }
 
   const headers = new Headers(response.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
   headers.set(
     "cache-control",
     "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
@@ -592,6 +593,13 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    if (
+      url.pathname.startsWith("/__static_pages/") &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      return Response.redirect(new URL("/", url.origin), 302);
+    }
+
     const staticPage = await serveStaticPage(request, url, env);
     if (staticPage) return staticPage;
 
