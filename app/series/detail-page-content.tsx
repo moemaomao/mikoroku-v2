@@ -404,12 +404,92 @@ function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source
   });
 }
 
-function getCachedManga(slug: string): Manga | null {
+const SERIES_DETAIL_CACHE_DB = "mikoroku-series-detail-cache";
+const SERIES_DETAIL_CACHE_STORE = "details";
+const SERIES_DETAIL_CACHE_TTL = 15 * 60 * 1000;
+
+type SeriesDetailCacheEntry = {
+  slug: string;
+  time: number;
+  data: Manga;
+};
+
+function openSeriesDetailCache(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(SERIES_DETAIL_CACHE_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(SERIES_DETAIL_CACHE_STORE)) {
+        request.result.createObjectStore(SERIES_DETAIL_CACHE_STORE, { keyPath: "slug" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Could not open the series detail cache."));
+    request.onblocked = () => reject(new Error("Series detail cache is blocked by another browser tab."));
+  });
+}
+
+async function readIndexedDbManga(slug: string): Promise<Manga | null> {
+  if (!("indexedDB" in window)) return null;
+  const database = await openSeriesDetailCache();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(SERIES_DETAIL_CACHE_STORE, "readonly");
+    const request = transaction.objectStore(SERIES_DETAIL_CACHE_STORE).get(slug);
+    let manga: Manga | null = null;
+    request.onsuccess = () => {
+      const entry = request.result as SeriesDetailCacheEntry | undefined;
+      if (entry?.data && Date.now() - entry.time < SERIES_DETAIL_CACHE_TTL) {
+        manga = normalizeManga(entry.data, slug);
+      }
+    };
+    request.onerror = () => transaction.abort();
+    transaction.oncomplete = () => {
+      database.close();
+      resolve(manga);
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? request.error ?? new Error("Could not read the series detail cache."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? request.error ?? new Error("Reading the series detail cache was aborted."));
+    };
+  });
+}
+
+async function writeIndexedDbManga(slug: string, manga: Manga): Promise<void> {
+  if (!("indexedDB" in window)) {
+    throw new Error("IndexedDB is unavailable in this browser.");
+  }
+  const database = await openSeriesDetailCache();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(SERIES_DETAIL_CACHE_STORE, "readwrite");
+    transaction.objectStore(SERIES_DETAIL_CACHE_STORE).put({
+      slug,
+      time: Date.now(),
+      data: manga,
+    } satisfies SeriesDetailCacheEntry);
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not write the series detail cache."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Writing the series detail cache was aborted."));
+    };
+  });
+}
+
+function getLegacyCachedManga(slug: string): Manga | null {
   try {
     const cached = localStorage.getItem(`detail_${slug}`);
     if (!cached) return null;
     const parsed = JSON.parse(cached) as { time?: number; data?: Record<string, unknown> };
-    if (parsed.data && Date.now() - (parsed.time || 0) < 15 * 60 * 1000) {
+    if (parsed.data && Date.now() - (parsed.time || 0) < SERIES_DETAIL_CACHE_TTL) {
       return normalizeManga(parsed.data, slug);
     }
   } catch (error) {
@@ -423,7 +503,26 @@ function getCachedManga(slug: string): Manga | null {
   return null;
 }
 
-function cacheMangaDetail(slug: string, manga: Manga): void {
+async function getCachedManga(slug: string): Promise<Manga | null> {
+  try {
+    const cached = await readIndexedDbManga(slug);
+    if (cached) return cached;
+  } catch (error) {
+    console.warn(`IndexedDB detail manga gagal dibaca untuk ${slug}.`, error);
+  }
+
+  const legacyCached = getLegacyCachedManga(slug);
+  if (!legacyCached) return null;
+  try {
+    await writeIndexedDbManga(slug, legacyCached);
+    localStorage.removeItem(`detail_${slug}`);
+  } catch (error) {
+    console.warn(`Cache detail manga lama untuk ${slug} tidak dapat dipindahkan ke IndexedDB.`, error);
+  }
+  return legacyCached;
+}
+
+function cacheLegacyMangaDetail(slug: string, manga: Manga): void {
   const detailPrefix = "detail_";
   const cacheKey = `${detailPrefix}${slug}`;
   try {
@@ -451,6 +550,7 @@ function cacheMangaDetail(slug: string, manga: Manga): void {
   } catch (error) {
     console.warn("Detail manga dimuat, tetapi cache saat ini tidak dapat disimpan.", error);
   }
+
   try {
     localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data: manga }));
   } catch (error) {
@@ -458,8 +558,24 @@ function cacheMangaDetail(slug: string, manga: Manga): void {
   }
 }
 
+async function cacheMangaDetail(slug: string, manga: Manga): Promise<void> {
+  try {
+    await writeIndexedDbManga(slug, manga);
+  } catch (error) {
+    console.warn(`IndexedDB detail manga gagal disimpan untuk ${slug}; memakai cache localStorage.`, error);
+    cacheLegacyMangaDetail(slug, manga);
+    return;
+  }
+
+  try {
+    localStorage.setItem("currentManga", JSON.stringify(manga));
+  } catch (error) {
+    console.warn("Detail manga dimuat, tetapi cache saat ini tidak dapat disimpan.", error);
+  }
+}
+
 async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
-  const cachedManga = getCachedManga(slug);
+  const cachedManga = await getCachedManga(slug);
   if (cachedManga) return cachedManga;
 
   const responses = await Promise.allSettled([
@@ -495,7 +611,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   }
 
   if (manga) {
-    cacheMangaDetail(slug, manga);
+    await cacheMangaDetail(slug, manga);
     return manga;
   }
 
@@ -507,7 +623,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     console.warn("Firestore SDK tidak dapat mengambil detail manga.", error);
   }
   if (firestore) {
-    cacheMangaDetail(slug, firestore);
+    await cacheMangaDetail(slug, firestore);
     return firestore;
   }
 
@@ -1175,12 +1291,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const cachedManga = getCachedManga(slug);
-    if (cachedManga) {
-      setManga(cachedManga);
-      setState("ready");
-      return () => controller.abort();
-    }
     setManga(null);
     setState("loading");
     loadManga(slug, controller.signal).then((result) => {
