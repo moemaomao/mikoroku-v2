@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import CenteredLoadingSpinner from "../centered-loading-spinner";
 
 const BookmarkPage = dynamic(() => import("./bookmark-page"), {
   ssr: false,
@@ -10,16 +11,7 @@ const BookmarkPage = dynamic(() => import("./bookmark-page"), {
       aria-busy="true"
       style={{ backgroundColor: "var(--mk-page-bg, #0b0b0b)", color: "var(--mk-bookmark-text, #fff)" }}
     >
-      <section
-        className="bookmark-container"
-        aria-labelledby="bookmark-title"
-        style={{ backgroundColor: "var(--mk-bookmark-container, #0f0f1e)" }}
-      >
-        <header className="bookmark-header">
-          <h1 id="bookmark-title">Bookmark</h1>
-        </header>
-        <p role="status">Memuat bookmark...</p>
-      </section>
+      <CenteredLoadingSpinner label="Loading bookmarks" />
     </main>
   ),
 });

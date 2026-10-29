@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { imageProxyUrl } from "../lib/image-proxy";
+import {
+  clearReadingHistory as clearStoredReadingHistory,
+  deleteReadingHistoryEntry,
+  upsertReadingHistoryEntry,
+} from "../lib/reading-history";
 
 type DataRecord = Record<string, unknown>;
 type CompatTimestamp = { toDate?: () => Date };
@@ -49,6 +53,7 @@ type HistoryEntry = {
   slug?: string;
   url: string;
   time: number;
+  progress?: number;
 };
 type HistoryInput = {
   series?: string;
@@ -80,7 +85,6 @@ type LegacyModalWindow = {
 };
 
 const HISTORY_KEY = "readingHistory";
-const HISTORY_LIMIT = 50;
 const RAW_COVER_BASE =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const DEFAULT_AVATAR =
@@ -319,18 +323,7 @@ const GAME_ROLES = new Map(
 );
 
 const modalStyles = `
-#historyModal,#user-profile-modal,#dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
-#historyModal{background:rgba(0,0,0,.55)}
-#historyBox{width:100%;max-width:500px;max-height:80vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
-body.dark #historyBox{background:#1d1d1d;color:#fff}
-.history-header{padding:15px 20px;font-size:20px;font-weight:bold;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;align-items:center}
-body.dark .history-header{border-color:#333}
-.history-item{display:flex;gap:12px;padding:12px 20px;cursor:pointer;border-bottom:1px solid #eee;position:relative}
-body.dark .history-item{border-color:#333}.history-item:hover{background:#f5f5f5}body.dark .history-item:hover{background:#2a2a2a}
-.history-cover{width:60px;height:80px;border-radius:8px;object-fit:cover}.history-content{flex:1;min-width:0}.history-title{font-weight:bold}.history-chapter{margin-top:4px;font-size:14px;color:#666}body.dark .history-chapter{color:#aaa}.history-time{margin-top:6px;font-size:12px;color:#999}
-.delete-btn{position:absolute;right:15px;top:50%;transform:translateY(-50%);background:none;border:0;font-size:18px;color:#ff4444;cursor:pointer;opacity:0;transition:opacity .2s}.history-item:hover .delete-btn{opacity:1}
-.history-footer{padding:15px 20px;display:flex;justify-content:flex-end;border-top:1px solid #ddd}body.dark .history-footer{border-color:#333}
-.history-btn,.close-btn{padding:10px 18px;border:0;border-radius:8px;cursor:pointer}.close-btn{padding:0;width:32px;height:32px;font-size:24px;background:none;color:#666}
+#user-profile-modal,#dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
 #user-profile-modal{background:rgba(0,0,0,.9);z-index:99999}
 .profile-box{background:#1f1f2e;width:100%;max-width:380px;border-radius:14px;padding:18px;position:relative;color:white;box-sizing:border-box}
 .profile-close{position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;color:#aaa;cursor:pointer}
@@ -408,12 +401,6 @@ function resolveCover(value: unknown): string {
   return /^https?:\/\//i.test(cover) ? cover : RAW_COVER_BASE + cover.replace(/^\//, "");
 }
 
-function thumbUrl(value: unknown): string {
-  const full = resolveCover(value);
-  if (!full || full === FALLBACK_COVER) return FALLBACK_COVER;
-  return imageProxyUrl(full, "historyCover");
-}
-
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -447,10 +434,6 @@ function initializeUserModals(): () => void {
   style.textContent = modalStyles;
   document.head.appendChild(style);
 
-  const historyModal = createElement("div");
-  historyModal.id = "historyModal";
-  historyModal.innerHTML = `<div id="historyBox"><div class="history-header"><span>📖 Reading History</span><button type="button" class="close-btn" data-close-history aria-label="Close">✕</button></div><div id="historyList"></div><div class="history-footer"><button type="button" class="history-btn" data-clear-history>🗑 Hapus Semua</button></div></div>`;
-
   const profileModal = createElement("div");
   profileModal.id = "user-profile-modal";
   profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><button type="button" class="profile-dm" data-profile-dm>Message</button><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
@@ -462,7 +445,7 @@ function initializeUserModals(): () => void {
   const notificationModal = createElement("div");
   notificationModal.id = "reply-notif-overlay";
   notificationModal.innerHTML = `<section class="notif-box"><button type="button" class="notif-close" data-close-notifications aria-label="Close">×</button><h3 style="margin:0 0 16px;text-align:center;color:#93c5fd">Notifications</h3><div id="reply-notif-list"></div></section>`;
-  document.body.append(historyModal, profileModal, dmModal, notificationModal);
+  document.body.append(profileModal, dmModal, notificationModal);
 
   const db = (): CompatFirestore | null => {
     const sdk = legacy.firebase;
@@ -483,54 +466,10 @@ function initializeUserModals(): () => void {
   };
   const displayHistory = () => {
     legacy.closeAuthDropdown?.();
-    const list = byId<HTMLDivElement>("historyList");
-    if (!list) return;
-    list.replaceChildren();
-    const history = readHistory();
-    if (!history.length) {
-      const empty = createElement("div", undefined, "Belum ada history.");
-      empty.style.cssText = "padding:40px;text-align:center;color:#888";
-      list.appendChild(empty);
-    } else {
-      history.forEach((item) => {
-        const row = createElement("div", "history-item");
-        row.dataset.historyUrl = item.url;
-        const image = createElement("img", "history-cover");
-        image.src = thumbUrl(item.cover);
-        image.loading = "lazy";
-        image.alt = item.series || item.title || "Cover";
-        image.onerror = () => {
-          image.src = FALLBACK_COVER;
-        };
-        const content = createElement("div", "history-content");
-        const title = createElement("div", "history-title", item.series || item.title || "Unknown");
-        const chapter = createElement("div", "history-chapter", item.chapter || "");
-        const time = createElement("div", "history-time");
-        const elapsed = Math.max(0, Date.now() - numberValue(item.time));
-        const minutes = 60_000;
-        const hours = 60 * minutes;
-        const days = 24 * hours;
-        time.textContent =
-          elapsed < minutes
-            ? "Baru saja"
-            : elapsed < hours
-              ? `${Math.floor(elapsed / minutes)} menit lalu`
-              : elapsed < days
-                ? `${Math.floor(elapsed / hours)} jam lalu`
-                : `${Math.floor(elapsed / days)} hari lalu`;
-        content.append(title, chapter, time);
-        const remove = createElement("button", "delete-btn", "🗑");
-        remove.type = "button";
-        remove.dataset.deleteHistory = item.url;
-        remove.setAttribute("aria-label", "Hapus dari history");
-        row.append(image, content, remove);
-        list.appendChild(row);
-      });
-    }
-    historyModal.style.display = "flex";
+    if (window.location.pathname !== "/history") window.location.assign("/history");
   };
   const closeHistory = () => {
-    historyModal.style.display = "none";
+    if (window.location.pathname === "/history") window.history.back();
   };
   const saveHistory = (data: HistoryInput) => {
     if (!data || typeof data.url !== "string" || !data.url) return;
@@ -546,44 +485,31 @@ function initializeUserModals(): () => void {
       }
     }
     cover ||= resolveCover(data.cover) || data.cover || FALLBACK_COVER;
-    const updated: HistoryEntry[] = [
-      {
-        series: data.series || data.title || "",
-        title: data.title || "Unknown",
-        chapter: data.chapter || "",
-        cover,
-        slug: data.slug || "",
-        url: data.url,
-        time: Date.now(),
-      },
-      ...readHistory().filter((entry) => entry.url !== data.url),
-    ].slice(0, HISTORY_LIMIT);
-    try {
-      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-    } catch (error) {
-      console.warn("Gagal menyimpan reading history", error);
-    }
+    const previous = readHistory().find((entry) => entry.url === data.url);
+    void upsertReadingHistoryEntry({
+      series: data.series || data.title || "",
+      title: data.title || "Unknown",
+      chapter: data.chapter || "",
+      cover,
+      slug: data.slug || "",
+      url: data.url,
+      time: Date.now(),
+      progress: previous?.progress ?? 0,
+    }).then(() => {
+      window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+    }).catch((error: unknown) => console.error("Could not save reading history.", error));
   };
   const deleteHistory = (url: string) => {
-    if (!window.confirm("Hapus item ini dari history?")) return;
-    try {
-      window.localStorage.setItem(
-        HISTORY_KEY,
-        JSON.stringify(readHistory().filter((item) => item.url !== url)),
-      );
-    } catch (error) {
-      console.warn("Gagal memperbarui reading history", error);
-    }
-    displayHistory();
+    if (!window.confirm("Remove this item from reading history?")) return;
+    void deleteReadingHistoryEntry(url).then(() => {
+      window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+    }).catch((error: unknown) => console.error("Could not remove reading history entry.", error));
   };
   const clearHistory = () => {
-    if (!window.confirm("Hapus seluruh history?")) return;
-    try {
-      window.localStorage.removeItem(HISTORY_KEY);
-    } catch (error) {
-      console.warn("Gagal menghapus reading history", error);
-    }
-    displayHistory();
+    if (!window.confirm("Clear all reading history from this browser?")) return;
+    void clearStoredReadingHistory().then(() => {
+      window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+    }).catch((error: unknown) => console.error("Could not clear reading history.", error));
   };
 
   let profileDmTarget: { uid: string; name: string; avatar: string } | null = null;
@@ -984,18 +910,6 @@ function initializeUserModals(): () => void {
     notificationModal.style.display = "none";
   };
 
-  const onHistoryClick = (event: MouseEvent) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const deleteButton = target.closest<HTMLElement>("[data-delete-history]");
-    if (deleteButton?.dataset.deleteHistory) {
-      event.stopPropagation();
-      deleteHistory(deleteButton.dataset.deleteHistory);
-      return;
-    }
-    const row = target.closest<HTMLElement>("[data-history-url]");
-    if (row?.dataset.historyUrl) window.location.href = row.dataset.historyUrl;
-  };
   const onInboxClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -1005,15 +919,12 @@ function initializeUserModals(): () => void {
   const onModalClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest("[data-close-history]")) closeHistory();
-    else if (target.closest("[data-clear-history]")) clearHistory();
-    else if (target.closest("[data-close-profile]")) closeProfile();
+    if (target.closest("[data-close-profile]")) closeProfile();
     else if (target.closest("[data-profile-dm]")) {
       const dmTarget = profileDmTarget;
       closeProfile();
       if (dmTarget) openDmToUser(dmTarget.uid, dmTarget.name, dmTarget.avatar);
-    } else if (target.closest("[data-close-notifications]")) closeNotifications();
-    else if (target === historyModal) closeHistory();
+    }     else if (target.closest("[data-close-notifications]")) closeNotifications();
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" && !event.shiftKey && event.target === messageInput) {
@@ -1021,7 +932,6 @@ function initializeUserModals(): () => void {
       void sendMessage();
     }
   };
-  historyModal.addEventListener("click", onHistoryClick);
   document.addEventListener("click", onModalClick);
   inbox?.addEventListener("click", onInboxClick);
   byId("dm-close-btn")?.addEventListener("click", closeDm);
@@ -1078,13 +988,12 @@ function initializeUserModals(): () => void {
   };
 
   return () => {
-    historyModal.removeEventListener("click", onHistoryClick);
     document.removeEventListener("click", onModalClick);
     inbox?.removeEventListener("click", onInboxClick);
     byId("dm-close-btn")?.removeEventListener("click", closeDm);
     byId("dm-back-btn")?.removeEventListener("click", backToInbox);
     messageInput?.removeEventListener("keydown", onKeyDown);
-    [notificationModal, dmModal, profileModal, historyModal].forEach((element) => element.remove());
+    [notificationModal, dmModal, profileModal].forEach((element) => element.remove());
     style.remove();
     (Object.keys(previousApi) as Array<keyof typeof previousApi>).forEach(restoreApi);
   };

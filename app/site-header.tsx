@@ -1123,16 +1123,7 @@ function HeaderContents() {
           <SidebarLink href="/hentai-list" icon="book" onClick={() => mobile && closeSidebar()}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={() => mobile && closeSidebar()}>Genre List</SidebarLink>
           <SidebarLink href="/bookmark" icon="bookmark" onClick={() => mobile && closeSidebar()}>Bookmark</SidebarLink>
-          <button
-            type="button"
-            onClick={() => {
-              window.showHistory?.();
-              if (mobile) closeSidebar();
-            }}
-            className="flex w-full items-center gap-3 rounded-xl border border-transparent bg-transparent px-3.5 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-black/[0.06] hover:text-zinc-950 dark:text-indigo-100/80 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            <Icon name="history" className="h-5 w-5 shrink-0" />History
-          </button>
+          <SidebarLink href="/history" icon="history" onClick={() => mobile && closeSidebar()}>History</SidebarLink>
           <SidebarLink href="/commission" icon="commission" onClick={() => mobile && closeSidebar()}>Commission</SidebarLink>
           <SidebarLink href="/global-settings" icon="settings" onClick={() => mobile && closeSidebar()}>Global Settings</SidebarLink>
           <div className="my-3 h-px bg-gradient-to-r from-transparent via-black/15 to-transparent dark:via-white/15" />

@@ -25,6 +25,7 @@ import {
   type CoverImageConversionSettings,
 } from "../../lib/image-proxy";
 import { clearSharedChapterCache } from "../lib/chapter-cache";
+import { writeReadingHistory } from "../../lib/reading-history";
 
 const BOOKMARKS_KEY = "mangaBookmarks";
 const HISTORY_KEY = "readingHistory";
@@ -540,8 +541,18 @@ export default function GlobalSettingsPage() {
       ).sort((left, right) => Number(right.time) - Number(left.time)).slice(0, HISTORY_LIMIT);
 
       localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      await writeReadingHistory(history.map((item) => ({
+        series: typeof item.series === "string" ? item.series : undefined,
+        title: typeof item.title === "string" ? item.title : undefined,
+        chapter: typeof item.chapter === "string" ? item.chapter : undefined,
+        cover: typeof item.cover === "string" ? item.cover : undefined,
+        slug: typeof item.slug === "string" ? item.slug : undefined,
+        url: String(item.url),
+        time: Number(item.time) || 0,
+        progress: Number(item.progress) || 0,
+      })));
       window.dispatchEvent(new Event("bookmarkUpdated"));
+      window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
       setNotice(`${incomingBookmarks.length} bookmarks and ${incomingHistory.length} history items processed; existing local data was kept.`);
       await refreshStorageReport();
     } catch (error) {

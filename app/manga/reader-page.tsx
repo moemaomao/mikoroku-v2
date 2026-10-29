@@ -9,6 +9,10 @@ import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapt
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl, readerImageUrlWithQuality } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
+import {
+  updateReadingHistoryProgress,
+  upsertReadingHistoryEntry,
+} from "../../lib/reading-history";
 import { initializeFirebaseClient } from "../lib/firebase-client";
 
 type ReaderKind = "manga" | "novel";
@@ -980,6 +984,8 @@ export default function ReaderPage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [floatingHidden, setFloatingHidden] = useState(false);
   const lastScrollYRef = useRef(0);
+  const pageRef = useRef(page);
+  pageRef.current = page;
   useEffect(() => {
     if (settingsOpen || reportOpen) setFloatingHidden(false);
   }, [settingsOpen, reportOpen]);
@@ -1013,6 +1019,16 @@ export default function ReaderPage({
   const [imageQuality, setImageQuality] = useState(600);
   const [readerProgress, setReaderProgress] = useState(0);
   const activeKind = data?.kind || kind;
+
+  useEffect(() => {
+    if (!data || data.kind !== "manga" || mode !== "single" || !data.images.length) return;
+    const progress = Math.round((Math.min(page, data.images.length) / data.images.length) * 100);
+    setReaderProgress(progress);
+    const historyUrl = `/manga/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`;
+    void updateReadingHistoryProgress(historyUrl, progress)
+      .then(() => window.dispatchEvent(new Event("mikoroku:reading-history-updated")))
+      .catch((historyError: unknown) => console.error("Reading progress could not be saved.", historyError));
+  }, [data, mode, page, slug]);
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -1081,21 +1097,13 @@ export default function ReaderPage({
           slug,
           url: `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`,
           time: Date.now(),
+          progress: 0,
         };
-        try {
-          const savedHistory = JSON.parse(localStorage.getItem("readingHistory") || "[]") as unknown;
-          const history = Array.isArray(savedHistory)
-            ? savedHistory.filter((item): item is typeof historyItem =>
-                Boolean(item) && typeof item === "object" &&
-                "url" in item && typeof item.url === "string" &&
-                item.url !== historyItem.url,
-              )
-            : [];
-          history.unshift(historyItem);
-          localStorage.setItem("readingHistory", JSON.stringify(history.slice(0, 50)));
-        } catch (historyError) {
+        void upsertReadingHistoryEntry(historyItem).then(() => {
+          window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+        }).catch((historyError: unknown) => {
           console.error("Reading history could not be saved.", historyError);
-        }
+        });
         localStorage.setItem(`read_${result.title}`, JSON.stringify([
           ...new Set([
             ...(() => {
@@ -1227,13 +1235,54 @@ export default function ReaderPage({
     }
     let saveTimer = 0;
     lastScrollYRef.current = window.scrollY;
+    const calculateContentProgress = () => {
+      if (data.kind === "manga" && mode === "single") {
+        return data.images.length
+          ? Math.round((Math.min(pageRef.current, data.images.length) / data.images.length) * 100)
+          : 0;
+      }
+
+      const readerRoot = document.querySelector<HTMLElement>(".reader-page");
+      const isReaderFullscreen = document.fullscreenElement === readerRoot;
+      const readerViewport = isReaderFullscreen && readerRoot
+        ? readerRoot.getBoundingClientRect()
+        : null;
+      const viewportTop = readerViewport?.top ?? 0;
+      const viewportBottom = readerViewport?.bottom ?? window.innerHeight;
+      const viewportHeight = viewportBottom - viewportTop;
+      const chapterImages = data.kind === "manga"
+        ? document.querySelectorAll<HTMLElement>(".reader-images.long-strip img")
+        : [];
+      const contentEnd = data.kind === "manga"
+        ? chapterImages[chapterImages.length - 1]
+        : document.querySelector<HTMLElement>(".reader-novel-text");
+      const firstImage = data.kind === "manga" ? chapterImages[0] : null;
+      if (!contentEnd) return 0;
+
+      const contentStartY = firstImage?.getBoundingClientRect().top
+        ?? document.querySelector<HTMLElement>(".reader-novel-text")?.getBoundingClientRect().top
+        ?? contentEnd.getBoundingClientRect().top;
+      const contentEndY = contentEnd.getBoundingClientRect().bottom;
+      const contentHeight = contentEndY - contentStartY;
+      if (contentHeight <= 0) return 0;
+      const effectiveHeight = Math.max(1, contentHeight - viewportHeight);
+      const effectiveProgress = viewportTop - contentStartY;
+      return Math.round(Math.min(100, Math.max(0, (effectiveProgress / effectiveHeight) * 100)));
+    };
+
     const updateProgress = () => {
       const y = window.scrollY;
-      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
-      setReaderProgress(scrollable > 0 ? Math.min(100, Math.round((y / scrollable) * 100)) : 0);
+      const progress = calculateContentProgress();
+      setReaderProgress(progress);
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         localStorage.setItem(scrollKey, String(y));
+        const historyUrl = `${data.kind === "novel" ? "/novel" : "/manga"}/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`;
+        void updateReadingHistoryProgress(historyUrl, progress).then(() => {
+          window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+        }).catch((historyError: unknown) => {
+          console.error("Reading progress could not be saved.", historyError);
+        });
       }, 250);
 
       const delta = y - lastScrollYRef.current;
@@ -1274,11 +1323,21 @@ export default function ReaderPage({
       updateProgress();
     };
     window.addEventListener("scroll", updateProgress, { passive: true });
+    window.addEventListener("resize", updateProgress, { passive: true });
     document.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    const contentResizeObserver = new ResizeObserver(updateProgress);
+    const contentElement = data.kind === "manga"
+      ? mode === "long-strip"
+        ? document.querySelector<HTMLElement>(".reader-images.long-strip")
+        : null
+      : document.querySelector<HTMLElement>(".reader-novel-text");
+    if (contentElement) contentResizeObserver.observe(contentElement);
     updateProgress();
     return () => {
       window.clearTimeout(saveTimer);
+      contentResizeObserver.disconnect();
       window.removeEventListener("scroll", updateProgress);
+      window.removeEventListener("resize", updateProgress);
       document.removeEventListener("scroll", onScroll, { capture: true } as EventListenerOptions);
     };
   }, [data, mode, slug]);
