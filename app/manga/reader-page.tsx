@@ -13,6 +13,10 @@ import {
   updateReadingHistoryProgress,
   upsertReadingHistoryEntry,
 } from "../../lib/reading-history";
+import {
+  readCachedReaderData,
+  writeCachedReaderData,
+} from "../lib/reader-data-cache";
 import { initializeFirebaseClient } from "../lib/firebase-client";
 
 type ReaderKind = "manga" | "novel";
@@ -211,6 +215,48 @@ function ReaderImage({
 }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [displaySrc, setDisplaySrc] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    setDisplaySrc("");
+    setLoaded(false);
+    setFailed(false);
+
+    if (!("caches" in window)) {
+      setDisplaySrc(src);
+      return () => {
+        active = false;
+      };
+    }
+
+    void window.caches.open(READER_IMAGE_CACHE_NAME)
+      .then((cache) => cache.match(src))
+      .then(async (response) => {
+        if (!response) {
+          if (active) setDisplaySrc(src);
+          return;
+        }
+        const blob = await response.blob();
+        if (blob.size < 100) {
+          if (active) setDisplaySrc(src);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setDisplaySrc(objectUrl);
+        else URL.revokeObjectURL(objectUrl);
+      })
+      .catch((cacheError: unknown) => {
+        console.warn("Could not read the cached reader image; loading its URL directly.", cacheError);
+        if (active) setDisplaySrc(src);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
 
   function handleError(event: React.SyntheticEvent<HTMLImageElement>) {
     const image = event.currentTarget;
@@ -233,10 +279,10 @@ function ReaderImage({
         <span className="grid min-h-[40vh] place-items-center bg-black/[.04] px-4 text-sm text-slate-500 dark:bg-white/[.04] dark:text-slate-400" role="img" aria-label={`${alt} could not be loaded`}>
           Image could not be loaded
         </span>
-      ) : (
+      ) : displaySrc ? (
         <img
           className={`${className} relative`}
-          src={src}
+          src={displaySrc}
           alt={alt}
           loading={loading}
           fetchPriority={fetchPriority}
@@ -244,6 +290,10 @@ function ReaderImage({
           onLoad={() => setLoaded(true)}
           onError={handleError}
         />
+      ) : (
+        <span className="grid min-h-[20vh] place-items-center" aria-hidden="true">
+          <span className="size-8 animate-spin rounded-full border-2 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />
+        </span>
       )}
     </span>
   );
@@ -1054,17 +1104,46 @@ export default function ReaderPage({
 
   useEffect(() => {
     const controller = new AbortController();
+    let hasUsableData = false;
+    let hasFreshData = false;
     let targetChapter = chapter || "";
     if (preferStoredChapter || !targetChapter) {
       const cached = getCurrentChapterCache(slug);
       if (cached?.num) targetChapter = String(cached.num);
     }
     const cachedData = getCachedReaderData(slug, targetChapter, kind, forcedServer);
+    hasUsableData = Boolean(cachedData);
     setData(cachedData);
     setError("");
+
+    if (kind === "manga") {
+      void readCachedReaderData(slug, targetChapter)
+        .then((cachedReaderData) => {
+          if (controller.signal.aborted || !cachedReaderData) return;
+          const preferredSource = forcedServer || localStorage.getItem("chapterSourceMode");
+          const requiredSource = preferredSource === "sv1"
+            ? "blogger"
+            : preferredSource === "sv2"
+              ? "blogger2"
+              : preferredSource === "es"
+                ? "firestore"
+                : undefined;
+          if (requiredSource && cachedReaderData.source !== requiredSource) return;
+          hasUsableData = true;
+          if (!hasFreshData) {
+            setData(cachedReaderData);
+            setError("");
+          }
+        })
+        .catch((cacheError: unknown) => {
+          console.warn("Could not restore the cached reader chapter.", cacheError);
+        });
+    }
+
     loadReaderData(slug, targetChapter, kind, controller.signal, forcedServer)
       .then((result) => {
         if (controller.signal.aborted) return;
+        hasFreshData = true;
         if (result.kind !== kind) {
           const route = result.kind === "novel" ? "/novel" : "/manga";
           window.location.replace(`${route}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`);
@@ -1077,6 +1156,11 @@ export default function ReaderPage({
           return;
         }
         setData(result);
+        if (result.kind === "manga") {
+          void writeCachedReaderData(slug, result).catch((cacheError: unknown) => {
+            console.warn("Could not cache the loaded reader chapter.", cacheError);
+          });
+        }
         setPage(1);
         localStorage.setItem("currentChapter", JSON.stringify({
           ...getCurrentChapterCache(slug),
@@ -1121,7 +1205,7 @@ export default function ReaderPage({
       .catch((loadError: unknown) => {
         if (controller.signal.aborted || isAbortError(loadError)) return;
         console.error("Reader failed to load the chapter.", loadError);
-        if (!cachedData) {
+        if (!hasUsableData) {
           setError(loadError instanceof Error ? loadError.message : "Failed to load chapter.");
         }
       });
