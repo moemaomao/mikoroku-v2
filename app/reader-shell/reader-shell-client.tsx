@@ -14,10 +14,15 @@ export default function ReaderShellClient() {
   const [invalidRoute, setInvalidRoute] = useState(false);
 
   useEffect(() => {
+    const pathMatch = window.location.pathname.match(
+      /^\/(manga|novel)\/([^/]+)\/([^/]+)\/?$/,
+    );
     const params = new URLSearchParams(window.location.search);
-    const kind = params.get("kind");
-    const slug = params.get("slug");
-    const chapter = params.get("chapter");
+    const kind = pathMatch?.[1] || params.get("kind");
+    const encodedSlug = pathMatch?.[2];
+    const encodedChapter = pathMatch?.[3];
+    let slug = encodedSlug || params.get("slug");
+    let chapter = encodedChapter || params.get("chapter") || params.get("c");
     if (
       (kind !== "manga" && kind !== "novel") ||
       !slug ||
@@ -27,12 +32,23 @@ export default function ReaderShellClient() {
       return;
     }
 
-    params.delete("kind");
-    params.delete("slug");
-    params.delete("chapter");
-    const query = params.toString();
-    const path = `/${kind}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
-    window.history.replaceState(null, "", query ? `${path}?${query}` : path);
+    try {
+      if (encodedSlug) slug = decodeURIComponent(encodedSlug);
+      if (encodedChapter) chapter = decodeURIComponent(encodedChapter);
+    } catch {
+      setInvalidRoute(true);
+      return;
+    }
+
+    if (!pathMatch) {
+      params.delete("kind");
+      params.delete("slug");
+      params.delete("chapter");
+      params.delete("c");
+      const query = params.toString();
+      const path = `/${kind}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
+      window.history.replaceState(null, "", query ? `${path}?${query}` : path);
+    }
     setReader({ kind, slug, chapter });
   }, []);
 

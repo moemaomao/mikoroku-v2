@@ -146,6 +146,38 @@ function isStaticDocumentRequest(request: Request, url: URL): boolean {
     (request.headers.get("accept") || "").toLowerCase().includes("text/html");
 }
 
+async function fetchStaticDocument(
+  request: Request,
+  url: URL,
+  env: CloudflareEnv,
+  assetPath: string,
+  sourceRoute: string,
+): Promise<Response> {
+  const response = await env.ASSETS!.fetch(
+    new Request(new URL(assetPath, url.origin), request),
+  );
+  if (response.status === 404) {
+    await response.body?.cancel();
+    console.error(`[worker static-pages] Built asset is missing for ${sourceRoute}: ${assetPath}`);
+    return new Response("Static page asset is missing. Rebuild and deploy the Worker assets.", {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
+  headers.set(
+    "cache-control",
+    "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function serveStaticPage(
   request: Request,
   url: URL,
@@ -164,29 +196,7 @@ async function serveStaticPage(
     return Response.redirect(canonicalUrl, 308);
   }
 
-  const response = await env.ASSETS.fetch(
-    new Request(new URL(assetPath, url.origin), request),
-  );
-  if (response.status === 404) {
-    await response.body?.cancel();
-    console.error(`[worker static-pages] Built asset is missing for ${url.pathname}: ${assetPath}`);
-    return new Response("Static page asset is missing. Rebuild and deploy the Worker assets.", {
-      status: 503,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  }
-
-  const headers = new Headers(response.headers);
-  headers.set("content-type", "text/html; charset=utf-8");
-  headers.set(
-    "cache-control",
-    "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
-  );
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return fetchStaticDocument(request, url, env, assetPath, url.pathname);
 }
 
 async function serveSocialMetadataFallback(
@@ -618,27 +628,20 @@ export default {
     }
 
     if (env.ASSETS && shouldServeReaderShell(request, url)) {
-      const match = url.pathname.match(/^\/(manga|novel)\/([^/]+)\/([^/]+)\/?$/);
-      if (!match) return new Response("Invalid reader URL.", { status: 400 });
-
-      let slug: string;
-      let chapter: string;
-      try {
-        slug = decodeURIComponent(match[2]);
-        chapter = decodeURIComponent(match[3]);
-      } catch {
-        return new Response("Invalid reader URL.", { status: 400 });
+      const shellAssetPath = await getStaticPageAssetPath(
+        env,
+        "/reader-shell",
+        url.origin,
+      );
+      if (shellAssetPath) {
+        return fetchStaticDocument(
+          request,
+          url,
+          env,
+          shellAssetPath,
+          "/reader-shell",
+        );
       }
-
-      const shellUrl = new URL("/reader-shell", url.origin);
-      shellUrl.searchParams.set("kind", match[1]);
-      shellUrl.searchParams.set("slug", slug);
-      shellUrl.searchParams.set("chapter", chapter);
-      for (const [key, value] of url.searchParams) {
-        if (key === "kind" || key === "slug" || key === "chapter") continue;
-        shellUrl.searchParams.append(key, value);
-      }
-      return Response.redirect(shellUrl, 307);
     }
 
     const isHomepageDocument =
