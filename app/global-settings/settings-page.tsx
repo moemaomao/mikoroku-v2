@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { clearCoverImageCache, getCoverImageCacheBytes } from "../lib/cover-image";
 import { clearFirestoreOfflineCache } from "../lib/firebase-client";
+import { readGlobalSetting, writeGlobalSetting } from "../lib/global-settings-storage";
 import {
+  GLOBAL_APPEARANCE_KEY,
   applyGlobalAppearance,
   defaultGlobalAppearance,
   readGlobalAppearance,
@@ -63,6 +65,40 @@ type StorageReport = {
   originUsageBytes: number | null;
   originQuotaBytes: number | null;
 };
+
+const GLOBAL_SETTING_KEYS = [
+  GLOBAL_APPEARANCE_KEY,
+  COVER_IMAGE_QUALITY_KEY,
+  CHAPTER_THUMBNAIL_SIZE_KEY,
+] as const;
+
+async function restoreGlobalSetting(key: string): Promise<string | null> {
+  let legacyValue: string | null = null;
+  try {
+    legacyValue = localStorage.getItem(key);
+    if (!("indexedDB" in window)) return legacyValue;
+
+    const storedValue = await readGlobalSetting(key);
+    if (storedValue !== null) {
+      localStorage.setItem(key, storedValue);
+      return storedValue;
+    }
+
+    if (legacyValue !== null) {
+      await writeGlobalSetting(key, legacyValue);
+    }
+    return legacyValue;
+  } catch (error) {
+    console.error(`Could not restore global setting "${key}" from IndexedDB.`, error);
+    return legacyValue;
+  }
+}
+
+async function persistGlobalSetting(key: string): Promise<void> {
+  const value = localStorage.getItem(key);
+  if (value === null) throw new Error(`Global setting "${key}" is missing from localStorage.`);
+  await writeGlobalSetting(key, value);
+}
 
 function formatBytes(bytes: number | null): string {
   if (bytes === null) return "Unavailable";
@@ -398,12 +434,19 @@ export default function GlobalSettingsPage() {
   const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const saved = readGlobalAppearance();
-    setSettings(saved);
-    applyGlobalAppearance(saved);
-    setCoverConversion(readCoverImageConversion());
-    setChapterThumbnailSize(readChapterThumbnailSize());
+    let active = true;
+    void Promise.all(GLOBAL_SETTING_KEYS.map(restoreGlobalSetting)).then(() => {
+      if (!active) return;
+      const saved = readGlobalAppearance();
+      setSettings(saved);
+      applyGlobalAppearance(saved);
+      setCoverConversion(readCoverImageConversion());
+      setChapterThumbnailSize(readChapterThumbnailSize());
+    });
     void refreshStorageReport();
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function refreshStorageReport() {
@@ -577,53 +620,57 @@ export default function GlobalSettingsPage() {
     }
   }
 
-  function updateAppearance(key: GlobalAppearanceToggleSetting, value: boolean) {
+  async function updateAppearance(key: GlobalAppearanceToggleSetting, value: boolean) {
     const updated: GlobalAppearanceSettings = { ...settings, [key]: value };
     try {
       saveGlobalAppearance(updated);
       applyGlobalAppearance(updated);
       setSettings(updated);
-      setNotice("Appearance settings saved.");
+      await persistGlobalSetting(GLOBAL_APPEARANCE_KEY);
+      setNotice("Appearance settings saved to this browser.");
     } catch (error) {
       console.error("Failed to save global appearance preferences.", error);
-      setNotice("Settings could not be saved. Check your browser storage permissions.");
+      setNotice("Appearance took effect and is saved locally, but IndexedDB could not be updated.");
     }
   }
 
-  function updateAccentColor(accentColor: string | null) {
+  async function updateAccentColor(accentColor: string | null) {
     const updated: GlobalAppearanceSettings = { ...settings, accentColor };
     try {
       saveGlobalAppearance(updated);
       applyGlobalAppearance(updated);
       setSettings(updated);
-      setNotice("Appearance settings saved.");
+      await persistGlobalSetting(GLOBAL_APPEARANCE_KEY);
+      setNotice("Appearance settings saved to this browser.");
     } catch (error) {
       console.error("Failed to save global appearance preferences.", error);
-      setNotice("Settings could not be saved. Check your browser storage permissions.");
+      setNotice("Appearance took effect and is saved locally, but IndexedDB could not be updated.");
     }
   }
 
-  function updateCardDisplay(cardDisplay: GlobalAppearanceSettings["cardDisplay"]) {
+  async function updateCardDisplay(cardDisplay: GlobalAppearanceSettings["cardDisplay"]) {
     const updated: GlobalAppearanceSettings = { ...settings, cardDisplay };
     try {
       saveGlobalAppearance(updated);
       applyGlobalAppearance(updated);
       setSettings(updated);
-      setNotice("Layout settings saved.");
+      await persistGlobalSetting(GLOBAL_APPEARANCE_KEY);
+      setNotice("Layout settings saved to this browser.");
     } catch (error) {
       console.error("Failed to save global appearance preferences.", error);
-      setNotice("Settings could not be saved. Check your browser storage permissions.");
+      setNotice("Layout took effect and is saved locally, but IndexedDB could not be updated.");
     }
   }
 
-  function updateCoverConversion(updated: CoverImageConversionSettings) {
+  async function updateCoverConversion(updated: CoverImageConversionSettings) {
     try {
       localStorage.setItem(COVER_IMAGE_QUALITY_KEY, JSON.stringify(updated));
       setCoverConversion(updated);
+      await persistGlobalSetting(COVER_IMAGE_QUALITY_KEY);
       setNotice("Cover image conversion settings saved.");
     } catch (error) {
       console.error("Failed to save cover image conversion settings.", error);
-      setNotice("Image settings could not be saved. Check your browser storage permissions.");
+      setNotice("Image setting took effect and is saved locally, but IndexedDB could not be updated.");
     }
   }
 
@@ -631,18 +678,19 @@ export default function GlobalSettingsPage() {
     updateCoverConversion({ ...coverConversion, preset });
   }
 
-  function updateChapterThumbnailSize(size: number) {
+  async function updateChapterThumbnailSize(size: number) {
     try {
       localStorage.setItem(CHAPTER_THUMBNAIL_SIZE_KEY, String(size));
       setChapterThumbnailSize(size);
+      await persistGlobalSetting(CHAPTER_THUMBNAIL_SIZE_KEY);
       setNotice("Chapter list thumbnail size saved.");
     } catch (error) {
       console.error("Failed to save chapter thumbnail size.", error);
-      setNotice("Thumbnail size could not be saved. Check your browser storage permissions.");
+      setNotice("Thumbnail size took effect and is saved locally, but IndexedDB could not be updated.");
     }
   }
 
-  function resetGlobalSettings() {
+  async function resetGlobalSettings() {
     if (!window.confirm("Reset Global Settings to their defaults? Bookmarks, history, and caches will not be deleted.")) {
       return;
     }
@@ -655,7 +703,14 @@ export default function GlobalSettingsPage() {
       setSettings(defaultGlobalAppearance);
       setCoverConversion(DEFAULT_COVER_IMAGE_CONVERSION);
       setChapterThumbnailSize(DEFAULT_CHAPTER_THUMBNAIL_SIZE);
-      setNotice("Global Settings reset to defaults.");
+      const results = await Promise.allSettled(GLOBAL_SETTING_KEYS.map(persistGlobalSetting));
+      const failedWrites = results.filter((result) => result.status === "rejected").length;
+      if (failedWrites) {
+        console.error("Some global settings could not be written to IndexedDB.", results);
+        setNotice("Settings reset locally, but IndexedDB could not be updated for every setting.");
+      } else {
+        setNotice("Global Settings reset to defaults.");
+      }
     } catch (error) {
       console.error("Failed to reset Global Settings.", error);
       setNotice("Settings could not be reset. Check your browser storage permissions.");
@@ -902,8 +957,9 @@ export default function GlobalSettingsPage() {
               <h2 id="storage-heading" className="text-lg font-bold">Data &amp; storage tools</h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Inspect and manage local browser cache. Firestore offline data lives mostly in IndexedDB
-                (shown under total origin storage). localStorage also holds bookmarks, history, theme,
-                and preferences — those are kept unless you use &quot;Clear all localStorage&quot;.
+                (shown under total origin storage). Global display preferences are stored in IndexedDB
+                and mirrored in localStorage for compatibility. Bookmarks, history, theme, and account
+                data remain in localStorage.
               </p>
             </div>
 
@@ -962,7 +1018,7 @@ export default function GlobalSettingsPage() {
               >
                 Clear all localStorage (keep account)
                 <span className="mt-1 block text-xs font-normal text-slate-600 dark:text-slate-400">
-                  Removes every localStorage key except bookmarks, history, appearance, theme, and Firebase login data. Use this if the size stays high after a normal cache clear.
+                Removes localStorage keys except account data and compatibility copies of preferences. IndexedDB settings remain stored.
                 </span>
               </button>
               <button
