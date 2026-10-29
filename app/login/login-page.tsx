@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import SiteChrome from "../site-chrome";
 import styles from "./login.module.css";
@@ -155,10 +154,10 @@ export default function LoginPage() {
               <span className={styles.artBook}>M</span>
               <span className={styles.artSparkle}>✦</span>
             </div>
-            <Link className={styles.brand} href="/" aria-label="Mikoroku home">
+            <a className={styles.brand} href="/" aria-label="Mikoroku home">
               <span className={styles.brandMark}>M</span>
               <span>Mikoroku</span>
-            </Link>
+            </a>
             <div className={styles.introCopy}>
               <span className={styles.eyebrow}>YOUR READING, YOUR WAY</span>
               <h2>Find your next favorite story.</h2>
@@ -233,7 +232,7 @@ export default function LoginPage() {
               </button>
             </p>
 
-            <Link className={styles.back} href={returnTo}>Back to previous page</Link>
+            <a className={styles.back} href={returnTo}>Back to previous page</a>
           </div>
         </section>
       </main>

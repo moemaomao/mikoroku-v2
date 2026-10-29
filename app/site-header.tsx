@@ -2,7 +2,6 @@
 
 import { imageProxyUrl } from "../lib/image-proxy";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyGlobalAppearance,
@@ -243,14 +242,12 @@ function SidebarLink({
   children,
   onClick,
   external = false,
-  native = false,
 }: {
   href: string;
   icon: string;
   children: React.ReactNode;
   onClick?: () => void;
   external?: boolean;
-  native?: boolean;
 }) {
   const classes =
     "flex w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-slate-900 no-underline transition hover:bg-white/75 hover:text-black dark:text-indigo-50/90 dark:hover:bg-white/10 dark:hover:text-white";
@@ -258,10 +255,7 @@ function SidebarLink({
   if (external) {
     return <a className={classes} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{content}</a>;
   }
-  if (native) {
-    return <a className={classes} href={href} onClick={onClick}>{content}</a>;
-  }
-  return <Link className={classes} href={href} onClick={onClick}>{content}</Link>;
+  return <a className={classes} href={href} onClick={onClick}>{content}</a>;
 }
 
 function HeaderContents() {
@@ -940,7 +934,7 @@ function HeaderContents() {
               <Icon name="search" />
             </button>
           )}
-          <Link
+          <a
             id="announcementLink"
             className={`${classButton} relative no-underline`}
             href="/announcements"
@@ -954,7 +948,7 @@ function HeaderContents() {
                 {unreadAnnouncements > 99 ? "99+" : unreadAnnouncements}
               </span>
             )}
-          </Link>
+          </a>
           <button
             id="darkModeToggle"
             type="button"
@@ -1057,7 +1051,7 @@ function HeaderContents() {
                     <button type="button" onClick={handleProfile} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="user" className="h-[18px] w-[18px]" />Profil</button>
                     <button type="button" onClick={handleNotifications} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="bell" className="h-[18px] w-[18px]" />Notifications</button>
                     <button type="button" onClick={handleMessages} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="message" className="h-[18px] w-[18px]" />Direct Messages</button>
-                    <Link href="/settings" onClick={closeAuth} className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="settings" className="h-[18px] w-[18px]" />Settings</Link>
+                    <a href="/settings" onClick={closeAuth} className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="settings" className="h-[18px] w-[18px]" />Settings</a>
                     <hr className="my-1 border-0 border-t border-black/[0.08] dark:border-white/10" />
                     <button type="button" onClick={handleLogout} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-red-600 transition hover:bg-red-500/10"><Icon name="logout" className="h-[18px] w-[18px]" />Logout</button>
                   </>
@@ -1126,7 +1120,7 @@ function HeaderContents() {
           <SidebarLink href="/manga-list" icon="book" onClick={() => mobile && closeSidebar()}>Manga List</SidebarLink>
           <SidebarLink href="/hentai-list" icon="book" onClick={() => mobile && closeSidebar()}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={() => mobile && closeSidebar()}>Genre List</SidebarLink>
-          <SidebarLink href="/bookmark" icon="bookmark" native onClick={() => mobile && closeSidebar()}>Bookmark</SidebarLink>
+          <SidebarLink href="/bookmark" icon="bookmark" onClick={() => mobile && closeSidebar()}>Bookmark</SidebarLink>
           <SidebarLink href="/history" icon="history" onClick={() => mobile && closeSidebar()}>History</SidebarLink>
           <SidebarLink href="/commission" icon="commission" onClick={() => mobile && closeSidebar()}>Commission</SidebarLink>
           <SidebarLink href="/global-settings" icon="settings" onClick={() => mobile && closeSidebar()}>Global Settings</SidebarLink>

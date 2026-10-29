@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import {
@@ -116,7 +115,7 @@ export default function ReadingHistoryPage() {
               <i className="fas fa-book-open" aria-hidden="true" />
               <h2>No reading history yet</h2>
               <p>Chapters you read will appear here.</p>
-              <Link href="/manga-list">Explore manga</Link>
+              <a href="/manga-list">Explore manga</a>
             </div>
           ) : (
             <ul className="reading-history-list">
@@ -124,7 +123,7 @@ export default function ReadingHistoryPage() {
                 const progress = entry.progress || 0;
                 return (
                   <li className="reading-history-card" key={entry.url}>
-                    <Link className="reading-history-open" href={entry.url}>
+                    <a className="reading-history-open" href={entry.url}>
                       <span className="reading-history-cover">
                         <CoverImage
                           src={coverUrl(entry.cover || "")}
@@ -151,7 +150,7 @@ export default function ReadingHistoryPage() {
                         </span>
                         <span className="reading-history-time">{formatElapsed(entry.time)}</span>
                       </span>
-                    </Link>
+                    </a>
                     <button
                       type="button"
                       className="reading-history-delete"

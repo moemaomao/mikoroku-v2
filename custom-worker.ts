@@ -72,6 +72,12 @@ function isSocialCrawler(request: Request): boolean {
     .test(request.headers.get("user-agent") || "");
 }
 
+function isAutomatedCrawler(request: Request): boolean {
+  return isSocialCrawler(request) ||
+    /bot|crawler|spider|slurp|preview/i
+      .test(request.headers.get("user-agent") || "");
+}
+
 function isSharePage(pathname: string): boolean {
   return /^\/(?:series\/[^/]+|manga\/[^/]+\/[^/]+|novel\/[^/]+\/[^/]+)\/?$/.test(pathname);
 }
@@ -81,7 +87,105 @@ function shouldServeSeriesShell(request: Request, url: URL): boolean {
     /^\/series\/[^/]+\/?$/.test(url.pathname) &&
     request.headers.get("rsc") !== "1" &&
     !url.searchParams.has("_rsc") &&
-    !isSocialCrawler(request);
+    !isAutomatedCrawler(request);
+}
+
+function shouldServeReaderShell(request: Request, url: URL): boolean {
+  return /^\/(?:manga|novel)\/[^/]+\/[^/]+\/?$/.test(url.pathname) &&
+    isStaticDocumentRequest(request, url) &&
+    !isAutomatedCrawler(request);
+}
+
+let staticPageManifestPromise: Promise<Record<string, string>> | null = null;
+
+async function getStaticPageAssetPath(
+  env: CloudflareEnv,
+  pathname: string,
+  origin: string,
+): Promise<string | null> {
+  if (!env.ASSETS) return null;
+
+  if (!staticPageManifestPromise) {
+    const manifestUrl = new URL("/__static_pages/manifest.json", origin);
+    staticPageManifestPromise = env.ASSETS
+      .fetch(new Request(manifestUrl))
+      .then(async (response) => {
+        if (!response.ok) {
+          await response.body?.cancel();
+          throw new Error(`Static page manifest returned HTTP ${response.status}.`);
+        }
+        return response.json() as Promise<Record<string, string>>;
+      })
+      .catch((error: unknown) => {
+        staticPageManifestPromise = null;
+        throw error;
+      });
+  }
+
+  let decodedPathname = pathname;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    // Keep the encoded path; it may still be a valid manifest key.
+  }
+
+  try {
+    const manifest = await staticPageManifestPromise;
+    return manifest[pathname] || manifest[decodedPathname] || null;
+  } catch (error) {
+    console.error("[worker static-pages] Unable to load static page manifest.", error);
+    return null;
+  }
+}
+
+function isStaticDocumentRequest(request: Request, url: URL): boolean {
+  return (request.method === "GET" || request.method === "HEAD") &&
+    request.headers.get("rsc") !== "1" &&
+    !url.searchParams.has("_rsc") &&
+    !request.headers.has("next-action") &&
+    (request.headers.get("accept") || "").toLowerCase().includes("text/html");
+}
+
+async function serveStaticPage(
+  request: Request,
+  url: URL,
+  env: CloudflareEnv,
+): Promise<Response | null> {
+  if (!env.ASSETS || !isStaticDocumentRequest(request, url)) return null;
+
+  const hasTrailingSlash = url.pathname.length > 1 && url.pathname.endsWith("/");
+  const canonicalPath = hasTrailingSlash ? url.pathname.slice(0, -1) : url.pathname;
+  const assetPath = await getStaticPageAssetPath(env, canonicalPath, url.origin);
+  if (!assetPath) return null;
+
+  if (hasTrailingSlash) {
+    const canonicalUrl = new URL(url);
+    canonicalUrl.pathname = canonicalPath;
+    return Response.redirect(canonicalUrl, 308);
+  }
+
+  const response = await env.ASSETS.fetch(
+    new Request(new URL(assetPath, url.origin), request),
+  );
+  if (response.status === 404) {
+    await response.body?.cancel();
+    console.error(`[worker static-pages] Built asset is missing for ${url.pathname}: ${assetPath}`);
+    return new Response("Static page asset is missing. Rebuild and deploy the Worker assets.", {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set(
+    "cache-control",
+    "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 async function serveSocialMetadataFallback(
@@ -488,35 +592,8 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
-    const isSeriesShellDocument =
-      url.pathname === "/series-shell" &&
-      (request.method === "GET" || request.method === "HEAD") &&
-      request.headers.get("rsc") !== "1" &&
-      !url.searchParams.has("_rsc");
-
-    if (env.ASSETS && isSeriesShellDocument) {
-      const assetUrl = new URL("/series-shell.html", url.origin);
-      const assetRequest = new Request(assetUrl, request);
-      const response = await env.ASSETS.fetch(assetRequest);
-      if (response.status === 404) {
-        await response.body?.cancel();
-        return new Response("Static series shell is missing. Rebuild and deploy the Worker assets.", {
-          status: 503,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        });
-      }
-
-      const headers = new Headers(response.headers);
-      headers.set(
-        "cache-control",
-        "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
-      );
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
-    }
+    const staticPage = await serveStaticPage(request, url, env);
+    if (staticPage) return staticPage;
 
     if (env.ASSETS && shouldServeSeriesShell(request, url)) {
       const encodedSlug = url.pathname.match(/^\/series\/([^/]+)\/?$/)?.[1];
@@ -529,6 +606,30 @@ export default {
       }
       const shellUrl = new URL("/series-shell", url.origin);
       shellUrl.searchParams.set("slug", slug);
+      return Response.redirect(shellUrl, 307);
+    }
+
+    if (env.ASSETS && shouldServeReaderShell(request, url)) {
+      const match = url.pathname.match(/^\/(manga|novel)\/([^/]+)\/([^/]+)\/?$/);
+      if (!match) return new Response("Invalid reader URL.", { status: 400 });
+
+      let slug: string;
+      let chapter: string;
+      try {
+        slug = decodeURIComponent(match[2]);
+        chapter = decodeURIComponent(match[3]);
+      } catch {
+        return new Response("Invalid reader URL.", { status: 400 });
+      }
+
+      const shellUrl = new URL("/reader-shell", url.origin);
+      shellUrl.searchParams.set("kind", match[1]);
+      shellUrl.searchParams.set("slug", slug);
+      shellUrl.searchParams.set("chapter", chapter);
+      for (const [key, value] of url.searchParams) {
+        if (key === "kind" || key === "slug" || key === "chapter") continue;
+        shellUrl.searchParams.append(key, value);
+      }
       return Response.redirect(shellUrl, 307);
     }
 
