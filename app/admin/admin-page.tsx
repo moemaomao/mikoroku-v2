@@ -27,7 +27,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from "react";
 import "quill/dist/quill.snow.css";
 import styles from "./admin.module.css";
 import AdvertisementSettings from "./advertisement-settings";
@@ -328,68 +328,125 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** Repair Blogger/Google URLs that were line-wrapped or split mid-path when pasted */
+function repairBrokenImageUrls(content: string): string {
+  // 1) Join lines that are continuations of a previous unfinished URL
+  const lines = content.split(/\r?\n/);
+  const joined: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const prev = joined[joined.length - 1];
+    const prevIsOpenUrl =
+      prev &&
+      /^https?:\/\//i.test(prev) &&
+      !/\.(jpe?g|png|gif|webp|bmp|avif)(?:\?.*)?$/i.test(prev) &&
+      (prev.includes("googleusercontent.com") ||
+        prev.includes("blogspot.com") ||
+        prev.includes("ggpht.com") ||
+        prev.length > 80);
+    const lineIsContinuation =
+      prevIsOpenUrl &&
+      !/^https?:\/\//i.test(line) &&
+      !/^[\[{<]/.test(line);
+    if (lineIsContinuation) {
+      joined[joined.length - 1] = prev + line.replace(/\s+/g, "");
+    } else {
+      joined.push(line);
+    }
+  }
+  let result = joined.join("\n");
+
+  // 2) Remove horizontal spaces inside a URL path (do NOT touch newlines between URLs)
+  for (let i = 0; i < 8; i++) {
+    const next = result.replace(
+      /(https?:\/\/(?:blogger\.)?googleusercontent\.com\/[^\s"'<>]*?)[^\S\r\n]+([^\s"'<>]+)/gi,
+      (full, a, b) => {
+        // never glue a finished image URL onto the next http URL
+        if (/\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(a) && /^https?:/i.test(b)) return full;
+        if (/^https?:/i.test(b) && /googleusercontent|blogspot|ggpht/i.test(b)) return full;
+        return a + b;
+      },
+    );
+    if (next === result) break;
+    result = next;
+  }
+  return result;
+}
+
 function extractChapterImageUrls(content: string): string[] {
-  const normalized = content
-    .replace(/&amp;/gi, "&")
-    .replace(/&#39;|&apos;|&#x27;/gi, "'")
-    .replace(/&quot;|&#34;|&#x22;/gi, '"');
-  const candidates: string[] = [];
-  const imageTags = normalized.match(/<img\b[^>]*>/gi) || [];
+  try {
+    // Hard limit input size to prevent main-thread freeze / crash
+    const safeContent = typeof content === "string" ? content.slice(0, 500_000) : "";
+    if (!safeContent.trim()) return [];
 
-  const bestSrcsetUrl = (srcset: string): string => {
-    let bestUrl = "";
-    let bestSize = -1;
-    for (const candidate of srcset.split(",")) {
-      const match = candidate.trim().match(/^(\S+)(?:\s+([\d.]+)(w|x))?$/i);
-      if (!match) continue;
-      const size = match[2] ? Number(match[2]) : 0;
-      if (size >= bestSize) {
-        bestUrl = match[1];
-        bestSize = size;
+    const normalized = repairBrokenImageUrls(safeContent)
+      .replace(/&amp;/gi, "&")
+      .replace(/&#39;|&apos;|&#x27;/gi, "'")
+      .replace(/&quot;|&#34;|&#x22;/gi, '"');
+    const candidates: string[] = [];
+    const imageTags = normalized.match(/<img\b[^>]{0,2000}>/gi) || [];
+
+    const bestSrcsetUrl = (srcset: string): string => {
+      let bestUrl = "";
+      let bestSize = -1;
+      for (const candidate of srcset.split(",").slice(0, 20)) {
+        const match = candidate.trim().match(/^(\S+)(?:\s+([\d.]+)(w|x))?$/i);
+        if (!match) continue;
+        const size = match[2] ? Number(match[2]) : 0;
+        if (size >= bestSize) {
+          bestUrl = match[1];
+          bestSize = size;
+        }
       }
+      return bestUrl;
+    };
+
+    for (const tag of imageTags.slice(0, 300)) {
+      const attributes = new Map<string, string>();
+      for (const match of tag.matchAll(/\b([a-z][\w:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
+        attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? "");
+      }
+
+      const url = [
+        attributes.get("data-original"),
+        attributes.get("data-lazy-src"),
+        attributes.get("data-src"),
+        bestSrcsetUrl(attributes.get("data-srcset") || ""),
+        bestSrcsetUrl(attributes.get("srcset") || ""),
+        attributes.get("src"),
+      ].find((candidate) => {
+        if (!candidate || candidate.length > 4000) return false;
+        try {
+          const parsed = new URL(candidate);
+          return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
+        } catch {
+          return false;
+        }
+      });
+      if (url) candidates.push(url);
     }
-    return bestUrl;
-  };
 
-  for (const tag of imageTags) {
-    const attributes = new Map<string, string>();
-    for (const match of tag.matchAll(/\b([a-z][\w:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
-      attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? "");
+    if (!candidates.length) {
+      const plainMatches = normalized.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+      candidates.push(...plainMatches.slice(0, 300));
     }
 
-    const url = [
-      attributes.get("data-original"),
-      attributes.get("data-lazy-src"),
-      attributes.get("data-src"),
-      bestSrcsetUrl(attributes.get("data-srcset") || ""),
-      bestSrcsetUrl(attributes.get("srcset") || ""),
-      attributes.get("src"),
-    ].find((candidate) => {
-      if (!candidate) return false;
-      try {
-        const parsed = new URL(candidate);
-        return (parsed.protocol === "http:" || parsed.protocol === "https:") && Boolean(parsed.hostname);
-      } catch {
-        return false;
-      }
-    });
-    if (url) candidates.push(url);
+    return [...new Set(candidates
+      .map((value) => value.replace(/["'<>),;}\]]+$/, "").trim())
+      .filter((value) => {
+        if (!value || value.length > 4000) return false;
+        try {
+          const url = new URL(value);
+          return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+        } catch {
+          return false;
+        }
+      }))];
+  } catch (err) {
+    console.error("extractChapterImageUrls failed:", err);
+    return [];
   }
-
-  if (!candidates.length) {
-    candidates.push(...(normalized.match(/https?:\/\/[^\s"'<>]+/gi) || []));
-  }
-
-  return [...new Set(candidates
-    .map((value) => value.replace(/["'<>),;}\]]+$/, "").trim())
-    .filter((value) => {
-      try {
-        const url = new URL(value);
-        return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
-      } catch {
-        return false;
-      }
-    }))];
 }
 
 async function uploadToImgBB(file: File): Promise<string> {
@@ -419,7 +476,36 @@ async function uploadToImgBB(file: File): Promise<string> {
 function imageFileName(url: string): string {
   try {
     const path = new URL(url).pathname;
-    return decodeURIComponent(path.split("/").pop() || url);
+    const name = path.split("/").pop() || "";
+    try {
+      const decoded = decodeURIComponent(name);
+      return decoded.length > 60 ? decoded.slice(0, 57) + "..." : decoded || "image";
+    } catch {
+      return name.length > 60 ? name.slice(0, 57) + "..." : name || "image";
+    }
+  } catch {
+    return url.length > 40 ? "…" + url.slice(-40) : url;
+  }
+}
+
+/** Admin preview src. Prefer direct URL; optional cache-bust. */
+function adminPreviewSrc(url: string, bust = 0): string {
+  try {
+    // Normalize common Blogger size tokens to a reliable variant
+    let src = url;
+    try {
+      const u = new URL(url);
+      if (/(^|\.)googleusercontent\.com$/i.test(u.hostname)) {
+        u.pathname = u.pathname
+          .replace(/\/s\d+(?:-c)?\//i, "/s1600/")
+          .replace(/\/w\d+-h\d+(?:-[a-z0-9-]+)?\//i, "/s1600/");
+        src = u.toString()
+          .replace(/=s\d+(?:-c)?(?:-[a-z0-9-]+)?(?=$|[?#])/i, "=s1600")
+          .replace(/=w\d+-h\d+(?:-[a-z0-9-]+)?(?=$|[&#])/i, "=s1600");
+      }
+    } catch { /* keep original */ }
+    if (!bust) return src;
+    return `${src}${src.includes("?") ? "&" : "?"}_r=${bust}`;
   } catch {
     return url;
   }
@@ -758,13 +844,35 @@ export default function AdminPage() {
   const thumbnailFileInput = useRef<HTMLInputElement>(null);
   const chapterFilesInput = useRef<HTMLInputElement>(null);
   const loadingMangaRef = useRef(false);
-  const chapterImageUrls = useMemo(
-    () => extractChapterImageUrls(chapterDraft.images),
-    [chapterDraft.images],
-  );
+  const [imageReloadKey, setImageReloadKey] = useState(0);
+  const chapterImageUrls = useMemo(() => {
+    try {
+      return extractChapterImageUrls(chapterDraft.images || "");
+    } catch (err) {
+      console.error("chapterImageUrls useMemo failed:", err);
+      return [];
+    }
+  }, [chapterDraft.images]);
 
   useEffect(() => {
     setIsLightMode(window.localStorage.getItem("theme") === "light");
+  }, []);
+
+  // Swallow benign AbortErrors (Next.js / fetch cancellation) so they don't show as red overlays
+  useEffect(() => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const isAbort =
+        (typeof DOMException !== "undefined" && reason instanceof DOMException && reason.name === "AbortError") ||
+        (reason instanceof Error && reason.name === "AbortError") ||
+        (typeof reason === "string" && /signal is aborted/i.test(reason));
+      if (isAbort) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
   }, []);
 
   useEffect(() => {
@@ -1904,7 +2012,7 @@ export default function AdminPage() {
   }
 
   function addChapterImageUrls() {
-    const uniqueUrls = extractChapterImageUrls(chapterDraft.images);
+    const uniqueUrls = extractChapterImageUrls(chapterDraft.images).slice(0, 200);
     setChapterDraft((current) => ({
       ...current,
       images: uniqueUrls.join("\n"),
@@ -1912,25 +2020,42 @@ export default function AdminPage() {
     }));
   }
 
-  function pasteChapterImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const clipboardHtml = event.clipboardData.getData("text/html");
-    const clipboardText = event.clipboardData.getData("text/plain");
-    const pastedContent = /<img\b/i.test(clipboardHtml) ? clipboardHtml : clipboardText;
-    const pastedUrls = extractChapterImageUrls(pastedContent);
-    if (!pastedUrls.length) return;
+  function pasteChapterImages(event: ClipboardEvent<HTMLTextAreaElement>) {
+    try {
+      const clipboardHtml = event.clipboardData.getData("text/html") || "";
+      const clipboardText = event.clipboardData.getData("text/plain") || "";
+      // Prefer plain text for long Blogger URLs to avoid heavy HTML parsing
+      const preferText = clipboardText.length > 0 && (
+        clipboardText.includes("blogger.googleusercontent.com") ||
+        clipboardText.includes("http") && clipboardHtml.length > 100_000
+      );
+      const rawContent = preferText || !/<img\b/i.test(clipboardHtml)
+        ? clipboardText.slice(0, 500_000)
+        : clipboardHtml.slice(0, 500_000);
+      const pastedContent = repairBrokenImageUrls(rawContent);
 
-    event.preventDefault();
-    setChapterDraft((current) => {
-      const images = [...new Set([
-        ...extractChapterImageUrls(current.images),
-        ...pastedUrls,
-      ])];
-      return {
-        ...current,
-        images: images.join("\n"),
-        thumbnail: current.thumbnail || images[Math.min(2, images.length - 1)] || "",
-      };
-    });
+      const pastedUrls = extractChapterImageUrls(pastedContent);
+      if (!pastedUrls.length) return;
+
+      event.preventDefault();
+      setChapterDraft((current) => {
+        try {
+          const existing = extractChapterImageUrls(current.images || "");
+          const images = [...new Set([...existing, ...pastedUrls])].slice(0, 200);
+          return {
+            ...current,
+            images: images.join("\n"),
+            thumbnail: current.thumbnail || images[Math.min(2, images.length - 1)] || "",
+          };
+        } catch (inner) {
+          console.error("pasteChapterImages state update failed:", inner);
+          return current;
+        }
+      });
+    } catch (err) {
+      console.error("pasteChapterImages failed:", err);
+      // Let default paste happen so user still gets the text
+    }
   }
 
   function sortChapterImages() {
@@ -3245,7 +3370,7 @@ export default function AdminPage() {
               </div>
               <input type="url" placeholder="Thumbnail URL" value={chapterDraft.thumbnail} onChange={(event) => setChapterDraft((current) => ({ ...current, thumbnail: event.target.value }))} />
               {chapterDraft.thumbnail && (
-                <img className={styles.thumbnailPreview} src={chapterDraft.thumbnail} alt="Chapter thumbnail preview" />
+                <img className={styles.thumbnailPreview} src={chapterDraft.thumbnail} alt="Chapter thumbnail preview" referrerPolicy="no-referrer" decoding="async" />
               )}
             </div>
             <div className={`${styles.field} ${styles.chapterImagesField}`}>
@@ -3258,13 +3383,15 @@ export default function AdminPage() {
               <div className={styles.imageListToolbar}>
                 <button type="button" className={styles.secondaryButton} onClick={addChapterImageUrls}>＋ Add to List</button>
                 <button type="button" className={styles.secondaryButton} onClick={sortChapterImages}>⇅ Sort by Name</button>
+                <button type="button" className={styles.secondaryButton} onClick={() => setChapterDraft((c) => ({ ...c, images: "", thumbnail: c.thumbnail }))}>Clear Images</button>
+                <button type="button" className={styles.secondaryButton} onClick={() => setImageReloadKey((k) => k + 1)} title="Hard reload all preview images">↻ Reload Previews</button>
                 <span>{chapterImageUrls.length ? `${chapterImageUrls.length} images` : ""}</span>
               </div>
               <div className={styles.uploadedImageGrid}>
                 {chapterImageUrls.map((url, index) => (
                   <div
                     className={styles.uploadedImage}
-                    key={`${url}-${index}`}
+                    key={`page-${index}-${url.slice(-48)}`}
                     draggable
                     onDragStart={(event) => {
                       event.dataTransfer.setData("text/plain", String(index));
@@ -3281,7 +3408,36 @@ export default function AdminPage() {
                       setChapterDraft((current) => ({ ...current, images: reordered.join("\n") }));
                     }}
                   >
-                    <img src={url} alt={`Chapter page ${index + 1}`} loading="lazy" />
+                    <img
+                      src={adminPreviewSrc(url, imageReloadKey)}
+                      alt={`Chapter page ${index + 1}`}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      decoding="async"
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        const attempt = Number(el.dataset.attempt || "0");
+                        if (attempt === 0) {
+                          // 1st fail → try weserv proxy
+                          el.dataset.attempt = "1";
+                          try {
+                            const proxy = new URL("https://images.weserv.nl/");
+                            proxy.searchParams.set("url", url);
+                            proxy.searchParams.set("w", "240");
+                            proxy.searchParams.set("q", "70");
+                            proxy.searchParams.set("n", "-1");
+                            proxy.searchParams.set("v", String(imageReloadKey + 1));
+                            el.src = proxy.toString();
+                          } catch {
+                            el.src = adminPreviewSrc(url, imageReloadKey + 1);
+                          }
+                        } else if (attempt === 1) {
+                          // 2nd fail → cache-bust direct
+                          el.dataset.attempt = "2";
+                          el.src = adminPreviewSrc(url, imageReloadKey + 2);
+                        }
+                      }}
+                    />
                     <span className={styles.imageIndex}>{index + 1}</span>
                     <span className={styles.imageFileName} title={imageFileName(url)}>{imageFileName(url) || `page-${index + 1}`}</span>
                     <div className={styles.uploadedImageActions}>
