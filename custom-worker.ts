@@ -83,10 +83,8 @@ function isSharePage(pathname: string): boolean {
 }
 
 function shouldServeSeriesShell(request: Request, url: URL): boolean {
-  return request.method === "GET" &&
-    /^\/series\/[^/]+\/?$/.test(url.pathname) &&
-    request.headers.get("rsc") !== "1" &&
-    !url.searchParams.has("_rsc") &&
+  return /^\/series\/[^/]+\/?$/.test(url.pathname) &&
+    isStaticDocumentRequest(request, url) &&
     !isAutomatedCrawler(request);
 }
 
@@ -614,17 +612,20 @@ export default {
     if (staticPage) return staticPage;
 
     if (env.ASSETS && shouldServeSeriesShell(request, url)) {
-      const encodedSlug = url.pathname.match(/^\/series\/([^/]+)\/?$/)?.[1];
-      if (!encodedSlug) return new Response("Invalid series URL.", { status: 400 });
-      let slug: string;
-      try {
-        slug = decodeURIComponent(encodedSlug);
-      } catch {
-        return new Response("Invalid series slug.", { status: 400 });
+      const shellAssetPath = await getStaticPageAssetPath(
+        env,
+        "/series-shell",
+        url.origin,
+      );
+      if (shellAssetPath) {
+        return fetchStaticDocument(
+          request,
+          url,
+          env,
+          shellAssetPath,
+          "/series-shell",
+        );
       }
-      const shellUrl = new URL("/series-shell", url.origin);
-      shellUrl.searchParams.set("slug", slug);
-      return Response.redirect(shellUrl, 307);
     }
 
     if (env.ASSETS && shouldServeReaderShell(request, url)) {

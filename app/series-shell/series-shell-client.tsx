@@ -5,15 +5,35 @@ import DetailPageClient from "../series/detail-page-client";
 
 export default function SeriesShellClient() {
   const [slug, setSlug] = useState("");
+  const [invalidRoute, setInvalidRoute] = useState(false);
 
   useEffect(() => {
-    const slugFromRedirect = new URLSearchParams(window.location.search).get("slug");
-    if (!slugFromRedirect) return;
+    const pathMatch = window.location.pathname.match(/^\/series\/([^/]+)\/?$/);
+    const encodedSlug = pathMatch?.[1];
+    const slugFromQuery = new URLSearchParams(window.location.search).get("slug");
+    const slugValue = encodedSlug || slugFromQuery;
+    if (!slugValue) {
+      setInvalidRoute(true);
+      return;
+    }
 
-    const seriesPath = `/series/${encodeURIComponent(slugFromRedirect)}`;
-    window.history.replaceState(null, "", seriesPath);
-    setSlug(slugFromRedirect);
+    try {
+      setSlug(encodedSlug ? decodeURIComponent(slugValue) : slugValue);
+    } catch {
+      setInvalidRoute(true);
+    }
   }, []);
+
+  if (invalidRoute) {
+    return (
+      <main className="grid min-h-screen place-items-center px-6 text-center">
+        <div>
+          <h1 className="text-xl font-semibold">Series page could not be opened</h1>
+          <a className="mt-4 inline-block underline" href="/">Go to homepage</a>
+        </div>
+      </main>
+    );
+  }
 
   if (!slug) {
     return (
