@@ -65,19 +65,21 @@ export default function SiteFooter({
     <div id="site-footer" className="m-0 w-full p-0 transition-[margin,width] duration-300 min-[769px]:[body.sidebar-open_&]:ml-[var(--sidebar-width)] min-[769px]:[body.sidebar-open_&]:w-[calc(100%-var(--sidebar-width))]">
       <footer
         id="mainFooter"
-        className="relative mt-10 w-full overflow-hidden bg-transparent py-[50px] text-[#858585] transition-[margin,width] duration-300 max-[600px]:mt-[30px] max-[600px]:px-[15px] max-[600px]:pt-10 max-[600px]:pb-[30px] min-[768px]:py-[60px]"
+        className="relative mt-10 w-full overflow-visible bg-transparent py-[50px] text-[#858585] transition-[margin,width] duration-300 max-[600px]:mt-[30px] max-[600px]:px-[15px] max-[600px]:pt-10 max-[600px]:pb-[30px] min-[768px]:py-[60px]"
         style={{
-          backgroundColor: backgroundColor || "var(--mk-footer-bg, #0b0b0b)",
+          backgroundColor: backgroundColor || "var(--mk-footer-bg, transparent)",
           marginTop: removeTopGap ? 0 : undefined,
           padding: removeTopGap ? "0 0 50px" : undefined,
         }}
       >
         <div
-          className="site-footer-card mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 bg-black/10 px-[30px] py-[22px] backdrop-blur-xl max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7"
+          className="site-footer-card mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 px-[30px] py-[22px] max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7"
           style={{
-            backgroundColor: "var(--mk-footer-card-bg, rgba(23, 23, 37, .96))",
-            borderColor: "var(--mk-footer-card-border, rgba(255, 255, 255, .1))",
+            backgroundColor: "var(--mk-footer-card-bg, rgba(15, 15, 25, 0.32))",
+            borderColor: "var(--mk-footer-card-border, rgba(255, 255, 255, .12))",
             color: "var(--mk-footer-card-text, #d4d4d8)",
+            WebkitBackdropFilter: "blur(28px) saturate(1.6)",
+            backdropFilter: "blur(28px) saturate(1.6)",
           }}
         >
         <nav className="flex flex-wrap gap-4 max-[600px]:justify-center" aria-label="Informasi situs">

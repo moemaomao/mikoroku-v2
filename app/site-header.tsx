@@ -305,8 +305,8 @@ function HeaderContents() {
     document.documentElement.style.setProperty("--mk-bookmark-text", isDark ? "#ffffff" : "#111827");
     document.documentElement.style.setProperty("--mk-commission-card-bg", isDark ? "#171725" : "#ffffff");
     document.documentElement.style.setProperty("--mk-commission-card-text", isDark ? "#e2e8f0" : "#1e293b");
-    document.documentElement.style.setProperty("--mk-footer-bg", isDark ? "#0b0b0b" : "#f8f9fa");
-    document.documentElement.style.setProperty("--mk-footer-card-bg", isDark ? "rgba(23,23,37,.96)" : "rgba(255,255,255,.94)");
+    document.documentElement.style.setProperty("--mk-footer-bg", "transparent");
+    document.documentElement.style.setProperty("--mk-footer-card-bg", isDark ? "rgba(15,15,25,0.32)" : "rgba(255,255,255,0.28)");
     document.documentElement.style.setProperty("--mk-footer-card-border", isDark ? "rgba(255,255,255,.1)" : "rgba(15,23,42,.12)");
     document.documentElement.style.setProperty("--mk-footer-card-text", isDark ? "#d4d4d8" : "#334155");
     document.documentElement.style.setProperty("--mk-footer-link", isDark ? "#ff5757" : "#be123c");
@@ -1219,8 +1219,8 @@ function applyTheme(isDark: boolean): void {
   document.documentElement.style.setProperty("--mk-bookmark-text", isDark ? "#ffffff" : "#111827");
   document.documentElement.style.setProperty("--mk-commission-card-bg", isDark ? "#171725" : "#ffffff");
   document.documentElement.style.setProperty("--mk-commission-card-text", isDark ? "#e2e8f0" : "#1e293b");
-  document.documentElement.style.setProperty("--mk-footer-bg", isDark ? "#0b0b0b" : "#f8f9fa");
-  document.documentElement.style.setProperty("--mk-footer-card-bg", isDark ? "rgba(23,23,37,.96)" : "rgba(255,255,255,.94)");
+  document.documentElement.style.setProperty("--mk-footer-bg", "transparent");
+  document.documentElement.style.setProperty("--mk-footer-card-bg", isDark ? "rgba(15,15,25,0.32)" : "rgba(255,255,255,0.28)");
   document.documentElement.style.setProperty("--mk-footer-card-border", isDark ? "rgba(255,255,255,.1)" : "rgba(15,23,42,.12)");
   document.documentElement.style.setProperty("--mk-footer-card-text", isDark ? "#d4d4d8" : "#334155");
   document.documentElement.style.setProperty("--mk-footer-link", isDark ? "#ff5757" : "#be123c");
