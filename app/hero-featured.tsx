@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { imageProxyUrl } from "../lib/image-proxy";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import styles from "./hero-featured.module.css";
@@ -33,7 +33,6 @@ function resolveCover(value: unknown): string {
   return `https://raw.githubusercontent.com/moemaomao/mymangadata/main/${cover.replace(/^\//, "")}`;
 }
 
-/** Compress via site image proxy (weserv webp ~200px) */
 function thumb(url: string, version = 0): string {
   if (!url || url.includes("placeholder.com")) return url;
   try {
@@ -43,7 +42,7 @@ function thumb(url: string, version = 0): string {
   }
 }
 
-function pickFromWindow(limit = 6): HeroCover[] {
+function pickFromWindow(limit = 15): HeroCover[] {
   if (typeof window === "undefined") return [];
 
   const data = window.mangaData;
@@ -60,8 +59,8 @@ function pickFromWindow(limit = 6): HeroCover[] {
     seen.add(key);
     pool.push({
       title: item.title,
-      slug: String(item.slug || normalizeTitle(item.title)),
-      cover: thumb(raw, Number(item.updatedAt || 0)),
+      slug: String(item.slug || key),
+      cover: thumb(raw, Number(item.updatedAt) || 0),
       subtitle: Array.isArray(item.genres)
         ? (item.genres as string[]).slice(0, 2).join(" · ")
         : "Borderline H",
@@ -79,26 +78,64 @@ function pickFromWindow(limit = 6): HeroCover[] {
       if (pool.length >= limit) break;
     }
   }
-
-  if (pool.length < 6) return [];
-
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-
-  return pool.slice(0, limit);
+  return pool;
 }
 
 function seriesHref(slug: string): string {
-  if (!slug || slug === "#") return "/manga-list";
+  if (!slug || slug === "#") return "#";
   return `/series/${encodeURIComponent(slug)}`;
+}
+
+function circularOffset(index: number, active: number, n: number): number {
+  let d = index - active;
+  if (d > n / 2) d -= n;
+  if (d < -n / 2) d += n;
+  return d;
+}
+
+function layoutMetrics(width: number, dual: boolean) {
+  let cardW = 128;
+  if (width >= 1600) cardW = 142;
+  else if (width >= 1400) cardW = 138;
+  else if (width >= 1100) cardW = 132;
+  else if (width < 768) cardW = 104;
+
+  const scaleMain = dual ? 1.06 : 1.12;
+  const mainW = cardW * scaleMain;
+  const gap = dual ? Math.max(6, Math.min(14, width * 0.006)) : 0;
+  const mainHalf = dual ? mainW / 2 + gap / 2 : 0;
+
+  let step: number;
+  if (!dual) {
+    step = Math.max(48, cardW * 0.55);
+  } else {
+    const maxSide = 7;
+    const usable = Math.min(width, 1600) * 0.92;
+    const remain = Math.max(0, usable / 2 - mainHalf);
+    step = Math.max(cardW * 0.42, Math.min(cardW * 0.72, remain / maxSide));
+  }
+
+  return { cardW, mainHalf, step, dual };
+}
+
+function cardX(offset: number, m: ReturnType<typeof layoutMetrics>): number {
+  if (!m.dual) {
+    return offset * m.step;
+  }
+  // dual: 0 = left main, 1 = right main
+  if (offset === 0) return -m.mainHalf;
+  if (offset === 1) return m.mainHalf;
+  if (offset > 1) return m.mainHalf + (offset - 1) * m.step;
+  // offset < 0
+  return -m.mainHalf + offset * m.step;
 }
 
 export default function HeroFeatured() {
   const [covers, setCovers] = useState<HeroCover[]>(FALLBACK_COVERS);
   const [active, setActive] = useState(0);
   const [hidden, setHidden] = useState(false);
+  const [vw, setVw] = useState(1200);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const syncHide = () => {
@@ -118,19 +155,34 @@ export default function HeroFeatured() {
   }, []);
 
   useEffect(() => {
+    const sync = () => {
+      setVw(window.innerWidth);
+      setSidebarOpen(document.body.classList.contains("sidebar-open"));
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    const mo = new MutationObserver(sync);
+    mo.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    const timer = window.setInterval(sync, 500);
+    return () => {
+      window.removeEventListener("resize", sync);
+      mo.disconnect();
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     const apply = () => {
-      const picked = pickFromWindow(6);
-      if (picked.length >= 6) {
+      const picked = pickFromWindow(15);
+      if (picked.length >= 9) {
         setCovers(picked);
         setActive(0);
       }
     };
-
     apply();
     const onReady = () => apply();
     window.addEventListener("mangaDataReady", onReady);
     const timers = [800, 2000, 4000].map((ms) => window.setTimeout(apply, ms));
-
     return () => {
       window.removeEventListener("mangaDataReady", onReady);
       timers.forEach((id) => window.clearTimeout(id));
@@ -138,14 +190,23 @@ export default function HeroFeatured() {
   }, []);
 
   useEffect(() => {
-    if (covers.length < 2) return;
+    if (covers.length < 2 || hidden) return;
     const timer = window.setInterval(() => {
       setActive((i) => (i + 1) % covers.length);
-    }, 4500);
+    }, 4800);
     return () => window.clearInterval(timer);
-  }, [covers.length]);
+  }, [covers.length, hidden]);
 
-  const featured = covers[active] || covers[0];
+  const n = covers.length;
+  const dual = vw >= 768;
+  const contentW = sidebarOpen && dual ? Math.max(320, vw - 240) : vw;
+  const metrics = layoutMetrics(contentW, dual);
+  const maxAbs = dual ? 8 : 3;
+
+  const goTo = (index: number) => {
+    if (index === active) return;
+    setActive(index);
+  };
 
   if (hidden) {
     return <section id="heroSection" className={styles.hero} hidden aria-hidden="true" />;
@@ -153,65 +214,66 @@ export default function HeroFeatured() {
 
   return (
     <section id="heroSection" className={styles.hero} aria-label="Featured Titles">
-      <div className={styles.covers}>
-        {covers.map((item, index) => (
-          <button
-            key={`${item.slug}-${index}`}
-            type="button"
-            className={`${styles.card} ${styles[`pos${index + 1}` as keyof typeof styles]} ${
-              index === active ? styles.cardActive : ""
-            }`}
-            onClick={() => setActive(index)}
-            aria-label={item.title}
-            aria-current={index === active ? "true" : undefined}
-          >
-            <img
-              src={item.cover}
-              alt={item.title}
-              width={200}
-              height={280}
-              loading={index < 3 ? "eager" : "lazy"}
-              decoding="async"
-            />
-            <div className={styles.cardInfo}>
-              <h3>{item.title}</h3>
-              {item.subtitle ? <p>{item.subtitle}</p> : null}
-            </div>
-          </button>
-        ))}
+      <div className={styles.track}>
+        {covers.map((item, index) => {
+          const offset = circularOffset(index, active, n);
+          const abs = Math.abs(offset);
+          if (abs > maxAbs) return null;
+
+          const isMainA = offset === 0;
+          const isMainB = dual && offset === 1;
+          const isMain = isMainA || isMainB;
+          const x = cardX(offset, metrics);
+
+          return (
+            <button
+              key={`${item.slug}-${index}`}
+              type="button"
+              className={`${styles.card} ${isMainA ? styles.cardActive : ""} ${isMainB ? styles.cardActiveB : ""}`}
+              style={
+                {
+                  "--x": `${x}px`,
+                  "--a": isMain ? 0 : abs,
+                  "--rot": isMain ? 0 : offset * (dual ? -10 : -16),
+                  zIndex: isMain ? 50 : 40 - abs,
+                } as CSSProperties
+              }
+              onClick={() => {
+                if (isMain) {
+                  window.location.href = seriesHref(item.slug);
+                } else {
+                  goTo(index);
+                }
+              }}
+              aria-label={item.title}
+              aria-current={isMainA ? "true" : undefined}
+            >
+              <img
+                src={item.cover}
+                alt={item.title}
+                width={240}
+                height={340}
+                loading={abs <= 2 || isMain ? "eager" : "lazy"}
+                decoding="async"
+                draggable={false}
+              />
+            </button>
+          );
+        })}
       </div>
 
-      <div className={styles.panel}>
-        <a href={seriesHref(featured.slug)} className={styles.panelLink}>
-          <div className={styles.panelCoverWrap}>
-            <img
-              key={featured.slug + String(active)}
-              src={featured.cover}
-              alt={featured.title}
-              className={styles.panelCover}
-              width={72}
-              height={100}
-              loading="eager"
-              decoding="async"
-            />
-          </div>
-          <div className={styles.ornament}>✦</div>
-          <h2 className={styles.panelTitle}>{featured.title}</h2>
-          <p className={styles.sub}>{featured.subtitle || "Borderline H Scans"}</p>
-          <span className={styles.btn}>READ NOW</span>
-        </a>
-
-        <div className={styles.dots} aria-label="Pilih featured">
-          {covers.map((item, i) => (
-            <button
-              key={item.slug + i}
-              type="button"
-              className={`${styles.dot} ${i === active ? styles.dotActive : ""}`}
-              aria-label={item.title}
-              onClick={() => setActive(i)}
-            />
-          ))}
-        </div>
+      <div className={styles.dots} role="tablist" aria-label="Featured slides">
+        {covers.map((item, i) => (
+          <button
+            key={item.slug + i}
+            type="button"
+            role="tab"
+            aria-selected={i === active}
+            className={`${styles.dot} ${i === active ? styles.dotOn : ""}`}
+            aria-label={item.title}
+            onClick={() => goTo(i)}
+          />
+        ))}
       </div>
     </section>
   );
