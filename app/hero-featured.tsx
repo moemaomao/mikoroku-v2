@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, useRef, type CSSProperties } from "react";
 import { imageProxyUrl } from "../lib/image-proxy";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import styles from "./hero-featured.module.css";
@@ -86,22 +86,36 @@ function pickFromWindow(limit = 15): HeroCover[] {
   }
 
   const pool: HeroCover[] = [];
-  const maxLen = Math.max(githubPool.length, firestorePool.length);
-  for (let i = 0; i < maxLen && pool.length < limit; i++) {
-    if (i < firestorePool.length && pool.length < limit) pool.push(firestorePool[i]);
-    if (i < githubPool.length && pool.length < limit) pool.push(githubPool[i]);
+  const fsCap = Math.max(2, Math.floor(limit * 0.3));
+  const ghCap = limit - fsCap;
+
+  for (let i = 0; i < githubPool.length && pool.length < ghCap; i++) {
+    pool.push(githubPool[i]);
   }
 
-  if (pool.length < limit) {
+  for (let i = 0; i < firestorePool.length && pool.length < limit && i < fsCap; i++) {
+    pool.push(firestorePool[i]);
+  }
+
+  const ghPart = pool.slice(0, Math.min(pool.length, ghCap));
+  const fsPart = pool.slice(ghPart.length);
+  const mixed: HeroCover[] = [];
+  const maxLen = Math.max(ghPart.length, fsPart.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < ghPart.length) mixed.push(ghPart[i]);
+    if (i < fsPart.length) mixed.push(fsPart[i]);
+  }
+
+  if (mixed.length < limit) {
     for (const item of [...githubPool, ...firestorePool]) {
-      if (pool.length >= limit) break;
-      if (!pool.some((p) => normalizeTitle(p.title) === normalizeTitle(item.title))) {
-        pool.push(item);
+      if (mixed.length >= limit) break;
+      if (!mixed.some((p) => normalizeTitle(p.title) === normalizeTitle(item.title))) {
+        mixed.push(item);
       }
     }
   }
 
-  return pool.slice(0, limit);
+  return mixed.slice(0, limit);
 }
 
 function seriesHref(slug: string): string {
@@ -145,9 +159,11 @@ function cardX(offset: number, m: ReturnType<typeof layoutMetrics>): number {
   if (!m.dual) {
     return offset * m.step;
   }
+
   if (offset === 0) return -m.mainHalf;
   if (offset === 1) return m.mainHalf;
   if (offset > 1) return m.mainHalf + (offset - 1) * m.step;
+
   return -m.mainHalf + offset * m.step;
 }
 
@@ -157,6 +173,21 @@ export default function HeroFeatured() {
   const [hidden, setHidden] = useState(false);
   const [vw, setVw] = useState(1200);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [displayTitle, setDisplayTitle] = useState<HeroCover | null>(null);
+  const [titlePhase, setTitlePhase] = useState<"in" | "out">("in");
+  const titleToken = useRef(0);
+
+  useEffect(() => {
+    const id = "mikoroku-cyber-font";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Rajdhani:wght@600;700&display=swap";
+    document.head.appendChild(link);
+  }, []);
+
 
   useEffect(() => {
     const syncHide = () => {
@@ -217,6 +248,34 @@ export default function HeroFeatured() {
     }, 4800);
     return () => window.clearInterval(timer);
   }, [covers.length, hidden]);
+
+  useEffect(() => {
+    if (!displayTitle && covers[active]) {
+      setDisplayTitle(covers[active]);
+      setTitlePhase("in");
+    }
+  }, [covers, active, displayTitle]);
+
+  useEffect(() => {
+    const next = covers[active];
+    if (!next) return;
+    if (displayTitle && next.slug === displayTitle.slug && next.title === displayTitle.title) return;
+    if (!displayTitle) {
+      setDisplayTitle(next);
+      setTitlePhase("in");
+      return;
+    }
+
+    const token = ++titleToken.current;
+    setTitlePhase("out");
+    const t = window.setTimeout(() => {
+      if (titleToken.current !== token) return;
+      setDisplayTitle(next);
+      setTitlePhase("in");
+    }, 480);
+    return () => window.clearTimeout(t);
+  }, [active, covers, displayTitle]);
+
 
   const n = covers.length;
   const dual = vw >= 768;
@@ -293,6 +352,19 @@ export default function HeroFeatured() {
             </button>
           );
         })}
+      </div>
+
+      <div className={styles.titleStage} aria-live="polite">
+        {displayTitle && <div className={styles.titleStrip} aria-hidden="true" />}
+        {displayTitle && (
+          <div
+            key={`${displayTitle.slug}-${titlePhase}`}
+            className={`${styles.titleCard} ${titlePhase === "out" ? styles.titleCardOut : styles.titleCardIn}`}
+          >
+            <h2 className={styles.titleText}>{displayTitle.title}</h2>
+            <p className={styles.titleGenre}>{displayTitle.subtitle || "Borderline H"}</p>
+          </div>
+        )}
       </div>
 
       <div className={styles.dots} role="tablist" aria-label="Featured slides">

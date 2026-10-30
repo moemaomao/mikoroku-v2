@@ -118,11 +118,170 @@
   opacity: 0.95;
 }
 
+.titleStage {
+  position: relative;
+  z-index: 55;
+  height: 72px;
+  margin: 4px 0 0;
+  padding: 0 16px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.titleStrip {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(280px, 55vw);
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #c9a06a)) 90%, #fff),
+    color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #c9a06a)) 40%, transparent) 70%,
+    transparent
+  );
+  box-shadow: 0 0 10px color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #c9a06a)) 50%, transparent);
+  z-index: 1;
+}
+
+.titleCard {
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 0;
+  max-width: min(480px, 60vw);
+  width: 100%;
+  pointer-events: none;
+}
+
+.titleText {
+  position: absolute;
+  left: 0;
+  bottom: calc(50% + 8px);
+  margin: 0;
+  max-width: 100%;
+  font-family: "Orbitron", "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  font-size: clamp(15px, 2.4vw, 20px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #c9a06a)) 72%, #ffffff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+
+.titleGenre {
+  position: absolute;
+  left: 0;
+  top: calc(50% + 8px);
+  margin: 0;
+  max-width: 100%;
+  font-family: "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  font-size: clamp(11px, 1.6vw, 13px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #c9a06a)) 55%, #ffffff);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.titleCardIn .titleText {
+  animation: titleRiseIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.titleCardIn .titleGenre {
+  animation: genreDropIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.titleCardOut .titleText {
+  animation: titleRiseOut 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.titleCardOut .titleGenre {
+  animation: genreDropOut 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes titleRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes titleRiseOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes genreDropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 0.85;
+    transform: translateY(0);
+  }
+}
+
+@keyframes genreDropOut {
+  from {
+    opacity: 0.85;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+:global(html.light) .titleText,
+:global(body.light) .titleText {
+  color: color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #760c12)) 78%, #000000);
+  text-shadow: none;
+}
+
+:global(html.light) .titleGenre,
+:global(body.light) .titleGenre {
+  color: color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #760c12)) 65%, #000000);
+}
+
+:global(html.light) .titleStrip,
+:global(body.light) .titleStrip {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #760c12)) 90%, #000),
+    color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #760c12)) 35%, transparent) 70%,
+    transparent
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--mikoroku-accent-surface, var(--accent, #760c12)) 35%, transparent);
+}
+
 .dots {
   display: flex;
   justify-content: center;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 4px;
   margin-bottom: 2px;
   position: relative;
   z-index: 60;
@@ -154,6 +313,7 @@
   background: var(--mikoroku-accent-surface, #760c12);
 }
 
+/* Desktop: hero shifts with sidebar */
 @media (min-width: 769px) {
   :global(body.sidebar-open) .hero {
     margin-left: var(--sidebar-w);
@@ -206,8 +366,26 @@
       rotateY(0deg)
       scale(1.14) !important;
   }
+  .titleStage {
+    height: 62px;
+    padding: 0 12px;
+  }
+  .titleCard {
+    left: 12px;
+    max-width: 75vw;
+  }
+  .titleText {
+    font-size: 13px;
+  }
+  .titleGenre {
+    font-size: 10px;
+  }
+  .titleStrip {
+    left: 12px;
+    width: min(200px, 60vw);
+  }
   .dots {
-    margin-top: 6px;
+    margin-top: 2px;
   }
 }
 
@@ -217,5 +395,11 @@
   }
   .hero {
     transition: none;
+  }
+  .titleCardIn .titleText,
+  .titleCardIn .titleGenre,
+  .titleCardOut .titleText,
+  .titleCardOut .titleGenre {
+    animation: none;
   }
 }
