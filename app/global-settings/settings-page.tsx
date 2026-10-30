@@ -157,6 +157,28 @@ function readHistory(value: unknown): Record<string, unknown>[] {
   });
 }
 
+
+/** Normalize chapter numbers so "01" / "05" match UI "1" / "5". */
+function normalizeChapterNum(value: unknown): string {
+  const m = String(value ?? "").trim().match(/(\d+)(?:\.(\d+))?/);
+  if (!m) return "";
+  const whole = String(parseInt(m[1], 10));
+  if (m[2] != null && m[2] !== "") return `${whole}.${m[2]}`;
+  return whole;
+}
+
+function normalizeChapterList(list: unknown[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    const n = normalizeChapterNum(item);
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
+}
+
 /** Collect all read_* chapter marks from localStorage (old-site compatible). */
 function collectReadMarks(): Record<string, string[]> {
   const marks: Record<string, string[]> = {};
@@ -169,7 +191,7 @@ function collectReadMarks(): Record<string, string[]> {
       try {
         const raw = JSON.parse(localStorage.getItem(key) || "[]");
         if (Array.isArray(raw) && raw.length > 0) {
-          marks[title] = raw.map(String).filter(Boolean);
+          marks[title] = normalizeChapterList(raw);
         }
       } catch {
         // skip invalid
@@ -190,7 +212,7 @@ function collectLastRead(): Record<string, string> {
       if (!key || !key.startsWith("lastRead_")) continue;
       const slug = key.slice(9);
       const value = localStorage.getItem(key);
-      if (slug && value) last[slug] = value;
+      if (slug && value) last[slug] = normalizeChapterNum(value) || value;
     }
   } catch {
     // ignore
@@ -217,8 +239,8 @@ function importReadMarks(incoming: unknown): number {
     } catch {
       existing = [];
     }
-    const incomingChapters = chapters.map(String).filter(Boolean);
-    const merged = [...new Set([...existing, ...incomingChapters])];
+    const incomingChapters = normalizeChapterList(chapters);
+    const merged = normalizeChapterList([...existing, ...incomingChapters]);
     localStorage.setItem(key, JSON.stringify(merged));
     titlesProcessed += 1;
   }
@@ -237,7 +259,7 @@ function importLastRead(incoming: unknown): number {
     if (!slug || typeof value !== "string" || !value.trim()) continue;
     const key = "lastRead_" + slug;
     if (localStorage.getItem(key) === null) {
-      localStorage.setItem(key, value.trim());
+      localStorage.setItem(key, normalizeChapterNum(value) || value.trim());
       count += 1;
     }
   }
