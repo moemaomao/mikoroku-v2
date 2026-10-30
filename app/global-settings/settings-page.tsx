@@ -553,6 +553,7 @@ export default function GlobalSettingsPage() {
   );
   const [chapterThumbnailSize, setChapterThumbnailSize] = useState(DEFAULT_CHAPTER_THUMBNAIL_SIZE);
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"info" | "success" | "error">("info");
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
   const [storageBusy, setStorageBusy] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -634,14 +635,16 @@ export default function GlobalSettingsPage() {
       link.click();
       URL.revokeObjectURL(url);
       const markCount = Object.keys(readMarks).length;
+      setNoticeTone("success");
       setNotice(
-        `Exported ${payload.bookmarks.length} bookmarks, ${payload.history.length} history items` +
-          (markCount ? `, and read marks for ${markCount} series` : "") +
+        `Export berhasil. ${payload.bookmarks.length} bookmarks, ${payload.history.length} history` +
+          (markCount ? `, read marks ${markCount} series` : "") +
           ".",
       );
     } catch (error) {
       console.error("Failed to export bookmarks and history.", error);
-      setNotice("Export failed. Check your browser storage permissions.");
+      setNoticeTone("error");
+      setNotice("Export gagal. Cek izin penyimpanan browser.");
     }
   }
 
@@ -654,54 +657,82 @@ export default function GlobalSettingsPage() {
         throw new Error("JSON file must contain a Mikoroku export object.");
       }
       const data = payload as Record<string, unknown>;
-      if (data.format !== "mikoroku-user-data" || data.version !== 1 ||
-        !Array.isArray(data.bookmarks) || !Array.isArray(data.history)) {
-        throw new Error("Unsupported file format. Use a Mikoroku bookmarks and history export.");
+      // Accept v1 exports even if bookmarks/history are empty arrays; readMarks-only backups OK if format matches
+      if (data.format !== "mikoroku-user-data" || Number(data.version) !== 1) {
+        throw new Error("Unsupported file format. Use a Mikoroku user-data export (format mikoroku-user-data v1).");
       }
+      if (!Array.isArray(data.bookmarks)) data.bookmarks = [];
+      if (!Array.isArray(data.history)) data.history = [];
 
+      // 1) Read marks FIRST — must not depend on history/bookmarks succeeding
+      const readMarksImported = importReadMarks(data.readMarks);
+      const lastReadImported = importLastRead(data.lastRead);
+
+      // 2) Bookmarks
       const incomingBookmarks = readBookmarks(data.bookmarks);
-      const incomingHistory = readHistory(data.history);
       const bookmarks = mergeBy(
         readBookmarks(localStorageData(BOOKMARKS_KEY)),
         incomingBookmarks,
         (item) => String(item.slug || item.title).toLowerCase(),
       );
-      const history = mergeBy(
-        readHistory(localStorageData(HISTORY_KEY)),
-        incomingHistory,
-        (item) => String(item.url),
-      ).sort((left, right) => Number(right.time) - Number(left.time)).slice(0, HISTORY_LIMIT);
-
       localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
-      await writeReadingHistory(history.map((item) => ({
-        series: typeof item.series === "string" ? item.series : undefined,
-        title: typeof item.title === "string" ? item.title : undefined,
-        chapter: typeof item.chapter === "string" ? item.chapter : undefined,
-        cover: typeof item.cover === "string" ? item.cover : undefined,
-        slug: typeof item.slug === "string" ? item.slug : undefined,
-        url: String(item.url),
-        time: Number(item.time) || 0,
-        progress: Number(item.progress) || 0,
-      })));
 
-      // Import chapter read marks (from old site or previous export)
-      const readMarksImported = importReadMarks(data.readMarks);
-      const lastReadImported = importLastRead(data.lastRead);
+      // 3) History (isolated — failure here must not roll back read marks)
+      let historyImported = 0;
+      let historyError: string | null = null;
+      try {
+        const incomingHistory = readHistory(data.history);
+        historyImported = incomingHistory.length;
+        const history = mergeBy(
+          readHistory(localStorageData(HISTORY_KEY)),
+          incomingHistory,
+          (item) => String(item.url),
+        )
+          .sort((left, right) => Number(right.time) - Number(left.time))
+          .slice(0, HISTORY_LIMIT);
+
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        await writeReadingHistory(
+          history.map((item) => ({
+            series: typeof item.series === "string" ? item.series : undefined,
+            title: typeof item.title === "string" ? item.title : undefined,
+            chapter: typeof item.chapter === "string" ? item.chapter : undefined,
+            cover: typeof item.cover === "string" ? item.cover : undefined,
+            slug: typeof item.slug === "string" ? item.slug : undefined,
+            url: String(item.url),
+            time: Number(item.time) || 0,
+            progress: Number(item.progress) || 0,
+          })),
+        );
+      } catch (err) {
+        console.error("History import failed (read marks already saved):", err);
+        historyError = err instanceof Error ? err.message : "history import failed";
+      }
 
       window.dispatchEvent(new Event("bookmarkUpdated"));
       window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+      window.dispatchEvent(new Event("mikoroku:read-marks-updated"));
 
-      const parts = [
-        `${incomingBookmarks.length} bookmarks`,
-        `${incomingHistory.length} history items`,
-      ];
-      if (readMarksImported > 0) parts.push(`read marks for ${readMarksImported} series`);
+      const parts: string[] = [];
+      parts.push(`${incomingBookmarks.length} bookmarks`);
+      parts.push(
+        historyError
+          ? `history error (${historyError})`
+          : `${historyImported} history items`,
+      );
+      parts.push(
+        readMarksImported > 0
+          ? `read marks for ${readMarksImported} series`
+          : "0 read-mark series (file may have empty readMarks)",
+      );
       if (lastReadImported > 0) parts.push(`${lastReadImported} last-read positions`);
-      setNotice(`${parts.join(", ")} processed; existing local data was kept.`);
+      setNoticeTone("success");
+      setNotice(`Import berhasil. ${parts.join(", ")}. Buka ulang halaman series (refresh) agar tanda chapter sudah dibaca muncul.`);
       await refreshStorageReport();
     } catch (error) {
-      console.error("Failed to import bookmarks and history.", error);
-      setNotice(error instanceof Error ? error.message : "Import failed. Make sure the JSON file is valid.");
+      console.error("Failed to import user data.", error);
+      setNoticeTone("error");
+      setNotice(error instanceof Error ? error.message : "Import gagal. Pastikan file JSON valid.");
     } finally {
       if (importFileRef.current) importFileRef.current.value = "";
     }
@@ -1216,6 +1247,22 @@ export default function GlobalSettingsPage() {
                     onChange={(event) => void importUserData(event.target.files?.[0])}
                   />
                 </div>
+                {notice ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className={
+                      noticeTone === "success"
+                        ? "mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-sm font-medium text-emerald-800 dark:text-emerald-300"
+                        : noticeTone === "error"
+                          ? "mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2.5 text-sm font-medium text-rose-800 dark:text-rose-300"
+                          : "mt-3 rounded-xl border border-black/10 bg-black/[0.03] px-3 py-2.5 text-sm text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300"
+                    }
+                  >
+                    {noticeTone === "success" ? "✓ " : noticeTone === "error" ? "✕ " : ""}
+                    {notice}
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>
