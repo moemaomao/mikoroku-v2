@@ -804,9 +804,9 @@ function HeaderContents() {
   };
 
   const classButton =
-    "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-white transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)]";
+    "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:text-white dark:hover:bg-white/10";
   const mainHeaderClass = [
-    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-700 bg-zinc-950/90 px-2 py-2 text-white shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5",
+    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-200 bg-white/90 px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-zinc-950/90 dark:text-white",
     !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
     headerHidden ? "-translate-y-full" : "translate-y-0",
   ].join(" ");
@@ -880,7 +880,7 @@ function HeaderContents() {
                 setSearchOpen(Boolean(event.target.value.trim()));
               }}
               onFocus={() => setSearchOpen(Boolean(search.trim()))}
-              className="h-[34px] min-w-0 w-full appearance-none rounded-3xl border border-zinc-300 bg-black/[0.07] px-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-500 focus:border-[var(--mikoroku-accent)] sm:h-[30px] sm:px-4 dark:border-zinc-600 dark:bg-black/35 dark:text-white dark:placeholder:text-zinc-400"
+              className="h-[34px] min-w-0 w-full appearance-none rounded-3xl border border-zinc-300 bg-zinc-100 px-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-500 focus:border-[var(--mikoroku-accent)] sm:h-[30px] sm:px-4 dark:border-zinc-600 dark:bg-black/35 dark:text-white dark:placeholder:text-zinc-400"
             />
             {searchOpen && search.trim() && (
               <div
@@ -1040,7 +1040,7 @@ function HeaderContents() {
             {authOpen && (
               <div
                 id="authDropdown"
-                className="absolute right-0 top-full z-[10000] mt-2 max-h-[min(80vh,600px)] min-w-[220px] overflow-y-auto rounded-lg border border-zinc-300 bg-white text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                className="absolute right-0 top-full z-[10000] mt-2 max-h-[min(80vh,600px)] min-w-[220px] overflow-y-auto rounded-lg border border-zinc-200 bg-white text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
               >
                 {user ? (
                   <>
@@ -1057,28 +1057,83 @@ function HeaderContents() {
                   </>
                 ) : (
                   <div className="p-4">
-                    <p className="mb-3 text-center font-semibold">Login with</p>
-                    {[
-                      ["email", "Email", "bg-indigo-600 text-white"],
-                      ["google", "Google", "border border-zinc-300 bg-white text-zinc-900"],
-                      ["github", "GitHub", "bg-zinc-800 text-white"],
-                      ["facebook", "Facebook", "bg-blue-600 text-white"],
-                      ["twitter", "X (Twitter)", "bg-black text-white"],
-                    ].map(([provider, label, style]) => (
-                      <button
-                        key={provider}
-                        type="button"
-                        onClick={() => {
-                          closeAuth();
-                          void window.triggerLogin?.(provider).catch((error: unknown) => {
-                            console.error(`Login ${provider} gagal.`, error);
-                          });
-                        }}
-                        className={`mb-2 w-full rounded-lg px-3 py-2.5 text-sm transition hover:opacity-85 ${style}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                    <p className="mb-3 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100">Login with</p>
+                    <div className="flex flex-col gap-2">
+                      {(
+                        [
+                          {
+                            provider: "email",
+                            label: "Email",
+                            style: "bg-indigo-600 text-white hover:bg-indigo-500",
+                            icon: (
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" aria-hidden="true">
+                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                <path d="m3 7 9 6 9-6" />
+                              </svg>
+                            ),
+                          },
+                          {
+                            provider: "google",
+                            label: "Google",
+                            style: "border border-zinc-300 bg-zinc-50 text-zinc-900 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
+                            icon: (
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="#EA4335" d="M12 10.2v3.6h5.1c-.2 1.2-.9 2.3-1.9 3l3.1 2.4c1.8-1.7 2.9-4.1 2.9-7 0-.7-.1-1.3-.2-1.9H12z" />
+                                <path fill="#34A853" d="M6.6 14.3 5.7 15l-2.1 1.6C5.1 19.3 8.3 21.2 12 21.2c2.4 0 4.4-.8 5.9-2.1l-3.1-2.4c-.8.6-1.9.9-2.8.9-2.2 0-4-1.5-4.7-3.5z" />
+                                <path fill="#4A90E2" d="M3.6 7.4C2.9 8.8 2.5 10.3 2.5 12s.4 3.2 1.1 4.6l3-2.3c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9l-3-2.1z" />
+                                <path fill="#FBBC05" d="M12 5.4c1.3 0 2.5.5 3.4 1.3l2.5-2.5C16.4 2.7 14.4 1.8 12 1.8 8.3 1.8 5.1 3.7 3.6 6.8l3 2.3C7.9 6.9 9.8 5.4 12 5.4z" />
+                              </svg>
+                            ),
+                          },
+                          {
+                            provider: "github",
+                            label: "GitHub",
+                            style: "bg-zinc-800 text-white hover:bg-zinc-700",
+                            icon: (
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true">
+                                <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.7.5.1.68-.22.68-.48 0-.24-.01-.87-.01-1.7-2.78.62-3.37-1.37-3.37-1.37-.46-1.2-1.12-1.52-1.12-1.52-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.58 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.28 2.75 1.05A9.3 9.3 0 0 1 12 6.8c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.95.68 1.92 0 1.38-.01 2.5-.01 2.84 0 .26.18.59.69.48A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />
+                              </svg>
+                            ),
+                          },
+                          {
+                            provider: "facebook",
+                            label: "Facebook",
+                            style: "bg-blue-600 text-white hover:bg-blue-500",
+                            icon: (
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true">
+                                <path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14C17.17 2.09 16.02 2 14.79 2 12.24 2 10.5 3.66 10.5 6.7V9.5H8v4h2.5V22h3.5v-8.5z" />
+                              </svg>
+                            ),
+                          },
+                          {
+                            provider: "twitter",
+                            label: "X (Twitter)",
+                            style: "bg-black text-white hover:bg-zinc-900",
+                            icon: (
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true">
+                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
+                              </svg>
+                            ),
+                          },
+                        ] as const
+                      ).map(({ provider, label, style, icon }) => (
+                        <button
+                          key={provider}
+                          type="button"
+                          title={label}
+                          aria-label={`Login with ${label}`}
+                          onClick={() => {
+                            closeAuth();
+                            void window.triggerLogin?.(provider).catch((error: unknown) => {
+                              console.error(`Login ${provider} gagal.`, error);
+                            });
+                          }}
+                          className={`flex w-full items-center justify-center rounded-lg px-3 py-2.5 transition ${style}`}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
