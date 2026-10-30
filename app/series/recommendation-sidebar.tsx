@@ -179,9 +179,20 @@ function readCache(): Recommendation[] {
 }
 
 function isAbortError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const name = (error as { name?: string }).name;
-  return name === "AbortError";
+  if (error == null) return false;
+  // abort("reason") can reject fetch with the raw reason (string), not AbortError
+  if (error === "unmount" || error === "cleanup") return true;
+  if (typeof error === "string" && /abort|unmount/i.test(error)) return true;
+  if (typeof error === "object") {
+    const name = (error as { name?: string }).name || "";
+    const message = String((error as { message?: string }).message || "");
+    if (name === "AbortError") return true;
+    if (/aborted|abort|unmount/i.test(message)) return true;
+  }
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    return error.name === "AbortError" || error.code === DOMException.ABORT_ERR;
+  }
+  return false;
 }
 
 function saveCache(items: Recommendation[]): void {
@@ -379,16 +390,23 @@ export default function RecommendationSidebar({
     void Promise.allSettled([loadGithub(), loadFirestore()]).then((results) => {
       results.forEach((result, index) => {
         if (result.status === "rejected") {
+          if (isAbortError(result.reason) || !active) return;
           reportFailure(index === 0 ? "Dataset GitHub" : "Firestore")(result.reason);
         }
       });
       if (active) setLoading(false);
+    }).catch(() => {
+      /* ignore unmount races */
     });
 
     return () => {
       active = false;
       try {
-        controller.abort();
+        if (!controller.signal.aborted) {
+          // No reason string: some browsers reject fetch with the raw reason ("unmount")
+          // which Next.js surfaces as Runtime Error. AbortError is handled by isAbortError.
+          controller.abort();
+        }
       } catch {
         /* ignore */
       }

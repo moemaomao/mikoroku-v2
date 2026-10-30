@@ -176,6 +176,17 @@ async function cacheCover(url: string, blob: Blob): Promise<void> {
   }
 }
 
+function isNetworkFetchError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error === "object") {
+    const name = (error as { name?: string }).name || "";
+    const message = String((error as { message?: string }).message || "");
+    if (name === "TypeError" && /failed to fetch|networkerror|load failed/i.test(message)) return true;
+    if (name === "AbortError") return true;
+  }
+  return false;
+}
+
 async function fetchCover(url: string): Promise<Blob> {
   const cached = await getCachedCover(url).catch((error: unknown) => {
     console.warn("Could not read the cover image from IndexedDB; fetching it from the image service.", error);
@@ -183,7 +194,16 @@ async function fetchCover(url: string): Promise<Blob> {
   });
   if (cached) return cached;
 
-  const response = await fetch(url, { mode: "cors", credentials: "omit" });
+  let response: Response;
+  try {
+    response = await fetch(url, { mode: "cors", credentials: "omit" });
+  } catch (error) {
+    if (isNetworkFetchError(error)) {
+      throw new Error("COVER_FETCH_NETWORK");
+    }
+    throw error;
+  }
+
   if (!response.ok) throw new Error(`Cover image request failed with HTTP ${response.status}.`);
   const blob = await response.blob();
   if (!blob.type.startsWith("image/")) throw new Error("The image service returned a non-image response.");
@@ -233,7 +253,10 @@ export function useCoverImageSource(source: string, preset: ImageProxyPreset = "
       objectUrl = URL.createObjectURL(blob);
       setResolved({ key: sourceKey, source: objectUrl });
     }).catch((error: unknown) => {
-      console.warn("Could not cache the optimized cover image; loading its proxy URL directly.", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg !== "COVER_FETCH_NETWORK") {
+        console.warn("Could not cache the optimized cover image; loading its proxy URL directly.", error);
+      }
       if (active) setResolved({ key: sourceKey, source: optimizedUrl });
     });
 
