@@ -8,6 +8,7 @@ import {
   cardImageClass,
   cardOverlayClass,
   cardTitleClass,
+  bottomBadgeBarClass,
   catalogGridClass,
   chapterBadgeClass,
   homepageLoadMoreClass,
@@ -518,20 +519,28 @@ function MangaCard({
       style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}
     >
       <div className={cardCoverClass}>
-        {status && (
-          <div className={`${statusBadgeClass} ${statusBadgeColors[status] || "bg-[#616161]"}`}>
-            {status.toUpperCase()}
-          </div>
-        )}
         {(Boolean(item.isUp) || (isRecentUpdate(updatedAt) && isManaged(meta))) && (
           <div className={upBadgeClass}>UP</div>
         )}
-        {type && (
-          <div className={`${typeBadgeClass} ${typeBadgeColors[type.replace(/\s+/g, "-")] || typeBadgeColors.default}`}>
-            {type.toUpperCase()}
+        {chapter >= 0 && <div className={chapterBadgeClass}>Ch. {chapter}</div>}
+        {(type || status) && (
+          <div className={bottomBadgeBarClass}>
+            {type ? (
+              <div className={`${typeBadgeClass} ${typeBadgeColors[type.replace(/\s+/g, "-")] || typeBadgeColors.default}`}>
+                {type.toUpperCase()}
+              </div>
+            ) : (
+              <div className={`${typeBadgeClass} text-[#bdbdbd]`} />
+            )}
+            {status ? (
+              <div className={`${statusBadgeClass} ${statusBadgeColors[status] || "text-[#bdbdbd]"}`}>
+                {status.toUpperCase()}
+              </div>
+            ) : (
+              <div className={`${statusBadgeClass} text-[#bdbdbd]`} />
+            )}
           </div>
         )}
-        {chapter >= 0 && <div className={chapterBadgeClass}>Ch. {chapter}</div>}
         {image && !coverFailed ? (
           <img
             className={cardImageClass}

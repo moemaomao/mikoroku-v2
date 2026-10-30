@@ -25,42 +25,45 @@ export const cardCoverClass =
 export const cardImageClass = "block h-full w-full object-cover";
 
 export const cardOverlayClass =
-  "overlay pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.88),transparent)] p-2";
+  "overlay pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.88),transparent)] p-2 pb-7";
 
 export const cardTitleClass =
-  "title relative z-10 m-0 line-clamp-2 overflow-hidden text-center text-[13px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)] transition-all duration-200 [@media(hover:hover)]:group-hover/card:absolute [@media(hover:hover)]:group-hover/card:inset-x-1.5 [@media(hover:hover)]:group-hover/card:bottom-1.5 [@media(hover:hover)]:group-hover/card:line-clamp-none [@media(hover:hover)]:group-hover/card:overflow-visible [@media(hover:hover)]:group-hover/card:rounded-lg [@media(hover:hover)]:group-hover/card:bg-black/30 [@media(hover:hover)]:group-hover/card:px-2.5 [@media(hover:hover)]:group-hover/card:py-2 [@media(hover:hover)]:group-hover/card:shadow-[0_6px_18px_rgba(0,0,0,0.45)]";
+  "title relative z-10 m-0 line-clamp-2 overflow-hidden text-center text-[13px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)] transition-all duration-200 [@media(hover:hover)]:group-hover/card:absolute [@media(hover:hover)]:group-hover/card:inset-x-1.5 [@media(hover:hover)]:group-hover/card:bottom-7 [@media(hover:hover)]:group-hover/card:line-clamp-none [@media(hover:hover)]:group-hover/card:overflow-visible [@media(hover:hover)]:group-hover/card:rounded-lg [@media(hover:hover)]:group-hover/card:bg-black/30 [@media(hover:hover)]:group-hover/card:px-2.5 [@media(hover:hover)]:group-hover/card:py-2 [@media(hover:hover)]:group-hover/card:shadow-[0_6px_18px_rgba(0,0,0,0.45)]";
 
-export const statusBadgeClass =
-  "status-badge absolute left-1.5 top-1 z-20 rounded-[4px] px-1.5 py-0.5 text-[8px] font-bold text-white";
-
-export const chapterBadgeClass =
-  "ch-badge absolute left-1.5 top-[22px] z-20 rounded-[4px] bg-[#ffcc00] px-1.5 py-0.5 text-[8px] font-bold text-black";
+export const bottomBadgeBarClass =
+  "badge-bar absolute inset-x-0 bottom-0 z-20 flex h-[22px] items-stretch overflow-hidden rounded-b-[10px] border-t border-white/10";
 
 export const typeBadgeClass =
-  "type-badge absolute bottom-1 left-1 z-20 rounded-[4px] px-1.5 py-0.5 text-[8px] font-bold uppercase text-white";
+  "type-badge flex min-w-0 flex-1 items-center justify-start truncate border-r border-white/10 px-1.5 text-[8px] font-bold uppercase leading-none";
+
+export const statusBadgeClass =
+  "status-badge flex min-w-0 flex-1 items-center justify-end truncate px-1.5 text-[8px] font-bold uppercase leading-none";
+
+export const chapterBadgeClass =
+  "ch-badge absolute left-1.5 top-1 z-20 rounded-[4px] bg-[#ffcc00] px-1.5 py-0.5 text-[8px] font-bold text-black";
 
 export const upBadgeClass =
   "up-badge absolute right-1.5 top-1 z-20 animate-pulse rounded-[4px] bg-red-600 px-1.5 py-0.5 text-[8px] font-bold text-white";
 
 export const typeBadgeColors: Record<string, string> = {
-  manga: "bg-[#c91714]",
-  manhwa: "bg-[#1976d2]",
-  manhua: "bg-[#2e7d32]",
-  novel: "bg-[#8e24aa]",
-  "light-novel": "bg-[#0e008a]",
-  "web-novel": "bg-[#a5017c]",
-  doujinshi: "bg-[#8b1e42]",
-  webtoon: "bg-[#00c853]",
-  cg: "bg-[#009688]",
-  default: "bg-[#616161]",
+  manga: "bg-[#c91714]/35 text-[#ff8a80]",
+  manhwa: "bg-[#1976d2]/35 text-[#82b1ff]",
+  manhua: "bg-[#2e7d32]/35 text-[#a5d6a7]",
+  novel: "bg-[#8e24aa]/35 text-[#e1bee7]",
+  "light-novel": "bg-[#0e008a]/40 text-[#b39ddb]",
+  "web-novel": "bg-[#a5017c]/35 text-[#f48fb1]",
+  doujinshi: "bg-[#8b1e42]/35 text-[#ef9a9a]",
+  webtoon: "bg-[#00c853]/30 text-[#69f0ae]",
+  cg: "bg-[#009688]/35 text-[#80cbc4]",
+  default: "bg-white/15 text-[#eeeeee]",
 };
 
 export const statusBadgeColors: Record<string, string> = {
-  ongoing: "bg-green-700",
-  completed: "bg-[#2962ff]",
-  hiatus: "bg-[#ff9100]",
-  dropped: "bg-[#d11138]",
-  canceled: "bg-[#6d4c41]",
+  ongoing: "bg-green-700/35 text-[#69f0ae]",
+  completed: "bg-[#2962ff]/35 text-[#82b1ff]",
+  hiatus: "bg-[#ff9100]/35 text-[#ffd180]",
+  dropped: "bg-[#d11138]/35 text-[#ff8a80]",
+  canceled: "bg-[#6d4c41]/40 text-[#bcaaa4]",
 };
 
 export const homepageSectionHeadingClass =

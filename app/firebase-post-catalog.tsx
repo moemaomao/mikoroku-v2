@@ -9,6 +9,7 @@ import {
   cardImageClass,
   cardOverlayClass,
   cardTitleClass,
+  bottomBadgeBarClass,
   catalogGridClass,
   chapterBadgeClass,
   homepageLoadMoreClass,
@@ -198,25 +199,33 @@ function CatalogCard({
       href={`/series/${encodeURIComponent(record.slug)}`}
     >
       <div className={cardCoverClass}>
-        {status && (
-          <div
-            className={`${statusBadgeClass} ${statusBadgeColors[status.toLowerCase()] || "bg-[#616161]"}`}
-          >
-            {status.toUpperCase()}
-          </div>
-        )}
-        {type && (
-          <div
-            className={`${typeBadgeClass} ${typeBadgeColors[type.replace(/\s+/g, "-")] || typeBadgeColors.default}`}
-          >
-            {type.toUpperCase()}
-          </div>
-        )}
         {chapter !== null && (
           <div className={chapterBadgeClass}>Ch. {chapter}</div>
         )}
         {updatedAt > 0 && Date.now() - updatedAt < 86400000 && (
           <div className={upBadgeClass}>UP</div>
+        )}
+        {(type || status) && (
+          <div className={bottomBadgeBarClass}>
+            {type ? (
+              <div
+                className={`${typeBadgeClass} ${typeBadgeColors[type.replace(/\s+/g, "-")] || typeBadgeColors.default}`}
+              >
+                {type.toUpperCase()}
+              </div>
+            ) : (
+              <div className={`${typeBadgeClass} text-[#bdbdbd]`} />
+            )}
+            {status ? (
+              <div
+                className={`${statusBadgeClass} ${statusBadgeColors[status.toLowerCase()] || "text-[#bdbdbd]"}`}
+              >
+                {status.toUpperCase()}
+              </div>
+            ) : (
+              <div className={`${statusBadgeClass} text-[#bdbdbd]`} />
+            )}
+          </div>
         )}
         <img
           key={`${section}-${record.slug}-${thumbnail}`}
