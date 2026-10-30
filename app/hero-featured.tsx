@@ -122,11 +122,9 @@ function cardX(offset: number, m: ReturnType<typeof layoutMetrics>): number {
   if (!m.dual) {
     return offset * m.step;
   }
-  // dual: 0 = left main, 1 = right main
   if (offset === 0) return -m.mainHalf;
   if (offset === 1) return m.mainHalf;
   if (offset > 1) return m.mainHalf + (offset - 1) * m.step;
-  // offset < 0
   return -m.mainHalf + offset * m.step;
 }
 
@@ -249,6 +247,18 @@ export default function HeroFeatured() {
               aria-current={isMainA ? "true" : undefined}
             >
               <img
+                className={styles.glow}
+                src={item.cover}
+                alt=""
+                aria-hidden="true"
+                width={240}
+                height={340}
+                loading={abs <= 2 || isMain ? "eager" : "lazy"}
+                decoding="async"
+                draggable={false}
+              />
+              <img
+                className={styles.cover}
                 src={item.cover}
                 alt={item.title}
                 width={240}

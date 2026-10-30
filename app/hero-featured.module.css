@@ -34,7 +34,7 @@
   border: 0;
   background: #111;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   cursor: pointer;
   transform-origin: center center;
   transform-style: preserve-3d;
@@ -46,30 +46,57 @@
     scale(calc(1 - var(--a, 0) * 0.05));
   opacity: calc(1 - var(--a, 0) * 0.07);
   filter: brightness(calc(1 - var(--a, 0) * 0.08));
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
   transition:
     transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
     opacity 0.45s ease,
-    filter 0.45s ease,
-    box-shadow 0.45s ease;
+    filter 0.45s ease;
 }
 
-.card img {
+.glow {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 75%;
+  height: 28%;
+  transform: translate(-50%, -20%) scale(1);
+  object-fit: cover;
+  object-position: center bottom;
+  border-radius: 50%;
+  filter: blur(16px) saturate(1.4) brightness(0.85);
+  opacity: 0.45;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.45s ease, filter 0.45s ease, transform 0.45s ease;
+}
+
+.cover {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  border-radius: 8px;
   pointer-events: none;
   user-select: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+}
+
+.cardActive .glow,
+.cardActiveB .glow {
+  opacity: 0.6;
+  filter: blur(18px) saturate(1.6) brightness(0.95);
+  width: 82%;
+  height: 32%;
+  transform: translate(-50%, -15%) scale(1.05);
 }
 
 .cardActive,
 .cardActiveB {
   opacity: 1 !important;
   filter: brightness(1) !important;
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
   z-index: 50 !important;
   transform:
     translate(-50%, -50%)
@@ -77,6 +104,13 @@
     translateZ(48px)
     rotateY(0deg)
     scale(1.06) !important;
+}
+
+.cardActive .cover,
+.cardActiveB .cover {
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .card:not(.cardActive):not(.cardActiveB):hover {
@@ -120,7 +154,6 @@
   background: var(--mikoroku-accent-surface, #760c12);
 }
 
-/* Desktop: hero shifts with sidebar — center in remaining content area */
 @media (min-width: 769px) {
   :global(body.sidebar-open) .hero {
     margin-left: var(--sidebar-w);
@@ -160,6 +193,9 @@
   .card {
     width: 104px;
     height: 150px;
+    border-radius: 6px;
+  }
+  .cover {
     border-radius: 6px;
   }
   .cardActive {
