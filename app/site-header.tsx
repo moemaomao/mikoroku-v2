@@ -454,6 +454,20 @@ function HeaderContents() {
   }, []);
 
   const closeSidebar = useCallback(() => {
+    // Blur fokus di dalam sidebar dulu supaya browser tidak complain aria-hidden
+    try {
+      const sidebar = document.getElementById("siteSidebar");
+      const active = document.activeElement;
+      if (
+        sidebar &&
+        active instanceof HTMLElement &&
+        sidebar.contains(active)
+      ) {
+        active.blur();
+      }
+    } catch {
+      /* ignore */
+    }
     setSidebarOpen(false);
     document.body.style.overflow = "";
     if (isDesktop()) {

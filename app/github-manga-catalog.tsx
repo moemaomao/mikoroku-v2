@@ -490,6 +490,32 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
 
 const volumeCoverCache = new Map<string, string>();
 const volumeCoverPending = new Map<string, Promise<string>>();
+let volumeCoverInFlight = 0;
+const VOLUME_COVER_MAX_PARALLEL = 2;
+const volumeCoverQueue: Array<() => void> = [];
+
+function runVolumeCoverQueue() {
+  while (volumeCoverInFlight < VOLUME_COVER_MAX_PARALLEL && volumeCoverQueue.length) {
+    const next = volumeCoverQueue.shift();
+    if (next) next();
+  }
+}
+
+function enqueueVolumeCover<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      volumeCoverInFlight += 1;
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          volumeCoverInFlight -= 1;
+          runVolumeCoverQueue();
+        });
+    };
+    volumeCoverQueue.push(run);
+    runVolumeCoverQueue();
+  });
+}
 
 function coverFileKey(url: string): string {
   try {
@@ -586,6 +612,7 @@ async function fetchVolumeCover(slugs: string[], mainCover: string): Promise<str
   const unique = [...new Set(slugs.map((s) => String(s || "").trim()).filter(Boolean))];
   if (!unique.length) return "";
 
+  // cache hit by any slug
   for (const slug of unique) {
     if (volumeCoverCache.has(slug)) {
       const hit = volumeCoverCache.get(slug) || "";
@@ -597,9 +624,9 @@ async function fetchVolumeCover(slugs: string[], mainCover: string): Promise<str
   const pending = volumeCoverPending.get(cacheKey);
   if (pending) return pending;
 
-  const job = (async () => {
+  const job = enqueueVolumeCover(async () => {
     try {
-  
+      // 1) window.mangaData / github list
       for (const slug of unique) {
         const data = window.mangaData?.[slug] as Record<string, unknown> | undefined;
         if (data) {
@@ -625,6 +652,7 @@ async function fetchVolumeCover(slugs: string[], mainCover: string): Promise<str
         }
       }
 
+      // 2) Firestore REST — coba semua candidate slug
       for (const slug of unique) {
         try {
           const url = `https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents/manga/${encodeURIComponent(slug)}`;
@@ -637,10 +665,10 @@ async function fetchVolumeCover(slugs: string[], mainCover: string): Promise<str
             for (const s of unique) volumeCoverCache.set(s, found);
             return found;
           }
-       
+          // document exists but no alternate cover
           volumeCoverCache.set(slug, "");
         } catch {
-    
+          /* try next slug */
         }
       }
 
@@ -649,7 +677,7 @@ async function fetchVolumeCover(slugs: string[], mainCover: string): Promise<str
     } finally {
       volumeCoverPending.delete(cacheKey);
     }
-  })();
+  });
 
   volumeCoverPending.set(cacheKey, job);
   return job;
@@ -702,35 +730,6 @@ function MangaCard({
       }
     }
   }, [item, cover, slug]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.innerWidth < 769) return;
-    if (volumeCover) return;
-    if (candidateSlugs.some((s) => volumeCoverCache.has(s))) {
-      const hit = candidateSlugs.map((s) => volumeCoverCache.get(s) || "").find(Boolean);
-      if (hit) setVolumeCover(hit);
-      return;
-    }
-    const idle = window.requestIdleCallback
-      ? window.requestIdleCallback(() => {
-          void fetchVolumeCover(candidateSlugs, cover).then((url) => {
-            if (url) setVolumeCover(url);
-          });
-        })
-      : window.setTimeout(() => {
-          void fetchVolumeCover(candidateSlugs, cover).then((url) => {
-            if (url) setVolumeCover(url);
-          });
-        }, 400 + index * 60);
-    return () => {
-      if (typeof idle === "number" && window.cancelIdleCallback) {
-        try { window.cancelIdleCallback(idle as number); } catch { /* ignore */ }
-      } else {
-        window.clearTimeout(idle as number);
-      }
-    };
-  }, [cover, slug, index]);
 
   const onEnter = () => {
     if (typeof window !== "undefined" && window.innerWidth < 769) return;

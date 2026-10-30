@@ -292,17 +292,6 @@ function CatalogCard({
   const status = String(value(record, "status") || "");
   const updatedAt = Number(record.updatedAt || 0);
 
-  useEffect(() => {
-    if (volumeCover) return;
-    if (typeof window === "undefined" || window.innerWidth < 769) return;
-    const t = window.setTimeout(() => {
-      void fetchVolumeCover(record.slug, cover).then((url) => {
-        if (url) setVolumeCover(url);
-      });
-    }, 500);
-    return () => window.clearTimeout(t);
-  }, [record.slug, cover, volumeCover]);
-
   const onEnter = () => {
     if (typeof window !== "undefined" && window.innerWidth < 769) return;
     setFlipped(true);
