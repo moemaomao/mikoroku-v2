@@ -203,7 +203,6 @@ function collectReadMarks(): Record<string, string[]> {
   return marks;
 }
 
-/** Collect all lastRead_* values from localStorage. */
 function collectLastRead(): Record<string, string> {
   const last: Record<string, string> = {};
   try {
@@ -220,11 +219,6 @@ function collectLastRead(): Record<string, string> {
   return last;
 }
 
-/**
- * Merge incoming read marks into localStorage.
- * Keys are series titles (as used on mikoroku.com: "read_" + currentTitle).
- * Existing chapter numbers are kept; new ones are appended (union).
- */
 function importReadMarks(incoming: unknown): number {
   if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return 0;
   let titlesProcessed = 0;
@@ -247,10 +241,6 @@ function importReadMarks(incoming: unknown): number {
   return titlesProcessed;
 }
 
-/**
- * Merge incoming lastRead_* values. Existing local values are kept if already present
- * (incoming only fills missing keys).
- */
 function importLastRead(incoming: unknown): number {
   if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return 0;
   let count = 0;
@@ -657,18 +647,15 @@ export default function GlobalSettingsPage() {
         throw new Error("JSON file must contain a Mikoroku export object.");
       }
       const data = payload as Record<string, unknown>;
-      // Accept v1 exports even if bookmarks/history are empty arrays; readMarks-only backups OK if format matches
+    
       if (data.format !== "mikoroku-user-data" || Number(data.version) !== 1) {
         throw new Error("Unsupported file format. Use a Mikoroku user-data export (format mikoroku-user-data v1).");
       }
       if (!Array.isArray(data.bookmarks)) data.bookmarks = [];
       if (!Array.isArray(data.history)) data.history = [];
 
-      // 1) Read marks FIRST — must not depend on history/bookmarks succeeding
       const readMarksImported = importReadMarks(data.readMarks);
       const lastReadImported = importLastRead(data.lastRead);
-
-      // 2) Bookmarks
       const incomingBookmarks = readBookmarks(data.bookmarks);
       const bookmarks = mergeBy(
         readBookmarks(localStorageData(BOOKMARKS_KEY)),
@@ -677,7 +664,6 @@ export default function GlobalSettingsPage() {
       );
       localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
 
-      // 3) History (isolated — failure here must not roll back read marks)
       let historyImported = 0;
       let historyError: string | null = null;
       try {
@@ -970,7 +956,7 @@ export default function GlobalSettingsPage() {
               <div>
                 <h2 id="cover-quality-heading" className="text-lg font-bold">Cover image data saver</h2>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Convert cover images to smaller versions, like the reader. Admin cover previews are not affected.
+                  Convert cover images to smaller versions, like the reader.
                 </p>
               </div>
               <label className="flex shrink-0 cursor-pointer items-center gap-2">
