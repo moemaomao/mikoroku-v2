@@ -57,6 +57,8 @@ const PROTECTED_LOCAL_STORAGE_PREFIXES = [
   "firebase:",
   "firebaseui:",
   "firebaseLocalStorageDb",
+  "read_",
+  "lastRead_",
 ];
 
 type StorageReport = {
@@ -131,16 +133,115 @@ function readHistory(value: unknown): Record<string, unknown>[] {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const entry = item as Record<string, unknown>;
     if (typeof entry.url !== "string" || !entry.url.trim()) return [];
-    const url = entry.url.trim();
-    if (!url.startsWith("/") || url.startsWith("//")) {
+    let url = entry.url.trim();
+    // Normalize absolute mikoroku.com URLs → relative path for new site
+    if (url.startsWith("http://") || url.startsWith("https://")) {
       try {
-        if (!["http:", "https:"].includes(new URL(url).protocol)) return [];
+        const parsed = new URL(url);
+        if (
+          parsed.hostname === "mikoroku.com" ||
+          parsed.hostname === "www.mikoroku.com" ||
+          parsed.hostname === "mikoroku.top" ||
+          parsed.hostname === "www.mikoroku.top"
+        ) {
+          url = parsed.pathname + (parsed.search || "");
+        } else if (!["http:", "https:"].includes(parsed.protocol)) {
+          return [];
+        }
       } catch {
         return [];
       }
     }
+    if (!url.startsWith("/") || url.startsWith("//")) return [];
     return [{ ...entry, url, time: Number(entry.time) || 0 }];
   });
+}
+
+/** Collect all read_* chapter marks from localStorage (old-site compatible). */
+function collectReadMarks(): Record<string, string[]> {
+  const marks: Record<string, string[]> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("read_")) continue;
+      const title = key.slice(5);
+      if (!title) continue;
+      try {
+        const raw = JSON.parse(localStorage.getItem(key) || "[]");
+        if (Array.isArray(raw) && raw.length > 0) {
+          marks[title] = raw.map(String).filter(Boolean);
+        }
+      } catch {
+        // skip invalid
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return marks;
+}
+
+/** Collect all lastRead_* values from localStorage. */
+function collectLastRead(): Record<string, string> {
+  const last: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("lastRead_")) continue;
+      const slug = key.slice(9);
+      const value = localStorage.getItem(key);
+      if (slug && value) last[slug] = value;
+    }
+  } catch {
+    // ignore
+  }
+  return last;
+}
+
+/**
+ * Merge incoming read marks into localStorage.
+ * Keys are series titles (as used on mikoroku.com: "read_" + currentTitle).
+ * Existing chapter numbers are kept; new ones are appended (union).
+ */
+function importReadMarks(incoming: unknown): number {
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return 0;
+  let titlesProcessed = 0;
+  const map = incoming as Record<string, unknown>;
+  for (const [title, chapters] of Object.entries(map)) {
+    if (!title || !Array.isArray(chapters)) continue;
+    const key = "read_" + title;
+    let existing: string[] = [];
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || "[]");
+      if (Array.isArray(raw)) existing = raw.map(String);
+    } catch {
+      existing = [];
+    }
+    const incomingChapters = chapters.map(String).filter(Boolean);
+    const merged = [...new Set([...existing, ...incomingChapters])];
+    localStorage.setItem(key, JSON.stringify(merged));
+    titlesProcessed += 1;
+  }
+  return titlesProcessed;
+}
+
+/**
+ * Merge incoming lastRead_* values. Existing local values are kept if already present
+ * (incoming only fills missing keys).
+ */
+function importLastRead(incoming: unknown): number {
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return 0;
+  let count = 0;
+  const map = incoming as Record<string, unknown>;
+  for (const [slug, value] of Object.entries(map)) {
+    if (!slug || typeof value !== "string" || !value.trim()) continue;
+    const key = "lastRead_" + slug;
+    if (localStorage.getItem(key) === null) {
+      localStorage.setItem(key, value.trim());
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function mergeBy<T extends Record<string, unknown>>(current: T[], incoming: T[], key: (item: T) => string): T[] {
@@ -492,12 +593,16 @@ export default function GlobalSettingsPage() {
 
   function exportUserData() {
     try {
+      const readMarks = collectReadMarks();
+      const lastRead = collectLastRead();
       const payload = {
         format: "mikoroku-user-data",
         version: 1,
         exportedAt: new Date().toISOString(),
         bookmarks: readBookmarks(localStorageData(BOOKMARKS_KEY)),
         history: readHistory(localStorageData(HISTORY_KEY)),
+        readMarks,
+        lastRead,
       };
       const file = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(file);
@@ -506,7 +611,12 @@ export default function GlobalSettingsPage() {
       link.download = `mikoroku-data-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      setNotice("Bookmarks and reading history exported successfully.");
+      const markCount = Object.keys(readMarks).length;
+      setNotice(
+        `Exported ${payload.bookmarks.length} bookmarks, ${payload.history.length} history items` +
+          (markCount ? `, and read marks for ${markCount} series` : "") +
+          ".",
+      );
     } catch (error) {
       console.error("Failed to export bookmarks and history.", error);
       setNotice("Export failed. Check your browser storage permissions.");
@@ -551,9 +661,21 @@ export default function GlobalSettingsPage() {
         time: Number(item.time) || 0,
         progress: Number(item.progress) || 0,
       })));
+
+      // Import chapter read marks (from old site or previous export)
+      const readMarksImported = importReadMarks(data.readMarks);
+      const lastReadImported = importLastRead(data.lastRead);
+
       window.dispatchEvent(new Event("bookmarkUpdated"));
       window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
-      setNotice(`${incomingBookmarks.length} bookmarks and ${incomingHistory.length} history items processed; existing local data was kept.`);
+
+      const parts = [
+        `${incomingBookmarks.length} bookmarks`,
+        `${incomingHistory.length} history items`,
+      ];
+      if (readMarksImported > 0) parts.push(`read marks for ${readMarksImported} series`);
+      if (lastReadImported > 0) parts.push(`${lastReadImported} last-read positions`);
+      setNotice(`${parts.join(", ")} processed; existing local data was kept.`);
       await refreshStorageReport();
     } catch (error) {
       console.error("Failed to import bookmarks and history.", error);
@@ -1043,10 +1165,11 @@ export default function GlobalSettingsPage() {
                   Removes local cover image cache. Images will be downloaded again when needed.
                 </span>
               </button>
-              <div className="rounded-xl border border-black/10 p-3 dark:border-white/10">
-                <p className="text-sm font-semibold">Bookmark &amp; reading history</p>
+              <div className="rounded-xl border border-black/10 p-3 dark:border-white/10 sm:col-span-2">
+                <p className="text-sm font-semibold">Bookmark, history &amp; chapter read marks</p>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  Import merges data and keeps existing local items.
+                  Export / import bookmarks, reading history, and chapter read marks (from mikoroku.com or this site).
+                  Import merges data and keeps existing local items. Compatible with backups from the old site.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
