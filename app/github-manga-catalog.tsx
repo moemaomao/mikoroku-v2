@@ -29,8 +29,6 @@ type MangaItem = Record<string, unknown> & {
   slug?: string;
   img?: string;
   cover?: string;
-  covers?: string[];
-  coverNumbers?: Record<string, string>;
   desc?: string;
   status?: string;
   type?: string;
@@ -488,201 +486,6 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
   safeSet("mangaGithubLightCache", { time: Date.now(), list: lightList, fullList: items });
 }
 
-const volumeCoverCache = new Map<string, string>();
-const volumeCoverPending = new Map<string, Promise<string>>();
-let volumeCoverInFlight = 0;
-const VOLUME_COVER_MAX_PARALLEL = 2;
-const volumeCoverQueue: Array<() => void> = [];
-
-function runVolumeCoverQueue() {
-  while (volumeCoverInFlight < VOLUME_COVER_MAX_PARALLEL && volumeCoverQueue.length) {
-    const next = volumeCoverQueue.shift();
-    if (next) next();
-  }
-}
-
-function enqueueVolumeCover<T>(task: () => Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const run = () => {
-      volumeCoverInFlight += 1;
-      task()
-        .then(resolve, reject)
-        .finally(() => {
-          volumeCoverInFlight -= 1;
-          runVolumeCoverQueue();
-        });
-    };
-    volumeCoverQueue.push(run);
-    runVolumeCoverQueue();
-  });
-}
-
-function coverFileKey(url: string): string {
-  try {
-    const clean = url.split("?")[0].split("#")[0];
-    const parts = clean.split("/");
-    return (parts[parts.length - 1] || clean).toLowerCase();
-  } catch {
-    return normalize(url);
-  }
-}
-
-function pickDifferentCover(candidates: string[], mainCover: string): string {
-  const mainKey = coverFileKey(mainCover);
-  const mainNorm = normalize(mainCover);
-  for (const raw of candidates) {
-    if (!raw || !raw.trim()) continue;
-    const resolved = resolveCover(raw);
-    if (!resolved) continue;
-    if (coverFileKey(resolved) === mainKey) continue;
-    if (normalize(resolved) === mainNorm) continue;
-    return resolved;
-  }
-  return "";
-}
-
-function collectCoversFromRecord(data: Record<string, unknown>): string[] {
-  const out: string[] = [];
-  const push = (value: unknown) => {
-    if (typeof value === "string" && value.trim()) out.push(value.trim());
-    else if (Array.isArray(value)) {
-      for (const item of value) {
-        if (typeof item === "string" && item.trim()) out.push(item.trim());
-      }
-    }
-  };
-  push(data.covers);
-  push(data.cover);
-  push(data.img);
-  push(data.image);
-  push(data.thumbnail);
-  if (data.coverNumbers && typeof data.coverNumbers === "object") {
-    out.push(...Object.keys(data.coverNumbers as Record<string, unknown>));
-  }
-  if (data.info && typeof data.info === "object") {
-    const info = data.info as Record<string, unknown>;
-    push(info.covers);
-    push(info.cover);
-    push(info.img);
-    if (info.coverNumbers && typeof info.coverNumbers === "object") {
-      out.push(...Object.keys(info.coverNumbers as Record<string, unknown>));
-    }
-  }
-  return out;
-}
-
-function pickVolumeCoverFromItem(item: MangaItem, mainCover: string): string {
-  return pickDifferentCover(collectCoversFromRecord(item as Record<string, unknown>), mainCover);
-}
-
-function decodeFirestoreString(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  const field = value as { stringValue?: string };
-  return typeof field.stringValue === "string" ? field.stringValue : "";
-}
-
-function decodeFirestoreCovers(fields: Record<string, unknown> | undefined): string[] {
-  if (!fields) return [];
-  const out: string[] = [];
-  const coversField = fields.covers as
-    | { arrayValue?: { values?: unknown[] }; stringValue?: string }
-    | undefined;
-  if (coversField?.arrayValue?.values) {
-    for (const entry of coversField.arrayValue.values) {
-      const s = decodeFirestoreString(entry);
-      if (s) out.push(s);
-    }
-  } else if (coversField?.stringValue) {
-    out.push(coversField.stringValue);
-  }
-  for (const key of ["cover", "img", "image", "thumbnail"]) {
-    const s = decodeFirestoreString(fields[key]);
-    if (s) out.push(s);
-  }
-  const numbers = fields.coverNumbers as
-    | { mapValue?: { fields?: Record<string, unknown> } }
-    | undefined;
-  if (numbers?.mapValue?.fields) {
-    out.push(...Object.keys(numbers.mapValue.fields));
-  }
-  return out;
-}
-
-async function fetchVolumeCover(slugs: string[], mainCover: string): Promise<string> {
-  const unique = [...new Set(slugs.map((s) => String(s || "").trim()).filter(Boolean))];
-  if (!unique.length) return "";
-
-  // cache hit by any slug
-  for (const slug of unique) {
-    if (volumeCoverCache.has(slug)) {
-      const hit = volumeCoverCache.get(slug) || "";
-      if (hit) return hit;
-    }
-  }
-
-  const cacheKey = unique[0];
-  const pending = volumeCoverPending.get(cacheKey);
-  if (pending) return pending;
-
-  const job = enqueueVolumeCover(async () => {
-    try {
-      // 1) window.mangaData / github list
-      for (const slug of unique) {
-        const data = window.mangaData?.[slug] as Record<string, unknown> | undefined;
-        if (data) {
-          const found = pickDifferentCover(collectCoversFromRecord(data), mainCover);
-          if (found) {
-            for (const s of unique) volumeCoverCache.set(s, found);
-            return found;
-          }
-        }
-      }
-      if (Array.isArray(window.githubMangaList)) {
-        for (const item of window.githubMangaList) {
-          if (!item || typeof item !== "object") continue;
-          const rec = item as MangaItem;
-          const itemSlug = String(rec.slug || "");
-          if (unique.some((s) => normalize(s) === normalize(itemSlug) || normalize(s) === normalize(rec.title))) {
-            const found = pickVolumeCoverFromItem(rec, mainCover);
-            if (found) {
-              for (const s of unique) volumeCoverCache.set(s, found);
-              return found;
-            }
-          }
-        }
-      }
-
-      // 2) Firestore REST — coba semua candidate slug
-      for (const slug of unique) {
-        try {
-          const url = `https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents/manga/${encodeURIComponent(slug)}`;
-          const res = await fetch(url);
-          if (!res.ok) continue;
-          const doc = await res.json() as { fields?: Record<string, unknown> };
-          const covers = decodeFirestoreCovers(doc.fields);
-          const found = pickDifferentCover(covers, mainCover);
-          if (found) {
-            for (const s of unique) volumeCoverCache.set(s, found);
-            return found;
-          }
-          // document exists but no alternate cover
-          volumeCoverCache.set(slug, "");
-        } catch {
-          /* try next slug */
-        }
-      }
-
-      for (const s of unique) volumeCoverCache.set(s, "");
-      return "";
-    } finally {
-      volumeCoverPending.delete(cacheKey);
-    }
-  });
-
-  volumeCoverPending.set(cacheKey, job);
-  return job;
-}
-
 function MangaCard({
   item, metadata, priority, index, animate,
 }: {
@@ -693,55 +496,16 @@ function MangaCard({
   animate: boolean;
 }) {
   const [coverFailed, setCoverFailed] = useState(false);
-  const [volumeCover, setVolumeCover] = useState("");
-  const [flipped, setFlipped] = useState(false);
   const meta = getMetadata(item, metadata);
   const manga = mangaForMetadata(item, meta);
   const slug = String(manga.slug || item.slug || slugify(item.title));
   const cover = String(manga.img || "");
   const image = thumbnail(cover, meta?.updatedAt);
-  const backSrc = volumeCover ? thumbnail(volumeCover, meta?.updatedAt) : image;
   const status = String(manga.status || "").toLowerCase();
   const type = String(manga.type || "manga").toLowerCase();
   const chapter = chapterNumber(item, meta);
   const updatedAt = Number(meta?.updatedAt || 0);
   manga.rating = meta?.rating ?? item.rating ?? "-";
-
-  const candidateSlugs = [
-    slug,
-    String(meta?.slug || ""),
-    String(meta?.githubSlug || ""),
-    String(item.slug || ""),
-    String((item as MangaItem & { githubSlug?: string }).githubSlug || ""),
-    slugify(item.title),
-  ].filter(Boolean);
-
-  useEffect(() => {
-    const local = pickVolumeCoverFromItem(item, cover);
-    if (local) {
-      setVolumeCover(local);
-      for (const s of candidateSlugs) volumeCoverCache.set(s, local);
-      return;
-    }
-    for (const s of candidateSlugs) {
-      if (volumeCoverCache.has(s) && volumeCoverCache.get(s)) {
-        setVolumeCover(volumeCoverCache.get(s) || "");
-        return;
-      }
-    }
-  }, [item, cover, slug]);
-
-  const onEnter = () => {
-    if (typeof window !== "undefined" && window.innerWidth < 769) return;
-    setFlipped(true);
-    if (!volumeCover) {
-      void fetchVolumeCover(candidateSlugs, cover).then((url) => {
-        if (url) setVolumeCover(url);
-      });
-    }
-  };
-
-  const onLeave = () => setFlipped(false);
 
   return (
     <a
@@ -749,16 +513,12 @@ function MangaCard({
       className={animate ? cardClass : cardClassStatic}
       data-key={normalize(item.title)}
       data-slug={slug}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      onFocus={onEnter}
-      onBlur={onLeave}
       onClick={() => {
         try { localStorage.setItem("currentManga", JSON.stringify(manga)); } catch { /* ignore */ }
       }}
       style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}
     >
-      <div className={cardCoverClass} style={{ perspective: 900 }}>
+      <div className={cardCoverClass}>
         {(Boolean(item.isUp) || (isRecentUpdate(updatedAt) && isManaged(meta))) && (
           <div className={upBadgeClass}>UP</div>
         )}
@@ -782,55 +542,17 @@ function MangaCard({
           </div>
         )}
         {image && !coverFailed ? (
-          <div
-            className="relative h-full w-full"
-            style={{
-              transformStyle: "preserve-3d",
-              transition: "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-            }}
-          >
-            <img
-              className={cardImageClass}
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                backfaceVisibility: "hidden",
-                WebkitBackfaceVisibility: "hidden",
-              }}
-              src={image}
-              alt={item.title}
-              width="150"
-              height="225"
-              decoding="async"
-              loading={priority ? "eager" : "lazy"}
-              fetchPriority={priority ? "high" : "auto"}
-              onError={() => setCoverFailed(true)}
-            />
-            <img
-              className={cardImageClass}
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                backfaceVisibility: "hidden",
-                WebkitBackfaceVisibility: "hidden",
-                transform: "rotateY(180deg)",
-              }}
-              src={backSrc || image}
-              alt=""
-              aria-hidden="true"
-              width="150"
-              height="225"
-              decoding="async"
-              loading="lazy"
-            />
-          </div>
+          <img
+            className={cardImageClass}
+            src={image}
+            alt={item.title}
+            width="150"
+            height="225"
+            decoding="async"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+            onError={() => setCoverFailed(true)}
+          />
         ) : (
           <div className="flex aspect-[2/3] w-full items-center justify-center bg-[#1a1a1a] p-2.5 text-center text-[11px] font-semibold text-[#888] dark:bg-[#111]">
             Cover Not Found

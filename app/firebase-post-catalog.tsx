@@ -172,103 +172,6 @@ async function fetchRecords(): Promise<Record<string, MangaRecord>> {
   return records;
 }
 
-const volumeCoverCache = new Map<string, string>();
-const volumeCoverPending = new Map<string, Promise<string>>();
-
-function coverFileKey(url: string): string {
-  try {
-    const clean = url.split("?")[0].split("#")[0];
-    const parts = clean.split("/");
-    return (parts[parts.length - 1] || clean).toLowerCase();
-  } catch {
-    return url.toLowerCase();
-  }
-}
-
-function pickDifferentCover(candidates: string[], mainCover: string): string {
-  const mainKey = coverFileKey(mainCover);
-  const main = mainCover.trim().toLowerCase();
-  for (const raw of candidates) {
-    if (!raw || !raw.trim()) continue;
-    const c = raw.trim();
-    if (coverFileKey(c) === mainKey) continue;
-    if (c.toLowerCase() === main) continue;
-    return c;
-  }
-  return "";
-}
-
-function pickVolumeCover(record: MangaRecord, mainCover: string): string {
-  const list = value(record, "covers", []);
-  const covers = Array.isArray(list) ? list.map(String) : [];
-  const numbers = value(record, "coverNumbers", null);
-  if (numbers && typeof numbers === "object") {
-    covers.push(...Object.keys(numbers as Record<string, unknown>));
-  }
-  for (const key of ["cover", "img", "image"]) {
-    const v = value(record, key, "");
-    if (typeof v === "string" && v) covers.push(v);
-  }
-  return pickDifferentCover(covers, mainCover);
-}
-
-function decodeFirestoreString(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  const field = value as { stringValue?: string };
-  return typeof field.stringValue === "string" ? field.stringValue : "";
-}
-
-async function fetchVolumeCover(slug: string, mainCover: string): Promise<string> {
-  if (!slug) return "";
-  if (volumeCoverCache.has(slug)) return volumeCoverCache.get(slug) || "";
-  const pending = volumeCoverPending.get(slug);
-  if (pending) return pending;
-
-  const job = (async () => {
-    try {
-      const url = `https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents/manga/${encodeURIComponent(slug)}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        volumeCoverCache.set(slug, "");
-        return "";
-      }
-      const doc = await res.json() as { fields?: Record<string, unknown> };
-      const fields = doc.fields || {};
-      const out: string[] = [];
-      const coversField = fields.covers as
-        | { arrayValue?: { values?: unknown[] }; stringValue?: string }
-        | undefined;
-      if (coversField?.arrayValue?.values) {
-        for (const entry of coversField.arrayValue.values) {
-          const s = decodeFirestoreString(entry);
-          if (s) out.push(s);
-        }
-      }
-      for (const key of ["cover", "img", "image", "thumbnail"]) {
-        const s = decodeFirestoreString(fields[key]);
-        if (s) out.push(s);
-      }
-      const numbers = fields.coverNumbers as
-        | { mapValue?: { fields?: Record<string, unknown> } }
-        | undefined;
-      if (numbers?.mapValue?.fields) {
-        out.push(...Object.keys(numbers.mapValue.fields));
-      }
-      const found = pickDifferentCover(out, mainCover);
-      volumeCoverCache.set(slug, found);
-      return found;
-    } catch {
-      volumeCoverCache.set(slug, "");
-      return "";
-    } finally {
-      volumeCoverPending.delete(slug);
-    }
-  })();
-
-  volumeCoverPending.set(slug, job);
-  return job;
-}
-
 function CatalogCard({
   record,
   section,
@@ -285,22 +188,8 @@ function CatalogCard({
   const thumbnail = cover
     ? imageProxyUrl(cover, "postCatalog")
     : "https://via.placeholder.com/80x110?text=No+Image";
-  const [volumeCover, setVolumeCover] = useState(() => pickVolumeCover(record, cover));
-  const [flipped, setFlipped] = useState(false);
-  const volumeThumb = volumeCover ? imageProxyUrl(volumeCover, "postCatalog") : "";
-  const backSrc = volumeThumb || thumbnail;
   const status = String(value(record, "status") || "");
   const updatedAt = Number(record.updatedAt || 0);
-
-  const onEnter = () => {
-    if (typeof window !== "undefined" && window.innerWidth < 769) return;
-    setFlipped(true);
-    if (!volumeCover) {
-      void fetchVolumeCover(record.slug, cover).then((url) => {
-        if (url) setVolumeCover(url);
-      });
-    }
-  };
 
   return (
     <a
@@ -308,10 +197,8 @@ function CatalogCard({
       data-slug={record.slug}
       data-section={section}
       href={`/series/${encodeURIComponent(record.slug)}`}
-      onMouseEnter={onEnter}
-      onMouseLeave={() => setFlipped(false)}
     >
-      <div className={cardCoverClass} style={{ perspective: 900 }}>
+      <div className={cardCoverClass}>
         {chapter !== null && (
           <div className={chapterBadgeClass}>Ch. {chapter}</div>
         )}
@@ -340,56 +227,19 @@ function CatalogCard({
             )}
           </div>
         )}
-        <div
-          className="relative h-full w-full"
-          style={{
-            transformStyle: "preserve-3d",
-            transition: "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+        <img
+          key={`${section}-${record.slug}-${thumbnail}`}
+          className={cardImageClass}
+          src={thumbnail}
+          alt={record.title}
+          loading="lazy"
+          decoding="async"
+          style={{ backgroundColor: "#1a1a1a" }}
+          onError={(event) => {
+            event.currentTarget.src =
+              "https://via.placeholder.com/80x110?text=No+Image";
           }}
-        >
-          <img
-            key={`${section}-${record.slug}-${thumbnail}`}
-            className={cardImageClass}
-            src={thumbnail}
-            alt={record.title}
-            loading="lazy"
-            decoding="async"
-            style={{
-              backgroundColor: "#1a1a1a",
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              backfaceVisibility: "hidden",
-              WebkitBackfaceVisibility: "hidden",
-            }}
-            onError={(event) => {
-              event.currentTarget.src =
-                "https://via.placeholder.com/80x110?text=No+Image";
-            }}
-          />
-          <img
-            className={cardImageClass}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              backfaceVisibility: "hidden",
-              WebkitBackfaceVisibility: "hidden",
-              transform: "rotateY(180deg)",
-              backgroundColor: "#1a1a1a",
-            }}
-            src={backSrc}
-            alt=""
-            aria-hidden="true"
-            loading="lazy"
-            decoding="async"
-          />
-        </div>
+        />
         <div className={cardOverlayClass}>
           <div className={cardTitleClass}>{record.title}</div>
         </div>
