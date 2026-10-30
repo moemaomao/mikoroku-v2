@@ -47,17 +47,18 @@ function pickFromWindow(limit = 15): HeroCover[] {
 
   const data = window.mangaData;
   const list = window.githubMangaList;
-  const pool: HeroCover[] = [];
+  const githubPool: HeroCover[] = [];
+  const firestorePool: HeroCover[] = [];
   const seen = new Set<string>();
 
-  const push = (item: Record<string, unknown>) => {
+  const push = (item: Record<string, unknown>, target: HeroCover[]) => {
     if (typeof item.title !== "string" || !item.title) return;
     const key = normalizeTitle(item.title);
     if (seen.has(key)) return;
     const raw = resolveCover(item.cover || item.img);
     if (!raw) return;
     seen.add(key);
-    pool.push({
+    target.push({
       title: item.title,
       slug: String(item.slug || key),
       cover: thumb(raw, Number(item.updatedAt) || 0),
@@ -69,16 +70,38 @@ function pickFromWindow(limit = 15): HeroCover[] {
 
   if (Array.isArray(list) && list.length) {
     for (const item of list) {
-      if (item && typeof item === "object") push(item as Record<string, unknown>);
-      if (pool.length >= limit) break;
-    }
-  } else if (data && typeof data === "object") {
-    for (const value of Object.values(data)) {
-      if (value && typeof value === "object") push(value as Record<string, unknown>);
-      if (pool.length >= limit) break;
+      if (item && typeof item === "object") push(item as Record<string, unknown>, githubPool);
     }
   }
-  return pool;
+
+  if (data && typeof data === "object") {
+    for (const value of Object.values(data)) {
+      if (!value || typeof value !== "object") continue;
+      const item = value as Record<string, unknown>;
+      if (typeof item.title === "string" && seen.has(normalizeTitle(item.title))) continue;
+      const isFs = item.firestore === true || item.github !== true;
+      if (isFs) push(item, firestorePool);
+      else push(item, githubPool);
+    }
+  }
+
+  const pool: HeroCover[] = [];
+  const maxLen = Math.max(githubPool.length, firestorePool.length);
+  for (let i = 0; i < maxLen && pool.length < limit; i++) {
+    if (i < firestorePool.length && pool.length < limit) pool.push(firestorePool[i]);
+    if (i < githubPool.length && pool.length < limit) pool.push(githubPool[i]);
+  }
+
+  if (pool.length < limit) {
+    for (const item of [...githubPool, ...firestorePool]) {
+      if (pool.length >= limit) break;
+      if (!pool.some((p) => normalizeTitle(p.title) === normalizeTitle(item.title))) {
+        pool.push(item);
+      }
+    }
+  }
+
+  return pool.slice(0, limit);
 }
 
 function seriesHref(slug: string): string {
