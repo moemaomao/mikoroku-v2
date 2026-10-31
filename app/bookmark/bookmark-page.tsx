@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "nextjs-toploader/app";
 import { CoverImage } from "../lib/cover-image";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient } from "../lib/firebase-client";
@@ -285,6 +286,7 @@ async function migrateLocalBookmarks(user: AuthUser, local: Bookmark[]): Promise
 }
 
 export default function BookmarkPage() {
+  const router = useRouter();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [syncError, setSyncError] = useState("");
@@ -468,8 +470,8 @@ export default function BookmarkPage() {
       cover: bookmark.img,
       slug: bookmark.slug || slugify(bookmark.title),
     }));
-    window.location.href = `/series/${encodeURIComponent(bookmark.slug || slugify(bookmark.title))}`;
-  }, []);
+    router.push(`/series/${encodeURIComponent(bookmark.slug || slugify(bookmark.title))}`);
+  }, [router]);
 
   const removeBookmark = useCallback(async (bookmark: Bookmark) => {
     setRemoving(bookmark.title);

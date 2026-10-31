@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, type CSSProperties } from "react";
+import { useRouter } from "nextjs-toploader/app";
 import { imageProxyUrl } from "../lib/image-proxy";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import styles from "./hero-featured.module.css";
@@ -168,6 +169,7 @@ function cardX(offset: number, m: ReturnType<typeof layoutMetrics>): number {
 }
 
 export default function HeroFeatured() {
+  const router = useRouter();
   const [covers, setCovers] = useState<HeroCover[]>(FALLBACK_COVERS);
   const [active, setActive] = useState(0);
   const [hidden, setHidden] = useState(false);
@@ -320,7 +322,7 @@ export default function HeroFeatured() {
               }
               onClick={() => {
                 if (isMain) {
-                  window.location.href = seriesHref(item.slug);
+                  router.push(seriesHref(item.slug));
                 } else {
                   goTo(index);
                 }

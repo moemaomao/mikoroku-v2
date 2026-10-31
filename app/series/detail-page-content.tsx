@@ -1,6 +1,7 @@
 "use client";
 
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useRouter } from "nextjs-toploader/app";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
 import { addDoc, collection, doc, getDocs, getFirestore, onSnapshot, serverTimestamp } from "firebase/firestore";
@@ -577,9 +578,10 @@ async function cacheMangaDetail(slug: string, manga: Manga): Promise<void> {
 async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
   const cachedManga = await getCachedManga(slug);
   if (cachedManga) return cachedManga;
+  const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(12000)]);
 
   const responses = await Promise.allSettled([
-    fetch(GITHUB_DATA_URL, { signal }).then(async (response) => {
+    fetch(GITHUB_DATA_URL, { signal: requestSignal }).then(async (response) => {
       if (!response.ok) throw new Error(`Dataset manga merespons HTTP ${response.status}.`);
       const items = await response.json() as Record<string, unknown>[];
       const result = items.find((item) =>
@@ -589,7 +591,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
       );
       return result ? normalizeManga(result, slug) : null;
     }),
-    fetch(`${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}`, { signal }).then(async (response) => {
+    fetch(`${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}`, { signal: requestSignal }).then(async (response) => {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`Firestore merespons HTTP ${response.status}.`);
       return normalizeManga(decodeFirestoreDocument(await response.json()), slug);
@@ -656,7 +658,7 @@ async function loadBloggerChapterSource(
   });
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
-    signal,
+    signal: AbortSignal.any([signal, AbortSignal.timeout(16000)]),
     headers: { Accept: "application/json" },
   });
 
@@ -1053,6 +1055,7 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 }
 
 export default function DetailPageContent({ slug }: { slug: string }) {
+  const router = useRouter();
   const [manga, setManga] = useState<Manga | null>(null);
   const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
@@ -1086,7 +1089,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   });
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [commentCount, setCommentCount] = useState<number | null>(null);
-  const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
+  const [chapterState, setChapterState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [chapterError, setChapterError] = useState("");
   const [source, setSource] = useState<ChapterSource>("blogger");
   const [firestoreLatestUpdate, setFirestoreLatestUpdate] = useState("");
@@ -1100,6 +1103,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [chapterSearch, setChapterSearch] = useState("");
   const [chapterWindow, setChapterWindow] = useState(CHAPTER_UI_BATCH);
   const chapterSentinelRef = useRef<HTMLDivElement | null>(null);
+  const chapterSectionRef = useRef<HTMLElement | null>(null);
+  const [chaptersVisible, setChaptersVisible] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportType, setReportType] = useState("");
@@ -1277,6 +1282,25 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   } as CSSProperties;
 
   useEffect(() => {
+    const section = chapterSectionRef.current;
+    if (!section) return;
+    if (!("IntersectionObserver" in window)) {
+      setChaptersVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setChaptersVisible(true);
+        observer.disconnect();
+      },
+      { rootMargin: "500px 0px" },
+    );
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [manga]);
+
+  useEffect(() => {
     const sourcePreference = localStorage.getItem("chapterSourceMode");
     const sortPreference = localStorage.getItem("chapterSortMode");
     const viewPreference = localStorage.getItem("chapterViewMode");
@@ -1353,7 +1377,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
     );
 
-    if (!mangaTitle && !hasLocalCache) return;
+    if (!chaptersVisible || (!mangaTitle && !hasLocalCache)) return;
     const controller = new AbortController();
     setChapterError("");
     if (chapterCacheSlugRef.current !== slug) {
@@ -1533,7 +1557,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     });
 
     return () => controller.abort();
-  }, [slug, mangaTitle, source, chapterRetry]);
+  }, [chaptersVisible, slug, mangaTitle, source, chapterRetry]);
 
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {
     if (source === nextSource) return;
@@ -1839,8 +1863,8 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       isNovel,
     }));
     const readerRoute = isNovel ? "/novel" : "/manga";
-    window.location.href = `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(String(chapter.num))}`;
-  }, [manga, slug]);
+    router.push(`${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(String(chapter.num))}`);
+  }, [manga, router, slug]);
 
   if (state === "loading") {
     return (
@@ -2171,7 +2195,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             {detailTab === "chapters" && <>
             <BannerAdSlot placement="series-before-chapters" />
             <ReaderServerNotice />
-            <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
+            <section ref={chapterSectionRef} className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
               <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 max-[767px]:mt-3 md:mx-[30px]">
                 <i className="fas fa-search text-xs" aria-hidden="true" />
                 <input
@@ -2253,6 +2277,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 }`}
                 aria-busy={chapterState === "loading"}
               >
+                {chapterState === "idle" && (
+                  <div className="chapter-loading-inner flex min-h-[220px] w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
+                    <span>Chapter list akan dimuat saat terlihat.</span>
+                  </div>
+                )}
                 {chapterState === "loading" && (
                   <div className="chapter-loading-inner flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
                     <i className="fas fa-spinner fa-spin fa-2x mb-3" aria-hidden="true" />

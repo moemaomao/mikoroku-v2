@@ -1,6 +1,8 @@
 "use client";
 
 import { imageProxyUrl } from "../lib/image-proxy";
+import Link from "next/link";
+import { useRouter } from "nextjs-toploader/app";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -138,9 +140,9 @@ function getDisplayName(user: HeaderUser | null): string {
   return user.displayName || user.email?.split("@")[0] || "User";
 }
 
-function navigateToManga(title: string): void {
+function getMangaPath(title: string): string {
   const cleanTitle = title.trim();
-  if (!cleanTitle) return;
+  if (!cleanTitle) return "/";
   const key = normalizeTitle(cleanTitle);
   const mangaData = Object.values(window.mangaData || {}).flatMap((value) => {
     const item = getMangaEntry(value);
@@ -162,7 +164,7 @@ function navigateToManga(title: string): void {
     }
   }
   const slug = manga?.slug || slugify(cleanTitle);
-  window.location.href = `/series/${encodeURIComponent(slug)}`;
+  return `/series/${encodeURIComponent(slug)}`;
 }
 
 function updateBookmarkIcon(): boolean {
@@ -255,10 +257,11 @@ function SidebarLink({
   if (external) {
     return <a className={classes} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{content}</a>;
   }
-  return <a className={classes} href={href} onClick={onClick}>{content}</a>;
+  return <Link className={classes} href={href} onClick={onClick}>{content}</Link>;
 }
 
 function HeaderContents() {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(() => desktopSidebarPreference ?? false);
   const [mobile, setMobile] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -287,10 +290,12 @@ function HeaderContents() {
 
   useEffect(() => {
     window.closeAuthDropdown = closeAuth;
-    window.openBookmark = navigateToManga;
+    window.openBookmark = (title) => {
+      router.push(getMangaPath(title));
+    };
     return () => {
       if (window.closeAuthDropdown === closeAuth) delete window.closeAuthDropdown;
-      if (window.openBookmark === navigateToManga) delete window.openBookmark;
+      delete window.openBookmark;
     };
   }, [closeAuth]);
 
@@ -729,7 +734,7 @@ function HeaderContents() {
     setSearchOpen(false);
     setSearchExpanded(false);
     setSearch("");
-    navigateToManga(title);
+    router.push(getMangaPath(title));
   };
 
   const openMobileSearch = () => {
@@ -852,14 +857,14 @@ function HeaderContents() {
               <path className={`origin-center transition-transform duration-300 ${sidebarOpen ? "translate-y-[7px]" : ""}`} d="M8 42h48c0 6-10 10-24 10S8 48 8 42z" />
             </svg>
           </button>
-          <a
+          <Link
             id="headerLogo"
             href="/"
             aria-label="Mikoroku home"
             className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-9 max-w-[120px] shrink-0 items-center sm:h-10 sm:max-w-none`}
           >
             <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto max-w-full object-contain" />
-          </a>
+          </Link>
         </div>
 
         <div
@@ -948,7 +953,7 @@ function HeaderContents() {
               <Icon name="search" />
             </button>
           )}
-          <a
+          <Link
             id="announcementLink"
             className={`${classButton} relative no-underline`}
             href="/announcements"
@@ -962,7 +967,7 @@ function HeaderContents() {
                 {unreadAnnouncements > 99 ? "99+" : unreadAnnouncements}
               </span>
             )}
-          </a>
+          </Link>
           <button
             id="darkModeToggle"
             type="button"
@@ -1014,7 +1019,9 @@ function HeaderContents() {
                     <button
                       type="button"
                       key={`${bookmark.title}-${bookmark.slug || ""}`}
-                      onClick={() => navigateToManga(bookmark.title)}
+                      onClick={() => {
+                        router.push(getMangaPath(bookmark.title));
+                      }}
                       className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/[0.08]"
                     >
                       <img
@@ -1065,7 +1072,7 @@ function HeaderContents() {
                     <button type="button" onClick={handleProfile} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="user" className="h-[18px] w-[18px]" />Profil</button>
                     <button type="button" onClick={handleNotifications} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="bell" className="h-[18px] w-[18px]" />Notifications</button>
                     <button type="button" onClick={handleMessages} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="message" className="h-[18px] w-[18px]" />Direct Messages</button>
-                    <a href="/settings" onClick={closeAuth} className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="settings" className="h-[18px] w-[18px]" />Settings</a>
+                    <Link href="/settings" onClick={closeAuth} className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="settings" className="h-[18px] w-[18px]" />Settings</Link>
                     <hr className="my-1 border-0 border-t border-black/[0.08] dark:border-white/10" />
                     <button type="button" onClick={handleLogout} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-red-600 transition hover:bg-red-500/10"><Icon name="logout" className="h-[18px] w-[18px]" />Logout</button>
                   </>
@@ -1172,9 +1179,9 @@ function HeaderContents() {
         className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto border-r border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.92)_0%,rgba(248,250,252,0.98)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[18px_14px] text-indigo-950 transition-transform duration-300 ease-in-out dark:border-white/15 dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] min-[769px]:transition-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5 pb-[18px] pt-1">
-          <a href="/" aria-label="Mikoroku home" onClick={() => mobile && closeSidebar()} className="flex h-[42px] shrink-0 items-center">
+          <Link href="/" aria-label="Mikoroku home" onClick={() => mobile && closeSidebar()} className="flex h-[42px] shrink-0 items-center">
             <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto object-contain" />
-          </a>
+          </Link>
           <button
             type="button"
             id="sidebarClose"

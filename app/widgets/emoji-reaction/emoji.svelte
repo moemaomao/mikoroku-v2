@@ -1,4 +1,4 @@
-<svelte:options customElement="mikoroku-emoji-reaction" />
+<svelte:options customElement={{ tag: "mikoroku-emoji-reaction" }} />
 
 <script lang="ts">
   import { onMount } from "svelte";

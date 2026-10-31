@@ -107,9 +107,13 @@ export async function fetchBloggerChapters(
   const maxResults = options?.maxResults ?? 500;
   const q = encodeURIComponent(title.trim());
   const url = `${domain}/feeds/posts/default?alt=json&max-results=${maxResults}&q=${q}`;
+  const timeout = AbortSignal.timeout(15000);
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, timeout])
+    : timeout;
 
   const res = await fetch(url, {
-    signal: options?.signal,
+    signal,
     headers: {
       Accept: "application/json",
       "User-Agent": "mikoroku-blogger-proxy/1.0",

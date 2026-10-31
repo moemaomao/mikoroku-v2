@@ -166,6 +166,10 @@ the element is mounted:
 <script type="module" src="/widgets/emoji-reaction.js"></script>
 ```
 
+Site header dan footer dirender langsung dari komponen TypeScript React
+`app/site-header.tsx` dan `app/site-footer.tsx`. Hanya widget emoji dan komentar
+yang dibuild sebagai bundle standalone di `public/widgets/`.
+
 Use `npm run build:emoji` to rebuild it after changing
 `app/widgets/emoji-reaction/emoji.svelte`. React/Next integration uses the
 same element, so it does not parse or execute the legacy HTML widget.

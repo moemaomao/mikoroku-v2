@@ -2,6 +2,7 @@
 
 import JSZip from "jszip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "nextjs-toploader/app";
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import SiteChrome from "../site-chrome";
@@ -1005,6 +1006,7 @@ export default function ReaderPage({
   kind: ReaderKind;
   preferStoredChapter?: boolean;
 }) {
+  const router = useRouter();
   const [data, setData] = useState<ReaderData | null>(null);
   const [error, setError] = useState("");
   const [forcedServer, setForcedServer] = useState<"sv1" | "sv2" | "es" | null>(null);
@@ -1146,13 +1148,13 @@ export default function ReaderPage({
         hasFreshData = true;
         if (result.kind !== kind) {
           const route = result.kind === "novel" ? "/novel" : "/manga";
-          window.location.replace(`${route}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`);
+          router.replace(`${route}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`);
           return;
         }
         const readerRoute = result.kind === "novel" ? "/novel" : "/manga";
         const canonicalPath = `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`;
         if (window.location.pathname !== canonicalPath) {
-          window.location.replace(canonicalPath);
+          router.replace(canonicalPath);
           return;
         }
         setData(result);
@@ -1223,7 +1225,7 @@ export default function ReaderPage({
 
   const changeChapter = useCallback((target: string) => {
     const path = activeKind === "novel" ? "/novel" : "/manga";
-    window.location.replace(`${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`);
+    router.replace(`${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`);
   }, [activeKind, slug]);
 
   const tryServer = useCallback((server: "sv1" | "sv2" | "es") => {

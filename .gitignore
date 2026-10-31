@@ -6,5 +6,6 @@ out/
 *.tsbuildinfo
 app/widgets/emoji-reaction/dist/
 app/widgets/comment-widget/dist/
+app/widgets/site-shell/dist/
 .dev.vars
 cloudflare-env.d.ts

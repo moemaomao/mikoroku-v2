@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { AdvertisementManager } from "./advertisement-manager";
+import NextTopLoader from "nextjs-toploader";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://mikoroku.top"),
@@ -97,6 +98,13 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           dangerouslySetInnerHTML={{
             __html: `(function(){var root=document.documentElement;document.body.classList.toggle("dark",root.classList.contains("dark"));document.body.classList.toggle("light",root.classList.contains("light"))})();`,
           }}
+        />
+        <NextTopLoader
+          color="#ef4444"
+          height={2}
+          crawl={false}
+          showSpinner={false}
+          speed={250}
         />
         <AdvertisementManager>{children}</AdvertisementManager>
       </body>

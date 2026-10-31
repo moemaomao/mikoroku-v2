@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 
 declare global {
   interface Window {
@@ -83,10 +84,10 @@ export default function SiteFooter({
           }}
         >
         <nav className="flex flex-wrap gap-4 max-[600px]:justify-center" aria-label="Informasi situs">
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/privacy">Privacy Policy</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/dmca">DMCA</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/terms">Terms</a>
-          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/about">About</a>
+          <Link className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/privacy">Privacy Policy</Link>
+          <Link className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/dmca">DMCA</Link>
+          <Link className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/terms">Terms</Link>
+          <Link className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/about">About</Link>
           <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="mailto:mikorokuscan@gmail.com">Contact</a>
         </nav>
 
