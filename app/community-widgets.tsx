@@ -8,7 +8,6 @@ declare global {
     DOMPurify?: unknown;
     md5?: unknown;
     setCommentCommunityPageId?: (pageId: string) => void;
-    setEmojiCommunityPageId?: (pageId: string) => void;
     __mikorokuCommunityWidgets?: CommunityWidgetRuntime;
   }
 }
@@ -23,50 +22,12 @@ type CommunityWidgetRuntime = {
   parking: HTMLElement;
   pageId: string;
   initialization: Promise<void> | null;
+  commentElement: (HTMLElement & { pageId?: string }) | null;
+  emojiElement: (HTMLElement & { pageId?: string }) | null;
 };
 
-const widgets = [
-  { id: "custom-comment-widget", path: "/Features/Hakoroku/comment.html" },
-  { id: "emoji-widget", path: "/Features/emoji-reaction.html" },
-];
-
-const STYLE_ATTR = "data-mikoroku-widget-style";
-
-function parseWidgetHtml(raw: string): { bodyHtml: string; styleHtml: string; scriptsHtml: string[] } {
-  const bodyMatch = raw.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-  let bodyHtml = bodyMatch ? bodyMatch[1] : raw;
-
-  const styles = raw.match(/<style[\s\S]*?<\/style>/gi) || [];
-  const links = raw.match(/<link[^>]*>/gi) || [];
-  const scriptsHtml = raw.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) || [];
-  const styleHtml = [...styles, ...links].join("\n");
-
-  bodyHtml = bodyHtml
-    .replace(/<!DOCTYPE[\s\S]*?>/i, "")
-    .replace(/<\/?html[^>]*>/gi, "")
-    .replace(/<\/?head[^>]*>/gi, "")
-    .replace(/<\/?body[^>]*>/gi, "")
-    .replace(/<title[\s\S]*?<\/title>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<link[^>]*>/gi, "")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
-
-  return { bodyHtml, styleHtml, scriptsHtml };
-}
-
-function injectWidgetStyles(styleHtml: string, owner: string) {
-  if (!styleHtml.trim()) return;
-  if (document.head.querySelector(`[${STYLE_ATTR}="${owner}"]`)) return;
-
-  const wrap = document.createElement("div");
-  wrap.innerHTML = styleHtml;
-  [...wrap.childNodes].forEach((node) => {
-    if (node.nodeType !== 1) return;
-    const element = node as HTMLElement;
-    element.setAttribute(STYLE_ATTR, owner);
-    document.head.appendChild(element);
-  });
-}
+const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js";
+const EMOJI_SCRIPT_SRC = "/widgets/emoji-reaction.js";
 
 function getCommunityRuntime(): CommunityWidgetRuntime {
   const existing = window.__mikorokuCommunityWidgets;
@@ -91,57 +52,62 @@ function getCommunityRuntime(): CommunityWidgetRuntime {
     parking,
     pageId: "",
     initialization: null,
+    commentElement: null,
+    emojiElement: null,
   };
   window.__mikorokuCommunityWidgets = runtime;
   return runtime;
 }
 
-async function loadWidget(widget: (typeof widgets)[number], runtime: CommunityWidgetRuntime) {
-  const container = runtime.root.querySelector<HTMLElement>(`#${widget.id}`);
-  if (!container) throw new Error(`Widget container ${widget.id} was not found.`);
-
-  const response = await fetch(widget.path);
-  if (!response.ok) throw new Error(`Widget ${widget.id} returned HTTP ${response.status}.`);
-
-  const raw = await response.text();
-  const { bodyHtml, styleHtml, scriptsHtml } = parseWidgetHtml(raw);
-  injectWidgetStyles(styleHtml, widget.id);
-
-  const template = document.createElement("template");
-  template.innerHTML = bodyHtml;
-  template.content.querySelectorAll("title").forEach((title) => title.remove());
-  container.replaceChildren(template.content);
-
-  const scriptsTemplate = document.createElement("template");
-  scriptsTemplate.innerHTML = scriptsHtml.join("\n");
-  const scripts = [...scriptsTemplate.content.querySelectorAll("script")];
-  for (const original of scripts) {
-    if (original.src && isLibraryAvailable(original.src)) continue;
-
-    const script = document.createElement("script");
-    if (original.type) script.type = original.type;
-    if (original.src) {
-      script.src = original.src;
-      script.async = false;
-    } else {
-      script.textContent = original.textContent;
-    }
-
-    const loaded = original.src || original.type === "module"
-      ? new Promise<void>((resolve, reject) => {
-        script.addEventListener("load", () => resolve(), { once: true });
-        script.addEventListener("error", () => reject(new Error(`Failed to load ${original.src || widget.path}`)), { once: true });
-      })
-      : null;
-    document.body.appendChild(script);
-    if (loaded) await loaded;
-  }
+async function initializeWidgets(runtime: CommunityWidgetRuntime) {
+  await Promise.all([
+    loadCommentWidget(runtime),
+    loadEmojiWidget(runtime),
+  ]);
 }
 
-async function initializeWidgets(runtime: CommunityWidgetRuntime) {
-  for (const widget of widgets) {
-    await loadWidget(widget, runtime);
+async function loadCommentWidget(runtime: CommunityWidgetRuntime) {
+  const container = runtime.root.querySelector<HTMLElement>("#custom-comment-widget");
+  if (!container) throw new Error("Widget container custom-comment-widget was not found.");
+
+  if (!customElements.get("mikoroku-comment-widget")) {
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.type = "module";
+      script.src = COMMENT_SCRIPT_SRC;
+      script.addEventListener("load", () => resolve(), { once: true });
+      script.addEventListener("error", () => reject(new Error(`Failed to load ${COMMENT_SCRIPT_SRC}`)), { once: true });
+      document.head.appendChild(script);
+    });
   }
+
+  const element = document.createElement("mikoroku-comment-widget") as HTMLElement & { pageId?: string };
+  element.setAttribute("page-id", runtime.pageId);
+  element.pageId = runtime.pageId;
+  container.replaceChildren(element);
+  runtime.commentElement = element;
+}
+
+async function loadEmojiWidget(runtime: CommunityWidgetRuntime) {
+  const container = runtime.root.querySelector<HTMLElement>("#emoji-widget");
+  if (!container) throw new Error("Widget container emoji-widget was not found.");
+
+  if (!customElements.get("mikoroku-emoji-reaction")) {
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.type = "module";
+      script.src = EMOJI_SCRIPT_SRC;
+      script.addEventListener("load", () => resolve(), { once: true });
+      script.addEventListener("error", () => reject(new Error(`Failed to load ${EMOJI_SCRIPT_SRC}`)), { once: true });
+      document.head.appendChild(script);
+    });
+  }
+
+  const element = document.createElement("mikoroku-emoji-reaction") as HTMLElement & { pageId?: string };
+  element.setAttribute("page-id", runtime.pageId);
+  element.pageId = runtime.pageId;
+  container.replaceChildren(element);
+  runtime.emojiElement = element;
 }
 
 export default function CommunityWidgets({ pageId, className = "" }: CommunityWidgetsProps) {
@@ -161,28 +127,63 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
     mount.appendChild(runtime.root);
 
     let active = true;
-    if (!runtime.initialization) {
-      runtime.initialization = initializeWidgets(runtime);
-    } else {
+    const updatePageId = () => {
       window.setCommentCommunityPageId?.(communityPageId);
-      window.setEmojiCommunityPageId?.(communityPageId);
-    }
+      runtime.commentElement?.setAttribute("page-id", communityPageId);
+      if (runtime.commentElement) runtime.commentElement.pageId = communityPageId;
+      runtime.emojiElement?.setAttribute("page-id", communityPageId);
+      if (runtime.emojiElement) runtime.emojiElement.pageId = communityPageId;
+    };
 
-    void runtime.initialization
-      .then(() => {
-        if (!active) return;
-        window.setCommentCommunityPageId?.(communityPageId);
-        window.setEmojiCommunityPageId?.(communityPageId);
-        setWidgetError("");
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        console.error("Community widgets failed to load.", error);
-        setWidgetError(error instanceof Error ? error.message : "Community widgets failed to load.");
-      });
+    let initialized = false;
+    let fallbackTimer: number | null = null;
+    const initializeWhenVisible = () => {
+      if (initialized) return;
+      initialized = true;
+      observer?.disconnect();
+      if (!runtime.initialization) {
+        runtime.initialization = initializeWidgets(runtime);
+      } else {
+        updatePageId();
+      }
+
+      void runtime.initialization
+        .then(() => {
+          if (!active) return;
+          updatePageId();
+          setWidgetError("");
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          console.error("Community widgets failed to load.", error);
+          setWidgetError(error instanceof Error ? error.message : "Community widgets failed to load.");
+        });
+    };
+
+    let observer: IntersectionObserver | null = null;
+    if ("IntersectionObserver" in window) {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          observer?.disconnect();
+          initializeWhenVisible();
+        },
+        { rootMargin: "600px 0px" },
+      );
+      observer.observe(runtime.root);
+    } else {
+      initializeWhenVisible();
+    }
+    fallbackTimer = window.setTimeout(initializeWhenVisible, 1500);
+
+    if (runtime.initialization) {
+      initializeWhenVisible();
+    }
 
     return () => {
       active = false;
+      observer?.disconnect();
+      if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
       runtime.root.hidden = true;
       runtime.parking.appendChild(runtime.root);
       if (document.documentElement.dataset.communityPageId === communityPageId) {
@@ -200,13 +201,4 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
       {widgetError && <p className="community-widget-error" role="status">{widgetError}</p>}
     </div>
   );
-}
-
-function isLibraryAvailable(src: string): boolean {
-  if (src.includes("firebase-app-compat.js")) return Boolean(window.firebase?.apps?.length);
-  if (src.includes("firebase-auth-compat.js")) return Boolean(window.firebase?.auth);
-  if (src.includes("firebase-firestore-compat.js")) return Boolean(window.firebase?.firestore);
-  if (src.includes("purify.min.js")) return Boolean(window.DOMPurify);
-  if (src.includes("md5.min.js")) return Boolean(window.md5);
-  return false;
 }

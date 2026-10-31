@@ -4,5 +4,7 @@ node_modules/
 .wrangler/
 out/
 *.tsbuildinfo
+app/widgets/emoji-reaction/dist/
+app/widgets/comment-widget/dist/
 .dev.vars
 cloudflare-env.d.ts

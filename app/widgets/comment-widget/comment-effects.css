@@ -1,0 +1,402 @@
+/* ==================== ANIMATIONS ==================== */
+
+/* Shake */
+@keyframes shake {
+  0%,100% {
+    transform: translate(0);
+  }
+  25% {
+    transform: translate(-1px,0);
+  }
+  50% {
+    transform: translate(1px,0);
+  }
+  75% {
+    transform: translate(-1px,1px);
+  }
+}
+
+/* Glitch Lite */
+@keyframes glitchLite {
+  0%,100% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-3px,2px);
+  }
+  40% {
+    transform: translate(3px,-2px);
+  }
+  60% {
+    transform: translate(-2px,-1px);
+  }
+  80% {
+    transform: translate(2px,1px);
+  }
+}
+
+/* Flicker */
+@keyframes flicker {
+  0%,100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-1px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+  75% {
+    transform: translateY(-1px);
+  }
+}
+
+/* Float */
+@keyframes floatBorder {
+  0%,100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(1deg);
+  }
+}
+
+/* Pulse */
+@keyframes pulseBorder {
+  0%,100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Spectrum */
+@keyframes spectrum {
+  from {
+    filter: hue-rotate(0deg);
+  }
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* Breathing */
+@keyframes breath {
+  0%,100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.015);
+  }
+}
+
+/* Drift */
+@keyframes drift {
+  0%,100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-2px);
+  }
+  75% {
+    transform: translateY(2px);
+  }
+}
+
+/* Chaos */
+@keyframes chaos {
+  0% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-4px,3px);
+  }
+  40% {
+    transform: translate(4px,-3px);
+  }
+  60% {
+    transform: translate(-3px,2px);
+  }
+  80% {
+    transform: translate(3px,-2px);
+  }
+  100% {
+    transform: translate(0);
+  }
+}
+
+/* ==================== BORDER SHAPES - FIXED (HIGH PRIORITY) ==================== */
+.shape-rounded {
+  border-radius: 40px !important;
+}
+
+.shape-box {
+  border-radius: 0px !important;
+}
+
+.shape-octagon {
+  clip-path: polygon(
+    12px 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    12px 100%,
+    0 calc(100% - 12px),
+    0 12px
+  );
+}
+
+.shape-corner-alt {
+  border-radius: 0 !important;
+  border-top-right-radius: 50px !important;
+  border-bottom-left-radius: 50px !important;
+}
+
+.shape-blob {
+  border-radius: 20% 20% 20% 20% !important;
+}
+
+.shape-cyber {
+  border-radius: 0 !important;
+  border-top-right-radius: 50px !important;
+  border-bottom-right-radius: 50px !important;
+}
+
+.shape-corner {
+  border-radius: 0 !important;
+  border-top-left-radius: 50px !important;
+  border-bottom-right-radius: 50px !important;
+}
+
+.shape-corner-top {
+  border-radius: 0 !important;
+  border-top-left-radius: 50px !important;
+  border-top-right-radius: 50px !important;
+}
+
+.shape-corner-bottom {
+  border-radius: 0 !important;
+  border-bottom-left-radius: 50px !important;
+  border-bottom-right-radius: 50px !important;
+}
+
+.shape-dashed {
+  position: relative;
+  border: none !important;
+}
+
+.shape-dashed::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 3px;
+
+  background:
+    repeating-conic-gradient(
+  from 0deg,
+  hsl(var(--hue,260),85%,65%) 0deg 6deg,
+  transparent 6deg 10deg
+);
+
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  pointer-events: none;
+}
+
+
+.shape-dotted {
+  border: none !important;
+
+  background:
+    radial-gradient(
+      circle,
+      hsl(var(--hue,260),85%,65%) 1%,
+      transparent 36%
+    ) !important;
+
+  background-size: 16px 16px !important;
+
+  border-radius: 10px !important;
+}
+
+.shape-diagonal {
+  border: none !important;
+  position: relative;
+}
+
+.shape-diagonal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 4px;
+  border-radius: inherit;
+
+  background:
+    repeating-linear-gradient(
+      45deg,
+      hsl(var(--hue, 260), 85%, 65%) 0 4px,
+      transparent 4px 8px
+    );
+
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  pointer-events: none;
+}
+
+.shape-zigzag {
+  border: none !important;
+  position: relative;
+  background: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 8px,
+      hsl(var(--hue, 260), 85%, 65%) 2px,
+      hsl(var(--hue, 260), 85%, 65%) 10px
+    ) !important;
+  background-size: 20px 20px !important;
+  border-radius: 10px !important;
+}
+
+/* ==================== POLA BORDER KEREN (FIXED - TIDAK HITAM) ==================== */
+
+.shape-grid {
+  border: 2px solid #7c3aed !important;
+  background-image: 
+    linear-gradient(rgba(124,58,237,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,58,237,0.15) 1px, transparent 1px) !important;
+  background-size: 14px 14px !important;
+  border-radius: 10px !important;
+}
+
+.comment.shape-dashed:hover,
+.comment.shape-dotted:hover,
+.comment.shape-double:hover,
+.comment.shape-zigzag:hover {
+  box-shadow: 0 0 25px rgba(124, 58, 237, 0.7) !important;
+  transform: translateY(-2px) !important;
+}
+
+#user-settings-modal *,
+#user-settings-modal *::before,
+#user-settings-modal *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+
+.author-name-row .user-custom-badge {
+  margin-left: 2px;
+}
+
+#badge-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.custom-badge-option {
+  transition: all 0.25s ease;
+}
+
+.custom-badge-option.active {
+  border: 2px solid #a78bfa !important;
+  box-shadow: 0 0 20px rgba(167,139,250,0.7) !important;
+  transform: scale(1.05);
+}
+
+.custom-badge-option[data-badge="Milf Lover"].active {
+  box-shadow: 0 0 20px rgba(255, 77, 109, 0.7);
+}
+
+.custom-badge-option[data-badge="Team Horny"].active {
+  box-shadow: 0 0 20px rgba(255, 193, 7, 0.8);
+}
+
+.avatar-wrapper .avatar-ring.frame-active {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.avatar-wrapper.has-frame .avatar-ring {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ====================== AVATAR FRAME FIX PALING KUAT ====================== */
+.avatar-wrapper {
+  position: relative !important;
+  width: 45px !important;
+  height: 45px !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+}
+
+.avatar-wrapper img.avatar-ring {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  z-index: 1 !important;
+}
+
+/* FRAME */
+.avatar-custom-frame {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  object-fit: contain !important;
+  pointer-events: none !important;
+  z-index: 20 !important;
+  image-rendering: crisp-edges;
+}
+
+/* DESKTOP */
+.avatar-custom-frame {
+  width: 155% !important;
+  height: 155% !important;
+}
+
+/* MOBILE - FORCE SCALE */
+@media (max-width: 480px) {
+  .avatar-wrapper {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .avatar-custom-frame {
+    width: 155% !important;
+    height: 155% !important;
+    z-index: 20 !important;
+  }
+
+  .comment-author img.avatar-ring,
+  .comment-author img:not(.avatar-custom-frame) {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+

@@ -28,6 +28,7 @@
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx",
+    "app/widgets/**/*.svelte",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [

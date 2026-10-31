@@ -15,6 +15,7 @@ Built with **Next.js App Router** and deployed on **Cloudflare Workers** using `
 | Layer | Technology |
 |-------|------------|
 | Framework | Next.js 16 (App Router) + React 19 |
+| Standalone widget | Svelte 5 custom element (`mikoroku-emoji-reaction`) |
 | Styling | Tailwind CSS 4 |
 | Deploy | Cloudflare Workers + OpenNext |
 | Database / Auth | Firebase (Auth + Firestore) |
@@ -102,6 +103,7 @@ mikoroku-v2/
 │   └── assets/
 │       ├── icons/
 │       └── hakoroku/             # Avatar frames, etc.
+├── app/widgets/                  # Svelte sources for standalone community widgets
 │
 ├── scripts/                      # Utility scripts
 ├── custom-worker.ts              # Cloudflare Worker entry
@@ -122,6 +124,62 @@ npm install
 # Run local development server
 npm run dev
 ```
+
+Untuk live preview widget komentar, jalankan:
+
+```bash
+npm run dev:comment
+```
+
+Jalankan `npm run dev:emoji` juga jika ingin mengembangkan kedua widget
+bersamaan. Bundle komentar publik tersedia di
+`public/widgets/comment-widget.js` dan stylesheet-nya di
+`public/widgets/comment-widget.css`. Runtime komentar legacy dipisahkan ke
+`public/widgets/comment-runtime.js` dan hanya dimuat setelah widget aktif.
+CSS komentar juga dipisahkan menjadi `comment-dm.css`, `comment-report.css`,
+`comment-settings.css`, dan `comment-effects.css`. CSS fitur tersebut dimuat
+saat fitur dibuka atau ketika browser idle, bukan pada render komentar awal.
+
+Untuk live preview widget emoji, jalankan dua terminal:
+
+```bash
+# Terminal 1
+npm run dev:emoji
+
+# Terminal 2
+npm run dev
+```
+
+Kemudian buka halaman detail/reader untuk preview integrasi Next.
+Perubahan pada `app/widgets/emoji-reaction/emoji.svelte` akan otomatis
+membangun ulang `public/widgets/emoji-reaction.js`; refresh browser untuk
+melihat hasilnya.
+
+### Standalone emoji widget
+
+The emoji reaction widget source is in `app/widgets/emoji-reaction/emoji.svelte`. Its generated bundle is built in the widget folder and copied to `public/widgets/emoji-reaction.js` as a
+framework-agnostic custom element. The generated bundle loads Firebase only when
+the element is mounted:
+
+```html
+<mikoroku-emoji-reaction page-id="detail_example"></mikoroku-emoji-reaction>
+<script type="module" src="/widgets/emoji-reaction.js"></script>
+```
+
+Use `npm run build:emoji` to rebuild it after changing
+`app/widgets/emoji-reaction/emoji.svelte`. React/Next integration uses the
+same element, so it does not parse or execute the legacy HTML widget.
+
+### Widget loading performance
+
+Community widgets are loaded with `IntersectionObserver` when they are within
+600px of the viewport, rather than during the initial page load. The emoji and
+comment bundles load in parallel, and the comment dependencies (DOMPurify,
+Firebase, and md5) are fetched concurrently where their dependency order allows.
+Comment CSS is emitted as a separate minified asset and all widget assets use
+short-lived CDN/browser caching with stale-while-revalidate. The legacy comment
+runtime is also a separate cacheable asset, so repeat visits can reuse it
+without inflating the custom-element loader.
 
 ---
 
@@ -164,6 +222,9 @@ Do **not** use `npm run build` for Workers — it only produces a standalone Nex
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Next.js development server |
+| `npm run build:emoji` | Build the Svelte emoji custom element |
+| `npm run build:comment` | Build the Svelte comment custom element |
+| `npm run build:widgets` | Build all standalone community widgets |
 | `npm run build` | Standalone Next.js build |
 | `npm run cf:build` | OpenNext build for Cloudflare |
 | `npm run preview` | Build + local Workers preview |

@@ -4,8 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:emoji": "vite build --config vite.emoji.config.ts --watch",
+    "dev:comment": "vite build --config vite.comment.config.ts --watch",
+    "build:emoji": "vite build --config vite.emoji.config.ts",
+    "build:comment": "vite build --config vite.comment.config.ts",
+    "build:widgets": "npm run build:emoji && npm run build:comment",
+    "prebuild": "npm run build:widgets",
     "build": "next build",
-    "cf:build": "opennextjs-cloudflare build --config wrangler.jsonc && node scripts/copy-homepage-asset.mjs",
+    "cf:build": "npm run build:widgets && opennextjs-cloudflare build --config wrangler.jsonc && node scripts/copy-homepage-asset.mjs",
     "preview": "npm run cf:build && opennextjs-cloudflare preview --config wrangler.jsonc",
     "deploy": "npm run cf:build && opennextjs-cloudflare deploy --config wrangler.jsonc",
     "upload": "npm run cf:build && opennextjs-cloudflare upload --config wrangler.jsonc",
@@ -20,13 +26,16 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.14",
     "@opennextjs/cloudflare": "^1.20.12",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tailwindcss/postcss": "^4.1.14",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "svelte": "^5.57.3",
     "tailwindcss": "^4.1.14",
     "typescript": "^5.9.0",
+    "vite": "^8.3.5",
     "wrangler": "^4.151.3"
   }
 }

@@ -4,6 +4,30 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 initOpenNextCloudflareForDev({ configPath: "wrangler.jsonc" });
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/widgets/comment-widget.js",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+      {
+        source: "/widgets/comment-widget.css",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+      {
+        source: "/widgets/comment-runtime.js",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+      ...["dm", "report", "settings", "effects"].map((feature) => ({
+        source: `/widgets/comment-${feature}.css`,
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      })),
+      {
+        source: "/widgets/emoji-reaction.js",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       {
