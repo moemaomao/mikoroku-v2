@@ -65,6 +65,7 @@ async function initializeSiteChrome(showChrome: boolean): Promise<void> {
         appId: "1:249700505242:web:dab240af09caf30ad7f123",
       });
     }
+    window.dispatchEvent(new Event("firebaseCompatReady"));
   } catch (error) {
     console.error("Firebase halaman gagal diinisialisasi.", error);
   }

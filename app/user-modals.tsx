@@ -324,13 +324,13 @@ const GAME_ROLES = new Map(
 
 const modalStyles = `
 #user-profile-modal,#dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
-#user-profile-modal{background:rgba(0,0,0,.9);z-index:99999}
-.profile-box{background:#1f1f2e;width:100%;max-width:380px;border-radius:14px;padding:18px;position:relative;color:white;box-sizing:border-box}
+#user-profile-modal{background:transparent;z-index:99999}
+.profile-box{background:#1f1f2e;width:100%;max-width:380px;max-height:calc(100vh - 32px);overflow-y:auto;border-radius:14px;padding:18px;position:relative;color:white;box-sizing:border-box}
 .profile-close{position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;color:#aaa;cursor:pointer}
 .profile-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}.profile-avatar{width:80px;height:80px;border-radius:15px;border:3px solid #7c3aed;object-fit:cover}
 .profile-dm{width:100%;height:34px;background:transparent;color:#22c55e;border:1px solid #22c55e;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px}
 .profile-stats{background:#28283a;border-radius:12px;padding:14px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center}.profile-stat-label{color:#aaa;font-size:.75rem}.profile-badge-title{display:flex;align-items:center;gap:10px;margin:12px 0;color:#ddd;font-size:13px;font-weight:700}.profile-badge-title:after{content:"";flex:1;height:1px;background:rgba(255,255,255,.15)}
-.user-custom-badge,.game-role{display:inline-flex;padding:4px 9px;border-radius:8px;background:linear-gradient(45deg,#7c3aed,#ec4899);color:white;font-size:.78rem;font-weight:600;margin:2px}
+.user-custom-badge{display:inline-flex;padding:4px 9px;border-radius:8px;background:linear-gradient(45deg,#7c3aed,#ec4899);color:white;font-size:.78rem;font-weight:600;margin:2px}.game-role{display:inline-flex;padding:4px 9px;border-radius:8px;background:transparent;color:white;font-size:.78rem;font-weight:600;margin:2px}
 #dm-modal{z-index:30000;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .dm-wrapper{width:100%;max-width:720px;height:78vh;display:flex;flex-direction:column;overflow:hidden;border-radius:22px;background:rgba(2,7,2,.92);border:1px solid rgba(77,255,101,.18);box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .dm-header{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:0 24px;background:rgba(133,255,77,.04);border-bottom:1px solid rgba(255,255,255,.06)}

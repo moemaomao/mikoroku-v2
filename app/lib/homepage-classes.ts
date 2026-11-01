@@ -34,16 +34,16 @@ export const bottomBadgeBarClass =
   "badge-bar absolute inset-x-0 bottom-0 z-20 flex h-[22px] items-stretch overflow-hidden rounded-b-[10px]";
 
 export const typeBadgeClass =
-  "type-badge flex min-w-0 flex-1 items-center justify-start truncate px-[clamp(3px,1.5vw,6px)] text-[clamp(7px,2.1vw,8px)] font-bold uppercase leading-none";
+  "type-badge flex min-w-0 flex-1 items-center justify-start truncate px-1.5 text-[8px] font-bold uppercase leading-none";
 
 export const statusBadgeClass =
-  "status-badge flex min-w-0 flex-1 items-center justify-end truncate px-[clamp(3px,1.5vw,6px)] text-[clamp(7px,2.1vw,8px)] font-bold uppercase leading-none";
+  "status-badge flex min-w-0 flex-1 items-center justify-end truncate px-1.5 text-[8px] font-bold uppercase leading-none";
 
 export const chapterBadgeClass =
-  "ch-badge absolute left-1.5 top-1 z-20 rounded-[4px] bg-[#ffcc00] px-[clamp(4px,1.5vw,6px)] py-0.5 text-[clamp(7px,2.1vw,8px)] font-bold text-black";
+  "ch-badge absolute left-1.5 top-1 z-20 rounded-[4px] bg-[#ffcc00] px-1.5 py-0.5 text-[8px] font-bold text-black";
 
 export const upBadgeClass =
-  "up-badge absolute right-1.5 top-1 z-20 animate-pulse rounded-[4px] bg-red-600 px-[clamp(4px,1.5vw,6px)] py-0.5 text-[clamp(7px,2.1vw,8px)] font-bold text-white";
+  "up-badge absolute right-1.5 top-1 z-20 animate-pulse rounded-[4px] bg-red-600 px-1.5 py-0.5 text-[8px] font-bold text-white";
 
 export const typeBadgeColors: Record<string, string> = {
   manga: "bg-[linear-gradient(to_left,transparent_0%,transparent_25%,rgba(201,23,20,0.45)_70%)] text-[#ff8a80]",

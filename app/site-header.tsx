@@ -199,6 +199,8 @@ function Icon({ name, className = "h-6 w-6" }: { name: string; className?: strin
       return <svg {...common}><path d="M3 12a9 9 0 1 0 3-6.7M3 4v6h6M12 7v5l3 2" /></svg>;
     case "commission":
       return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6m-4 5H8m8 4H8" /></svg>;
+    case "trophy":
+      return <svg {...common}><path d="M8 3h8v4a4 4 0 0 1-8 0V3Zm4 8v5m-4 5h8M5 5H3v2a4 4 0 0 0 4 4m12-6h2v2a4 4 0 0 1-4 4" /></svg>;
     case "discord":
       return <svg {...common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
     case "donation":
@@ -1192,6 +1194,7 @@ function HeaderContents() {
           <SidebarLink href="/bookmark" icon="bookmark" onClick={() => mobile && closeSidebar()}>Bookmark</SidebarLink>
           <SidebarLink href="/history" icon="history" onClick={() => mobile && closeSidebar()}>History</SidebarLink>
           <SidebarLink href="/commission" icon="commission" onClick={() => mobile && closeSidebar()}>Commission</SidebarLink>
+          <SidebarLink href="/leaderboard" icon="trophy" onClick={() => mobile && closeSidebar()}>Top Comments</SidebarLink>
           <SidebarLink href="/global-settings" icon="settings" onClick={() => mobile && closeSidebar()}>Global Settings</SidebarLink>
           <div className="my-3 h-px bg-gradient-to-r from-transparent via-black/15 to-transparent dark:via-white/15" />
           <SidebarLink href="https://discord.gg/kkt669knaG" icon="discord" external>Discord</SidebarLink>

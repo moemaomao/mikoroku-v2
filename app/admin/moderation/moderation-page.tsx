@@ -62,6 +62,7 @@ type EmojiServices = { firestore: Firestore };
 type RecordData = Record<string, unknown>;
 type ReportRow = { id: string; data: RecordData; comment: RecordData | null };
 type BannedRow = { id: string; data: RecordData };
+type LeaderboardUserRow = { id: string; data: RecordData };
 type ImportPreview = {
   sourcePostId: string;
   targetPostId: string;
@@ -332,8 +333,10 @@ export default function ModerationPage() {
   const [authReady, setAuthReady] = useState(false);
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [bannedUsers, setBannedUsers] = useState<BannedRow[]>([]);
+  const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUserRow[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
   const [loadingBans, setLoadingBans] = useState(false);
+  const [loadingLeaderboardUsers, setLoadingLeaderboardUsers] = useState(false);
   const [pageError, setPageError] = useState("");
   const [actionStatus, setActionStatus] = useState("");
   const [preview, setPreview] = useState<GlobalImportPreview | null>(null);
@@ -361,7 +364,7 @@ export default function ModerationPage() {
   const [emojiLoadedUrl, setEmojiLoadedUrl] = useState("");
   const [loadingEmojiCounts, setLoadingEmojiCounts] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<"import" | "reports" | "banned">("import");
+  const [activeTab, setActiveTab] = useState<"import" | "reports" | "banned" | "leaderboard">("import");
 
   const isModerator = Boolean(
     user?.email && MODERATOR_EMAILS.includes(user.email.trim().toLowerCase()),
@@ -458,11 +461,49 @@ export default function ModerationPage() {
     }
   }, [isModerator, services]);
 
+  const loadLeaderboardUsers = useCallback(async () => {
+    if (!services || !isModerator) return;
+    setLoadingLeaderboardUsers(true);
+    try {
+      const snapshot = await getDocs(query(
+        collection(services.firestore, "userStats"),
+        orderBy("commentCount", "desc"),
+        limit(100),
+      ));
+      setLeaderboardUsers(snapshot.docs.map((entry) => ({ id: entry.id, data: entry.data() })));
+    } catch (error) {
+      console.error("Failed to load leaderboard users.", error);
+      setPageError(`User leaderboard gagal dimuat: ${errorMessage(error)}`);
+    } finally {
+      setLoadingLeaderboardUsers(false);
+    }
+  }, [isModerator, services]);
+
   useEffect(() => {
     if (!isModerator) return;
     setPageError("");
-    void Promise.all([loadReports(), loadBannedUsers()]);
-  }, [isModerator, loadBannedUsers, loadReports]);
+    void Promise.all([loadReports(), loadBannedUsers(), loadLeaderboardUsers()]);
+  }, [isModerator, loadBannedUsers, loadLeaderboardUsers, loadReports]);
+
+  const toggleLeaderboardVisibility = async (entry: LeaderboardUserRow) => {
+    if (!services || !isModerator) return;
+    const hidden = entry.data.leaderboardHidden === true;
+    try {
+      await updateDoc(doc(services.firestore, "userStats", entry.id), {
+        leaderboardHidden: !hidden,
+        leaderboardHiddenAt: !hidden ? serverTimestamp() : null,
+      });
+      setLeaderboardUsers((current) => current.map((item) =>
+        item.id === entry.id
+          ? { ...item, data: { ...item.data, leaderboardHidden: !hidden } }
+          : item,
+      ));
+      setActionStatus(`${displayText(entry.data.displayName, entry.id)} sekarang ${hidden ? "ditampilkan di" : "disembunyikan dari"} leaderboard.`);
+    } catch (error) {
+      console.error("Failed to update leaderboard visibility.", error);
+      setPageError(`Status leaderboard gagal diperbarui: ${errorMessage(error)}`);
+    }
+  };
 
   const signIn = async () => {
     if (!services) return;
@@ -1212,11 +1253,12 @@ export default function ModerationPage() {
           </section>
         ) : (
           <>
-            <nav className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Moderator sections">
+            <nav className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Moderator sections">
               {([
                 ["import", "Import", "Migrasi komentar lama", "↗", ""],
                 ["reports", "Laporan", "Tinjau laporan komunitas", "!", reports.length ? String(reports.length) : "0"],
                 ["banned", "Banned", "Kelola akun yang dibatasi", "−", String(bannedUsers.length)],
+                ["leaderboard", "Leaderboard", "Hide/show user leaderboard", "★", String(leaderboardUsers.length)],
               ] as const).map(([tab, label]) => (
                 <button
                   key={tab}
@@ -1225,12 +1267,12 @@ export default function ModerationPage() {
                   onClick={() => setActiveTab(tab)}
                   className={`group flex min-h-[92px] items-center gap-4 rounded-2xl border p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${activeTab === tab ? "border-rose-500/40 bg-white ring-2 ring-rose-500/10 dark:bg-[#1b1c23]" : "border-black/[0.07] bg-white/75 hover:border-rose-500/30 dark:border-white/[0.07] dark:bg-[#15161b]"}`}
                 >
-                  <span className={`grid size-11 shrink-0 place-items-center rounded-xl text-lg font-bold ${activeTab === tab ? "bg-rose-600 text-white shadow-lg shadow-rose-600/20" : "bg-slate-100 text-slate-600 group-hover:bg-rose-50 group-hover:text-rose-600 dark:bg-white/[0.06] dark:text-slate-300 dark:group-hover:bg-rose-500/10 dark:group-hover:text-rose-300"}`}>{tab === "import" ? "↗" : tab === "reports" ? "!" : "−"}</span>
+                  <span className={`grid size-11 shrink-0 place-items-center rounded-xl text-lg font-bold ${activeTab === tab ? "bg-rose-600 text-white shadow-lg shadow-rose-600/20" : "bg-slate-100 text-slate-600 group-hover:bg-rose-50 group-hover:text-rose-600 dark:bg-white/[0.06] dark:text-slate-300 dark:group-hover:bg-rose-500/10 dark:group-hover:text-rose-300"}`}>{tab === "import" ? "↗" : tab === "reports" ? "!" : tab === "banned" ? "−" : "★"}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-bold">{label}</span>
-                    <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{tab === "import" ? "Migrasi komentar lama" : tab === "reports" ? "Tinjau laporan komunitas" : "Kelola akun yang dibatasi"}</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-slate-400">{tab === "import" ? "Migrasi komentar lama" : tab === "reports" ? "Tinjau laporan komunitas" : tab === "banned" ? "Kelola akun yang dibatasi" : "Hide/show user leaderboard"}</span>
                   </span>
-                  {tab !== "import" && <span className="grid min-w-7 place-items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 dark:bg-white/[0.08] dark:text-slate-300">{tab === "reports" ? reports.length : bannedUsers.length}</span>}
+                  {tab !== "import" && <span className="grid min-w-7 place-items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 dark:bg-white/[0.08] dark:text-slate-300">{tab === "reports" ? reports.length : tab === "banned" ? bannedUsers.length : leaderboardUsers.length}</span>}
                 </button>
               ))}
             </nav>
@@ -1602,6 +1644,37 @@ export default function ModerationPage() {
                     </table>
                   </div>
                 )}
+              </section>
+            )}
+
+            {activeTab === "leaderboard" && (
+              <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#191a20]" aria-labelledby="leaderboard-heading">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <h2 id="leaderboard-heading" className="text-lg font-bold">Visibility leaderboard</h2>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">User tersembunyi tetap dapat berkomentar, tetapi tidak muncul di leaderboard.</p>
+                      </div>
+                      <button type="button" onClick={() => void loadLeaderboardUsers()} disabled={loadingLeaderboardUsers} className="rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:border-white/15">Refresh</button>
+                    </div>
+                    {loadingLeaderboardUsers ? <p className="py-8 text-center text-sm">Memuat user leaderboard...</p> : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                          <thead><tr className="bg-slate-100 dark:bg-white/[0.06]"><th className="p-3">Nama</th><th className="p-3">UID</th><th className="p-3">Komentar</th><th className="p-3">Status</th><th className="p-3">Aksi</th></tr></thead>
+                          <tbody>{leaderboardUsers.map((entry) => {
+                            const hidden = entry.data.leaderboardHidden === true;
+                            return (
+                              <tr key={entry.id} className={`border-t border-black/10 dark:border-white/10 ${hidden ? "opacity-60" : ""}`}>
+                                <td className="p-3 font-semibold">{displayText(entry.data.displayName, displayText(entry.data.username, "Anonymous"))}</td>
+                                <td className="break-all p-3 font-mono text-xs">{entry.id}</td>
+                                <td className="p-3">{displayText(entry.data.commentCount, "0")}</td>
+                                <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${hidden ? "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"}`}>{hidden ? "Hidden" : "Visible"}</span></td>
+                                <td className="p-3"><button type="button" onClick={() => void toggleLeaderboardVisibility(entry)} className={`rounded-lg px-3 py-2 text-xs font-semibold text-white ${hidden ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-600 hover:bg-slate-700"}`}>{hidden ? "Show" : "Hide"}</button></td>
+                              </tr>
+                            );
+                          })}</tbody>
+                        </table>
+                      </div>
+                    )}
               </section>
             )}
           </>
