@@ -28,7 +28,7 @@ const IMAGE_PROXY_PRESETS = {
   coverDetail: { width: 1200, quality: 72, output: "webp" },
   coverVolume: { width: 100, quality: 72, output: "webp" },
   coverAdmin: { width: 200, quality: 72, output: "webp" },
-  headerPreview: { width: 50, quality: 75, output: "webp" },
+  headerPreview: { width: 80, quality: 75, output: "webp" },
   postCatalog: { width: 120, quality: 60 },
   historyCover: { width: 100, quality: 80, output: "webp" },
   recommendation: { width: 140, quality: 65, output: "webp" },
@@ -125,7 +125,7 @@ export function imageProxyUrl(
     : trimmedSource;
 
   const settings = IMAGE_PROXY_PRESETS[preset];
-  const coverConversion = USER_COVER_PRESETS.has(preset) ? readCoverImageConversion() : null;
+  const coverConversion = USER_COVER_PRESETS.has(preset) && preset !== "headerPreview" ? readCoverImageConversion() : null;
   const userQuality = coverConversion
     ? (coverConversion.preset === "custom" ? 80 : { low: 55, medium: 72, high: 85 }[coverConversion.preset])
     : null;
