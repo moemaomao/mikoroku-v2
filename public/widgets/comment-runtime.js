@@ -251,14 +251,40 @@ async function uploadToImgBB(base64) {
 }
 
 
-    function getBase64(file, callback) {
+    function getBase64(file, callback, options = {}) {
       if (!file) return callback(null);
       if (file.size > 5 * 1024 * 1024) {
         alert('Image too large (max 5MB)');
         return callback(null);
       }
+
+      const maxDimension = options.maxDimension || 1024;
+      const quality = options.quality || 0.82;
       const reader = new FileReader();
-      reader.onload = () => callback(reader.result);
+      reader.onload = () => {
+        const source = reader.result;
+        if (typeof source !== 'string' || maxDimension >= 1024) {
+          callback(source);
+          return;
+        }
+
+        const image = new Image();
+        image.onload = () => {
+          const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext('2d');
+          if (!context) {
+            callback(source);
+            return;
+          }
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          callback(canvas.toDataURL('image/jpeg', quality));
+        };
+        image.onerror = () => callback(source);
+        image.src = source;
+      };
       reader.onerror = () => callback(null);
       reader.readAsDataURL(file);
     }
@@ -1068,7 +1094,7 @@ function initUserSettingsModal() {
           'settings-avatar-preview'
         ).src = base64;
 
-      });
+      }, { maxDimension: 128, quality: 0.72 });
     };
   }
 }
@@ -2259,6 +2285,38 @@ function getOptimizedAvatar(avatarUrl, size = 48) {
   return avatarUrl;
 }
 
+const optimizedBase64AvatarCache = new Map();
+
+function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
+  if (!avatarUrl || !avatarUrl.startsWith('data:image/')) {
+    return Promise.resolve(avatarUrl);
+  }
+  if (optimizedBase64AvatarCache.has(avatarUrl)) {
+    return optimizedBase64AvatarCache.get(avatarUrl);
+  }
+
+  const conversion = new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        resolve(avatarUrl);
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/webp', quality));
+    };
+    image.onerror = () => resolve(avatarUrl);
+    image.src = avatarUrl;
+  });
+  optimizedBase64AvatarCache.set(avatarUrl, conversion);
+  return conversion;
+}
+
    function renderComment(comment) {
   console.time(`⏱️ renderComment ${comment.id || 'unknown'}`);
   
@@ -2321,9 +2379,10 @@ function getOptimizedAvatar(avatarUrl, size = 48) {
     avatarClass += ' anonymous';
   }
 
+  const displayAvatarSrc = avatarSrc.startsWith('data:image/') ? ANONYMOUS_AVATAR : avatarSrc;
   const avatarHtml = `
     <div class="avatar-wrapper">
-      <img src="${avatarSrc}"
+      <img src="${displayAvatarSrc}"
            alt="Avatar ${comment.author || 'User'}"
            class="${avatarClass}"
            width="45"
@@ -2636,6 +2695,13 @@ function getOptimizedAvatar(avatarUrl, size = 48) {
           </div>
         ` : ''}
       `;
+
+      if (avatarSrc.startsWith('data:image/')) {
+        const avatarElement = div.querySelector('.avatar-ring');
+        void optimizeBase64Avatar(avatarSrc).then((optimizedAvatar) => {
+          if (avatarElement && optimizedAvatar) avatarElement.src = optimizedAvatar;
+        });
+      }
 
   // ==================== LOAD LEVEL (DISAMAKAN DENGAN MODAL) ====================
   if (comment.uid) {

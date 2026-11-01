@@ -286,6 +286,8 @@
   }
 
   onMount(() => {
+    const host = document.querySelector("mikoroku-emoji-reaction");
+    if (host) host.classList.add("block");
     connecting = connect(pageId)
       .catch((error: unknown) => console.error("Failed to initialize emoji reaction.", error))
       .finally(() => { connecting = null; });
@@ -304,8 +306,22 @@
 
 <div class="reaction" aria-label="Emoji reactions">
   {#each reactionKeys as key}
-    <button type="button" aria-label={labels[key]} on:click={(event) => react(key, event.currentTarget)}>
-      <img src={images[key]} alt={labels[key]} width="45" height="45" loading="lazy" decoding="async" />
+    <button
+      type="button"
+      aria-label={labels[key]}
+      class:hot={counts[key] >= 10}
+      class="relative h-[45px] min-h-[45px] w-[45px] min-w-[45px] cursor-pointer border-0 bg-transparent p-0"
+      on:click={(event) => react(key, event.currentTarget)}
+    >
+      <img
+        src={images[key]}
+        alt={labels[key]}
+        width="45"
+        height="45"
+        loading="lazy"
+        decoding="async"
+        class="block h-[45px] w-[45px] origin-center rounded-full object-contain"
+      />
       <span class="count">{counts[key]}</span>
       <small>{labels[key]}</small>
     </button>
@@ -313,25 +329,126 @@
 </div>
 
 <style>
-  :host { display: block; }
-  .reaction { display: flex; justify-content: center; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin: 25px 0; text-align: center; }
-  button { width: 45px; height: 45px; min-width: 45px; border: 0; background: none; cursor: pointer; position: relative; padding: 0; }
-  img { width: 45px; height: 45px; object-fit: contain; border-radius: 50%; display: block; transform-origin: center; }
-  :global(img.active) { animation: react 0.52s cubic-bezier(.2,.8,.2,1); }
-  :global(img.like) { animation: spin 5.2s cubic-bezier(.2,.8,.2,1); }
-  :global(img.haha) { animation: bounce .2s ease; }
-  :global(img.wow) { animation: burst .8s ease; }
-  :global(img.sad) { animation: sad 1.8s ease; }
-  :global(img.angry2) { animation: angry .8s ease; }
-  .count { position: absolute; top: -8px; right: -10px; background: #ff4081; color: white; font: bold 12px/1 sans-serif; padding: 4px 8px; border-radius: 999px; min-width: 22px; box-sizing: border-box; }
-  small { display: block; margin-top: 4px; color: #a1a1a1; font: 11px sans-serif; user-select: none; white-space: nowrap; }
-  :global(.bubble) { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); background: white; color: black; font: 12px sans-serif; padding: 6px 10px; border: 2px solid black; border-radius: 12px; white-space: nowrap; z-index: 2; animation: bubble .6s ease; }
-  @keyframes react { 50% { transform: scale(1.2); } }
-  @keyframes spin { to { transform: rotate(1440deg) scale(1.15); } }
-  @keyframes bounce { 50% { transform: scale(1.2,.8); } }
-  @keyframes burst { 50% { transform: scale(1.3); filter: brightness(1.3); } }
-  @keyframes sad { 50% { transform: scale(.88) translateY(12px) rotate(-8deg); } }
-  @keyframes angry { 20%, 40%, 60% { transform: translateX(-6px) rotate(-6deg) scale(1.2); } }
-  @keyframes bubble { from { opacity: 0; transform: translate(-50%, 8px) scale(.8); } }
-  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; } }
+  :host {
+    display: block;
+  }
+
+  .reaction {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 25px 0;
+    text-align: center;
+  }
+
+  button {
+    position: relative;
+    width: 45px;
+    height: 45px;
+    min-width: 45px;
+    min-height: 45px;
+    flex: 0 0 45px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  button.hot::before {
+    position: absolute;
+    top: -14px;
+    left: -5px;
+    width: 55px;
+    height: 58px;
+    z-index: 0;
+    border-radius: 48% 48% 42% 42%;
+    background:
+      radial-gradient(ellipse at 50% 86%, rgba(255, 242, 92, .98) 0 22%, rgba(255, 145, 0, .92) 44%, transparent 72%),
+      radial-gradient(ellipse at 25% 44%, rgba(255, 70, 0, .86) 0 17%, transparent 58%),
+      radial-gradient(ellipse at 75% 40%, rgba(255, 24, 0, .8) 0 16%, transparent 55%);
+    box-shadow: 0 0 7px 2px rgba(255, 92, 0, .8);
+    filter: blur(2px);
+    content: "";
+    pointer-events: none;
+    animation: emoji-fire 1s ease-in-out infinite alternate;
+  }
+
+  img {
+    display: block;
+    position: relative;
+    z-index: 1;
+    width: 45px;
+    height: 45px;
+    object-fit: contain;
+    border-radius: 50%;
+    transform-origin: center;
+  }
+
+  .count {
+    position: absolute;
+    top: -8px;
+    right: -10px;
+    z-index: 3;
+    min-width: 22px;
+    box-sizing: border-box;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #ff4081;
+    color: #fff;
+    font: bold 12px/1 sans-serif;
+  }
+
+  small {
+    display: block;
+    position: relative;
+    z-index: 4;
+    margin-top: 4px;
+    color: #a1a1a1;
+    font: 11px sans-serif;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  :global(.bubble) {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    z-index: 2;
+    transform: translateX(-50%);
+    padding: 6px 10px;
+    border: 2px solid #000;
+    border-radius: 12px;
+    background: #fff;
+    color: #000;
+    font: 12px sans-serif;
+    white-space: nowrap;
+    animation: bubble .6s ease;
+  }
+
+  @keyframes bubble {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 8px) scale(.8);
+    }
+  }
+
+  @keyframes emoji-fire {
+    from {
+      opacity: .7;
+      transform: translateY(2px) scale(.94, .96);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(-1px) scale(1.05, 1.1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+    }
+  }
 </style>

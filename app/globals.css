@@ -1,4 +1,14 @@
 @import "tailwindcss";
+@source "./**/*.svelte";
+
+@theme {
+  @keyframes emoji-bubble {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 8px) scale(.8);
+    }
+  }
+}
 
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant list-mode (&:where(html[data-card-display="list"] *));
