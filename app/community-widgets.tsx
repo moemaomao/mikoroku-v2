@@ -35,6 +35,7 @@ function getCommunityRuntime(): CommunityWidgetRuntime {
 
   const root = document.createElement("section");
   root.className = "community-widgets";
+  root.dataset.state = "loading";
   root.setAttribute("aria-label", "Comments and reactions");
   root.innerHTML = `
     <div id="emoji-widget" class="community-reactions"></div>
@@ -123,6 +124,7 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
     document.documentElement.dataset.communityPageId = communityPageId;
     runtime.pageId = communityPageId;
     runtime.root.className = `community-widgets ${className}`.trim();
+    runtime.root.dataset.state = "loading";
     runtime.root.hidden = false;
     mount.appendChild(runtime.root);
 
@@ -152,11 +154,13 @@ export default function CommunityWidgets({ pageId, className = "" }: CommunityWi
           if (!active) return;
           updatePageId();
           setWidgetError("");
+          runtime.root.dataset.state = "ready";
         })
         .catch((error: unknown) => {
           if (!active) return;
           console.error("Community widgets failed to load.", error);
           setWidgetError(error instanceof Error ? error.message : "Community widgets failed to load.");
+          runtime.root.dataset.state = "ready";
         });
     };
 

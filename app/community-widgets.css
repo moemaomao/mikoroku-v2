@@ -5,6 +5,10 @@
   margin: 24px auto;
 }
 
+.community-widgets[data-state="loading"] {
+  visibility: hidden;
+}
+
 .community-widget-mount {
   display: contents;
 }
