@@ -878,8 +878,8 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         b.style.setProperty("border", `1px solid color-mix(in srgb, ${color} 55%, transparent)`, "important");
         b.style.setProperty("color", color, "important");
         b.style.setProperty("border-radius", "3px", "important");
-        b.style.fontSize = isMobile ? "8px" : "9px";
-        b.style.padding = isMobile ? "1px 6px" : "2px 7px";
+        b.style.fontSize = isMobile ? "clamp(7px, 2.1vw, 8px)" : "9px";
+        b.style.padding = isMobile ? "1px clamp(3px, 1.5vw, 6px)" : "2px 7px";
         b.style.lineHeight = "1.2";
         b.style.fontWeight = "600";
         b.style.letterSpacing = "0.02em";

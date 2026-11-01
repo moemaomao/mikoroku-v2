@@ -9,6 +9,7 @@ export default function HomeCommunityWidgets() {
   const containerRef = useRef<HTMLElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [nearViewport, setNearViewport] = useState(false);
+  const [discordOpen, setDiscordOpen] = useState(false);
   const [discordTheme, setDiscordTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -117,7 +118,26 @@ export default function HomeCommunityWidgets() {
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--mikoroku-home-section-accent,#aaa)] bg-[#f0f0f0] px-[14px] py-[5px] text-[13.5px] font-semibold leading-[1.3] text-[var(--mikoroku-home-section-text,#111)] dark:bg-[#1a1a1a] dark:text-[var(--mikoroku-home-section-text,currentColor)]">🌟 Discord Server</span>
         </div>
         <div id="discord-container" className="min-h-[400px]">
-          {nearViewport && (
+          {!discordOpen ? (
+            <button
+              type="button"
+              className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-[var(--mikoroku-home-section-accent,#aaa)] bg-[#f0f0f0] px-5 text-center text-sm font-semibold text-[var(--mikoroku-home-section-text,#111)] transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-home-section-accent,#aaa)] dark:bg-[#1a1a1a] dark:text-[var(--mikoroku-home-section-text,currentColor)] max-[768px]:min-h-[320px]"
+              onClick={() => setDiscordOpen(true)}
+              aria-expanded="false"
+            >
+              <span className="inline-flex items-center gap-2 rounded-lg bg-[#5865f2] px-4 py-2.5 text-white shadow-sm">
+                <svg
+                  aria-hidden="true"
+                  className="h-6 w-6"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M19.54 5.32A16.9 16.9 0 0 0 15.4 4l-.5 1.02a15.4 15.4 0 0 0-5.8 0L8.6 4a16.9 16.9 0 0 0-4.14 1.32C1.84 9.18 1.13 12.95 1.48 16.66a16.7 16.7 0 0 0 5.08 2.58l1.23-1.67c-.68-.25-1.33-.56-1.94-.92l.48-.37c3.74 1.75 7.8 1.75 11.5 0l.49.37c-.62.36-1.27.67-1.95.92l1.23 1.67a16.7 16.7 0 0 0 5.08-2.58c.41-4.3-.7-8.03-3.14-11.34ZM8.1 14.8c-1.1 0-2-1-2-2.23s.88-2.23 2-2.23 2.02 1 2 2.23-.9 2.23-2 2.23Zm7.8 0c-1.1 0-2-1-2-2.23s.88-2.23 2-2.23 2.02 1 2 2.23-.9 2.23-2 2.23Z" />
+                </svg>
+                <span>Open Discord Server</span>
+              </span>
+            </button>
+          ) : (
             <iframe
               key={discordTheme}
               className="block w-full rounded-xl border-0"
