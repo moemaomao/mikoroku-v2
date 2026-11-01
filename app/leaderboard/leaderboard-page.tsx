@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getApps, initializeApp } from "firebase/app";
 import { collection, getDocs, getFirestore, limit, orderBy, query, startAfter, type QueryDocumentSnapshot } from "firebase/firestore";
 import SiteChrome from "../site-chrome";
@@ -53,6 +53,66 @@ function commentLevel(commentCount: number): number {
 
 function openProfile(uid: string): void {
   window.showUserProfile?.(uid);
+}
+
+function optimizedAvatarUrl(avatarUrl: string, size: number): string {
+  if (!avatarUrl || avatarUrl === defaultAvatar) return defaultAvatar;
+  if (avatarUrl.includes("googleusercontent.com") || avatarUrl.includes("lh3.googleusercontent.com")) {
+    return avatarUrl.includes("=s")
+      ? avatarUrl.replace(/=s\d+/, `=s${size}`)
+      : `${avatarUrl}=s${size}`;
+  }
+  if (avatarUrl.includes("gravatar.com")) {
+    try {
+      const url = new URL(avatarUrl);
+      url.searchParams.set("s", String(size));
+      return url.toString();
+    } catch {
+      return avatarUrl;
+    }
+  }
+  return avatarUrl;
+}
+
+function LazyAvatar({ src, alt, width, height, className }: {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  className: string;
+}) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const image = imageRef.current;
+    if (!image || loadedSrc) return;
+    if (!("IntersectionObserver" in window)) {
+      setLoadedSrc(src);
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setLoadedSrc(src);
+      observer.disconnect();
+    }, { rootMargin: "200px 0px" });
+    observer.observe(image);
+    return () => observer.disconnect();
+  }, [loadedSrc, src]);
+
+  return (
+    <img
+      ref={imageRef}
+      src={loadedSrc ? optimizedAvatarUrl(loadedSrc, width) : defaultAvatar}
+      alt={alt}
+      width={width}
+      height={height}
+      loading="lazy"
+      decoding="async"
+      className={className}
+    />
+  );
 }
 
 function isLeaderboardUser(user: unknown): user is LeaderboardUser {
@@ -290,7 +350,7 @@ export default function LeaderboardPage() {
                     {index === 0 ? "🏆" : index + 1}
                   </span>
                   <button type="button" onClick={() => openProfile(user.uid)} aria-label={`Open profile of ${displayName(user)}`} className="mx-auto block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">
-                    <img src={user.avatar} alt="" className="h-16 w-16 rounded-full border-2 border-white object-cover shadow dark:border-slate-600" />
+                    <img src={optimizedAvatarUrl(user.avatar, 64)} alt="" width={64} height={64} fetchPriority="high" decoding="async" className="h-16 w-16 rounded-full border-2 border-white object-cover shadow dark:border-slate-600" />
                   </button>
                   <button type="button" onClick={() => openProfile(user.uid)} className="mx-auto mt-3 block max-w-full truncate text-center text-sm font-bold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">{displayName(user)}</button>
                   {user.username && <p className="truncate text-center text-[10px] text-slate-500 dark:text-slate-400">@{user.username}</p>}
@@ -310,10 +370,10 @@ export default function LeaderboardPage() {
               </div>
               <ol className="mt-4 grid gap-3 sm:grid-cols-2">
                 {restUsers.map((user, index) => (
-                  <li key={user.uid} className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white/70 px-4 py-3 transition duration-200 touch-manipulation hover:-translate-y-0.5 hover:brightness-110 hover:border-[var(--mikoroku-accent,#9d1018)]/60 hover:shadow-lg active:scale-[0.99] active:brightness-125 active:shadow-xl focus-within:brightness-110 focus-within:shadow-lg dark:border-white/10 dark:bg-white/[0.04] sm:gap-4">
+                  <li key={user.uid} className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200/80 bg-white/70 px-4 py-3 transition duration-200 touch-manipulation hover:-translate-y-0.5 hover:brightness-110 hover:border-[var(--mikoroku-accent,#9d1018)]/60 hover:shadow-lg active:scale-[0.99] active:brightness-125 active:shadow-xl focus-within:brightness-110 focus-within:shadow-lg dark:border-white/10 dark:bg-white/[0.04] sm:gap-4">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-300/80 bg-slate-100 text-sm font-bold text-slate-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-slate-300">{index + 6}</span>
                     <button type="button" onClick={() => openProfile(user.uid)} aria-label={`Open profile of ${displayName(user)}`} className="shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">
-                      <img src={user.avatar} alt="" className="h-11 w-11 rounded-full border border-slate-200 object-cover dark:border-white/15" />
+                      <LazyAvatar src={user.avatar} alt="" width={44} height={44} className="h-11 w-11 rounded-full border border-slate-200 object-cover dark:border-white/15" />
                     </button>
                     <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-1">
@@ -322,7 +382,7 @@ export default function LeaderboardPage() {
                         </div>
                         {user.username && <p className="truncate text-xs text-slate-500 dark:text-slate-400">@{user.username}</p>}
                     </div>
-                    <p className="shrink-0 text-sm font-bold text-[var(--mikoroku-accent,#9d1018)]">{user.commentCount.toLocaleString()} <span className="font-normal text-slate-500 dark:text-slate-400">comments</span></p>
+                    <p className="w-[4.5rem] min-w-0 shrink-0 text-right text-xs font-bold leading-tight text-[var(--mikoroku-accent,#9d1018)] sm:w-auto sm:text-sm">{user.commentCount.toLocaleString()} <span className="block break-words text-[10px] font-normal text-slate-500 dark:text-slate-400 sm:inline sm:text-inherit">comments</span></p>
                   </li>
                 ))}
               </ol>

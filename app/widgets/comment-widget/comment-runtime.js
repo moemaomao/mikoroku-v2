@@ -2236,13 +2236,15 @@ async function loadAllUsers() {
 }
 
  // ==================== OPTIMASI AVATAR OTOMATIS ====================
-function getOptimizedAvatar(avatarUrl, size = 96) {
+function getOptimizedAvatar(avatarUrl, size = 48) {
   if (!avatarUrl || avatarUrl === ANONYMOUS_AVATAR) {
     return ANONYMOUS_AVATAR;
   }
 
   if (avatarUrl.includes("googleusercontent.com") || avatarUrl.includes("lh3.googleusercontent.com")) {
-    return avatarUrl.replace(/=s\d+/, `=s${size}`);
+    return avatarUrl.includes("=s")
+      ? avatarUrl.replace(/=s\d+/, `=s${size}`)
+      : `${avatarUrl}=s${size}`;
   }
 
   if (avatarUrl.includes("gravatar.com")) {
