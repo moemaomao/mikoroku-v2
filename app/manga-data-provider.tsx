@@ -21,7 +21,7 @@ declare global {
 
 const MANGA_CACHE_KEY = "manga_cache_v1";
 const MANGA_CACHE_TIME = 15 * 60 * 1000;
-const MANGA_JSON_URL = "/api/catalog/manga";
+const MANGA_JSON_URL = "/catalog/manga.json";
 const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 let initialization: Promise<void> | undefined;
 
@@ -83,10 +83,7 @@ async function loadGithubData() {
     return;
   }
 
-  let response = await fetch(MANGA_JSON_URL);
-  if (!response.ok) {
-    response = await fetch(`${GITHUB_RAW}all-manga.json`);
-  }
+  const response = await fetch(MANGA_JSON_URL);
   if (!response.ok) throw new Error(`Manga dataset returned HTTP ${response.status}.`);
   const items: unknown = await response.json();
   if (!Array.isArray(items)) throw new Error("Manga dataset response must be an array.");

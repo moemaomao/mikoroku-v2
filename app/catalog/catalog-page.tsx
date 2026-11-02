@@ -38,7 +38,7 @@ type SortOrder = "latest" | "az" | "za";
 type DateValue = string | number | { toMillis?: () => number; seconds?: number };
 type MangaDataWindow = Window & { mangaData?: Record<string, Manga> };
 
-const datasetUrl = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const datasetUrl = "/catalog/manga.json";
 const githubRaw = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const cacheKey = "mikoroku_catalog_v1";
 const HOMEPAGE_LIGHT_CACHE = "mangaGithubLightCache";

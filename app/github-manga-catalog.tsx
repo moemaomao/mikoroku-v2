@@ -78,8 +78,8 @@ declare global {
   }
 }
 
-const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
-const MANGA_LIST_URL = "/api/catalog/manga";
+const COVER_ASSET_BASE = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
+const MANGA_DATA_URL = "/catalog/manga.json";
 const STALE_OK_DURATION = 24 * 60 * 60 * 1000;
 const HERO_CACHE_DURATION = 30 * 60 * 1000;
 const PAGE_SIZE = 24;
@@ -120,7 +120,7 @@ function resolveCover(value: unknown): string {
   const cover = value.replace(/\.$/, "").trim();
   if (/^https?:\/\//i.test(cover)) return cover;
   if (/^\/\//.test(cover)) return `${window.location.protocol}${cover}`;
-  return GITHUB_RAW + cover.replace(/^\//, "");
+  return COVER_ASSET_BASE + cover.replace(/^\//, "");
 }
 
 function getTimestamp(item: Record<string, unknown>): number {
@@ -251,13 +251,7 @@ function sharedListLoader(force = false): Promise<MangaItem[]> {
   if (shared.loaded && !force && shared.list) return Promise.resolve(shared.list);
   if (shared.promise && !force) return shared.promise;
 
-  const catalogUrl = new URL(MANGA_LIST_URL, window.location.origin);
-  if (force) catalogUrl.searchParams.set("refresh", "1");
-  shared.promise = fetch(catalogUrl)
-    .then((response) => {
-      if (response.ok) return response;
-      return fetch(`${GITHUB_RAW}all-manga.json${force ? `?t=${Date.now()}` : ""}`);
-    })
+  shared.promise = fetch(`${MANGA_DATA_URL}${force ? `?t=${Date.now()}` : ""}`)
     .then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json() as Promise<unknown>;

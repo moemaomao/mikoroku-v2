@@ -140,8 +140,7 @@ const firebaseConfig = {
   appId: "1:249700505242:web:dab240af09caf30ad7f123",
 };
 
-const githubDatasetUrl =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const githubDatasetUrl = "/catalog/manga.json";
 
 function normalizeTitle(title: string): string {
   return title.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");

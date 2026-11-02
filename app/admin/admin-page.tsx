@@ -54,8 +54,7 @@ const firebaseConfig = {
 const ADMIN_APP_NAME = "mikoroku-admin";
 const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache";
 const ADMIN_MANGA_CACHE_DURATION = 2 * 60 * 60 * 1000;
-const GITHUB_JSON =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const GITHUB_JSON = "/catalog/manga.json";
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
 
 type AdminFirebase = { auth: Auth; firestore: Firestore };

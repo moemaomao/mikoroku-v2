@@ -40,8 +40,7 @@ type Recommendation = {
   info: Record<string, unknown>;
 };
 
-const GITHUB_DATA_URL =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const GITHUB_DATA_URL = "/catalog/manga.json";
 const GITHUB_RAW_BASE =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const CACHE_KEY = "mk_rec_sidebar_gh_fs_v3";

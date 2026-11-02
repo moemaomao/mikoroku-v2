@@ -47,8 +47,7 @@ const UPSTREAM_TIMEOUT_MS = 8_000;
 const MANGA_CATALOG_CACHE_KEY = "catalog:github:all-manga:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
-const MANGA_CATALOG_URL =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const MANGA_CATALOG_URL = "/catalog/manga.json";
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -253,10 +252,11 @@ function catalogResponse(data: unknown[], cacheStatus: string): Response {
 }
 
 async function fetchAndCacheMangaCatalog(
+  requestUrl: string,
   kv?: KVNamespace,
   forceRefresh = false,
 ): Promise<unknown[]> {
-  const upstreamUrl = new URL(MANGA_CATALOG_URL);
+  const upstreamUrl = new URL(MANGA_CATALOG_URL, requestUrl);
   if (forceRefresh) upstreamUrl.searchParams.set("t", String(Date.now()));
   const upstream = await fetchUpstream(upstreamUrl.toString(), {
     headers: {
@@ -320,7 +320,7 @@ async function handleMangaCatalogProxy(
     }
 
     ctx.waitUntil(
-      fetchAndCacheMangaCatalog(kv).catch((error: unknown) => {
+      fetchAndCacheMangaCatalog(request.url, kv).catch((error: unknown) => {
         console.error("[worker manga-catalog] background refresh failed", error);
       }),
     );
@@ -328,7 +328,7 @@ async function handleMangaCatalogProxy(
   }
 
   try {
-    const data = await fetchAndCacheMangaCatalog(kv, forceRefresh);
+    const data = await fetchAndCacheMangaCatalog(request.url, kv, forceRefresh);
     return catalogResponse(data, forceRefresh ? "BYPASS" : "MISS");
   } catch (error) {
     console.error("[worker manga-catalog] upstream fetch failed", error);

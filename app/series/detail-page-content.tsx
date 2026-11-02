@@ -144,8 +144,7 @@ declare global {
   }
 }
 
-const GITHUB_DATA_URL =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const GITHUB_DATA_URL = "/catalog/manga.json";
 const GITHUB_RAW_BASE =
   "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const FIRESTORE_BASE =

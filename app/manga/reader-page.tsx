@@ -52,8 +52,7 @@ type ReaderData = {
   source?: string;
 };
 
-const mangaDatasetUrl =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/all-manga.json";
+const mangaDatasetUrl = "/catalog/manga.json";
 const bloggerChapterSources = [
   { source: "blogger", domain: "https://www.mikodrive.my.id" },
   { source: "blogger2", domain: "https://www.yomidays.my.id" },
