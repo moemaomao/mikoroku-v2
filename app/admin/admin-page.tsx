@@ -1673,14 +1673,30 @@ export default function AdminPage() {
 
   async function backupFirestore(includeChapters: boolean) {
     setBusy(true);
-    setSettingsStatus(includeChapters ? "Creating a manga and chapter backup..." : "Creating a manga backup...");
+    setSettingsStatus(
+      includeChapters
+        ? "Creating a manga and chapter backup..."
+        : "Creating a manga metadata backup...",
+    );
     try {
       const { firestore } = getAdminFirebase();
       const mangaSnapshot = await getDocs(collection(firestore, "manga"));
       const mangaData: Array<Record<string, unknown>> = [];
       let chapterCount = 0;
       for (const mangaDoc of mangaSnapshot.docs) {
-        const record: Record<string, unknown> = { id: mangaDoc.id, ...mangaDoc.data() };
+        const source = mangaDoc.data();
+        const metadata = Object.fromEntries(
+          Object.entries(source).filter(([key]) =>
+            key !== "chapters" &&
+            key !== "_chapters" &&
+            !key.startsWith("chapters.") &&
+            !key.startsWith("_chapters."),
+          ),
+        );
+        const record: Record<string, unknown> = {
+          id: mangaDoc.id,
+          ...(includeChapters ? source : metadata),
+        };
         if (includeChapters) {
           const chapters = await getDocs(
             collection(firestore, "manga", mangaDoc.id, "chapters"),
@@ -1696,10 +1712,11 @@ export default function AdminPage() {
       const now = new Date();
       const stamp = now.toISOString().slice(0, 19).replace(/[:T]/g, "-");
       downloadJson(
-        `mikoroku-backup-${includeChapters ? "full" : "manga"}-${stamp}.json`,
+        `mikoroku-backup-${includeChapters ? "full" : "metadata"}-${stamp}.json`,
         {
           exportedAt: now.toISOString(),
           exportedAtMs: now.getTime(),
+          type: includeChapters ? "full" : "manga-metadata",
           includeChapters,
           mangaCount: mangaData.length,
           ...(includeChapters ? { chapterCount } : {}),
@@ -1708,8 +1725,8 @@ export default function AdminPage() {
       );
       setSettingsStatus(
         includeChapters
-          ? `Backup completed: ${mangaData.length} manga and ${chapterCount} chapters.`
-          : `Backup completed: ${mangaData.length} manga.`,
+          ? `Full backup completed: ${mangaData.length} manga and ${chapterCount} chapters.`
+          : `Metadata backup completed: ${mangaData.length} manga.`,
       );
     } catch (error) {
       console.error("Firestore backup failed.", error);
@@ -3237,9 +3254,9 @@ export default function AdminPage() {
               </div>
               <div className={styles.settingsSection}>
                 <h3>Backup Firestore</h3>
-                <p>Download a backup of all manga, with an option to include every chapter.</p>
+                <p>Download manga metadata only or a full backup including every chapter.</p>
                 <div className={styles.panelActions}>
-                  <button className={styles.secondaryButton} onClick={() => void backupFirestore(false)} disabled={busy}>Backup Manga</button>
+                  <button className={styles.secondaryButton} onClick={() => void backupFirestore(false)} disabled={busy}>Backup Metadata Manga</button>
                   <button className={styles.primaryButton} onClick={() => void backupFirestore(true)} disabled={busy}>Full Backup</button>
                 </div>
               </div>
