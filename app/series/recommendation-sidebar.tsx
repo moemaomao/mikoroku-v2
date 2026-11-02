@@ -41,8 +41,6 @@ type Recommendation = {
 };
 
 const GITHUB_DATA_URL = "/catalog/manga.json";
-const GITHUB_RAW_BASE =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const CACHE_KEY = "mk_rec_sidebar_gh_fs_v3";
 const VISIBILITY_KEY = "mk_rec_sidebar_hidden";
 const CACHE_TTL = 25 * 60 * 1000;
@@ -74,7 +72,7 @@ function normalizeSlug(value: string): string {
 function resolveCover(value: unknown): string {
   const cover = asString(value).trim().replace(/\.$/, "");
   if (!cover || cover === "-") return "";
-  return /^https?:\/\//i.test(cover) ? cover : `${GITHUB_RAW_BASE}${cover.replace(/^\//, "")}`;
+  return /^https?:\/\//i.test(cover) ? cover : "";
 }
 
 function thumbnailUrl(value: string): string {

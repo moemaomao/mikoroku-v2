@@ -145,8 +145,6 @@ declare global {
 }
 
 const GITHUB_DATA_URL = "/catalog/manga.json";
-const GITHUB_RAW_BASE =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const FIRESTORE_BASE =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
 
@@ -274,7 +272,7 @@ function resolveCover(value: unknown): string {
   const cover = asString(value).trim().replace(/\.$/, "");
   if (!cover) return "";
   if (/^https?:\/\//i.test(cover)) return cover;
-  return `${GITHUB_RAW_BASE}${cover.replace(/^\//, "")}`;
+  return /^https?:\/\//i.test(cover) ? cover : "";
 }
 
 function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): Manga {

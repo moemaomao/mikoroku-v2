@@ -30,7 +30,7 @@ function resolveCover(value: unknown): string {
   const cover = value.replace(/\.$/, "").trim();
   if (/^https?:\/\//i.test(cover)) return cover;
   if (/^\/\//.test(cover)) return `https:${cover}`;
-  return `https://raw.githubusercontent.com/moemaomao/mymangadata/main/${cover.replace(/^\//, "")}`;
+  return "";
 }
 
 function thumb(url: string, version = 0): string {
@@ -40,6 +40,15 @@ function thumb(url: string, version = 0): string {
   } catch {
     return url;
   }
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
 }
 
 function pickFromWindow(limit = 15): HeroCover[] {
@@ -85,16 +94,18 @@ function pickFromWindow(limit = 15): HeroCover[] {
     }
   }
 
+  const randomizedGithubPool = shuffle(githubPool);
+  const randomizedFirestorePool = shuffle(firestorePool);
   const pool: HeroCover[] = [];
   const fsCap = Math.max(2, Math.floor(limit * 0.3));
   const ghCap = limit - fsCap;
 
-  for (let i = 0; i < githubPool.length && pool.length < ghCap; i++) {
-    pool.push(githubPool[i]);
+  for (let i = 0; i < randomizedGithubPool.length && pool.length < ghCap; i++) {
+    pool.push(randomizedGithubPool[i]);
   }
 
-  for (let i = 0; i < firestorePool.length && pool.length < limit && i < fsCap; i++) {
-    pool.push(firestorePool[i]);
+  for (let i = 0; i < randomizedFirestorePool.length && pool.length < limit && i < fsCap; i++) {
+    pool.push(randomizedFirestorePool[i]);
   }
 
   const ghPart = pool.slice(0, Math.min(pool.length, ghCap));
@@ -107,7 +118,7 @@ function pickFromWindow(limit = 15): HeroCover[] {
   }
 
   if (mixed.length < limit) {
-    for (const item of [...githubPool, ...firestorePool]) {
+    for (const item of [...randomizedGithubPool, ...randomizedFirestorePool]) {
       if (mixed.length >= limit) break;
       if (!mixed.some((p) => normalizeTitle(p.title) === normalizeTitle(item.title))) {
         mixed.push(item);

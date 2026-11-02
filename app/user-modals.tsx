@@ -85,8 +85,6 @@ type LegacyModalWindow = {
 };
 
 const HISTORY_KEY = "readingHistory";
-const RAW_COVER_BASE =
-  "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const DEFAULT_AVATAR =
   "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 const FALLBACK_COVER = "/assets/icons/favicon.ico";
@@ -398,7 +396,7 @@ function readHistory(): HistoryEntry[] {
 function resolveCover(value: unknown): string {
   if (typeof value !== "string" || !value.trim() || value.trim() === "-") return "";
   const cover = value.replace(/\.$/, "").trim();
-  return /^https?:\/\//i.test(cover) ? cover : RAW_COVER_BASE + cover.replace(/^\//, "");
+  return /^https?:\/\//i.test(cover) ? cover : FALLBACK_COVER;
 }
 
 function createElement<K extends keyof HTMLElementTagNameMap>(

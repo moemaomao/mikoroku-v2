@@ -41,7 +41,6 @@ type AnnouncementSnapshot = {
 
 declare global {
   interface Window {
-    GITHUB_RAW?: string;
     commentDisplayName?: string | null;
     _headerAvatar?: string | null;
     announcementBadgeCheck?: number;
@@ -69,7 +68,6 @@ const AVATAR_KEY = "commentWidget_avatar";
 const SIDEBAR_PREF_KEY = "mk_sidebar_open";
 const ADMIN_PANEL_EMAILS = ["mikorokuscan@gmail.com", "moemaomao@gmail.com"];
 let desktopSidebarPreference: boolean | null = null;
-const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const ANNOUNCEMENT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87WhV3FagJZSy_uhuoI",
   authDomain: "mikoroku.firebaseapp.com",
@@ -95,9 +93,7 @@ function slugify(value: string): string {
 
 function previewCover(value?: string): string {
   if (!value) return DEFAULT_THUMB;
-  const url = /^https?:\/\//i.test(value)
-    ? value
-    : `${window.GITHUB_RAW || GITHUB_RAW_BASE}${value.replace(/^\//, "")}`;
+  const url = /^https?:\/\//i.test(value) ? value : DEFAULT_THUMB;
   return imageProxyUrl(url, "headerPreview");
 }
 

@@ -6,7 +6,6 @@ import { imageProxyUrl, type ImageProxyPreset } from "../../lib/image-proxy";
 const COVER_CACHE_DB = "mikoroku-cover-cache";
 const COVER_CACHE_STORE = "covers";
 const MAX_CACHED_COVERS = 500;
-const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const pendingCoverRequests = new Map<string, Promise<Blob>>();
 
 type CachedCover = {
@@ -24,7 +23,7 @@ function resolveCoverSource(source: string): string {
       trimmedSource.startsWith("/") ||
       /^(data|blob):/i.test(trimmedSource)
       ? trimmedSource
-      : GITHUB_RAW + trimmedSource.replace(/^\//, "");
+      : "";
 }
 
 function getOptimizedCoverUrl(source: string, preset: ImageProxyPreset): string {

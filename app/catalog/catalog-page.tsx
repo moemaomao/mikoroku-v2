@@ -39,7 +39,6 @@ type DateValue = string | number | { toMillis?: () => number; seconds?: number }
 type MangaDataWindow = Window & { mangaData?: Record<string, Manga> };
 
 const datasetUrl = "/catalog/manga.json";
-const githubRaw = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const cacheKey = "mikoroku_catalog_v1";
 const HOMEPAGE_LIGHT_CACHE = "mangaGithubLightCache";
 const HOMEPAGE_FULL_CACHE = "mangaGithubCache";
@@ -255,7 +254,7 @@ function slugify(value: string): string {
 
 function normalizeCover(value?: string): string {
   if (!value || value === "-") return "";
-  return /^https?:\/\//i.test(value) ? value : githubRaw + value.replace(/^\/+/, "");
+  return /^https?:\/\//i.test(value) ? value : "";
 }
 
 function mangaTags(manga: Manga): string[] {

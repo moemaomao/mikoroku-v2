@@ -78,7 +78,6 @@ declare global {
   }
 }
 
-const COVER_ASSET_BASE = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 const MANGA_DATA_URL = "/catalog/manga.json";
 const STALE_OK_DURATION = 24 * 60 * 60 * 1000;
 const HERO_CACHE_DURATION = 30 * 60 * 1000;
@@ -120,7 +119,7 @@ function resolveCover(value: unknown): string {
   const cover = value.replace(/\.$/, "").trim();
   if (/^https?:\/\//i.test(cover)) return cover;
   if (/^\/\//.test(cover)) return `${window.location.protocol}${cover}`;
-  return COVER_ASSET_BASE + cover.replace(/^\//, "");
+  return "";
 }
 
 function getTimestamp(item: Record<string, unknown>): number {

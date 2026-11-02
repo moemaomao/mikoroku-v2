@@ -22,10 +22,7 @@ function coverUrl(value: string): string {
   if (!value) return FALLBACK_COVER;
   return /^https?:\/\//i.test(value)
     ? imageProxyUrl(value, "historyCover")
-    : imageProxyUrl(
-        `https://raw.githubusercontent.com/moemaomao/mymangadata/main/${value.replace(/^\//, "")}`,
-        "historyCover",
-      );
+    : FALLBACK_COVER;
 }
 
 function formatElapsed(time: number): string {

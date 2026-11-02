@@ -15,14 +15,12 @@ declare global {
     __mangaDataLoaded?: boolean;
     MANGA_CACHE_KEY?: string;
     MANGA_CACHE_TIME?: number;
-    GITHUB_RAW?: string;
   }
 }
 
 const MANGA_CACHE_KEY = "manga_cache_v1";
 const MANGA_CACHE_TIME = 15 * 60 * 1000;
 const MANGA_JSON_URL = "/catalog/manga.json";
-const GITHUB_RAW = "https://raw.githubusercontent.com/moemaomao/mymangadata/main/";
 let initialization: Promise<void> | undefined;
 
 function normalizeTitle(title: string): string {
@@ -32,7 +30,7 @@ function normalizeTitle(title: string): string {
 function resolveCover(value: unknown): string {
   if (typeof value !== "string" || !value.trim() || value.trim() === "-") return "";
   const cover = value.replace(/\.$/, "").trim();
-  return /^https?:\/\//i.test(cover) ? cover : GITHUB_RAW + cover.replace(/^\//, "");
+  return /^https?:\/\//i.test(cover) ? cover : "";
 }
 
 function applyMangaList(list: Record<string, unknown>[]) {
@@ -121,7 +119,6 @@ async function initializeMangaData() {
   window.mangaData ||= {};
   window.MANGA_CACHE_KEY ||= MANGA_CACHE_KEY;
   window.MANGA_CACHE_TIME ||= MANGA_CACHE_TIME;
-  window.GITHUB_RAW ||= GITHUB_RAW;
   window.__mangaDataLoaded = true;
 
   try {
