@@ -599,7 +599,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
 
   const githubManga = responses[0].status === "fulfilled" ? responses[0].value : null;
   const firestoreManga = responses[1].status === "fulfilled" ? responses[1].value : null;
-  const manga = githubManga && firestoreManga
+  let manga = githubManga && firestoreManga
     ? {
         ...githubManga,
         covers: firestoreManga.covers?.length
@@ -629,6 +629,25 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
             coverUpdatedAt: githubManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
           }
         : cachedManga;
+  if (!signal.aborted && !manga?.covers?.length) {
+    try {
+      const sdkManga = await loadFirebaseDocument(slug, signal);
+      if (sdkManga) {
+        manga = {
+          ...(manga || sdkManga),
+          covers: sdkManga.covers?.length ? sdkManga.covers : manga?.covers,
+          coverNumbers: Object.keys(sdkManga.coverNumbers || {}).length
+            ? sdkManga.coverNumbers
+            : manga?.coverNumbers,
+          coverUpdatedAt: sdkManga.coverUpdatedAt || manga?.coverUpdatedAt,
+        };
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        console.warn(`Firestore SDK tidak dapat mengambil volume cover ${slug}.`, error);
+      }
+    }
+  }
   for (const [index, result] of responses.entries()) {
     if (result.status === "rejected" && !signal.aborted) {
       console.warn(
