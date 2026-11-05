@@ -11,7 +11,10 @@ import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
-import { SERIES_COVER_PREFERENCE_STORAGE_KEY } from "../lib/series-cover-preferences";
+import {
+  SERIES_COVER_PREFERENCE_STORAGE_KEY,
+  SERIES_COVER_PREFERENCE_UPDATED_AT_KEY,
+} from "../lib/series-cover-preferences";
 import RecommendationSidebar from "./recommendation-sidebar";
 import ReaderServerNotice from "./reader-server-notice";
 import SiteFooter from "../site-footer";
@@ -36,6 +39,7 @@ type Manga = {
   cover?: string;
   covers?: string[];
   coverNumbers?: Record<string, string>;
+  coverUpdatedAt?: string | number;
   desc?: string;
   genres?: string[];
   rating?: number | string | null;
@@ -312,6 +316,7 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     maleTags: (value.maleTags || info.maleTags) as string | string[] | undefined,
     updatedAt: asString(value.updatedAt || value.latestUpdate || info.updatedAt || info.latestUpdate || info.date),
     latestUpdate: asString(value.latestUpdate || value.updatedAt || info.latestUpdate || info.updatedAt || info.date),
+    coverUpdatedAt: asString(value.coverUpdatedAt || info.coverUpdatedAt),
     info,
   };
 }
@@ -573,7 +578,6 @@ async function cacheMangaDetail(slug: string, manga: Manga): Promise<void> {
 
 async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
   const cachedManga = await getCachedManga(slug);
-  if (cachedManga) return cachedManga;
 
   const responses = await Promise.allSettled([
     fetch(GITHUB_DATA_URL, { signal }).then(async (response) => {
@@ -596,7 +600,12 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   const githubManga = responses[0].status === "fulfilled" ? responses[0].value : null;
   const firestoreManga = responses[1].status === "fulfilled" ? responses[1].value : null;
   const manga = githubManga && firestoreManga
-    ? { ...githubManga, covers: firestoreManga.covers, coverNumbers: firestoreManga.coverNumbers }
+    ? {
+        ...githubManga,
+        covers: firestoreManga.covers,
+        coverNumbers: firestoreManga.coverNumbers,
+        coverUpdatedAt: firestoreManga.coverUpdatedAt,
+      }
     : githubManga || firestoreManga;
   for (const [index, result] of responses.entries()) {
     if (result.status === "rejected" && !signal.aborted) {
@@ -624,7 +633,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     return firestore;
   }
 
-  return null;
+  return cachedManga;
 }
 
 async function loadFirebaseDocument(slug: string, signal: AbortSignal): Promise<Manga | null> {
@@ -1064,6 +1073,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   );
   const selectedCoverSlugRef = useRef("");
   const activeCoverUrl = selectedCoverUrl || baseCoverUrl;
+  const coverUpdatedAt = Number(manga?.coverUpdatedAt || 0);
   const cover = useCoverImageSource(activeCoverUrl, "coverDetail");
   useEffect(() => {
     setDetailCoverLoaded(false);
@@ -1218,7 +1228,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     } catch (error) {
       console.warn(`Could not read the homepage cover selection for ${mangaSlug}.`, error);
     }
-    if (localPreference) {
+    let preferenceUpdatedAt = 0;
+    try {
+      preferenceUpdatedAt = Number(localStorage.getItem(`${SERIES_COVER_PREFERENCE_UPDATED_AT_KEY}${mangaSlug}`)) || 0;
+    } catch (error) {
+      console.warn(`Could not read the cover preference timestamp for ${mangaSlug}.`, error);
+    }
+    if (localPreference && (!coverUpdatedAt || preferenceUpdatedAt >= coverUpdatedAt)) {
       setSelectedCoverUrl(localPreference);
       return () => {
         active = false;
@@ -1226,7 +1242,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     }
     if (!("indexedDB" in window)) return;
     void getSavedSeriesCoverUrl(mangaSlug).then((savedUrl) => {
-      if (!active || !savedUrl) return;
+      if (!active || !savedUrl || (coverUpdatedAt > 0 && preferenceUpdatedAt < coverUpdatedAt)) return;
       setSelectedCoverUrl(savedUrl);
       try {
         localStorage.setItem(`${SERIES_COVER_PREFERENCE_STORAGE_KEY}${mangaSlug}`, savedUrl);
@@ -1240,7 +1256,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return () => {
       active = false;
     };
-  }, [mangaSlug]);
+  }, [mangaSlug, coverUpdatedAt]);
 
   useEffect(() => {
     const updateSidebarState = () => setSiteSidebarOpen(document.body.classList.contains("sidebar-open"));
@@ -1658,6 +1674,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     let localSaved = false;
     try {
       localStorage.setItem(`${SERIES_COVER_PREFERENCE_STORAGE_KEY}${manga.slug}`, url);
+      localStorage.setItem(`${SERIES_COVER_PREFERENCE_UPDATED_AT_KEY}${manga.slug}`, String(Date.now()));
       localSaved = true;
     } catch (error) {
       console.warn(`Could not save the homepage cover selection for ${manga.slug}.`, error);

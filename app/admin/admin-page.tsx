@@ -67,6 +67,7 @@ type MangaRecord = {
   cover: string;
   covers?: string[];
   coverNumbers?: Record<string, string>;
+  coverUpdatedAt?: number;
   desc: string;
   type: string;
   status: string;
@@ -287,6 +288,7 @@ function fromFirestore(slug: string, data: Record<string, unknown>): MangaRecord
     coverNumbers: data.coverNumbers && typeof data.coverNumbers === "object"
       ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, text(number)]))
       : {},
+    coverUpdatedAt: typeof data.coverUpdatedAt === "number" ? data.coverUpdatedAt : 0,
     desc: text(data.desc),
     type: text(data.type) || "manga",
     status: text(data.status) || "unknown",
@@ -1206,6 +1208,7 @@ export default function AdminPage() {
         cover: mainCover,
         covers,
         coverNumbers,
+        coverUpdatedAt: mainCover !== editing?.cover ? Date.now() : editing?.coverUpdatedAt || 0,
         desc: draft.desc.trim(),
         type: draft.type,
         status: draft.status,
@@ -1792,6 +1795,7 @@ export default function AdminPage() {
         cover: mainCover,
         covers: nextCovers,
         coverNumbers: nextCoverNumbers,
+        coverUpdatedAt: Date.now(),
       },
       { merge: true },
     );
@@ -1801,6 +1805,7 @@ export default function AdminPage() {
       cover: mainCover,
       covers: nextCovers,
       coverNumbers: nextCoverNumbers,
+      coverUpdatedAt: Date.now(),
     };
     setSelectedManga(updatedManga);
     setSavedCoverOrder(nextCovers);

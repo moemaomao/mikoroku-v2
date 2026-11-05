@@ -21,7 +21,10 @@ import {
   typeBadgeColors,
   upBadgeClass,
 } from "./lib/homepage-classes";
-import { getSeriesCoverPreference } from "./lib/series-cover-preferences";
+import {
+  getSeriesCoverPreference,
+  getSeriesCoverPreferenceUpdatedAt,
+} from "./lib/series-cover-preferences";
 import { imageProxyUrl } from "../lib/image-proxy";
 
 type MangaItem = Record<string, unknown> & {
@@ -54,6 +57,7 @@ type FirestoreMeta = {
   status: string;
   type: string;
   cover: string;
+  coverUpdatedAt: number;
   rating: unknown;
 };
 
@@ -287,6 +291,7 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
     status: String(data.status || ""),
     type: String(data.type || ""),
     cover: String(data.cover || ""),
+    coverUpdatedAt: toMilliseconds(data.coverUpdatedAt),
     rating: data.rating,
   };
 }
@@ -347,8 +352,12 @@ function chapterNumber(item: MangaItem, metadata?: FirestoreMeta): number {
 }
 
 function mangaForMetadata(item: MangaItem, metadata?: FirestoreMeta): Record<string, unknown> {
+  const seriesSlug = metadata?.slug || item.slug || slugify(item.title);
+  const preference = getSeriesCoverPreference(seriesSlug);
+  const preferenceUpdatedAt = getSeriesCoverPreferenceUpdatedAt(seriesSlug);
+  const coverUpdatedAt = metadata?.coverUpdatedAt || 0;
   const cover = resolveCover(
-    getSeriesCoverPreference(metadata?.slug || item.slug || slugify(item.title)) ||
+    (preference && preferenceUpdatedAt >= coverUpdatedAt ? preference : "") ||
       metadata?.cover || item.img || item.cover || "",
   );
   const chapter = chapterNumber(item, metadata);
@@ -373,6 +382,7 @@ function mangaForMetadata(item: MangaItem, metadata?: FirestoreMeta): Record<str
     info: item,
     firestore,
     source: firestore ? "firestore" : "github",
+    coverUpdatedAt: metadata?.coverUpdatedAt || 0,
   };
   window.mangaData ||= {};
   window.mangaData[titleKey] = manga;
