@@ -602,11 +602,33 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   const manga = githubManga && firestoreManga
     ? {
         ...githubManga,
-        covers: firestoreManga.covers,
-        coverNumbers: firestoreManga.coverNumbers,
-        coverUpdatedAt: firestoreManga.coverUpdatedAt,
+        covers: firestoreManga.covers?.length
+          ? firestoreManga.covers
+          : cachedManga?.covers?.length
+            ? cachedManga.covers
+            : githubManga.covers,
+        coverNumbers: Object.keys(firestoreManga.coverNumbers || {}).length
+          ? firestoreManga.coverNumbers
+          : cachedManga?.coverNumbers || githubManga.coverNumbers,
+        coverUpdatedAt: firestoreManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || githubManga.coverUpdatedAt,
       }
-    : githubManga || firestoreManga;
+    : firestoreManga
+      ? {
+          ...firestoreManga,
+          covers: firestoreManga.covers?.length ? firestoreManga.covers : cachedManga?.covers,
+          coverNumbers: Object.keys(firestoreManga.coverNumbers || {}).length
+            ? firestoreManga.coverNumbers
+            : cachedManga?.coverNumbers,
+          coverUpdatedAt: firestoreManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
+        }
+      : githubManga
+        ? {
+            ...githubManga,
+            covers: githubManga.covers?.length ? githubManga.covers : cachedManga?.covers,
+            coverNumbers: githubManga.coverNumbers || cachedManga?.coverNumbers,
+            coverUpdatedAt: githubManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
+          }
+        : cachedManga;
   for (const [index, result] of responses.entries()) {
     if (result.status === "rejected" && !signal.aborted) {
       console.warn(
