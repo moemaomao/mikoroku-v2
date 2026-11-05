@@ -185,7 +185,7 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
       return comments.filter(c => visibleIds.has(c.id));
     }
     const DEBUG_SELF_NOTIFICATION = true;
-    const ANONYMOUS_AVATAR = 'https://mikoroku.com/assets/icons/favicon.ico';
+    const ANONYMOUS_AVATAR = 'https://mikoroku.top/assets/icons/favicon.ico';
     const LOCALSTORAGE_KEY = 'commentWidget_customUsername';
     const GITHUB_USERNAME_KEY = 'commentWidget_githubUsername';
     const DISPLAY_NAME_KEY = 'commentWidget_displayName';
