@@ -92,10 +92,6 @@ function safeImageUrl(value: unknown): string | undefined {
   }
 }
 
-function slugKey(value: string): string {
-  return value.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
 function fallbackTitle(slug: string): string {
   return decodeURIComponent(slug)
     .replace(/[-_]+/g, " ")
@@ -221,7 +217,10 @@ function mergeSeoCache(
   return {
     title: cache.title || series.title,
     description: cache.description || series.description,
-    image: cache.image || series.image,
+    image:
+      series.image !== DEFAULT_IMAGE
+        ? series.image
+        : cache.image || series.image,
     updatedAt: cache.updatedAt ?? series.updatedAt ?? Date.now(),
   };
 }
@@ -267,24 +266,6 @@ async function getFirestoreDocumentFast(
 export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
   const cache = await readSeoCache(slug);
 
-  if (cache?.title && cache?.image && cache.image !== DEFAULT_IMAGE) {
-    return {
-      title: cache.title,
-      description: cache.description,
-      image: cache.image,
-      updatedAt: cache.updatedAt,
-    };
-  }
-
-  if (cache?.title) {
-    return {
-      title: cache.title,
-      description: cache.description || `Baca manga ${cache.title} di Mikoroku.`,
-      image: cache.image || DEFAULT_IMAGE,
-      updatedAt: cache.updatedAt,
-    };
-  }
-
   const document = await getFirestoreDocumentFast(
     `manga/${encodeURIComponent(slug)}`,
     1200,
@@ -298,15 +279,6 @@ export async function getSeriesSeoData(slug: string): Promise<SeriesSeoData> {
 
 export async function getSeriesSeoDataForOg(slug: string): Promise<SeriesSeoData> {
   const cache = await readSeoCache(slug);
-
-  if (cache?.title && cache?.image) {
-    return {
-      title: cache.title,
-      description: cache.description,
-      image: cache.image,
-      updatedAt: cache.updatedAt,
-    };
-  }
 
   const document = await getFirestoreDocumentFast(
     `manga/${encodeURIComponent(slug)}`,
