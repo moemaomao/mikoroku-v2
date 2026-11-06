@@ -9,6 +9,7 @@ import {
   ogResponse,
   CACHE_HEADERS,
 } from "../../../../lib/og-remote";
+import { renderOgPng } from "../../../../lib/og-image";
 
 const CACHE_TTL = 86400;
 
@@ -69,7 +70,7 @@ export async function GET(
 
     const coverUrl = isUsableCover(series.image) ? series.image : null;
 
-    const buffer = await fetchRemoteOgPng({
+    let buffer = await fetchRemoteOgPng({
       title: series.title,
       description: series.description,
       label: "Manga & Series",
@@ -77,9 +78,12 @@ export async function GET(
     });
 
     if (!buffer) {
-      return new Response("OG unavailable", {
-        status: 200,
-        headers: { "Content-Type": "text/plain" },
+      console.warn("[OG series] remote render unavailable, using local renderer");
+      buffer = await renderOgPng({
+        title: series.title,
+        description: series.description,
+        label: "Manga & Series",
+        coverUrl,
       });
     }
 
