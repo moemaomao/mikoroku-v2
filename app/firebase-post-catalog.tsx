@@ -12,6 +12,8 @@ import {
   bottomBadgeBarClass,
   catalogGridClass,
   chapterBadgeClass,
+  commissionBadgeClass,
+  commissionCoverGradientClass,
   homepageLoadMoreClass,
   homepageSectionHeadingClass,
   statusBadgeClass,
@@ -189,6 +191,7 @@ function CatalogCard({
     ? imageProxyUrl(cover, "postCatalog")
     : "https://via.placeholder.com/80x110?text=No+Image";
   const status = String(value(record, "status") || "");
+  const commissionEnabled = value(record, "commissionEnabled") === true;
   const updatedAt = Number(record.updatedAt || 0);
 
   return (
@@ -205,6 +208,7 @@ function CatalogCard({
         {updatedAt > 0 && Date.now() - updatedAt < 86400000 && (
           <div className={upBadgeClass}>UP</div>
         )}
+        {commissionEnabled && <div className={commissionBadgeClass}>COMMISSION</div>}
         {(type || status) && (
           <div className={bottomBadgeBarClass}>
             {type ? (
@@ -240,6 +244,7 @@ function CatalogCard({
               "https://via.placeholder.com/80x110?text=No+Image";
           }}
         />
+        {commissionEnabled && <div className={commissionCoverGradientClass} />}
         <div className={cardOverlayClass}>
           <div className={cardTitleClass}>{record.title}</div>
         </div>

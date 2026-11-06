@@ -738,16 +738,20 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       }
   
       badgesRow.style.display = "flex";
-      badgesRow.style.flexWrap = "wrap";
+      badgesRow.style.flexWrap = "nowrap";
       badgesRow.style.alignItems = "center";
-      badgesRow.style.gap = "5px";
+      badgesRow.style.gap = "3px";
       badgesRow.style.margin = "0 0 4px 0";
       badgesRow.style.padding = "0";
       badgesRow.style.order = "0";
 
       const statusBadge = cover.querySelector<HTMLElement>(".status-badge");
       const typeBadge = cover.querySelector<HTMLElement>(".type-badge");
+      const commissionBadge = cover.querySelector<HTMLElement>(".commission-badge");
       const chBadge = cover.querySelector<HTMLElement>(".ch-badge");
+      const listBadges = [statusBadge, typeBadge, commissionBadge].filter(
+        (badge): badge is HTMLElement => Boolean(badge),
+      );
       if (chBadge) chBadge.style.display = "none";
 
       if (statusBadge) {
@@ -755,9 +759,6 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         statusBadge.style.left = "auto";
         statusBadge.style.top = "auto";
         statusBadge.style.zIndex = "1";
-        statusBadge.style.fontSize = "9px";
-        statusBadge.style.padding = "2px 6px";
-        statusBadge.style.borderRadius = "4px";
         badgesRow.append(statusBadge);
       }
       if (typeBadge) {
@@ -765,11 +766,31 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         typeBadge.style.left = "auto";
         typeBadge.style.bottom = "auto";
         typeBadge.style.zIndex = "1";
-        typeBadge.style.fontSize = "9px";
-        typeBadge.style.padding = "2px 6px";
-        typeBadge.style.borderRadius = "4px";
         badgesRow.append(typeBadge);
       }
+      if (commissionBadge) {
+        commissionBadge.style.position = "static";
+        commissionBadge.style.left = "auto";
+        commissionBadge.style.bottom = "auto";
+        commissionBadge.style.zIndex = "1";
+        badgesRow.append(commissionBadge);
+      }
+      listBadges.forEach((badge) => {
+        badge.style.width = "auto";
+        badge.style.minWidth = "0";
+        badge.style.maxWidth = "none";
+        badge.style.height = "20px";
+        badge.style.flex = "0 1 auto";
+        badge.style.overflow = "hidden";
+        badge.style.whiteSpace = "nowrap";
+        badge.style.justifyContent = "center";
+        badge.style.textAlign = "center";
+        badge.style.boxSizing = "border-box";
+        badge.style.border = "1px solid rgba(255,255,255,0.2)";
+        badge.style.fontSize = "8px";
+        badge.style.padding = "1px 4px";
+        badge.style.borderRadius = "4px";
+      });
 
       if (overlay.parentElement !== details) {
         details.append(overlay);
@@ -829,8 +850,8 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       // badges ABOVE title
       badgesRow.style.order = "0";
       badgesRow.style.display = "flex";
-      badgesRow.style.flexWrap = "wrap";
-      badgesRow.style.gap = "5px";
+      badgesRow.style.flexWrap = "nowrap";
+      badgesRow.style.gap = "3px";
       badgesRow.style.margin = "0";
       badgesRow.style.padding = "0";
 

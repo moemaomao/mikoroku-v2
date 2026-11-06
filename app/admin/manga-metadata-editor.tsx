@@ -74,6 +74,14 @@ export default function MangaMetadataEditor({
             ))}
           </select>
         </label>
+        <label className={styles.checkboxField}>
+          <input
+            type="checkbox"
+            checked={draft.commissionEnabled}
+            onChange={(event) => onChange("commissionEnabled", event.target.checked)}
+          />
+          <span>Show Commission Badge</span>
+        </label>
         <label className={styles.field}>
           <span>Status</span>
           <select value={draft.status} onChange={(event) => onChange("status", event.target.value)}>

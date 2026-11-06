@@ -52,7 +52,7 @@ const firebaseConfig = {
 };
 
 const ADMIN_APP_NAME = "mikoroku-admin";
-const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache";
+const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache_v2";
 const ADMIN_MANGA_CACHE_DURATION = 2 * 60 * 60 * 1000;
 const GITHUB_JSON = "/catalog/manga.json";
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
@@ -70,6 +70,7 @@ type MangaRecord = {
   coverUpdatedAt?: number;
   desc: string;
   type: string;
+  commissionEnabled?: boolean;
   status: string;
   author: string;
   artist: string;
@@ -101,6 +102,7 @@ export type MangaDraft = {
   cover: string;
   desc: string;
   type: string;
+  commissionEnabled: boolean;
   status: string;
   author: string;
   artist: string;
@@ -124,6 +126,7 @@ type SummaryEntry = {
   altTitle: string;
   cover: string;
   type: string;
+  commissionEnabled: boolean;
   status: string;
   author: string;
   genres: string[];
@@ -192,6 +195,7 @@ const emptyDraft: MangaDraft = {
   cover: "",
   desc: "",
   type: "manga",
+  commissionEnabled: false,
   status: "ongoing",
   author: "",
   artist: "",
@@ -257,6 +261,7 @@ function toDraft(manga?: MangaRecord): MangaDraft {
     cover: manga.cover,
     desc: manga.desc,
     type: manga.type || "manga",
+    commissionEnabled: manga.commissionEnabled === true,
     status: manga.status || "ongoing",
     author: manga.author,
     artist: manga.artist,
@@ -291,6 +296,7 @@ function fromFirestore(slug: string, data: Record<string, unknown>): MangaRecord
     coverUpdatedAt: typeof data.coverUpdatedAt === "number" ? data.coverUpdatedAt : 0,
     desc: text(data.desc),
     type: text(data.type) || "manga",
+    commissionEnabled: data.commissionEnabled === true,
     status: text(data.status) || "unknown",
     author: text(data.author),
     artist: text(data.artist),
@@ -548,6 +554,7 @@ function toSummaryEntry(manga: MangaRecord): SummaryEntry {
     altTitle: manga.altTitle,
     cover: manga.cover,
     type: manga.type || "manga",
+    commissionEnabled: manga.commissionEnabled === true,
     status: manga.status.toLowerCase(),
     author: manga.author,
     genres: manga.genres.slice(0, 12),
@@ -1141,11 +1148,11 @@ export default function AdminPage() {
   }
 
   function updateDraftField(key: keyof MangaDraft, value: string | boolean) {
-    if (key === "isDraft" && typeof value === "boolean") {
-      updateDraft("isDraft", value);
-    } else if (key !== "isDraft" && typeof value === "string") {
-      updateDraft(key, value);
+    if (key === "isDraft" || key === "commissionEnabled") {
+      if (typeof value === "boolean") updateDraft(key, value);
+      return;
     }
+    if (typeof value === "string") updateDraft(key, value);
   }
 
   async function handleSaveManga(event: FormEvent<HTMLFormElement>) {
@@ -1211,6 +1218,7 @@ export default function AdminPage() {
         coverUpdatedAt: mainCover !== editing?.cover ? Date.now() : editing?.coverUpdatedAt || 0,
         desc: draft.desc.trim(),
         type: draft.type,
+        commissionEnabled: draft.commissionEnabled,
         status: draft.status,
         author: draft.author.trim(),
         artist: draft.artist.trim(),

@@ -28,13 +28,19 @@ export const cardOverlayClass =
   "overlay pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.88),transparent)] p-2 pb-7";
 
 export const cardTitleClass =
-  "title relative z-10 m-0 line-clamp-2 overflow-hidden text-center text-[13px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)] transition-all duration-200 [@media(hover:hover)]:group-hover/card:absolute [@media(hover:hover)]:group-hover/card:inset-x-1.5 [@media(hover:hover)]:group-hover/card:bottom-7 [@media(hover:hover)]:group-hover/card:line-clamp-none [@media(hover:hover)]:group-hover/card:overflow-visible [@media(hover:hover)]:group-hover/card:rounded-lg [@media(hover:hover)]:group-hover/card:bg-black/30 [@media(hover:hover)]:group-hover/card:px-2.5 [@media(hover:hover)]:group-hover/card:py-2 [@media(hover:hover)]:group-hover/card:shadow-[0_6px_18px_rgba(0,0,0,0.45)]";
+  "title relative z-10 m-0 line-clamp-2 overflow-hidden text-center text-[11px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)] transition-all duration-200 [@media(hover:hover)]:group-hover/card:absolute [@media(hover:hover)]:group-hover/card:inset-x-1.5 [@media(hover:hover)]:group-hover/card:bottom-7 [@media(hover:hover)]:group-hover/card:line-clamp-none [@media(hover:hover)]:group-hover/card:overflow-visible [@media(hover:hover)]:group-hover/card:rounded-lg [@media(hover:hover)]:group-hover/card:bg-black/30 [@media(hover:hover)]:group-hover/card:px-2.5 [@media(hover:hover)]:group-hover/card:py-2 [@media(hover:hover)]:group-hover/card:shadow-[0_6px_18px_rgba(0,0,0,0.45)]";
 
 export const bottomBadgeBarClass =
   "badge-bar absolute inset-x-0 bottom-0 z-20 flex h-[22px] items-stretch overflow-hidden rounded-b-[10px]";
 
 export const typeBadgeClass =
   "type-badge flex min-w-0 flex-1 items-center justify-start truncate px-1.5 text-[8px] font-bold uppercase leading-none";
+
+export const commissionBadgeClass =
+  "commission-badge absolute bottom-[22px] left-0 z-20 flex h-[18px] w-1/2 items-center truncate rounded-tl-[4px] rounded-tr-[4px] bg-[linear-gradient(to_left,transparent_0%,transparent_25%,rgba(126,34,206,0.5)_70%)] px-1.5 text-[8px] font-bold uppercase leading-none text-[#d8b4fe]";
+
+export const commissionCoverGradientClass =
+  "pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(to_top,rgba(0,0,0,0.42),transparent_42%)]";
 
 export const statusBadgeClass =
   "status-badge flex min-w-0 flex-1 items-center justify-end truncate px-1.5 text-[8px] font-bold uppercase leading-none";

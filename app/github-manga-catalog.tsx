@@ -11,6 +11,8 @@ import {
   bottomBadgeBarClass,
   catalogGridClass,
   chapterBadgeClass,
+  commissionBadgeClass,
+  commissionCoverGradientClass,
   homepageLoadMoreClass,
   skeletonListCardClass,
   skeletonListContentClass,
@@ -35,6 +37,7 @@ type MangaItem = Record<string, unknown> & {
   desc?: string;
   status?: string;
   type?: string;
+  commissionEnabled?: boolean;
   genres?: string[];
   updatedAt?: number;
   lastChapter?: string | number;
@@ -56,6 +59,7 @@ type FirestoreMeta = {
   isDraft: boolean;
   status: string;
   type: string;
+  commissionEnabled: boolean;
   cover: string;
   coverUpdatedAt: number;
   rating: unknown;
@@ -290,6 +294,7 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
     isDraft: Boolean(data.isDraft),
     status: String(data.status || ""),
     type: String(data.type || ""),
+    commissionEnabled: data.commissionEnabled === true,
     cover: String(data.cover || ""),
     coverUpdatedAt: toMilliseconds(data.coverUpdatedAt),
     rating: data.rating,
@@ -373,6 +378,7 @@ function mangaForMetadata(item: MangaItem, metadata?: FirestoreMeta): Record<str
     rating: metadata?.rating ?? item.rating ?? "-",
     status: String(metadata?.status || item.status || "").toLowerCase(),
     type: String(metadata?.type || item.type || "manga").toLowerCase(),
+    commissionEnabled: metadata?.commissionEnabled === true,
     altTitle: item.altTitle || "",
     author: item.author || "-",
     artist: item.artist || "-",
@@ -473,6 +479,7 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
       cover: item.cover || item.img || "",
       status: item.status || meta?.status || "",
       type: item.type || meta?.type || "manga",
+      commissionEnabled: meta?.commissionEnabled === true,
       rating: item.rating ?? meta?.rating ?? null,
       desc: item.desc || "",
       genres: Array.isArray(item.genres) ? item.genres : [],
@@ -506,6 +513,7 @@ function MangaCard({
   const image = thumbnail(cover, meta?.updatedAt);
   const status = String(manga.status || "").toLowerCase();
   const type = String(manga.type || "manga").toLowerCase();
+  const commissionEnabled = manga.commissionEnabled === true;
   const chapter = chapterNumber(item, meta);
   const updatedAt = Number(meta?.updatedAt || 0);
   manga.rating = meta?.rating ?? item.rating ?? "-";
@@ -526,6 +534,7 @@ function MangaCard({
           <div className={upBadgeClass}>UP</div>
         )}
         {chapter >= 0 && <div className={chapterBadgeClass}>Ch. {chapter}</div>}
+        {commissionEnabled && <div className={commissionBadgeClass}>COMMISSION</div>}
         {(type || status) && (
           <div className={bottomBadgeBarClass}>
             {type ? (
@@ -561,6 +570,7 @@ function MangaCard({
             Cover Not Found
           </div>
         )}
+        {commissionEnabled && <div className={commissionCoverGradientClass} />}
         <div className={cardOverlayClass}>
           <div className={cardTitleClass}>{item.title}</div>
         </div>
