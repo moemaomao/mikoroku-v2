@@ -10,6 +10,7 @@ type Settings = {
   bio: string;
   avatar: string;
   customBadge: string;
+  customBadges: string[];
   customAvatarFrame: string;
   customFontStyle: string;
   customBorder: string;
@@ -80,6 +81,22 @@ const badges = [
   ["red-flag-collector", "Red Flag Collector"], ["copium-inhaler", "Copium Inhaler"], ["suffering-build", "Suffering Build"],
   ["ntr-enjoyer", "NTR Enjoyer"],
 ];
+
+function getBadgeSelectionLimit(commentCount: unknown) {
+  const count = typeof commentCount === "number" ? commentCount : 0;
+  return Math.floor(count / 5) + 1 >= 110 ? 2 : 1;
+}
+
+function normalizeBadges(data: Partial<Settings> & { commentCount?: unknown }) {
+  const saved = Array.isArray(data.customBadges)
+    ? data.customBadges.map(String)
+    : data.customBadge
+      ? [String(data.customBadge)]
+      : [];
+  const known = new Set(badges.map(([id]) => id));
+  return [...new Set(saved.filter((id) => known.has(id)))].slice(0, getBadgeSelectionLimit(data.commentCount));
+}
+
 const roles = [
   ["genshin", "Genshin Impact"], ["honkai-star-rail", "Honkai: Star Rail"],
   ["zenless-zone-zero", "Zenless Zone Zero"], ["azur-lane", "Azur Lane"],
@@ -134,6 +151,7 @@ const initialSettings: Settings = {
   bio: "",
   avatar: "",
   customBadge: "",
+  customBadges: [],
   customAvatarFrame: "",
   customFontStyle: "",
   customBorder: "",
@@ -151,6 +169,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
   const [allBadgesExpanded, setAllBadgesExpanded] = useState(false);
+  const [badgeLimit, setBadgeLimit] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -170,6 +189,8 @@ export default function SettingsPage() {
             ...parsed,
             displayName: String(parsed.displayName || user.displayName || ""),
             avatar: String(parsed.avatar || user.photoURL || anonymousAvatar),
+            customBadge: String(parsed.customBadge || parsed.customBadges?.[0] || ""),
+            customBadges: normalizeBadges(parsed),
             gameRoles: Array.isArray(parsed.gameRoles) ? parsed.gameRoles.map(String) : [],
             disableAnimations: parsed.disableAnimations === true ||
               localStorage.getItem("commentWidget_disableAnimations") === "true",
@@ -180,15 +201,17 @@ export default function SettingsPage() {
 
       try {
         const snapshot = await window.firebase!.firestore().collection("userStats").doc(user.uid).get();
-        const data = snapshot.exists ? snapshot.data() || {} : {};
+        const data = (snapshot.exists ? snapshot.data() || {} : {}) as Partial<Settings> & { commentCount?: unknown };
         if (!active) return;
+        setBadgeLimit(getBadgeSelectionLimit(data.commentCount));
         setSettings({
           ...initialSettings,
           displayName: String(data.displayName || user.displayName || ""),
           username: String(data.username || ""),
           bio: String(data.bio || ""),
           avatar: String(data.avatar || user.photoURL || anonymousAvatar),
-          customBadge: String(data.customBadge || ""),
+          customBadge: String(data.customBadge || data.customBadges?.[0] || ""),
+          customBadges: normalizeBadges(data),
           customAvatarFrame: String(data.customAvatarFrame || ""),
           customFontStyle: String(data.customFontStyle || ""),
           customBorder: String(data.customBorder || ""),
@@ -201,7 +224,6 @@ export default function SettingsPage() {
         setStatus("ready");
       } catch (error) {
         console.error("User settings failed to load.", error);
-        // Only surface error if we never managed to show cached/ready UI
         if (active) {
           setStatus((prev) => {
             if (prev === "ready") return prev;
@@ -215,7 +237,6 @@ export default function SettingsPage() {
     const attach = () => {
       if (!window.firebase?.auth) return false;
       const auth = window.firebase.auth();
-      // Use currentUser immediately if already signed in (no wait for first event)
       const current = auth.currentUser as (Account & { photoURL?: string | null }) | null;
       if (current) void applyUser(current);
 
@@ -239,7 +260,6 @@ export default function SettingsPage() {
           return;
         }
         if (attempts >= 50 && active) {
-          // ~5s max wait instead of 10s
           window.clearInterval(poll);
           setStatus("error");
           setMessage("Authentication service is unavailable.");
@@ -267,6 +287,17 @@ export default function SettingsPage() {
     update("gameRoles", settings.gameRoles.includes(role)
       ? settings.gameRoles.filter((item) => item !== role)
       : [...settings.gameRoles, role]);
+  }
+
+  function toggleBadge(badge: string) {
+    const selected = settings.customBadges;
+    const nextBadges = badge === ""
+      ? []
+      : selected.includes(badge)
+        ? selected.filter((item) => item !== badge)
+        : [...selected, badge].slice(-badgeLimit);
+    update("customBadges", nextBadges);
+    update("customBadge", nextBadges[0] || "");
   }
 
   async function selectAvatar(file?: File) {
@@ -297,6 +328,8 @@ export default function SettingsPage() {
     const sanitizedUsername = settings.username.toLowerCase().replace(/[^a-z0-9._-]/g, "");
     const next: Settings = {
       ...settings,
+      customBadges: settings.customBadges.slice(0, badgeLimit),
+      customBadge: settings.customBadges[0] || "",
       displayName: settings.displayName.trim() || "Anonymous",
       username: sanitizedUsername,
       bio: settings.bio.trim(),
@@ -370,13 +403,18 @@ export default function SettingsPage() {
                 <h2>Custom Badges</h2>
                 <div className="settings-badge-grid">
                   {(allBadgesExpanded ? badges : badges.slice(0, 16)).map(([id, name]) => (
-                    <button type="button" key={id || "none"} className={`settings-badge-option badge-${id || "none"}${settings.customBadge === id ? " selected" : ""}`}
-                      onClick={() => update("customBadge", id)}>{name}</button>
+                    <button type="button" key={id || "none"} className={`settings-badge-option badge-${id || "none"}${settings.customBadges.includes(id) ? " selected" : ""}`}
+                      onClick={() => toggleBadge(id)}>{name}</button>
                   ))}
-                  {settings.customBadge && !badges.some(([id]) => id === settings.customBadge) && (
-                    <button type="button" className="settings-badge-option selected" onClick={() => update("customBadge", settings.customBadge)}>{settings.customBadge}</button>
-                  )}
+                  {settings.customBadges.filter((selected) => !badges.some(([id]) => id === selected)).map((selected) => (
+                    <button type="button" key={selected} className="settings-badge-option selected" onClick={() => toggleBadge(selected)}>{selected}</button>
+                  ))}
                 </div>
+                <p className="settings-hint">
+                  {badgeLimit > 1
+                    ? "LV 110+: choose up to 2 badges."
+                    : "Choose 1 badge. Reach LV 110 to unlock a second badge."}
+                </p>
                 <button type="button" className="settings-expand" onClick={() => setAllBadgesExpanded((expanded) => !expanded)}>
                   {allBadgesExpanded ? "↑ Show Fewer Badges" : "↓ Expand All Badges"}
                 </button>

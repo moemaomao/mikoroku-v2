@@ -918,7 +918,7 @@ function handleQuoteBtnClick(e) {
       overlay.style.display = 'flex';
     }
 
-    function openUserSettings() {
+    async function openUserSettings() {
   window.loadCommentFeatureStyles?.('settings');
   if (!currentUser) {
     alert("Harap login terlebih dahulu!");
@@ -942,10 +942,14 @@ function handleQuoteBtnClick(e) {
 
   loadCurrentUserSettings();
 
-  const stats = userStatsCache[currentUser.uid] || {};
+  const statsDoc = await db.collection('userStats').doc(currentUser.uid).get();
+  const stats = statsDoc.exists ? statsDoc.data() : (userStatsCache[currentUser.uid] || {});
+  userStatsCache[currentUser.uid] = { ...userStatsCache[currentUser.uid], ...stats };
 
   // Badge
-  window.selectedBadge = stats.customBadge || "";
+  window.badgeSelectionLimit = getBadgeLimit(stats);
+  window.selectedBadges = getSelectedBadges(stats);
+  window.selectedBadge = window.selectedBadges[0] || "";
   allBadgesExpanded = false;
 
   renderBadges(false);
@@ -960,7 +964,7 @@ function handleQuoteBtnClick(e) {
   document.querySelectorAll('.custom-badge-option').forEach(btn => {
     btn.classList.toggle(
       'active',
-      btn.dataset.badge === window.selectedBadge
+      window.selectedBadges.includes(btn.dataset.badge)
     );
   });
 
@@ -1377,7 +1381,8 @@ async function saveUserSettings() {
   applyAnimationSetting(disableAnimations);
 
   const settings = {
-    customBadge: window.selectedBadge || "",
+    customBadge: window.selectedBadges[0] || "",
+    customBadges: window.selectedBadges,
     customBorder: selectedBorderClass || "",
     customAvatarFrame: window.selectedFrame || "",
     customCommentBg: window.selectedCustomBg || "",
@@ -2436,9 +2441,11 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
           ${(() => {
             if (!comment.uid) return '';
             const stats = userStatsCache[comment.uid];
-            if (!stats?.customBadge) return '';
-            const badge = BADGES.find(b => b.id === stats.customBadge);
-            return badge ? `<span class="user-custom-badge ${badge.id}">${badge.text}</span>` : '';
+            const selectedBadges = getSelectedBadges(stats);
+            return selectedBadges.map(badgeId => {
+              const badge = BADGES.find(b => b.id === badgeId);
+              return badge ? `<span class="user-custom-badge ${badge.id}">${badge.text}</span>` : '';
+            }).join('');
           })()}
         </div>
         ${(() => {
@@ -5049,6 +5056,26 @@ const BADGES = [
   { id: "ntr-enjoyer", text: "NTR Enjoyer", style: "background:linear-gradient(45deg,#1e293b,#7f1d1d,#dc2626); color:white;" }
 ];
 
+function getSelectedBadges(stats = {}) {
+  const saved = Array.isArray(stats.customBadges)
+    ? stats.customBadges
+    : stats.customBadge
+      ? [stats.customBadge]
+      : [];
+  const level = Number.isFinite(stats.level)
+    ? stats.level
+    : getCommentLevel(stats.commentCount || 0);
+  return [...new Set(saved.filter(id => BADGES.some(badge => badge.id === id)))]
+    .slice(0, getBadgeLimit({ ...stats, level }));
+}
+
+function getBadgeLimit(stats = {}) {
+  const level = Number.isFinite(stats.level)
+    ? stats.level
+    : getCommentLevel(stats.commentCount || 0);
+  return level >= 110 ? 2 : 1;
+}
+
 let allBadgesExpanded = false;
 
 function renderBadges(expanded = false) {
@@ -5120,21 +5147,35 @@ function renderBadges(expanded = false) {
         el.classList.remove('active');
       });
 
-      btn.classList.add('active');
-      btn.style.transform = 'scale(1.08)';
-      btn.style.boxShadow = `
-        0 0 0 2px rgba(255,255,255,0.15),
-        0 0 14px rgba(167,139,250,0.75),
-        0 4px 18px rgba(0,0,0,0.45)
-      `;
+      window.selectedBadges.forEach(selectedId => {
+        const selected = document.querySelector(`.custom-badge-option[data-badge="${CSS.escape(selectedId)}"]`);
+        if (!selected) return;
+        selected.classList.add('active');
+        selected.style.transform = 'scale(1.08)';
+        selected.style.boxShadow = `
+          0 0 0 2px rgba(255,255,255,0.15),
+          0 0 14px rgba(167,139,250,0.75),
+          0 4px 18px rgba(0,0,0,0.45)
+        `;
+      });
     }
 
-    if (window.selectedBadge === badge.id) {
+    if (window.selectedBadges.includes(badge.id)) {
       setTimeout(applySelectedStyle, 0);
     }
 
     btn.onclick = () => {
-      window.selectedBadge = badge.id;
+      const maxBadges = window.badgeSelectionLimit || getBadgeLimit(userStatsCache[currentUser?.uid] || {});
+      if (badge.id === '') {
+        window.selectedBadges = [];
+      } else if (window.selectedBadges.includes(badge.id)) {
+        window.selectedBadges = window.selectedBadges.filter(id => id !== badge.id);
+      } else {
+        window.selectedBadges = maxBadges === 1
+          ? [badge.id]
+          : [...window.selectedBadges, badge.id].slice(-maxBadges);
+      }
+      window.selectedBadge = window.selectedBadges[0] || "";
       applySelectedStyle();
     };
 
@@ -5399,7 +5440,8 @@ async function saveUserSettings() {
   applyAnimationSetting(disableAnimations);
 
   const settings = {
-    customBadge: window.selectedBadge || "",
+    customBadge: window.selectedBadges[0] || "",
+    customBadges: window.selectedBadges,
     customBorder: selectedBorderClass || "",
     customShape: selectedShapeClass || "",
     customAvatarFrame: window.selectedFrame || "",
@@ -6153,8 +6195,8 @@ if (data.joinedAt) {
     // Badge
     const badgeDiv = modal.querySelector('#modal-badge');
     badgeDiv.innerHTML = '';
-    if (data.customBadge) {
-      const badge = BADGES.find(b => b.id === data.customBadge);
+    getSelectedBadges(data).forEach(badgeId => {
+      const badge = BADGES.find(b => b.id === badgeId);
       if (badge) {
         const el = document.createElement('span');
         el.className = `user-custom-badge ${badge.id}`;
@@ -6162,7 +6204,7 @@ if (data.joinedAt) {
         el.textContent = badge.text;
         badgeDiv.appendChild(el);
       }
-    }
+    });
 
         // ==================== GAME ROLES DISPLAY ====================
     let existingRoles = modal.querySelector('#modal-game-roles');
