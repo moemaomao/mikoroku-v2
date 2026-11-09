@@ -59,7 +59,7 @@
             const data = doc.data();
             userStatsCache[doc.id] = {
               ...data,
-              level: Math.floor((data.points || 0) / 100) + 1
+              level: getCommentLevel(data.commentCount || 0)
             };
           });
 
@@ -4430,7 +4430,7 @@ window.currentProfileUser = {
       document.querySelectorAll(`[data-uid="${uid}"]`).forEach(el => {
         const badgeEl = el.querySelector('.badge');
         if (badgeEl) {
-          const level = calculateLevel(userStatsCache[uid].points || 0);
+          const level = calculateLevel(userStatsCache[uid].commentCount || 0);
           badgeEl.textContent = `Lv ${level}`;
         }
       });
@@ -5528,10 +5528,6 @@ function refreshUserComments(uid) {
   console.log('✅ Komentar user sudah di-refresh');
 }
 
-function calculateLevel(points = 0) {
-  return Math.floor(points / 100) + 1;
-}
-
 // ====================== CREATE DROPDOWN ======================
 function createMentionDropdown() {
 
@@ -6022,8 +6018,8 @@ setTimeout(initMentionSystem, 3000);
 window.initMentionSystem = initMentionSystem;
 
 
-function calculateLevel(points = 0) {
-  return Math.floor(points / 100) + 1;
+function calculateLevel(commentCount = 0) {
+  return getCommentLevel(commentCount);
 }
 
 
@@ -6181,7 +6177,7 @@ if (data.joinedAt) {
     if (joinedEl) joinedEl.textContent = joinedDate;
     // ==================== END FIX ====================
 
-    const level = getCommentLevel(data.commentCount || 0);
+    const level = calculateLevel(data.commentCount || 0);
     modal.querySelector('#modal-level').textContent = `Lv. ${level}`;
 
     modal.querySelector('#modal-points').textContent = `${(data.points || 0).toLocaleString()} pts`;

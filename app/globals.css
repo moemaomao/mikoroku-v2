@@ -29,6 +29,78 @@
   }
 }
 
+.leaderboard-animated-card {
+  isolation: isolate;
+}
+
+.leaderboard-animated-card:nth-child(1) {
+  --leaderboard-shimmer: 139 92 246;
+}
+
+.leaderboard-animated-card:nth-child(2) {
+  --leaderboard-shimmer: 244 63 94;
+}
+
+.leaderboard-animated-card:nth-child(3) {
+  --leaderboard-shimmer: 249 115 22;
+}
+
+.leaderboard-animated-card:nth-child(4) {
+  --leaderboard-shimmer: 234 179 8;
+}
+
+.leaderboard-animated-card:nth-child(5) {
+  --leaderboard-shimmer: 59 130 246;
+}
+
+.leaderboard-animated-card:nth-child(6) {
+  --leaderboard-shimmer: 34 197 94;
+}
+
+.leaderboard-animated-card::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 25%,
+    rgb(var(--leaderboard-shimmer) / 8%) 38%,
+    rgb(var(--leaderboard-shimmer) / 42%) 50%,
+    rgb(var(--leaderboard-shimmer) / 8%) 62%,
+    transparent 75%
+  );
+  background-size: 250% 250%;
+  animation: leaderboard-gradient-flow 3.5s ease-in-out infinite alternate;
+  content: "";
+  pointer-events: none;
+}
+
+.leaderboard-animated-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.leaderboard-animated-card > :first-child.absolute {
+  position: absolute;
+  z-index: 2;
+}
+
+@keyframes leaderboard-gradient-flow {
+  from {
+    background-position: 0% 50%;
+  }
+
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaderboard-animated-card::before {
+    animation: none;
+  }
+}
+
 html.light .bookmark-route {
   --bookmark-bg: #f8f9fa;
   --bookmark-text: #111827;

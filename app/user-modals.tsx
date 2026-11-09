@@ -566,7 +566,7 @@ function initializeUserModals(): () => void {
       const comments = numberValue(data.commentCount);
       const points = numberValue(data.points);
       const reputation = numberValue(data.reputation);
-      setText(profileField("level"), `Lv. ${Math.floor(comments / 10) + 1}`);
+      setText(profileField("level"), `Lv. ${Math.floor(comments / 5) + 1}`);
       setText(profileField("points"), `${points.toLocaleString()} pts`);
       setText(profileField("comments"), comments.toLocaleString());
       const reputationElement = profileField("reputation");

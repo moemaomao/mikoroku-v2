@@ -335,7 +335,7 @@ export default function LeaderboardPage() {
               {topUsers.map((user, index) => (
                 <article
                   key={user.uid}
-                  className={`relative overflow-hidden rounded-xl border p-4 shadow-sm transition duration-200 touch-manipulation hover:-translate-y-1 hover:brightness-110 hover:shadow-2xl active:scale-[0.98] active:brightness-125 active:shadow-2xl focus-within:brightness-110 focus-within:shadow-2xl ${
+                  className={`leaderboard-animated-card relative overflow-hidden rounded-xl border p-4 shadow-sm transition duration-200 touch-manipulation hover:-translate-y-1 hover:brightness-110 hover:shadow-2xl active:scale-[0.98] active:brightness-125 active:shadow-2xl focus-within:brightness-110 focus-within:shadow-2xl ${
                     [
                       "border-violet-400/70 bg-[linear-gradient(145deg,#f2e8ff,#d8b4fe)] shadow-violet-500/20 dark:bg-[linear-gradient(145deg,#3b1f5b,#21152f)]",
                       "border-red-400/70 bg-[linear-gradient(145deg,#ffe4e6,#fecdd3)] shadow-red-500/20 dark:bg-[linear-gradient(145deg,#5b2027,#30161b)]",
