@@ -632,6 +632,12 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
             coverUpdatedAt: githubManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
           }
         : cachedManga;
+  if (manga) {
+    manga.nsfw =
+      githubManga?.nsfw === true ||
+      firestoreManga?.nsfw === true ||
+      cachedManga?.nsfw === true;
+  }
   if (!signal.aborted && !manga?.covers?.length) {
     try {
       const sdkManga = await loadFirebaseDocument(slug, signal);
