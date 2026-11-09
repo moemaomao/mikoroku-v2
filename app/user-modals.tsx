@@ -327,6 +327,7 @@ const modalStyles = `
 .profile-box.leaderboard-profile{isolation:isolate;border:1px solid rgb(var(--profile-rank-color)/55%);box-shadow:0 0 28px rgb(var(--profile-rank-color)/24%)}
 .profile-box.leaderboard-profile:before{position:absolute;z-index:0;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 25%,rgb(var(--profile-rank-color)/8%) 38%,rgb(var(--profile-rank-color)/42%) 50%,rgb(var(--profile-rank-color)/8%) 62%,transparent 75%);background-size:250% 250%;animation:leaderboard-profile-gradient 3.5s ease-in-out infinite alternate;content:"";pointer-events:none}
 .profile-box.leaderboard-profile>*{position:relative;z-index:1}
+.profile-box.leaderboard-profile>.profile-close{position:absolute;z-index:2}
 .profile-box.leaderboard-rank-1{--profile-rank-color:139 92 246}
 .profile-box.leaderboard-rank-2{--profile-rank-color:244 63 94}
 .profile-box.leaderboard-rank-3{--profile-rank-color:249 115 22}
