@@ -1,48 +1,53 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export const NSFW_VISIBILITY_KEY = "mikoroku_show_nsfw_v1";
 const NSFW_VISIBILITY_EVENT = "mikorokuNsfwVisibilityChange";
+let cachedVisibility: boolean | null = null;
 
 export function readNsfwVisibility(): boolean {
   try {
-    return window.localStorage.getItem(NSFW_VISIBILITY_KEY) === "true";
+    cachedVisibility = window.localStorage.getItem(NSFW_VISIBILITY_KEY) === "true";
+    return cachedVisibility;
   } catch (error) {
     console.warn("Preferensi tampilan NSFW tidak dapat dibaca.", error);
-    return false;
+    return cachedVisibility ?? false;
   }
 }
 
+function subscribeToNsfwVisibility(onChange: () => void): () => void {
+  const handleVisibilityChange = (event: Event) => {
+    if (event instanceof CustomEvent && typeof event.detail === "boolean") {
+      cachedVisibility = event.detail;
+    } else {
+      cachedVisibility = null;
+    }
+    onChange();
+  };
+
+  window.addEventListener(NSFW_VISIBILITY_EVENT, handleVisibilityChange);
+  window.addEventListener("storage", handleVisibilityChange);
+  return () => {
+    window.removeEventListener(NSFW_VISIBILITY_EVENT, handleVisibilityChange);
+    window.removeEventListener("storage", handleVisibilityChange);
+  };
+}
+
 export function useNsfwVisibility(): [boolean, (visible: boolean) => void] {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    setVisible(readNsfwVisibility());
-    const handleVisibilityChange = (event: Event) => {
-      if (event instanceof CustomEvent && typeof event.detail === "boolean") {
-        setVisible(event.detail);
-      } else {
-        setVisible(readNsfwVisibility());
-      }
-    };
-
-    window.addEventListener(NSFW_VISIBILITY_EVENT, handleVisibilityChange);
-    window.addEventListener("storage", handleVisibilityChange);
-    return () => {
-      window.removeEventListener(NSFW_VISIBILITY_EVENT, handleVisibilityChange);
-      window.removeEventListener("storage", handleVisibilityChange);
-    };
-  }, []);
-
+  const visible = useSyncExternalStore(
+    subscribeToNsfwVisibility,
+    readNsfwVisibility,
+    () => false,
+  );
   const updateVisibility = useCallback((nextVisible: boolean) => {
     try {
       window.localStorage.setItem(NSFW_VISIBILITY_KEY, String(nextVisible));
     } catch (error) {
       console.warn("Preferensi tampilan NSFW tidak dapat disimpan.", error);
     }
+    cachedVisibility = nextVisible;
     window.dispatchEvent(new CustomEvent(NSFW_VISIBILITY_EVENT, { detail: nextVisible }));
-    setVisible(nextVisible);
   }, []);
 
   return [visible, updateVisibility];
