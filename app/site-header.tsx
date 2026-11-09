@@ -168,7 +168,6 @@ function updateBookmarkIcon(): boolean {
 
 function HeaderContents() {
   const [showNsfw, setShowNsfw] = useNsfwVisibility();
-  const authenticatedNsfwUser = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => desktopSidebarPreference ?? false);
   const [mobile, setMobile] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -427,9 +426,6 @@ function HeaderContents() {
     let active = true;
     const updateUser = (nextUser: HeaderUser | null) => {
       setUser(nextUser);
-      const nextUid = nextUser?.uid || null;
-      const shouldResetNsfw = Boolean(nextUid && nextUid !== authenticatedNsfwUser.current);
-      authenticatedNsfwUser.current = nextUid;
       if (!nextUser) {
         setDisplayName("User");
         setAvatar(DEFAULT_AVATAR);
@@ -442,7 +438,6 @@ function HeaderContents() {
         }
         return;
       }
-      if (shouldResetNsfw) setShowNsfw(false);
       const nextName = getDisplayName(nextUser);
       setDisplayName(nextName);
       window.commentDisplayName = nextName;
