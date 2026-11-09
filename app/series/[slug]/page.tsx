@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import DetailPageClient from "../detail-page-client";
+import { getSeriesSeoData } from "../../../lib/seo-metadata";
 
 export const revalidate = 600;
 
@@ -10,8 +11,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
 
-  const title = slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  const description = `Baca ${title} di Mikoroku.`;
+  const series = await getSeriesSeoData(slug);
+  const title = series.title;
+  const description = series.description || `Baca ${title} di Mikoroku.`;
   const imagePath = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
   const pageTitle = `${title} - Mikoroku`;
   const url = `https://mikoroku.top/series/${encodeURIComponent(slug)}`;

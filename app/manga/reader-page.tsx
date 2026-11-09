@@ -1070,6 +1070,50 @@ export default function ReaderPage({
   const activeKind = data?.kind || kind;
 
   useEffect(() => {
+    if (!data) return;
+
+    const title = `${data.chapterTitle} - ${data.title} | Mikoroku`;
+    const description = `Baca ${data.chapterTitle} ${data.title} di Mikoroku.`;
+    const pageUrl = new URL(
+      `/${data.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`,
+      window.location.origin,
+    ).href;
+    const imageUrl = new URL(
+      `/og/${data.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`,
+      window.location.origin,
+    ).href;
+
+    document.title = title;
+
+    const setMeta = (selector: string, attribute: "name" | "property", key: string, content: string) => {
+      let element = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!element) {
+        element = document.createElement("meta");
+        element.setAttribute(attribute, key);
+        document.head.append(element);
+      }
+      element.content = content;
+    };
+
+    setMeta('meta[name="description"]', "name", "description", description);
+    setMeta('meta[property="og:title"]', "property", "og:title", title);
+    setMeta('meta[property="og:description"]', "property", "og:description", description);
+    setMeta('meta[property="og:url"]', "property", "og:url", pageUrl);
+    setMeta('meta[property="og:image"]', "property", "og:image", imageUrl);
+    setMeta('meta[name="twitter:title"]', "name", "twitter:title", title);
+    setMeta('meta[name="twitter:description"]', "name", "twitter:description", description);
+    setMeta('meta[name="twitter:image"]', "name", "twitter:image", imageUrl);
+
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.append(canonical);
+    }
+    canonical.href = pageUrl;
+  }, [data, slug]);
+
+  useEffect(() => {
     if (!data || data.kind !== "manga" || mode !== "single" || !data.images.length) return;
     const progress = Math.round((Math.min(page, data.images.length) / data.images.length) * 100);
     setReaderProgress(progress);
@@ -1199,7 +1243,6 @@ export default function ReaderPage({
           ]),
         ]));
         window.dispatchEvent(new Event("mikoroku:chapter-read"));
-        document.title = `${result.chapterTitle} - ${result.title} | Mikoroku`;
       })
       .catch((loadError: unknown) => {
         if (controller.signal.aborted || isAbortError(loadError)) return;
