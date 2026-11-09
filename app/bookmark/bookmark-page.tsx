@@ -8,6 +8,7 @@ import MangaDataProvider from "../manga-data-provider";
 import UserModals from "../user-modals";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
+import { isNsfwManga } from "../lib/nsfw";
 
 type Bookmark = {
   title: string;
@@ -538,6 +539,7 @@ export default function BookmarkPage() {
                       <CoverImage
                         src={bookmark.img || "/assets/icons/favicon.ico"}
                         alt=""
+                        nsfw={isNsfwManga(bookmark.slug, bookmark.title)}
                         onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
                       />
                     </span>

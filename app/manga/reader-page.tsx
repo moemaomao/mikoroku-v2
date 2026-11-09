@@ -18,6 +18,7 @@ import {
   writeCachedReaderData,
 } from "../lib/reader-data-cache";
 import { initializeFirebaseClient } from "../lib/firebase-client";
+import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
 type ReaderKind = "manga" | "novel";
 type ChapterRecord = {
@@ -50,6 +51,7 @@ type ReaderData = {
   chapters: string[];
   chapter: string;
   source?: string;
+  nsfw?: boolean;
 };
 
 const mangaDatasetUrl = "/catalog/manga.json";
@@ -162,6 +164,18 @@ function readerImageUrl(url: string, dataSaver: boolean, quality: number): strin
   return dataSaver ? imageWithQuality(url, quality) : originalReaderImageUrl(url);
 }
 
+function readerPageImageUrl(
+  url: string,
+  dataSaver: boolean,
+  quality: number,
+  nsfw: boolean,
+  showNsfw: boolean,
+): string {
+  return nsfw && !showNsfw
+    ? imageProxyUrl(url, "nsfwCover")
+    : readerImageUrl(url, dataSaver, quality);
+}
+
 const READER_IMAGE_CACHE_NAME = "mikoroku-reader-images-v1";
 const READER_IMAGE_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const READER_IMAGE_CACHE_MAX_ENTRIES = 100;
@@ -204,6 +218,7 @@ function ReaderImage({
   wrapperClassName,
   loading,
   fetchPriority = "auto",
+  concealNsfw = false,
 }: {
   src: string;
   alt: string;
@@ -211,7 +226,9 @@ function ReaderImage({
   wrapperClassName: string;
   loading: "eager" | "lazy";
   fetchPriority?: "high" | "auto" | "low";
+  concealNsfw?: boolean;
 }) {
+  const imageSrc = src;
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [displaySrc, setDisplaySrc] = useState("");
@@ -231,15 +248,15 @@ function ReaderImage({
     }
 
     void window.caches.open(READER_IMAGE_CACHE_NAME)
-      .then((cache) => cache.match(src))
+      .then((cache) => cache.match(imageSrc))
       .then(async (response) => {
         if (!response) {
-          if (active) setDisplaySrc(src);
+          if (active) setDisplaySrc(imageSrc);
           return;
         }
         const blob = await response.blob();
         if (blob.size < 100) {
-          if (active) setDisplaySrc(src);
+          if (active) setDisplaySrc(imageSrc);
           return;
         }
         objectUrl = URL.createObjectURL(blob);
@@ -248,23 +265,27 @@ function ReaderImage({
       })
       .catch((cacheError: unknown) => {
         console.warn("Could not read the cached reader image; loading its URL directly.", cacheError);
-        if (active) setDisplaySrc(src);
+        if (active) setDisplaySrc(imageSrc);
       });
 
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src]);
+  }, [imageSrc]);
 
   function handleError(event: React.SyntheticEvent<HTMLImageElement>) {
     const image = event.currentTarget;
+    if (concealNsfw) {
+      setFailed(true);
+      return;
+    }
     if (image.dataset.fallbackTried) {
       setFailed(true);
       return;
     }
     image.dataset.fallbackTried = "true";
-    const fallback = imageProxyUrl(src, "readerFallback");
+    const fallback = imageProxyUrl(imageSrc, "readerFallback");
     if (fallback === image.src) {
       setFailed(true);
       return;
@@ -384,6 +405,7 @@ function getCachedReaderData(
     chapters,
     chapter: targetChapter,
     source: record.source,
+    nsfw: isNsfwManga(slug, String(cachedCurrent?.title || slug.replace(/-/g, " "))),
   };
 }
 
@@ -852,6 +874,7 @@ async function loadReaderData(
       chapter: targetChapter,
       id: chapterDocumentId,
       source: String(chapterData?.source || cachedCurrent?.source || ""),
+      nsfw: manga?.nsfw === true || isNsfwManga(slug, String(manga?.title || manga?.name || slug)),
     };
   }
   const cachedContent = chapterData?.content || chapterData?.text || chapterData?.html;
@@ -990,6 +1013,7 @@ async function loadReaderData(
     chapters,
     chapter: resolvedChapter,
     source: typeof chapterData.source === "string" ? chapterData.source : undefined,
+    nsfw: manga?.nsfw === true || isNsfwManga(slug, title),
   };
 }
 
@@ -1005,6 +1029,10 @@ export default function ReaderPage({
   preferStoredChapter?: boolean;
 }) {
   const [data, setData] = useState<ReaderData | null>(null);
+  const [showNsfw] = useNsfwVisibility();
+  const [mangaNsfw, setMangaNsfw] = useState(() =>
+    isNsfwManga(slug),
+  );
   const [error, setError] = useState("");
   const [forcedServer, setForcedServer] = useState<"sv1" | "sv2" | "es" | null>(null);
   const [activeServer, setActiveServer] = useState<"sv1" | "sv2" | "es" | null>(() => {
@@ -1068,6 +1096,16 @@ export default function ReaderPage({
   const [imageQuality, setImageQuality] = useState(600);
   const [readerProgress, setReaderProgress] = useState(0);
   const activeKind = data?.kind || kind;
+  const concealReaderPages = mangaNsfw && !showNsfw;
+
+  useEffect(() => {
+    const updateNsfwStatus = () => {
+      setMangaNsfw(Boolean(data?.nsfw || isNsfwManga(slug, data?.title)));
+    };
+    updateNsfwStatus();
+    window.addEventListener("mangaDataReady", updateNsfwStatus);
+    return () => window.removeEventListener("mangaDataReady", updateNsfwStatus);
+  }, [data?.nsfw, data?.title, slug]);
 
   useEffect(() => {
     if (!data) return;
@@ -1157,6 +1195,7 @@ export default function ReaderPage({
     const cachedData = getCachedReaderData(slug, targetChapter, kind, forcedServer);
     hasUsableData = Boolean(cachedData);
     setData(cachedData);
+    setMangaNsfw(Boolean(cachedData?.nsfw || isNsfwManga(slug, cachedData?.title)));
     setError("");
 
     if (kind === "manga") {
@@ -1174,7 +1213,12 @@ export default function ReaderPage({
           if (requiredSource && cachedReaderData.source !== requiredSource) return;
           hasUsableData = true;
           if (!hasFreshData) {
-            setData(cachedReaderData);
+            const cachedDataWithNsfw = {
+              ...cachedReaderData,
+              nsfw: cachedReaderData.nsfw || isNsfwManga(slug, cachedReaderData.title),
+            };
+            setData(cachedDataWithNsfw);
+            setMangaNsfw(cachedDataWithNsfw.nsfw === true);
             setError("");
           }
         })
@@ -1199,6 +1243,7 @@ export default function ReaderPage({
           return;
         }
         setData(result);
+        setMangaNsfw(result.nsfw === true || isNsfwManga(slug, result.title));
         if (result.kind === "manga") {
           void writeCachedReaderData(slug, { ...result, kind: "manga" }).catch((cacheError: unknown) => {
             console.warn("Could not cache the loaded reader chapter.", cacheError);
@@ -1296,9 +1341,9 @@ export default function ReaderPage({
     data.images.slice(start, start + preloadCount).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
-      image.src = readerImageUrl(src, dataSaver, imageQuality);
+      image.src = readerPageImageUrl(src, dataSaver, imageQuality, mangaNsfw, showNsfw);
     });
-  }, [data, dataSaver, imageQuality, kind, mode, page]);
+  }, [data, dataSaver, imageQuality, kind, mangaNsfw, mode, page, showNsfw]);
 
   useEffect(() => {
     if (!data || kind !== "manga" || mode !== "long-strip") return;
@@ -1585,12 +1630,13 @@ export default function ReaderPage({
         while (nextIndex < data.images.length) {
           const index = nextIndex++;
           const imageUrl = data.images[index];
-          const readerUrl = readerImageUrl(imageUrl, dataSaver, imageQuality);
-          const candidates = [
-            readerUrl,
-            imageUrl,
-            imageProxyUrl(imageUrl, "readerFallback"),
-          ];
+          const candidates = concealReaderPages
+            ? [imageProxyUrl(imageUrl, "nsfwCover")]
+            : [
+                readerImageUrl(imageUrl, dataSaver, imageQuality),
+                imageUrl,
+                imageProxyUrl(imageUrl, "readerFallback"),
+              ];
           let imageBlob: Blob | undefined;
 
           for (const candidate of [...new Set(candidates)]) {
@@ -1835,7 +1881,7 @@ export default function ReaderPage({
         : activeKind === "manga" ? (
           <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-white py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] dark:bg-[#0a0a0c] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
             {mode === "long-strip" ? data.images.map((image, index) => {
-              const src = readerImageUrl(image, dataSaver, imageQuality);
+              const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
               return (
                 <ReaderImage
                   className="block h-auto w-full"
@@ -1845,19 +1891,21 @@ export default function ReaderPage({
                   alt={`Page ${index + 1}`}
                   loading={index < 6 ? "eager" : "lazy"}
                   fetchPriority={index < 3 ? "high" : "auto"}
+                  concealNsfw={concealReaderPages}
                 />
               );
             }) : (
               <>
                 <div className="reader-single-page-frame relative grid w-full justify-items-center">
                   <ReaderImage
-                    className="w-auto max-w-full object-contain [max-height:calc(100vh-250px)]"
+                    className="w-full max-w-full object-contain [max-height:calc(100vh-250px)]"
                     wrapperClassName="grid w-full justify-items-center"
-                    key={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)}
-                    src={readerImageUrl(data.images[page - 1], dataSaver, imageQuality)}
+                    key={readerPageImageUrl(data.images[page - 1], dataSaver, imageQuality, mangaNsfw, showNsfw)}
+                    src={readerPageImageUrl(data.images[page - 1], dataSaver, imageQuality, mangaNsfw, showNsfw)}
                     alt={`Page ${page}`}
                     loading="eager"
                     fetchPriority="high"
+                    concealNsfw={concealReaderPages}
                   />
                   <button className="reader-image-nav reader-image-nav-previous absolute left-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[var(--mikoroku-accent)] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:left-5 dark:border-white/10 dark:bg-[#191a20]/90" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
                     <i className="fas fa-chevron-left" aria-hidden="true" />
@@ -1874,7 +1922,7 @@ export default function ReaderPage({
           <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>
             {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
             {data.images.map((image, index) => {
-              const src = image;
+              const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
               return (
                 <ReaderImage
                   className="mx-auto block h-auto max-w-full"
@@ -1884,6 +1932,7 @@ export default function ReaderPage({
                   alt={`Illustration ${index + 1}`}
                   loading={index < 3 ? "eager" : "lazy"}
                   fetchPriority={index < 3 ? "high" : "auto"}
+                  concealNsfw={concealReaderPages}
                 />
               );
             })}

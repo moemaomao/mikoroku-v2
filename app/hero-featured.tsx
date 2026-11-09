@@ -3,12 +3,14 @@
 import { useEffect, useState, useRef, type CSSProperties } from "react";
 import { imageProxyUrl } from "../lib/image-proxy";
 import { readGlobalAppearance } from "./lib/global-appearance";
+import { CoverImage } from "./lib/cover-image";
 import styles from "./hero-featured.module.css";
 
 type HeroCover = {
   title: string;
   slug: string;
   cover: string;
+  nsfw?: boolean;
   subtitle?: string;
 };
 
@@ -67,10 +69,16 @@ function pickFromWindow(limit = 15): HeroCover[] {
     const raw = resolveCover(item.cover || item.img);
     if (!raw) return;
     seen.add(key);
+    const dataMatch = data?.[String(item.slug || "")] || data?.[key];
+    const resolvedNsfw = dataMatch && typeof dataMatch === "object" &&
+      typeof (dataMatch as Record<string, unknown>).nsfw === "boolean"
+      ? (dataMatch as Record<string, unknown>).nsfw === true
+      : item.nsfw === true;
     target.push({
       title: item.title,
       slug: String(item.slug || key),
       cover: thumb(raw, Number(item.updatedAt) || 0),
+      nsfw: resolvedNsfw,
       subtitle: Array.isArray(item.genres)
         ? (item.genres as string[]).slice(0, 2).join(" · ")
         : "Borderline H",
@@ -339,7 +347,7 @@ export default function HeroFeatured() {
               aria-label={item.title}
               aria-current={isMainA ? "true" : undefined}
             >
-              <img
+              <CoverImage
                 className={styles.glow}
                 src={item.cover}
                 alt=""
@@ -349,8 +357,9 @@ export default function HeroFeatured() {
                 loading={abs <= 2 || isMain ? "eager" : "lazy"}
                 decoding="async"
                 draggable={false}
+                nsfw={item.nsfw === true}
               />
-              <img
+              <CoverImage
                 className={styles.cover}
                 src={item.cover}
                 alt={item.title}
@@ -359,6 +368,7 @@ export default function HeroFeatured() {
                 loading={abs <= 2 || isMain ? "eager" : "lazy"}
                 decoding="async"
                 draggable={false}
+                nsfw={item.nsfw === true}
               />
             </button>
           );

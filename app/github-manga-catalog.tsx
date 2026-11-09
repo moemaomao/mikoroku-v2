@@ -28,6 +28,7 @@ import {
   getSeriesCoverPreferenceUpdatedAt,
 } from "./lib/series-cover-preferences";
 import { imageProxyUrl } from "../lib/image-proxy";
+import { CoverImage } from "./lib/cover-image";
 
 type MangaItem = Record<string, unknown> & {
   title: string;
@@ -60,6 +61,7 @@ type FirestoreMeta = {
   status: string;
   type: string;
   commissionEnabled: boolean;
+  nsfw: boolean;
   cover: string;
   coverUpdatedAt: number;
   rating: unknown;
@@ -295,6 +297,7 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
     status: String(data.status || ""),
     type: String(data.type || ""),
     commissionEnabled: data.commissionEnabled === true,
+    nsfw: data.nsfw === true,
     cover: String(data.cover || ""),
     coverUpdatedAt: toMilliseconds(data.coverUpdatedAt),
     rating: data.rating,
@@ -379,6 +382,7 @@ function mangaForMetadata(item: MangaItem, metadata?: FirestoreMeta): Record<str
     status: String(metadata?.status || item.status || "").toLowerCase(),
     type: String(metadata?.type || item.type || "manga").toLowerCase(),
     commissionEnabled: metadata?.commissionEnabled === true,
+    nsfw: metadata?.nsfw === true || item.nsfw === true,
     altTitle: item.altTitle || "",
     author: item.author || "-",
     artist: item.artist || "-",
@@ -480,6 +484,7 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
       status: item.status || meta?.status || "",
       type: item.type || meta?.type || "manga",
       commissionEnabled: meta?.commissionEnabled === true,
+      nsfw: meta?.nsfw === true || item.nsfw === true,
       rating: item.rating ?? meta?.rating ?? null,
       desc: item.desc || "",
       genres: Array.isArray(item.genres) ? item.genres : [],
@@ -554,15 +559,16 @@ function MangaCard({
           </div>
         )}
         {image && !coverFailed ? (
-          <img
+          <CoverImage
             className={cardImageClass}
-            src={image}
+            src={cover}
             alt={item.title}
             width="150"
             height="225"
             decoding="async"
             loading={priority ? "eager" : "lazy"}
             fetchPriority={priority ? "high" : "auto"}
+            nsfw={manga.nsfw === true}
             onError={() => setCoverFailed(true)}
           />
         ) : (

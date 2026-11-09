@@ -9,6 +9,7 @@ export type CachedReaderData = {
   chapters: string[];
   chapter: string;
   source?: string;
+  nsfw?: boolean;
 };
 
 const READER_DATA_DATABASE = "mikoroku-reader-data";

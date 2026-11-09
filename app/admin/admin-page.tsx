@@ -71,6 +71,7 @@ type MangaRecord = {
   desc: string;
   type: string;
   commissionEnabled?: boolean;
+  nsfw?: boolean;
   status: string;
   author: string;
   artist: string;
@@ -103,6 +104,7 @@ export type MangaDraft = {
   desc: string;
   type: string;
   commissionEnabled: boolean;
+  nsfw: boolean;
   status: string;
   author: string;
   artist: string;
@@ -196,6 +198,7 @@ const emptyDraft: MangaDraft = {
   desc: "",
   type: "manga",
   commissionEnabled: false,
+  nsfw: false,
   status: "ongoing",
   author: "",
   artist: "",
@@ -262,6 +265,7 @@ function toDraft(manga?: MangaRecord): MangaDraft {
     desc: manga.desc,
     type: manga.type || "manga",
     commissionEnabled: manga.commissionEnabled === true,
+    nsfw: manga.nsfw === true,
     status: manga.status || "ongoing",
     author: manga.author,
     artist: manga.artist,
@@ -1148,7 +1152,7 @@ export default function AdminPage() {
   }
 
   function updateDraftField(key: keyof MangaDraft, value: string | boolean) {
-    if (key === "isDraft" || key === "commissionEnabled") {
+    if (key === "isDraft" || key === "commissionEnabled" || key === "nsfw") {
       if (typeof value === "boolean") updateDraft(key, value);
       return;
     }
@@ -1219,6 +1223,7 @@ export default function AdminPage() {
         desc: draft.desc.trim(),
         type: draft.type,
         commissionEnabled: draft.commissionEnabled,
+        nsfw: draft.nsfw,
         status: draft.status,
         author: draft.author.trim(),
         artist: draft.artist.trim(),

@@ -82,6 +82,14 @@ export default function MangaMetadataEditor({
           />
           <span>Show Commission Badge</span>
         </label>
+        <label className={styles.checkboxField}>
+          <input
+            type="checkbox"
+            checked={draft.nsfw}
+            onChange={(event) => onChange("nsfw", event.target.checked)}
+          />
+          <span>NSFW (protect cover)</span>
+        </label>
         <label className={styles.field}>
           <span>Status</span>
           <select value={draft.status} onChange={(event) => onChange("status", event.target.value)}>

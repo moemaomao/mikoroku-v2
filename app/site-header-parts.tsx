@@ -52,12 +52,16 @@ export function SiteSidebar({
   open,
   mobile,
   canAccessAdminPanels,
+  showNsfw,
+  onToggleNsfw,
   logoUrl,
   onClose,
 }: {
   open: boolean;
   mobile: boolean;
   canAccessAdminPanels: boolean;
+  showNsfw: boolean;
+  onToggleNsfw: () => void;
   logoUrl: string;
   onClose: () => void;
 }) {
@@ -71,6 +75,49 @@ export function SiteSidebar({
           <button type="button" id="sidebarClose" aria-label="Close menu" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.04] text-slate-800 transition hover:border-[var(--mikoroku-accent)]/40 hover:bg-[var(--mikoroku-accent-soft)] hover:text-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/[0.06] dark:text-indigo-50 dark:hover:text-[var(--mikoroku-accent)]"><Icon name="close" className="h-[22px] w-[22px]" /></button>
         </div>
         <nav className="flex flex-col gap-1">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showNsfw}
+            aria-label="Tampilkan cover NSFW"
+            onClick={onToggleNsfw}
+            className={`flex w-full items-center gap-3 rounded-lg border px-2.5 py-2 text-left text-sm font-medium transition ${
+              showNsfw
+                ? "border-rose-400/40 bg-rose-500/10 text-rose-700 dark:text-rose-200"
+                : "border-black/5 bg-black/[0.04] text-slate-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-indigo-50/90"
+            }`}
+          >
+            <span aria-hidden="true" className="grid h-6 w-8 shrink-0 place-items-center rounded border border-rose-500/40 bg-rose-500/10 text-[10px] font-extrabold leading-none text-rose-600 dark:text-rose-300">
+              R18
+            </span>
+            <span className="min-w-0 flex-1">{showNsfw ? "NSFW" : "SFW"}</span>
+            <span
+              aria-hidden="true"
+              style={{
+                display: "flex",
+                width: 44,
+                height: 24,
+                flexShrink: 0,
+                alignItems: "center",
+                padding: 3,
+                borderRadius: 9999,
+                backgroundColor: showNsfw ? "#f43f5e" : "#64748b",
+                transition: "background-color 160ms ease",
+              }}
+            >
+              <span
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9999,
+                  backgroundColor: "#fff",
+                  boxShadow: "0 1px 3px rgb(0 0 0 / 25%)",
+                  transform: showNsfw ? "translateX(20px)" : "translateX(0)",
+                  transition: "transform 160ms ease",
+                }}
+              />
+            </span>
+          </button>
           <SidebarLink href="/manga-list" icon="book" onClick={closeOnMobile}>Manga List</SidebarLink>
           <SidebarLink href="/hentai-list" icon="book" onClick={closeOnMobile}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={closeOnMobile}>Genre List</SidebarLink>

@@ -31,6 +31,7 @@ type Manga = {
   origin?: string;
   managedByAdmin?: boolean;
   isDraft?: boolean;
+  nsfw?: boolean;
 };
 
 export type CatalogKind = "manga" | "hentai" | "genre";
@@ -198,6 +199,11 @@ function mergeCatalogData(primary: Manga[], additions: Manga[]): Manga[] {
       managedByAdmin: Boolean(existing.managedByAdmin || manga.managedByAdmin),
       source: manga.source || existing.source,
       origin: manga.origin || existing.origin,
+      nsfw: manga.firestore
+        ? manga.nsfw
+        : existing.firestore
+          ? existing.nsfw
+          : newer.nsfw ?? older.nsfw,
       genres: (Array.isArray(newer.genres) && newer.genres.length ? newer.genres : older.genres) || newer.genres || older.genres,
     });
   }
@@ -514,7 +520,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
                 return (
                   <a className="catalog-card" href={`/series/${encodeURIComponent(slug)}`} key={`${slug}:${titleValue}`}>
                     <span className="catalog-cover">
-                      {cover ? <CoverImage src={cover} alt="" onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">No cover</span>}
+                      {cover ? <CoverImage src={cover} alt="" nsfw={manga.nsfw === true} onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">No cover</span>}
                     </span>
                     <span className="catalog-card-title">{titleValue}</span>
                   </a>

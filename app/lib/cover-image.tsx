@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ImgHTMLAttributes } from "react";
 import { imageProxyUrl, type ImageProxyPreset } from "../../lib/image-proxy";
+import { useNsfwVisibility } from "./nsfw";
 
 const COVER_CACHE_DB = "mikoroku-cover-cache";
 const COVER_CACHE_STORE = "covers";
@@ -271,19 +272,24 @@ export function useCoverImageSource(source: string, preset: ImageProxyPreset = "
 type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   src: string;
   optimizePreset?: ImageProxyPreset;
+  nsfw?: boolean;
 };
 
 export function CoverImage({
   src,
   optimizePreset = "cover",
+  nsfw = false,
   loading = "lazy",
   onError,
   ...props
 }: CoverImageProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [visible, setVisible] = useState(loading !== "lazy");
-  const resolvedSource = useCoverImageSource(src, optimizePreset, visible);
-  const fallbackKey = `${src}\u0000${optimizePreset}`;
+  const [showNsfw] = useNsfwVisibility();
+  const concealNsfw = nsfw && !showNsfw;
+  const activePreset = concealNsfw ? "nsfwCover" : optimizePreset;
+  const resolvedSource = useCoverImageSource(src, activePreset, visible);
+  const fallbackKey = `${src}\u0000${activePreset}`;
   const [fallback, setFallback] = useState<{ key: string; enabled: boolean }>({
     key: "",
     enabled: false,
@@ -317,7 +323,7 @@ export function CoverImage({
       loading={loading}
       src={displaySource || undefined}
       onError={(event) => {
-        if (displaySource && displaySource !== originalSource && !fallbackEnabled) {
+        if (displaySource && displaySource !== originalSource && !fallbackEnabled && !concealNsfw) {
           setFallback({ key: fallbackKey, enabled: true });
           return;
         }

@@ -1,7 +1,5 @@
 "use client";
 
-import { imageProxyUrl } from "../lib/image-proxy";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyGlobalAppearance,
@@ -9,6 +7,8 @@ import {
   readGlobalAppearance,
 } from "./lib/global-appearance";
 import { Icon, SiteSidebar } from "./site-header-parts";
+import { CoverImage } from "./lib/cover-image";
+import { isNsfwManga, useNsfwVisibility } from "./lib/nsfw";
 
 type MangaEntry = {
   title: string;
@@ -91,12 +91,6 @@ function slugify(value: string): string {
     .trim().replace(/\s+/g, "-").replace(/-+/g, "-");
 }
 
-function previewCover(value?: string): string {
-  if (!value) return DEFAULT_THUMB;
-  const url = /^https?:\/\//i.test(value) ? value : DEFAULT_THUMB;
-  return imageProxyUrl(url, "headerPreview");
-}
-
 function getMangaEntry(value: unknown): MangaEntry | undefined {
   if (!value || typeof value !== "object") return undefined;
   const item = value as Record<string, unknown>;
@@ -173,6 +167,8 @@ function updateBookmarkIcon(): boolean {
 }
 
 function HeaderContents() {
+  const [showNsfw, setShowNsfw] = useNsfwVisibility();
+  const authenticatedNsfwUser = useRef<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => desktopSidebarPreference ?? false);
   const [mobile, setMobile] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -431,6 +427,9 @@ function HeaderContents() {
     let active = true;
     const updateUser = (nextUser: HeaderUser | null) => {
       setUser(nextUser);
+      const nextUid = nextUser?.uid || null;
+      const shouldResetNsfw = Boolean(nextUid && nextUid !== authenticatedNsfwUser.current);
+      authenticatedNsfwUser.current = nextUid;
       if (!nextUser) {
         setDisplayName("User");
         setAvatar(DEFAULT_AVATAR);
@@ -443,6 +442,7 @@ function HeaderContents() {
         }
         return;
       }
+      if (shouldResetNsfw) setShowNsfw(false);
       const nextName = getDisplayName(nextUser);
       setDisplayName(nextName);
       window.commentDisplayName = nextName;
@@ -826,10 +826,11 @@ function HeaderContents() {
                     onClick={() => selectManga(manga.title)}
                     className="flex w-full cursor-pointer items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-black/5 dark:hover:bg-white/[0.08]"
                   >
-                    <img
-                      src={previewCover(manga.cover || manga.img)}
+                    <CoverImage
+                      src={manga.cover || manga.img || ""}
                       alt=""
                       loading="lazy"
+                      nsfw={manga.nsfw === true}
                       onError={(event) => { event.currentTarget.src = DEFAULT_THUMB; }}
                       className="h-[60px] w-[42px] shrink-0 rounded-md object-cover"
                     />
@@ -931,10 +932,11 @@ function HeaderContents() {
                       onClick={() => navigateToManga(bookmark.title)}
                       className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/[0.08]"
                     >
-                      <img
-                        src={previewCover(image)}
+                      <CoverImage
+                        src={image || ""}
                         alt=""
                         loading="lazy"
+                        nsfw={isNsfwManga(bookmark.slug, bookmark.title)}
                         onError={(event) => { event.currentTarget.src = DEFAULT_THUMB; }}
                         className="h-[52px] w-[38px] shrink-0 rounded-md object-cover"
                       />
@@ -1074,6 +1076,8 @@ function HeaderContents() {
         open={sidebarOpen}
         mobile={mobile}
         canAccessAdminPanels={canAccessAdminPanels}
+        showNsfw={showNsfw}
+        onToggleNsfw={() => setShowNsfw(!showNsfw)}
         logoUrl={LOGO_URL}
         onClose={closeSidebar}
       />

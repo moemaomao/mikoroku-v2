@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { imageProxyUrl } from "../../lib/image-proxy";
+import { CoverImage } from "../lib/cover-image";
+import { useNsfwVisibility } from "../lib/nsfw";
 
 type CurrentManga = {
   slug: string;
@@ -37,6 +39,7 @@ type Recommendation = {
   source: string;
   updatedAt: number;
   managedByAdmin: boolean;
+  nsfw?: boolean;
   info: Record<string, unknown>;
 };
 
@@ -154,6 +157,11 @@ function normalizeRecommendation(
     source: asString(item.source, fallbackSource),
     updatedAt: getTimestamp(item),
     managedByAdmin: Boolean(item.managedByAdmin),
+    nsfw: typeof item.nsfw === "boolean"
+      ? item.nsfw
+      : typeof info.nsfw === "boolean"
+        ? info.nsfw
+        : undefined,
     info,
   };
 }
@@ -204,6 +212,7 @@ function saveCache(items: Recommendation[]): void {
     status: item.status,
     type: item.type,
     rating: item.rating,
+    nsfw: item.nsfw,
     source: item.source,
     updatedAt: item.updatedAt,
   }));
@@ -257,6 +266,7 @@ export default function RecommendationSidebar({
   manga: CurrentManga;
   onVisibilityChange: (visible: boolean) => void;
 }) {
+  const [showNsfw] = useNsfwVisibility();
   const [catalogue, setCatalogue] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [visible, setVisible] = useState(readVisibility);
@@ -284,7 +294,10 @@ export default function RecommendationSidebar({
         ? {
           ...previous,
           ...recommendation,
-          img: recommendation.cover || recommendation.img || previous.cover || previous.img,
+            nsfw: recommendation.source === "github"
+              ? previous.nsfw ?? recommendation.nsfw
+              : recommendation.nsfw ?? previous.nsfw,
+            img: recommendation.cover || recommendation.img || previous.cover || previous.img,
           cover: recommendation.cover || recommendation.img || previous.cover || previous.img,
           desc: recommendation.desc.length > previous.desc.length
             ? recommendation.desc
@@ -498,7 +511,9 @@ export default function RecommendationSidebar({
             )}
             {recommendations.map((item, index) => {
               const itemCover = item.img || item.cover || "";
-              const itemThumb = thumbnailUrl(itemCover);
+              const itemThumb = item.nsfw && !showNsfw
+                ? imageProxyUrl(itemCover, "nsfwCover")
+                : thumbnailUrl(itemCover);
               return (
               <a
                 href={`/series/${encodeURIComponent(item.slug || normalizeSlug(item.title))}`}
@@ -531,12 +546,12 @@ export default function RecommendationSidebar({
                   />
                 )}
                 <span className="relative z-10 h-[66px] w-[46px] shrink-0 overflow-hidden rounded-lg bg-zinc-900 shadow-sm ring-1 ring-black/10 dark:ring-white/10">
-                  <img
+                  <CoverImage
                     src={itemThumb}
                     loading="lazy"
                     alt=""
+                    nsfw={item.nsfw}
                     onError={(event) => {
-                      event.currentTarget.onerror = null;
                       event.currentTarget.src = NO_COVER;
                     }}
                     className="!block !h-full !w-full !max-w-none !object-cover"

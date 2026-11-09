@@ -25,6 +25,7 @@ const COVER_IMAGE_WIDTHS: Record<Exclude<CoverImageConversionPreset, "custom">, 
 
 const IMAGE_PROXY_PRESETS = {
   cover: { width: 200, quality: 72, output: "webp" },
+  nsfwCover: { width: 10, quality: 30, output: "webp" },
   coverDetail: { width: 1200, quality: 72, output: "webp" },
   coverVolume: { width: 100, quality: 72, output: "webp" },
   coverAdmin: { width: 200, quality: 72, output: "webp" },

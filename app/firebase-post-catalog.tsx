@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import { imageProxyUrl } from "../lib/image-proxy";
+import { CoverImage } from "./lib/cover-image";
 import {
   cardClass,
   cardCoverClass,
@@ -136,6 +137,7 @@ function cacheRecords(records: Record<string, MangaRecord>) {
           img: value(record, "img") || value(record, "cover"),
           type: value(record, "type"),
           status: value(record, "status"),
+          nsfw: value(record, "nsfw") === true,
           rating: value(record, "rating", null),
           genres: value(record, "genres", []),
           author: value(record, "author"),
@@ -231,13 +233,14 @@ function CatalogCard({
             )}
           </div>
         )}
-        <img
+        <CoverImage
           key={`${section}-${record.slug}-${thumbnail}`}
           className={cardImageClass}
           src={thumbnail}
           alt={record.title}
           loading="lazy"
           decoding="async"
+          nsfw={value(record, "nsfw") === true}
           style={{ backgroundColor: "#1a1a1a" }}
           onError={(event) => {
             event.currentTarget.src =

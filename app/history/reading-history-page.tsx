@@ -13,6 +13,7 @@ import { CoverImage } from "../lib/cover-image";
 import MangaDataProvider from "../manga-data-provider";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
+import { isNsfwManga } from "../lib/nsfw";
 import UserModals from "../user-modals";
 import "./history.css";
 
@@ -126,6 +127,7 @@ export default function ReadingHistoryPage() {
                           src={coverUrl(entry.cover || "")}
                           alt=""
                           loading="lazy"
+                          nsfw={isNsfwManga(entry.slug, entry.series || entry.title)}
                           onError={(event) => { event.currentTarget.src = FALLBACK_COVER; }}
                         />
                       </span>

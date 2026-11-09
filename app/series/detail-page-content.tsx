@@ -11,6 +11,7 @@ import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
+import { useNsfwVisibility } from "../lib/nsfw";
 import {
   SERIES_COVER_PREFERENCE_STORAGE_KEY,
   SERIES_COVER_PREFERENCE_UPDATED_AT_KEY,
@@ -39,6 +40,7 @@ type Manga = {
   cover?: string;
   covers?: string[];
   coverNumbers?: Record<string, string>;
+  nsfw?: boolean;
   coverUpdatedAt?: string | number;
   desc?: string;
   genres?: string[];
@@ -294,6 +296,7 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     img: cover,
     cover,
     covers: asStringList(value.covers).map(resolveCover).filter(Boolean),
+    nsfw: value.nsfw === true || info.nsfw === true,
     coverNumbers: value.coverNumbers && typeof value.coverNumbers === "object"
       ? Object.fromEntries(Object.entries(value.coverNumbers).map(([url, number]) => [url, asString(number)]))
       : {},
@@ -1101,6 +1104,7 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 
 export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
+  const [showNsfw] = useNsfwVisibility();
   const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
   const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
@@ -1115,7 +1119,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const selectedCoverSlugRef = useRef("");
   const activeCoverUrl = selectedCoverUrl || baseCoverUrl;
   const coverUpdatedAt = Number(manga?.coverUpdatedAt || 0);
-  const cover = useCoverImageSource(activeCoverUrl, "coverDetail");
+  const cover = useCoverImageSource(
+    activeCoverUrl,
+    manga?.nsfw && !showNsfw ? "nsfwCover" : "coverDetail",
+  );
   useEffect(() => {
     setDetailCoverLoaded(false);
     setDetailCoverFailed(false);
@@ -1962,6 +1969,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     src={activeCoverUrl || "/assets/icons/favicon.ico"}
                     alt=""
                     loading="eager"
+                    nsfw={manga?.nsfw === true}
                     onLoad={() => {
                       setDetailCoverLoaded(true);
                       setDetailCoverFailed(false);
@@ -2210,7 +2218,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                       aria-pressed={activeCoverUrl === coverUrl}
                       aria-label={`Use volume ${manga.coverNumbers?.[coverUrl]?.trim() || index + 1} cover`}
                     >
-                      <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizePreset="coverVolume" />
+                      <CoverImage className="aspect-[3/4] w-full object-cover" src={coverUrl} alt="" loading="lazy" optimizePreset="coverVolume" nsfw={manga?.nsfw === true} />
                       <span className="block truncate px-2 py-2 text-xs font-medium">Volume {manga.coverNumbers?.[coverUrl]?.trim() || index + 1}</span>
                       {activeCoverUrl === coverUrl && <span className="absolute right-2 top-2 rounded-full bg-[var(--mikoroku-detail-cover-accent)] px-2 py-1 text-[10px] font-bold text-white">Selected</span>}
                     </button>
