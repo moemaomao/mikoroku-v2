@@ -508,6 +508,19 @@ function getLegacyCachedManga(slug: string): Manga | null {
   return null;
 }
 
+function getCurrentMangaForSlug(slug: string): Manga | null {
+  try {
+    const current = JSON.parse(localStorage.getItem("currentManga") || "null") as
+      | Record<string, unknown>
+      | null;
+    if (!current || asString(current.slug) !== slug) return null;
+    return normalizeManga(current, slug);
+  } catch (error) {
+    console.warn("Data manga saat ini tidak valid dan akan diabaikan.", error);
+    return null;
+  }
+}
+
 async function getCachedManga(slug: string): Promise<Manga | null> {
   try {
     const cached = await readIndexedDbManga(slug);
@@ -580,6 +593,7 @@ async function cacheMangaDetail(slug: string, manga: Manga): Promise<void> {
 }
 
 async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | null> {
+  const currentManga = getCurrentMangaForSlug(slug);
   const cachedManga = await getCachedManga(slug);
 
   const responses = await Promise.allSettled([
@@ -631,12 +645,13 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
             coverNumbers: githubManga.coverNumbers || cachedManga?.coverNumbers,
             coverUpdatedAt: githubManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
           }
-        : cachedManga;
+        : cachedManga || currentManga;
   if (manga) {
     manga.nsfw =
       githubManga?.nsfw === true ||
       firestoreManga?.nsfw === true ||
-      cachedManga?.nsfw === true;
+      cachedManga?.nsfw === true ||
+      currentManga?.nsfw === true;
   }
   if (!signal.aborted && !manga?.covers?.length) {
     try {
