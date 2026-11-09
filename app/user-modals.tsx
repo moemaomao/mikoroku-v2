@@ -75,7 +75,7 @@ type LegacyModalWindow = {
   getReadingHistory?: () => HistoryEntry[];
   deleteHistoryItem?: (url: string) => void;
   clearReadingHistory?: () => void;
-  showUserProfile?: (uid: string) => Promise<void>;
+  showUserProfile?: (uid: string, leaderboardRank?: number) => Promise<void>;
   closeProfileModal?: () => void;
   loadDmInbox?: () => Promise<void>;
   openChat?: (uid: string) => Promise<void>;
@@ -324,6 +324,24 @@ const modalStyles = `
 #user-profile-modal,#dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
 #user-profile-modal{background:transparent;z-index:99999}
 .profile-box{background:#1f1f2e;width:100%;max-width:380px;max-height:calc(100vh - 32px);overflow-y:auto;border-radius:14px;padding:18px;position:relative;color:white;box-sizing:border-box}
+.profile-box.leaderboard-profile{isolation:isolate;border:1px solid rgb(var(--profile-rank-color)/55%);box-shadow:0 0 28px rgb(var(--profile-rank-color)/24%)}
+.profile-box.leaderboard-profile:before{position:absolute;z-index:0;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 25%,rgb(var(--profile-rank-color)/8%) 38%,rgb(var(--profile-rank-color)/42%) 50%,rgb(var(--profile-rank-color)/8%) 62%,transparent 75%);background-size:250% 250%;animation:leaderboard-profile-gradient 3.5s ease-in-out infinite alternate;content:"";pointer-events:none}
+.profile-box.leaderboard-profile>*{position:relative;z-index:1}
+.profile-box.leaderboard-rank-1{--profile-rank-color:139 92 246}
+.profile-box.leaderboard-rank-2{--profile-rank-color:244 63 94}
+.profile-box.leaderboard-rank-3{--profile-rank-color:249 115 22}
+.profile-box.leaderboard-rank-4{--profile-rank-color:234 179 8}
+.profile-box.leaderboard-rank-5{--profile-rank-color:59 130 246}
+.profile-box.leaderboard-rank-6{--profile-rank-color:34 197 94}
+.profile-box.leaderboard-rank-1{background:linear-gradient(145deg,#3b1f5b,#21152f)}
+.profile-box.leaderboard-rank-2{background:linear-gradient(145deg,#5b2027,#30161b)}
+.profile-box.leaderboard-rank-3{background:linear-gradient(145deg,#5b321c,#301d12)}
+.profile-box.leaderboard-rank-4{background:linear-gradient(145deg,#514816,#302c12)}
+.profile-box.leaderboard-rank-5{background:linear-gradient(145deg,#1e3a5f,#15283f)}
+.profile-box.leaderboard-rank-6{background:linear-gradient(145deg,#1d4b2b,#142b1d)}
+.leaderboard-profile .profile-stats{border:1px solid rgb(var(--profile-rank-color)/35%);background:linear-gradient(145deg,rgb(var(--profile-rank-color)/24%),rgb(var(--profile-rank-color)/12%))}
+@keyframes leaderboard-profile-gradient{from{background-position:0% 50%}to{background-position:100% 50%}}
+@media(prefers-reduced-motion:reduce){.profile-box.leaderboard-profile:before{animation:none}}
 .profile-close{position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;color:#aaa;cursor:pointer}
 .profile-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}.profile-avatar{width:80px;height:80px;border-radius:15px;border:3px solid #7c3aed;object-fit:cover}
 .profile-dm{width:100%;height:34px;background:transparent;color:#22c55e;border:1px solid #22c55e;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px}
@@ -511,12 +529,31 @@ function initializeUserModals(): () => void {
   };
 
   let profileDmTarget: { uid: string; name: string; avatar: string } | null = null;
-  const showProfile = async (uid: string): Promise<void> => {
+  const showProfile = async (uid: string, leaderboardRank?: number): Promise<void> => {
     if (!uid) return;
     const firestore = db();
     if (!firestore) {
       window.alert("Firestore belum dimuat");
       return;
+    }
+    const profileBox = profileModal.querySelector<HTMLElement>(".profile-box");
+    profileBox?.classList.remove(
+      "leaderboard-profile",
+      "leaderboard-rank-1",
+      "leaderboard-rank-2",
+      "leaderboard-rank-3",
+      "leaderboard-rank-4",
+      "leaderboard-rank-5",
+      "leaderboard-rank-6",
+    );
+    if (
+      profileBox &&
+      typeof leaderboardRank === "number" &&
+      Number.isInteger(leaderboardRank) &&
+      leaderboardRank >= 1 &&
+      leaderboardRank <= 6
+    ) {
+      profileBox.classList.add("leaderboard-profile", `leaderboard-rank-${leaderboardRank}`);
     }
     profileModal.style.display = "flex";
     profileDmTarget = { uid, name: "Anonymous", avatar: DEFAULT_AVATAR };
