@@ -322,7 +322,7 @@ const GAME_ROLES = new Map(
 
 const modalStyles = `
 #user-profile-modal,#dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
-#user-profile-modal{background:transparent;z-index:99999}
+#user-profile-modal{background:rgba(0,0,0,.6);z-index:99999}
 .profile-box{background:#1f1f2e;width:100%;max-width:380px;max-height:calc(100vh - 32px);overflow-y:auto;border-radius:14px;padding:18px;position:relative;color:white;box-sizing:border-box}
 .profile-box.leaderboard-profile{isolation:isolate;border:1px solid rgb(var(--profile-rank-color)/55%);box-shadow:0 0 28px rgb(var(--profile-rank-color)/24%)}
 .profile-box.leaderboard-profile:before{position:absolute;z-index:0;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 25%,rgb(var(--profile-rank-color)/8%) 38%,rgb(var(--profile-rank-color)/42%) 50%,rgb(var(--profile-rank-color)/8%) 62%,transparent 75%);background-size:250% 250%;animation:leaderboard-profile-gradient 3.5s ease-in-out infinite alternate;content:"";pointer-events:none}

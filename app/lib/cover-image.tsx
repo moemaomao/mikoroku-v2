@@ -241,7 +241,6 @@ export function useCoverImageSource(source: string, preset: ImageProxyPreset = "
 
     let active = true;
     let objectUrl = "";
-    setResolved({ key: sourceKey, source: "" });
 
     if (!("indexedDB" in window)) {
       setResolved({ key: sourceKey, source: optimizedUrl });
@@ -266,7 +265,10 @@ export function useCoverImageSource(source: string, preset: ImageProxyPreset = "
     };
   }, [enabled, source, sourceKey, preset]);
 
-  return resolved.key === sourceKey ? resolved.source : "";
+  if (!enabled) return "";
+  return resolved.key === sourceKey
+    ? resolved.source
+    : getOptimizedCoverUrl(source, preset);
 }
 
 type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {

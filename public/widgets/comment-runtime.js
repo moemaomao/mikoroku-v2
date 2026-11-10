@@ -6023,21 +6023,153 @@ function calculateLevel(commentCount = 0) {
 }
 
 
-async function showUserProfile(uid) {
+const leaderboardProfileStyles = [
+  null,
+  { background: 'linear-gradient(145deg,#3b1f5b,#21152f)', accent: '139,92,246' },
+  { background: 'linear-gradient(145deg,#5b2027,#30161b)', accent: '244,63,94' },
+  { background: 'linear-gradient(145deg,#5b321c,#301d12)', accent: '249,115,22' },
+  { background: 'linear-gradient(145deg,#514816,#302c12)', accent: '234,179,8' },
+  { background: 'linear-gradient(145deg,#1e3a5f,#15283f)', accent: '59,130,246' },
+  { background: 'linear-gradient(145deg,#1d4b2b,#142b1d)', accent: '34,197,94' }
+];
+let cachedCommentLeaderboardTopUsers = null;
+let cachedCommentLeaderboardAt = 0;
+let commentLeaderboardRequest = null;
+
+async function getCommentLeaderboardRank(uid) {
+  if (
+    cachedCommentLeaderboardTopUsers &&
+    Date.now() - cachedCommentLeaderboardAt < 5 * 60 * 1000
+  ) {
+    const index = cachedCommentLeaderboardTopUsers.indexOf(uid);
+    return index >= 0 ? index + 1 : null;
+  }
+
+  if (!commentLeaderboardRequest) {
+    commentLeaderboardRequest = db.collection('userStats')
+      .orderBy('commentCount', 'desc')
+      .limit(50)
+      .get()
+      .then(snapshot => {
+        cachedCommentLeaderboardTopUsers = [];
+        snapshot.forEach(doc => {
+          if (doc.data().leaderboardHidden !== true && cachedCommentLeaderboardTopUsers.length < 6) {
+            cachedCommentLeaderboardTopUsers.push(doc.id);
+          }
+        });
+        cachedCommentLeaderboardAt = Date.now();
+        return cachedCommentLeaderboardTopUsers;
+      })
+      .finally(() => {
+        commentLeaderboardRequest = null;
+      });
+  }
+
+  const topUsers = await commentLeaderboardRequest;
+  const index = topUsers.indexOf(uid);
+  return index >= 0 ? index + 1 : null;
+}
+
+function applyCommentLeaderboardProfileStyle(profileBox, leaderboardRank) {
+  const rankStyle = Number.isInteger(leaderboardRank)
+    ? leaderboardProfileStyles[leaderboardRank]
+    : null;
+  const statsBox = profileBox.querySelector('#modal-profile-stats');
+  profileBox.classList.remove(
+    'leaderboard-profile',
+    'leaderboard-rank-1',
+    'leaderboard-rank-2',
+    'leaderboard-rank-3',
+    'leaderboard-rank-4',
+    'leaderboard-rank-5',
+    'leaderboard-rank-6'
+  );
+  if (rankStyle) {
+    profileBox.classList.add('leaderboard-profile', `leaderboard-rank-${leaderboardRank}`);
+    profileBox.style.setProperty('--profile-rank-color', rankStyle.accent);
+  } else {
+    profileBox.style.removeProperty('--profile-rank-color');
+  }
+  profileBox.style.background = rankStyle?.background || '#1f1f2e';
+  profileBox.style.border = rankStyle
+    ? `1px solid rgba(${rankStyle.accent},.55)`
+    : '1px solid transparent';
+  profileBox.style.boxShadow = rankStyle
+    ? `0 0 28px rgba(${rankStyle.accent},.24)`
+    : 'none';
+  if (statsBox) {
+    statsBox.style.background = rankStyle
+      ? `linear-gradient(145deg,rgba(${rankStyle.accent},.24),rgba(${rankStyle.accent},.12))`
+      : '#28283a';
+    statsBox.style.border = rankStyle
+      ? `1px solid rgba(${rankStyle.accent},.35)`
+      : 'none';
+  }
+}
+
+async function showUserProfile(uid, leaderboardRank) {
   let modal = document.getElementById('legacy-comment-profile-modal');
 
   if (!modal) {
     console.log("Creating user profile modal...");
+    if (!document.getElementById('legacy-comment-profile-styles')) {
+      const style = document.createElement('style');
+      style.id = 'legacy-comment-profile-styles';
+      style.textContent = `
+        .legacy-comment-profile-box.leaderboard-profile {
+          isolation: isolate;
+        }
+        .legacy-comment-profile-box.leaderboard-profile::before {
+          position: absolute;
+          z-index: 0;
+          inset: 0;
+          border-radius: inherit;
+          background: linear-gradient(
+            115deg,
+            transparent 25%,
+            rgba(var(--profile-rank-color), .08) 38%,
+            rgba(var(--profile-rank-color), .42) 50%,
+            rgba(var(--profile-rank-color), .08) 62%,
+            transparent 75%
+          );
+          background-size: 250% 250%;
+          animation: leaderboard-profile-gradient 3.5s ease-in-out infinite alternate;
+          content: "";
+          pointer-events: none;
+        }
+        .legacy-comment-profile-box.leaderboard-profile > * {
+          position: relative;
+          z-index: 1;
+        }
+        .legacy-comment-profile-box.leaderboard-profile > button:first-child {
+          z-index: 2;
+        }
+        .legacy-comment-profile-box.leaderboard-rank-1 { --profile-rank-color: 139,92,246; }
+        .legacy-comment-profile-box.leaderboard-rank-2 { --profile-rank-color: 244,63,94; }
+        .legacy-comment-profile-box.leaderboard-rank-3 { --profile-rank-color: 249,115,22; }
+        .legacy-comment-profile-box.leaderboard-rank-4 { --profile-rank-color: 234,179,8; }
+        .legacy-comment-profile-box.leaderboard-rank-5 { --profile-rank-color: 59,130,246; }
+        .legacy-comment-profile-box.leaderboard-rank-6 { --profile-rank-color: 34,197,94; }
+        @keyframes leaderboard-profile-gradient {
+          from { background-position: 0% 50%; }
+          to { background-position: 100% 50%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .legacy-comment-profile-box.leaderboard-profile::before { animation: none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
     modal = document.createElement('div');
     modal.id = 'legacy-comment-profile-modal';
     modal.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.9); z-index: 99999; display: none;
+      background: rgba(0,0,0,0.6); z-index: 99999; display: none;
       align-items: center; justify-content: center; padding: 12px; box-sizing: border-box;
     `;
 
     modal.innerHTML = `
-      <div style="background:#1f1f2e; width:100%; max-width:380px; border-radius:14px; padding:18px; position:relative; color:white; box-shadow:none;">
+      <div class="legacy-comment-profile-box" style="background:#1f1f2e; width:100%; max-width:380px; border-radius:14px; padding:18px; position:relative; color:white; box-shadow:none;">
         <button onclick="closeProfileModal()" style="position:absolute; top:10px; right:14px; background:none; border:none; font-size:24px; color:#aaa; cursor:pointer;">×</button>
 
         <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;">
@@ -6074,7 +6206,7 @@ async function showUserProfile(uid) {
   Message
 </button>
 
-        <div style="background:#28283a; border-radius:12px; padding:14px; margin-bottom:14px;">
+        <div id="modal-profile-stats" style="background:#28283a; border-radius:12px; padding:14px; margin-bottom:14px;">
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:center;">
             <div><div style="color:#aaa;font-size:.75rem;">Level</div><div id="modal-level" style="color:#ffd700;font-weight:700;margin-top:4px;"></div></div>
             <div><div style="color:#aaa;font-size:.75rem;">Points</div><div id="modal-points" style="color:#ffd700;font-weight:700;margin-top:4px;"></div></div>
@@ -6112,6 +6244,11 @@ async function showUserProfile(uid) {
     document.body.appendChild(modal);
   }
 
+  const profileBox = modal.firstElementChild;
+  const hasLeaderboardRank = Number.isInteger(leaderboardRank) &&
+    leaderboardRank >= 1 && leaderboardRank <= 6;
+  if (profileBox) applyCommentLeaderboardProfileStyle(profileBox, hasLeaderboardRank ? leaderboardRank : null);
+
   // Reset
   modal.querySelector('#modal-avatar').src = ANONYMOUS_AVATAR || '';
   modal.querySelector('#modal-displayname').textContent = 'Memuat profil...';
@@ -6123,6 +6260,15 @@ async function showUserProfile(uid) {
   try {
     const doc = await db.collection('userStats').doc(uid).get();
     const data = doc.exists ? doc.data() : {};
+
+    if (!hasLeaderboardRank && profileBox) {
+      try {
+        const rank = await getCommentLeaderboardRank(uid);
+        applyCommentLeaderboardProfileStyle(profileBox, rank);
+      } catch (error) {
+        console.warn('Gagal memuat peringkat user untuk warna profil.', error);
+      }
+    }
     
     const dmBtn = modal.querySelector('#profile-dm-btn');
 
