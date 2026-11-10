@@ -1739,6 +1739,78 @@
   background: rgb(10 15 29 / 55%);
 }
 
+:global(.admin-rich-search) {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+  color: #aab6d0;
+  font-size: 12px;
+}
+
+:global(.admin-rich-search input) {
+  width: min(280px, 55%);
+  min-width: 100px;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 7px;
+  outline: none;
+  color: #eef2ff;
+  background: #171a2b;
+  font: inherit;
+}
+
+:global(.admin-rich-search input:focus) {
+  border-color: rgb(107 155 255 / 70%);
+  box-shadow: 0 0 0 2px rgb(107 155 255 / 16%);
+}
+
+:global(.admin-rich-search span) {
+  min-width: 58px;
+  text-align: center;
+}
+
+:global(.admin-rich-search button) {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 6px;
+  color: #d5def5;
+  background: rgb(255 255 255 / 5%);
+  cursor: pointer;
+}
+
+:global(.admin-rich-search button:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+:global(.admin-rich-editor .ql-toolbar.ql-snow) {
+  position: relative;
+  z-index: 1;
+}
+
+:global(.admin-rich-editor .ql-container.ql-snow) {
+  position: relative;
+  z-index: 0;
+}
+
+:global(.admin-rich-editor .ql-picker-options) {
+  z-index: 3 !important;
+}
+
+:global(::highlight(mikoroku-chapter-search)) {
+  color: #171300 !important;
+  background-color: #ffe66d;
+}
+
+:global(::highlight(mikoroku-chapter-search-current)) {
+  color: #171300 !important;
+  background-color: #ffbb33;
+}
+
 :global(.admin-rich-editor .ql-toolbar.ql-snow),
 :global(.admin-rich-editor .ql-container.ql-snow) {
   border: none !important;
@@ -2484,6 +2556,23 @@
 .lightMode :global(.admin-rich-editor .ql-editor),
 .lightMode :global(.admin-rich-editor .ql-editor *) {
   color: #252c40 !important;
+}
+
+.lightMode :global(.admin-rich-search) {
+  border-bottom-color: rgb(20 29 55 / 14%);
+  color: #47536c;
+}
+
+.lightMode :global(.admin-rich-search input) {
+  border-color: rgb(20 29 55 / 14%);
+  color: #252c40;
+  background: #fff;
+}
+
+.lightMode :global(.admin-rich-search button) {
+  border-color: rgb(20 29 55 / 14%);
+  color: #35425e;
+  background: rgb(20 29 55 / 4%);
 }
 
 .lightMode .quickAddButton {
