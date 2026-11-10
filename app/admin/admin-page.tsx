@@ -830,7 +830,7 @@ export default function AdminPage() {
   const [isLightMode, setIsLightMode] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const quickAddRef = useRef<HTMLDivElement>(null);
-  const [chapterModalOpen, setChapterModalOpen] = useState(false);
+  const [chapterEditorOpen, setChapterEditorOpen] = useState(false);
   const [editingChapterNumber, setEditingChapterNumber] = useState<string | null>(null);
   const [chapterDraft, setChapterDraft] = useState<ChapterDraft>({ ...emptyChapterDraft });
   const [chapterError, setChapterError] = useState("");
@@ -1760,13 +1760,13 @@ export default function AdminPage() {
     });
   }
 
-  function openChapterModal() {
+  function openNewChapterEditor() {
     setEditingChapterNumber(null);
     setChapterDraft({ ...emptyChapterDraft });
     setChapterError("");
     setUploadNotice(null);
     setQuickAddOpen(false);
-    setChapterModalOpen(true);
+    setChapterEditorOpen(true);
   }
 
   async function uploadCoverFile() {
@@ -2188,7 +2188,7 @@ export default function AdminPage() {
     }
   }
 
-  function openChapterEditor(chapter: AdminChapter) {
+  function openExistingChapterEditor(chapter: AdminChapter) {
     if (!selectedManga) return;
     setEditingChapterNumber(chapter.num);
     setChapterDraft({
@@ -2201,7 +2201,7 @@ export default function AdminPage() {
       isDraft: chapter.isDraft,
     });
     setChapterError("");
-    setChapterModalOpen(true);
+    setChapterEditorOpen(true);
   }
 
   async function deleteChapter(chapter: AdminChapter) {
@@ -2505,7 +2505,7 @@ export default function AdminPage() {
         });
         setChapters(nextChapters);
       }
-      setChapterModalOpen(false);
+      setChapterEditorOpen(false);
       setMessage(`Chapter ${chapterNumber} saved successfully.`);
       setEditingChapterNumber(null);
       if (selectedManga?.slug === mangaSlug && nextManga) {
@@ -2565,7 +2565,7 @@ export default function AdminPage() {
   }
 
   return (
-    <main className={`${styles.adminShell} ${isLightMode ? styles.lightMode : ""}`}>
+    <main className={`${styles.adminShell} ${isLightMode ? styles.lightMode : ""} ${chapterEditorOpen ? styles.chapterEditorOpen : ""}`}>
       <aside className={`${styles.sidebar} ${mobileNavOpen ? styles.mobileSidebarOpen : ""}`}>
         <a className={styles.brand} href="/">Mikoroku Admin</a>
         <nav id="admin-navigation" className={styles.navigation} aria-label="Admin navigation">
@@ -2818,7 +2818,7 @@ export default function AdminPage() {
                       setChapterDraft({ ...emptyChapterDraft, mangaSlug: selectedManga.slug });
                       setEditingChapterNumber(null);
                       setUploadNotice(null);
-                      setChapterModalOpen(true);
+                      setChapterEditorOpen(true);
                     }}>＋ Add Chapter</button>
                     <button className={styles.deleteButton} onClick={() => void handleDeleteManga(selectedManga)} disabled={busy}>Delete Manga</button>
                     <button className={styles.secondaryButton} onClick={() => void openMangaChapters(selectedManga)} disabled={loadingChapters}>Refresh</button>
@@ -2970,7 +2970,7 @@ export default function AdminPage() {
                       setChapterDraft({ ...emptyChapterDraft, mangaSlug: selectedManga.slug });
                       setEditingChapterNumber(null);
                       setUploadNotice(null);
-                      setChapterModalOpen(true);
+                      setChapterEditorOpen(true);
                     }}>＋ Add Chapter</button>
                     <button className={styles.secondaryButton} onClick={() => void saveChapterOrder()} disabled={busy || !chapters.length}>▣ Save Order</button>
                     <small>Drag or use arrows to reorder chapters.</small>
@@ -3010,7 +3010,7 @@ export default function AdminPage() {
                               type="button"
                               className={styles.editButton}
                               aria-label={`Edit chapter ${chapter.num}`}
-                              onClick={() => openChapterEditor(chapter)}
+                              onClick={() => openExistingChapterEditor(chapter)}
                             >
                               <svg viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M12 20h9" />
@@ -3294,7 +3294,7 @@ export default function AdminPage() {
         {quickAddOpen && (
           <div className={styles.quickAddMenu} id="quick-add-menu">
             <button type="button" onClick={() => { setQuickAddOpen(false); openNewManga(); }}>＋ Add Manga</button>
-            <button type="button" onClick={() => { setQuickAddOpen(false); openChapterModal(); }}>▤ Upload Chapter</button>
+            <button type="button" onClick={() => { setQuickAddOpen(false); openNewChapterEditor(); }}>▤ Upload Chapter</button>
           </div>
         )}
         <button
@@ -3388,13 +3388,13 @@ export default function AdminPage() {
         </div>
       )}
 
-      {chapterModalOpen && (
-        <div className={styles.modalBackdrop} onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setChapterModalOpen(false);
-        }}>
-          <form className={styles.chapterModal} onSubmit={saveChapter}>
-            <button type="button" className={styles.modalClose} onClick={() => setChapterModalOpen(false)} aria-label="Close">×</button>
-            <h2>{editingChapterNumber ? `Edit Chapter ${editingChapterNumber}` : "Upload Chapter"}</h2>
+      {chapterEditorOpen && (
+        <div className={styles.chapterEditorPage} data-chapter-editor-page>
+          <form className={styles.chapterEditorForm} onSubmit={saveChapter}>
+            <div className={styles.chapterEditorHeading}>
+              <button type="button" className={styles.secondaryButton} onClick={() => setChapterEditorOpen(false)}>← Back to Chapters</button>
+              <h2>{editingChapterNumber ? `Edit Chapter ${editingChapterNumber}` : "Upload Chapter"}</h2>
+            </div>
             {selectedManga && chapterDraft.mangaSlug === selectedManga.slug ? (
               <div className={styles.selectedMangaLabel}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H7a2 2 0 0 1-2-2z" /><path d="M5 17a2 2 0 0 1 2-2h12" /></svg>
@@ -3567,14 +3567,14 @@ export default function AdminPage() {
               </div>
             </div>
             <div className={styles.chapterContentField}>
-              <label className={styles.field}>
-                <span>Text Content (optional, for novels)</span>
+              <div className={styles.field}>
+                <span id="chapter-content-label">Text Content (optional, for novels)</span>
                 <RichTextEditor kind="chapter" value={chapterDraft.content} onChange={(content) => setChapterDraft((current) => ({ ...current, content }))} />
-              </label>
+              </div>
             </div>
             <label className={styles.checkboxField}><input type="checkbox" checked={chapterDraft.isDraft} onChange={(event) => setChapterDraft((current) => ({ ...current, isDraft: event.target.checked }))} /><span>Save as Draft</span></label>
             {chapterError && <p className={styles.error}>{chapterError}</p>}
-            <div className={styles.formActions}><button className={styles.primaryButton} disabled={busy}>{busy ? "Saving..." : "Save Chapter"}</button><button type="button" className={styles.secondaryButton} onClick={() => setChapterModalOpen(false)}>Cancel</button></div>
+            <div className={styles.formActions}><button className={styles.primaryButton} disabled={busy}>{busy ? "Saving..." : "Save Chapter"}</button><button type="button" className={styles.secondaryButton} onClick={() => setChapterEditorOpen(false)}>Cancel</button></div>
           </form>
         </div>
       )}

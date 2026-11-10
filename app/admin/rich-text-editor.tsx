@@ -1,6 +1,6 @@
 "use client";
 
-import type Quill from "quill";
+import type Clipboard from "quill/modules/clipboard";
 import { useEffect, useRef } from "react";
 
 type RichTextEditorProps = {
@@ -31,7 +31,6 @@ export default function RichTextEditor({
   kind,
 }: RichTextEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<Quill | null>(null);
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
 
@@ -53,6 +52,12 @@ export default function RichTextEditor({
       const { default: QuillConstructor } = await import("quill");
       if (cancelled || !containerRef.current) return;
 
+      const chapterPage = container.closest<HTMLElement>(
+        "[data-chapter-editor-page]",
+      );
+      const chapterPageScrollTop = chapterPage?.scrollTop ?? 0;
+      const windowScrollX = window.scrollX;
+      const windowScrollY = window.scrollY;
       const editor = new QuillConstructor(container, {
         theme: "snow",
         placeholder:
@@ -61,13 +66,47 @@ export default function RichTextEditor({
             : "Novel chapter content (optional)...",
         modules: { toolbar: toolbars[kind] },
       });
-      if (valueRef.current) editor.root.innerHTML = valueRef.current;
-      const handleChange = () => onChangeRef.current(editor.root.innerHTML);
+      if (kind === "chapter") {
+        editor.root.setAttribute("aria-labelledby", "chapter-content-label");
+      }
+      if (kind === "chapter") {
+        const clipboard = editor.getModule("clipboard") as Clipboard;
+        clipboard.addMatcher(Node.ELEMENT_NODE, (_node, delta) => {
+          delta.ops.forEach((operation) => {
+            if (typeof operation.insert !== "string") return;
+            delete operation.attributes?.bold;
+          });
+          return delta;
+        });
+      }
+      const clipboard = editor.getModule("clipboard") as Clipboard;
+      if (valueRef.current) {
+        const contents = clipboard.convert({
+          html: valueRef.current,
+          text: "",
+        });
+        if (kind === "chapter") {
+          contents.ops.forEach((operation) => {
+            if (typeof operation.insert === "string") {
+              delete operation.attributes?.bold;
+            }
+          });
+        }
+        editor.setContents(contents, "silent");
+      }
+      editor.setSelection(null, "silent");
+      editor.blur();
+      const handleChange = () => {
+        const html = editor.root.innerHTML;
+        onChangeRef.current(html);
+      };
       editor.on("text-change", handleChange);
-      editorRef.current = editor;
+      requestAnimationFrame(() => {
+        if (chapterPage) chapterPage.scrollTop = chapterPageScrollTop;
+        window.scrollTo(windowScrollX, windowScrollY);
+      });
       dispose = () => {
         editor.off("text-change", handleChange);
-        editorRef.current = null;
         container.replaceChildren();
       };
     }
@@ -78,20 +117,6 @@ export default function RichTextEditor({
       dispose?.();
     };
   }, [kind]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || editor.root.innerHTML === value) return;
-    const selection = editor.getSelection();
-    editor.root.innerHTML = value;
-    if (selection) {
-      editor.setSelection(
-        Math.min(selection.index, editor.getLength() - 1),
-        selection.length,
-        "silent",
-      );
-    }
-  }, [value]);
 
   return (
     <div className={`admin-rich-editor admin-rich-editor-${kind}`}>

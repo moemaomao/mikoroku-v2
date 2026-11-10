@@ -1732,9 +1732,10 @@
 }
 
 :global(.admin-rich-editor) {
+  position: relative;
   border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   background: rgb(10 15 29 / 55%);
 }
 
@@ -1745,23 +1746,28 @@
 
 :global(.admin-rich-editor .ql-toolbar.ql-snow) {
   border-bottom: 1px solid rgb(255 255 255 / 12%) !important;
-  border-radius: 0;
+  border-radius: 11px 11px 0 0;
   background: rgb(255 255 255 / 6%);
   padding: 8px 10px;
 }
 
 :global(.admin-rich-editor .ql-container.ql-snow) {
-  border-radius: 0;
+  border-radius: 0 0 11px 11px;
   background: transparent;
 }
 
 :global(.admin-rich-editor .ql-editor) {
   min-height: 200px;
-  color: #eef2ff;
+  color: #eef2ff !important;
   font-family: Inter, system-ui, sans-serif;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.6;
   padding: 12px 14px;
+}
+
+:global(.admin-rich-editor .ql-editor *) {
+  color: #eef2ff !important;
 }
 
 :global(.admin-rich-editor-chapter .ql-editor) {
@@ -1820,6 +1826,7 @@
 }
 
 :global(.admin-rich-editor .ql-snow .ql-picker-options) {
+  z-index: 20;
   border-color: rgb(255 255 255 / 15%) !important;
   background: #202338 !important;
 }
@@ -1908,24 +1915,24 @@
   border-color: rgb(107 155 255 / 50%);
 }
 
-.modalBackdrop {
+.chapterEditorPage {
   position: fixed;
-  z-index: 10;
-  inset: 0;
-  display: flex;
+  z-index: 20;
+  inset: 0 0 0 250px;
   overflow-y: auto;
-  align-items: flex-start;
-  padding: 12px 20px 20px;
-  background: rgb(7 9 19 / 76%);
-  backdrop-filter: none;
+  padding: 24px;
+  color: #eef2ff;
+  background: #111221;
 }
 
-.chapterModal {
-  position: relative;
-  width: min(100%, 720px);
-  max-height: calc(100dvh - 32px);
-  overflow-y: auto;
-  margin: 8px auto 20px;
+.chapterEditorOpen .workspace,
+.chapterEditorOpen .quickAddWrap {
+  display: none;
+}
+
+.chapterEditorForm {
+  width: min(100%, 1080px);
+  margin: 0 auto;
   padding: 24px;
   border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 15px;
@@ -1934,32 +1941,23 @@
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
 }
 
-.chapterModal h2 {
-  margin: 0 52px 14px 0;
-  padding-right: 52px;
+.chapterEditorHeading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.chapterEditorHeading h2 {
+  margin: 0;
   font-size: 18px;
 }
 
-.chapterModal > .field {
+.chapterEditorForm > .field {
   margin-bottom: 10px;
 }
 
-.modalClose {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 44px;
-  height: 44px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 9px;
-  color: #b8c4da;
-  background: transparent;
-  font: inherit;
-  font-size: 22px;
-  cursor: pointer;
-}
-
-.chapterModal .error {
+.chapterEditorForm .error {
   margin: 14px 0 0;
   font-size: 14px;
 }
@@ -2025,9 +2023,19 @@
 .lightMode .detailMeta p,
 .lightMode .field,
 .lightMode .detailTabs button,
-.lightMode .selectedMangaLabel,
-.lightMode .chapterModal,
-.lightMode .chapterModal h2,
+.lightMode .selectedMangaLabel {
+  color: #252c40;
+}
+
+.lightMode .chapterEditorPage {
+  color: #252c40;
+  background:
+    radial-gradient(ellipse 80% 40% at 45% 0%, rgb(255 255 255 / 48%), transparent 74%),
+    linear-gradient(145deg, #e9edf6, #f0f2f8 54%, #e8edf6);
+}
+
+.lightMode .chapterEditorForm,
+.lightMode .chapterEditorHeading h2,
 .lightMode .chapterCardHeading strong,
 .lightMode .mangaCardTitle,
 .lightMode .imageListToolbar > span,
@@ -2239,23 +2247,23 @@
   background: rgb(190 46 64 / 6%);
 }
 
-.lightMode .chapterModal {
+.lightMode .chapterEditorForm {
   border-color: rgb(20 29 55 / 14%);
   color: #252c40;
   background: #f8f9fd;
 }
 
-.lightMode .chapterModal .field {
+.lightMode .chapterEditorForm .field {
   color: #36425b;
 }
 
 .lightMode .chapterImagesField > span,
 .lightMode .chapterThumbnailField > span,
-.lightMode .chapterContentField .field > span {
+.lightMode .chapterContentField > .field > span {
   color: #36425b;
 }
 
-.lightMode .chapterModal .fileUploadRow input[type="file"] {
+.lightMode .chapterEditorForm .fileUploadRow input[type="file"] {
   border-color: #c8d0e0;
   color: #1a2035;
   background: #f0f3f8;
@@ -2473,8 +2481,9 @@
   color: #28344c;
 }
 
-.lightMode :global(.admin-rich-editor .ql-editor) {
-  color: #252c40;
+.lightMode :global(.admin-rich-editor .ql-editor),
+.lightMode :global(.admin-rich-editor .ql-editor *) {
+  color: #252c40 !important;
 }
 
 .lightMode .quickAddButton {
@@ -2675,19 +2684,23 @@
     flex-direction: column;
   }
 
-  .chapterModal {
-    max-height: calc(100dvh - 20px);
-    margin-top: 0;
+  .chapterEditorPage {
+    left: 0;
+    padding: 12px;
+  }
+
+  .chapterEditorForm {
     padding: 20px 15px;
   }
 
-  .modalBackdrop {
-    padding: 10px;
-  }
-
-  .chapterModal .formGrid {
+  .chapterEditorForm .formGrid {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+  }
+
+  .chapterEditorHeading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .detailHeader {
@@ -2893,7 +2906,7 @@
 
 .workspace,
 .sidebar,
-.chapterModal,
+.chapterEditorPage,
 :global(body.adminPageBody) {
   scrollbar-width: thin;
   scrollbar-color: rgba(120, 140, 180, 0.45) transparent;
@@ -2901,7 +2914,7 @@
 
 .workspace::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar,
-.chapterModal::-webkit-scrollbar,
+.chapterEditorPage::-webkit-scrollbar,
 :global(body.adminPageBody)::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -2909,14 +2922,14 @@
 
 .workspace::-webkit-scrollbar-track,
 .sidebar::-webkit-scrollbar-track,
-.chapterModal::-webkit-scrollbar-track,
+.chapterEditorPage::-webkit-scrollbar-track,
 :global(body.adminPageBody)::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .workspace::-webkit-scrollbar-thumb,
 .sidebar::-webkit-scrollbar-thumb,
-.chapterModal::-webkit-scrollbar-thumb,
+.chapterEditorPage::-webkit-scrollbar-thumb,
 :global(body.adminPageBody)::-webkit-scrollbar-thumb {
   background: rgba(120, 140, 180, 0.4);
   border-radius: 999px;
@@ -2926,7 +2939,7 @@
 
 .workspace::-webkit-scrollbar-thumb:hover,
 .sidebar::-webkit-scrollbar-thumb:hover,
-.chapterModal::-webkit-scrollbar-thumb:hover,
+.chapterEditorPage::-webkit-scrollbar-thumb:hover,
 :global(body.adminPageBody)::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 140, 180, 0.65);
   background-clip: padding-box;
@@ -2934,20 +2947,20 @@
 
 .lightMode .workspace,
 .lightMode .sidebar,
-.lightMode .chapterModal {
+.lightMode .chapterEditorPage {
   scrollbar-color: rgba(100, 120, 160, 0.4) transparent;
 }
 
 .lightMode .workspace::-webkit-scrollbar-thumb,
 .lightMode .sidebar::-webkit-scrollbar-thumb,
-.lightMode .chapterModal::-webkit-scrollbar-thumb {
+.lightMode .chapterEditorPage::-webkit-scrollbar-thumb {
   background: rgba(100, 120, 160, 0.35);
   background-clip: padding-box;
 }
 
 .lightMode .workspace::-webkit-scrollbar-thumb:hover,
 .lightMode .sidebar::-webkit-scrollbar-thumb:hover,
-.lightMode .chapterModal::-webkit-scrollbar-thumb:hover {
+.lightMode .chapterEditorPage::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 120, 160, 0.55);
   background-clip: padding-box;
 }
