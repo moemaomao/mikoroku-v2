@@ -2354,9 +2354,24 @@ export default function AdminPage() {
         return;
       }
       const existingChapter = existingChapterSnapshot.data();
-      const currentManga = mangaSnapshot.exists()
-        ? fromFirestore(mangaSlug, mangaSnapshot.data())
-        : manga.find((item) => item.slug === mangaSlug);
+      const firestoreMangaData = mangaSnapshot.data();
+      const firestoreManga = mangaSnapshot.exists()
+        ? fromFirestore(mangaSlug, firestoreMangaData ?? {})
+        : null;
+      const catalogManga = manga.find((item) => item.slug === mangaSlug);
+      const mangaWithUnsetDefaults = firestoreManga
+        ? {
+            ...firestoreManga,
+            type: text(firestoreMangaData?.type),
+            status: text(firestoreMangaData?.status),
+          }
+        : null;
+      const currentManga = mangaWithUnsetDefaults
+        ? mergeGithubMetadata(
+            catalogManga ? [catalogManga] : [],
+            [mangaWithUnsetDefaults],
+          )[0]
+        : catalogManga;
       const record: AdminChapter = {
         num: chapterNumber,
         title: chapterDraft.title.trim() || `Chapter ${chapterNumber}`,
@@ -2389,98 +2404,106 @@ export default function AdminPage() {
         );
       }
 
-      const isNewChapter = !existingChapterSnapshot.exists();
-      const isRenamedChapter = Boolean(
-        oldChapterNumber && oldChapterNumber !== chapterNumber,
-      );
       let nextManga = currentManga;
       let refreshedChapters: AdminChapter[] | null = null;
-      if (isNewChapter || isRenamedChapter) {
-        const allChapters = await getDocs(
-          collection(firestore, "manga", mangaSlug, "chapters"),
-        );
-        refreshedChapters = allChapters.docs
-          .map((chapter) => {
-            const data = chapter.data();
-            return {
-              num: chapter.id,
-              title: text(data.title) || `Chapter ${chapter.id}`,
-              thumbnail: text(data.thumbnail),
-              images: stringList(data.images),
-              content: text(data.content),
-              isDraft: data.isDraft === true,
-              date: data.date,
-              order: typeof data.order === "number" ? data.order : 0,
-            };
-          })
-          .sort((left, right) => {
-            const leftNumber = Number.parseFloat(left.num);
-            const rightNumber = Number.parseFloat(right.num);
-            return Number.isFinite(rightNumber - leftNumber)
-              ? rightNumber - leftNumber
-              : right.order - left.order;
-          });
-        const chapterNumbers = allChapters.docs.map((chapter) => chapter.id);
-        const latestChapter = chapterNumbers.sort((left, right) => {
-          const leftNumber = Number.parseFloat(left);
-          const rightNumber = Number.parseFloat(right);
-          if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
-            return rightNumber - leftNumber;
-          }
-          return right.localeCompare(left);
-        })[0] ?? null;
-        const nextCount = allChapters.size;
-        const now = Date.now();
-        const parentData = currentManga
-          ? {
-              title: currentManga.title,
-              altTitle: currentManga.altTitle,
-              cover: currentManga.cover,
-              desc: currentManga.desc,
-              type: currentManga.type,
-              status: currentManga.status,
-              author: currentManga.author,
-              artist: currentManga.artist,
-              circle: currentManga.circle,
-              group: currentManga.group,
-              series: currentManga.series,
-              serialization: currentManga.serialization,
-              publication: currentManga.publication,
-              genres: currentManga.genres,
-              tags: currentManga.tags,
-              rating: currentManga.rating,
-              githubSlug: currentManga.githubSlug || mangaSlug,
-              origin: currentManga.origin === "github" ? "github" : "firestore",
-              source: currentManga.origin === "github" ? "hybrid" : "firestore",
-            }
-          : {};
-        await setDoc(
-          mangaRef,
-          {
-            ...parentData,
-            chapterCount: nextCount,
-            lastChapter: latestChapter,
-            lastChapterUpdated: latestChapter,
-            updatedAt: now,
-            latestUpdate: now,
-            managedByAdmin: true,
-          },
-          { merge: true },
-        );
-        if (currentManga) {
-          nextManga = {
-            ...currentManga,
-            chapterCount: nextCount,
-            lastChapter: latestChapter,
-            updatedAt: now,
-            managedByAdmin: true,
-            source: currentManga.origin === "github" ? "hybrid" : currentManga.source,
+      const allChapters = await getDocs(
+        collection(firestore, "manga", mangaSlug, "chapters"),
+      );
+      refreshedChapters = allChapters.docs
+        .map((chapter) => {
+          const data = chapter.data();
+          return {
+            num: chapter.id,
+            title: text(data.title) || `Chapter ${chapter.id}`,
+            thumbnail: text(data.thumbnail),
+            images: stringList(data.images),
+            content: text(data.content),
+            isDraft: data.isDraft === true,
+            date: data.date,
+            order: typeof data.order === "number" ? data.order : 0,
           };
-          try {
-            await updateSummary(firestore, nextManga);
-          } catch (error) {
-            console.warn("[admin] summary after chapter save skipped", error);
+        })
+        .sort((left, right) => {
+          const leftNumber = Number.parseFloat(left.num);
+          const rightNumber = Number.parseFloat(right.num);
+          return Number.isFinite(rightNumber - leftNumber)
+            ? rightNumber - leftNumber
+            : right.order - left.order;
+        });
+      const chapterNumbers = allChapters.docs.map((chapter) => chapter.id);
+      const latestChapter = chapterNumbers.sort((left, right) => {
+        const leftNumber = Number.parseFloat(left);
+        const rightNumber = Number.parseFloat(right);
+        if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+          return rightNumber - leftNumber;
+        }
+        return right.localeCompare(left);
+      })[0] ?? null;
+      const nextCount = allChapters.size;
+      const now = Date.now();
+      const parentData = currentManga
+        ? {
+            title: currentManga.title,
+            altTitle: currentManga.altTitle,
+            cover: currentManga.cover,
+            desc: currentManga.desc,
+            type: currentManga.type,
+            status: currentManga.status,
+            author: currentManga.author,
+            artist: currentManga.artist,
+            circle: currentManga.circle,
+            group: currentManga.group,
+            series: currentManga.series,
+            serialization: currentManga.serialization,
+            publication: currentManga.publication,
+            genres: currentManga.genres,
+            tags: currentManga.tags,
+            rating: currentManga.rating,
+            githubSlug: currentManga.githubSlug || mangaSlug,
+            origin: currentManga.origin === "github" ? "github" : "firestore",
+            source: currentManga.origin === "github" ? "hybrid" : "firestore",
           }
+        : {};
+      const existingMangaData = firestoreMangaData;
+      const metadataToRestore = mangaSnapshot.exists()
+        ? Object.fromEntries(
+            Object.entries(parentData).filter(([key]) => {
+              const value = existingMangaData?.[key];
+              return (
+                value == null ||
+                value === "" ||
+                (Array.isArray(value) && value.length === 0)
+              );
+            }),
+          )
+        : parentData;
+      await setDoc(
+        mangaRef,
+        {
+          ...metadataToRestore,
+          chapterCount: nextCount,
+          lastChapter: latestChapter,
+          lastChapterUpdated: latestChapter,
+          updatedAt: now,
+          latestUpdate: now,
+          managedByAdmin: true,
+        },
+        { merge: true },
+      );
+      if (currentManga) {
+        nextManga = {
+          ...currentManga,
+          chapterCount: nextCount,
+          lastChapter: latestChapter,
+          lastChapterUpdated: latestChapter,
+          updatedAt: now,
+          managedByAdmin: true,
+          source: currentManga.origin === "github" ? "hybrid" : currentManga.source,
+        };
+        try {
+          await updateSummary(firestore, nextManga);
+        } catch (error) {
+          console.warn("[admin] summary after chapter save skipped", error);
         }
       }
       if (nextManga) {

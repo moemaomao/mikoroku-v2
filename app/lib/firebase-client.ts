@@ -120,10 +120,12 @@ export function loadFirestoreMangaCatalog(): Promise<QuerySnapshot<DocumentData>
   const { firestore } = initializeFirebaseClient();
   if (!mangaCatalogPromise) {
     const request = getDocsFromServer(collection(firestore, "manga"));
-    mangaCatalogPromise = request.catch((error: unknown) => {
-      mangaCatalogPromise = undefined;
-      throw error;
+    const inFlightRequest = request.finally(() => {
+      if (mangaCatalogPromise === inFlightRequest) {
+        mangaCatalogPromise = undefined;
+      }
     });
+    mangaCatalogPromise = inFlightRequest;
   }
   return mangaCatalogPromise;
 }

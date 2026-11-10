@@ -264,19 +264,16 @@ export default function FirebasePostCatalog() {
 
   const applyRecords = useCallback((list: MangaRecord[]) => {
     const cleaned = list
-      .filter(
-        (record) =>
-          !["github"].includes(String(record.origin || "").toLowerCase()),
-      )
-      .filter(
-        (record) =>
-          !["github"].includes(String(record.source || "").toLowerCase()),
-      )
       .filter((record) => Boolean(record.title));
 
     setRecords(cleaned);
 
-    const mangaOnly = cleaned.filter((record) => !isNovel(record));
+    const mangaOnly = cleaned.filter(
+      (record) =>
+        !isNovel(record) &&
+        String(record.origin || "").toLowerCase() !== "github" &&
+        String(record.source || "").toLowerCase() !== "github",
+    );
     setRandomManga(mangaOnly.sort((left, right) =>
       updatedAtMillis(right) - updatedAtMillis(left) ||
       left.slug.localeCompare(right.slug),
