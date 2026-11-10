@@ -327,6 +327,14 @@ body.light #mainFooter p {
   opacity: .4 !important;
 }
 
+@media (max-width: 760px) {
+  .reader-single-page-frame .reader-image-nav {
+    background-color: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
 main.route-page-background [data-route-card="settings"] {
   border-color: rgba(255, 255, 255, .35) !important;
   background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 96%, transparent) !important;
