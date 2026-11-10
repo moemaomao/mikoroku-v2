@@ -59,8 +59,7 @@ declare global {
   }
 }
 
-const LOGO_URL =
-  "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhlpxqlAz__8_IHcJpy_JsiuX2dr0ompUWEoaUjtk279x167sNP1AphlLYw92AECMAcyXEg4bSnNcGnKZ86a3KEFGHwyi1huUIJ52zejDYkSeeTEnCL4Loig440EuS6yyeKZjmnAdkdcxsic5rArUT_bwv2Sk4lJgDXSYFSWLBawxBPBjGZPTS-pp2xTsc/s100/MIKOROKU.png";
+const LOGO_URL = "/assets/icons/mikoroku.png";
 const DEFAULT_AVATAR = "/assets/icons/favicon.ico";
 const DEFAULT_THUMB = "https://mikoroku.com/default-thumb.jpg";
 const DISPLAY_NAME_KEY = "commentWidget_displayName";
