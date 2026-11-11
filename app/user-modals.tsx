@@ -20,6 +20,7 @@ type CompatQuerySnapshot = {
 };
 type CompatDocumentReference = {
   get: () => Promise<CompatDocument>;
+  update: (data: DataRecord) => Promise<void>;
 };
 type CompatQuery = {
   where: (field: string, operator: string, value: unknown) => CompatQuery;
@@ -77,6 +78,7 @@ type LegacyModalWindow = {
   clearReadingHistory?: () => void;
   showUserProfile?: (uid: string, leaderboardRank?: number) => Promise<void>;
   closeProfileModal?: () => void;
+  openMikorokuDmInbox?: () => Promise<void>;
   loadDmInbox?: () => Promise<void>;
   openChat?: (uid: string) => Promise<void>;
   openDmToUser?: (uid: string, name?: string, avatar?: string) => void;
@@ -321,7 +323,7 @@ const GAME_ROLES = new Map(
 );
 
 const modalStyles = `
-#user-profile-modal,#dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+#user-profile-modal,#dm-modal,#mikoroku-dm-modal,#reply-notif-overlay{display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
 #user-profile-modal{background:rgba(0,0,0,.6);z-index:99999}
 .profile-box{background:#1f1f2e;width:100%;max-width:380px;max-height:calc(100vh - 32px);overflow-y:auto;border-radius:14px;padding:18px;position:relative;color:white;box-sizing:border-box}
 .profile-box.leaderboard-profile{isolation:isolate;border:1px solid rgb(var(--profile-rank-color)/55%);box-shadow:0 0 28px rgb(var(--profile-rank-color)/24%)}
@@ -364,6 +366,22 @@ const modalStyles = `
 .notif-close{position:absolute;top:12px;right:16px;background:none;border:0;color:#93c5fd;font-size:22px;cursor:pointer}.notif-item{padding:14px 16px;margin-bottom:12px;border:1px solid rgba(94,145,255,.4);border-radius:14px;background:rgba(75,102,255,.12)}
 @media(max-width:768px){#dm-modal{padding:8px}.dm-wrapper{height:94vh;max-height:94vh;border-radius:18px}.dm-header{position:relative;z-index:20;padding:0 12px}.dm-header h2{flex:1;text-align:center;margin:0 10px}.dm-body{position:relative;min-height:0}#dm-inbox{width:100%;min-width:100%;height:100%}#dm-chat-area{position:absolute;inset:0;z-index:5;background:rgba(2,7,2,.97)}.dm-chat-header{min-height:64px;padding:0 14px}.dm-chat-header[hidden]{display:none!important}#dm-chat-messages{padding:16px 12px}.dm-input{padding:12px}.dm-input-wrap{gap:8px}#dm-text{min-height:46px}.dm-send-btn{width:46px;height:46px}}
 @media(max-width:480px){.dm-wrapper{height:96vh;max-height:96vh;border-radius:16px}.dm-header{min-height:58px;padding:0 8px}.dm-header h2{font-size:1rem}.dm-chat-header{min-height:58px}#dm-chat-avatar{width:38px;height:38px}#dm-chat-messages{padding:12px 10px}.dm-message{max-width:85%}}
+#mikoroku-dm-modal{z-index:100001;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#mikoroku-dm-modal .dm-wrapper{width:100%;max-width:720px;height:78vh;display:flex;flex-direction:column;overflow:hidden;border-radius:22px;background:rgba(2,7,2,.92);border:1px solid rgba(77,255,101,.18);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#mikoroku-dm-modal .dm-body{flex:1;display:flex;overflow:hidden;min-height:0}
+#mikoroku-dm-modal #mikoroku-dm-inbox{width:240px;min-width:240px;overflow-y:auto;border-right:1px solid rgba(255,255,255,.06)}
+#mikoroku-dm-modal #mikoroku-dm-chat-area{flex:1;display:none;flex-direction:column;min-width:0;min-height:0;color:white}
+#mikoroku-dm-modal #mikoroku-dm-chat-messages{flex:1;min-height:0;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+#mikoroku-dm-modal .dm-input{flex-shrink:0;padding:16px 18px;border-top:1px solid rgba(255,255,255,.06)}
+#mikoroku-dm-modal #mikoroku-dm-text{flex:1;min-height:48px;max-height:120px;padding:12px 16px;border:0;border-radius:16px;background:rgba(255,255,255,.08);color:white;resize:vertical;font:inherit}
+#mikoroku-dm-modal .dm-send-btn{width:48px;height:48px;border:0;border-radius:14px;background:linear-gradient(135deg,#62ff4d,#4adc26);color:white;font-size:18px;cursor:pointer}
+#mikoroku-dm-modal #mikoroku-dm-chat-area .dm-chat-header[hidden]{display:none!important}
+#mikoroku-dm-modal .dm-message{position:relative;padding-right:42px}
+#mikoroku-dm-modal .dm-message-actions{position:absolute;top:4px;right:4px;display:flex;gap:2px;opacity:.65}
+#mikoroku-dm-modal .dm-message-actions button{border:0;border-radius:5px;background:rgba(0,0,0,.2);color:white;padding:2px 5px;font-size:11px;cursor:pointer}
+#mikoroku-dm-modal .dm-message-actions button:hover{background:rgba(0,0,0,.4);opacity:1}
+@media(max-width:768px){#mikoroku-dm-modal{padding:8px}#mikoroku-dm-modal .dm-wrapper{height:94vh;max-height:94vh;border-radius:18px}#mikoroku-dm-modal .dm-body{position:relative;min-height:0}#mikoroku-dm-modal #mikoroku-dm-inbox{width:100%;min-width:100%;height:100%}#mikoroku-dm-modal #mikoroku-dm-chat-area{position:absolute;inset:0;z-index:5;background:rgba(2,7,2,.97)}#mikoroku-dm-modal #mikoroku-dm-chat-messages{padding:16px 12px}#mikoroku-dm-modal .dm-input{padding:12px}#mikoroku-dm-modal .dm-send-btn{width:46px;height:46px}}
+@media(max-width:480px){#mikoroku-dm-modal .dm-wrapper{height:96vh;max-height:96vh;border-radius:16px}#mikoroku-dm-modal #mikoroku-dm-chat-messages{padding:12px 10px}.dm-message{max-width:85%}}
 `;
 
 function asRecord(value: unknown): DataRecord {
@@ -440,6 +458,7 @@ function initializeUserModals(): () => void {
     clearReadingHistory: legacy.clearReadingHistory,
     showUserProfile: legacy.showUserProfile,
     closeProfileModal: legacy.closeProfileModal,
+    openMikorokuDmInbox: legacy.openMikorokuDmInbox,
     loadDmInbox: legacy.loadDmInbox,
     openChat: legacy.openChat,
     openDmToUser: legacy.openDmToUser,
@@ -456,8 +475,8 @@ function initializeUserModals(): () => void {
   profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><button type="button" class="profile-dm" data-profile-dm>Message</button><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
 
   const dmModal = createElement("div");
-  dmModal.id = "dm-modal";
-  dmModal.innerHTML = `<div class="dm-wrapper"><div class="dm-header"><button type="button" id="dm-back-btn" class="dm-header-btn" style="display:none" aria-label="Back">←</button><h2>Direct Messages</h2><button type="button" id="dm-close-btn" class="dm-header-btn" aria-label="Close">✕</button></div><div class="dm-body"><div id="dm-inbox"></div><div id="dm-chat-area"><div class="dm-chat-header" id="dm-chat-header" hidden><img id="dm-chat-avatar" src="${DEFAULT_AVATAR}" alt="avatar"><div><div id="dm-chat-name">User</div><div id="dm-chat-status">@username</div></div></div><div id="dm-chat-messages"><div class="dm-empty">Select a conversation to start chatting</div></div><div class="dm-input"><div class="dm-input-wrap"><textarea id="dm-text" placeholder="Select a conversation first" disabled></textarea><button type="button" id="dm-send-btn" class="dm-send-btn" disabled aria-label="Send">➤</button></div></div></div></div></div>`;
+  dmModal.id = "mikoroku-dm-modal";
+  dmModal.innerHTML = `<div class="dm-wrapper"><div class="dm-header"><button type="button" id="mikoroku-dm-back-btn" class="dm-header-btn" style="display:none" aria-label="Back">←</button><h2>Direct Messages</h2><button type="button" id="mikoroku-dm-close-btn" class="dm-header-btn" aria-label="Close">✕</button></div><div class="dm-body"><div id="mikoroku-dm-inbox"></div><div id="mikoroku-dm-chat-area"><div class="dm-chat-header" id="mikoroku-dm-chat-header" hidden><img id="mikoroku-dm-chat-avatar" src="${DEFAULT_AVATAR}" alt="avatar"><div><div id="mikoroku-dm-chat-name">User</div><div id="mikoroku-dm-chat-status">@username</div></div></div><div id="mikoroku-dm-chat-messages"><div class="dm-empty">Select a conversation to start chatting</div></div><div class="dm-input"><div class="dm-input-wrap"><textarea id="mikoroku-dm-text" placeholder="Select a conversation first" disabled></textarea><button type="button" id="mikoroku-dm-send-btn" class="dm-send-btn" disabled aria-label="Send">➤</button></div></div></div></div></div>`;
 
   const notificationModal = createElement("div");
   notificationModal.id = "reply-notif-overlay";
@@ -642,12 +661,14 @@ function initializeUserModals(): () => void {
     profileModal.style.display = "none";
   };
 
-  const inbox = byId<HTMLDivElement>("dm-inbox");
-  const messageArea = byId<HTMLDivElement>("dm-chat-messages");
-  const messageInput = byId<HTMLTextAreaElement>("dm-text");
-  const sendButton = byId<HTMLButtonElement>("dm-send-btn");
-  const chatArea = byId<HTMLDivElement>("dm-chat-area");
-  const chatHeader = byId<HTMLDivElement>("dm-chat-header");
+  const dmById = <T extends HTMLElement>(id: string): T | null =>
+    dmModal.querySelector(`#${id}`) as T | null;
+  const inbox = dmById<HTMLDivElement>("mikoroku-dm-inbox");
+  const messageArea = dmById<HTMLDivElement>("mikoroku-dm-chat-messages");
+  const messageInput = dmById<HTMLTextAreaElement>("mikoroku-dm-text");
+  const sendButton = dmById<HTMLButtonElement>("mikoroku-dm-send-btn");
+  const chatArea = dmById<HTMLDivElement>("mikoroku-dm-chat-area");
+  const chatHeader = dmById<HTMLDivElement>("mikoroku-dm-chat-header");
   const resetChat = () => {
     if (chatHeader) chatHeader.hidden = true;
     messageArea?.replaceChildren(createElement("div", "dm-empty", "Select a conversation to start chatting"));
@@ -716,6 +737,10 @@ function initializeUserModals(): () => void {
         row.append(image, info, createElement("small", "dm-user-time", chat.time));
         inbox.appendChild(row);
       });
+      if (window.innerWidth > 768) {
+        const latestChatUid = chats.keys().next().value;
+        if (latestChatUid) await openChat(latestChatUid);
+      }
     } catch (error) {
       console.error("DM Inbox error:", error);
       inbox.replaceChildren(createElement("div", "dm-empty", "Gagal memuat inbox"));
@@ -730,7 +755,7 @@ function initializeUserModals(): () => void {
     if (!mobile) inbox.style.width = "240px";
     chatArea.style.display = "flex";
     chatArea.style.position = mobile ? "absolute" : "relative";
-    const backButton = byId<HTMLButtonElement>("dm-back-btn");
+    const backButton = dmById<HTMLButtonElement>("mikoroku-dm-back-btn");
     if (backButton) backButton.style.display = mobile ? "flex" : "none";
     if (chatHeader) chatHeader.hidden = false;
     messageInput.disabled = false;
@@ -749,9 +774,9 @@ function initializeUserModals(): () => void {
         console.warn("Gagal ambil data user", error);
       }
     }
-    setText(byId("dm-chat-name"), name);
-    setText(byId("dm-chat-status"), `@${name.toLowerCase().replace(/\s+/g, "") || "user"}`);
-    const avatar = byId<HTMLImageElement>("dm-chat-avatar");
+    setText(dmById("mikoroku-dm-chat-name"), name);
+    setText(dmById("mikoroku-dm-chat-status"), `@${name.toLowerCase().replace(/\s+/g, "") || "user"}`);
+    const avatar = dmById<HTMLImageElement>("mikoroku-dm-chat-avatar");
     if (avatar) {
       avatar.src = avatarUrl;
       avatar.onerror = () => {
@@ -775,9 +800,7 @@ function initializeUserModals(): () => void {
         if (!participants.includes(uid)) return;
         count += 1;
         const message = createElement("div", `dm-message ${data.from === user.uid ? "me" : "other"}`);
-        message.appendChild(
-          createElement("div", undefined, data.deleted ? "Message deleted" : stringValue(data.text)),
-        );
+        message.appendChild(createElement("div", undefined, data.deleted ? "Message deleted" : stringValue(data.text)));
         message.appendChild(
           createElement(
             "span",
@@ -785,6 +808,47 @@ function initializeUserModals(): () => void {
             `${formatTimestamp(data.timestamp, "time")}${data.edited ? " • edited" : ""}`,
           ),
         );
+        if (data.from === user.uid && !data.deleted) {
+          const actions = createElement("div", "dm-message-actions");
+          const editButton = createElement("button", undefined, "Edit");
+          editButton.type = "button";
+          editButton.setAttribute("aria-label", "Edit message");
+          editButton.addEventListener("click", async () => {
+            const currentText = stringValue(data.text);
+            const updatedText = window.prompt("Edit message:", currentText)?.trim();
+            if (!updatedText || updatedText === currentText) return;
+            try {
+              const editedAt = legacy.firebase?.firestore?.FieldValue?.serverTimestamp?.();
+              await firestore.collection("directMessages").doc(doc.id).update({
+                text: updatedText,
+                edited: true,
+                ...(editedAt ? { editedAt } : {}),
+              });
+              await openChat(uid);
+            } catch (error) {
+              console.error("Gagal mengedit pesan DM.", error);
+              window.alert("Gagal mengedit pesan.");
+            }
+          });
+          const deleteButton = createElement("button", undefined, "Hapus");
+          deleteButton.type = "button";
+          deleteButton.setAttribute("aria-label", "Hapus pesan");
+          deleteButton.addEventListener("click", async () => {
+            if (!window.confirm("Hapus pesan ini?")) return;
+            try {
+              await firestore.collection("directMessages").doc(doc.id).update({
+                deleted: true,
+                text: "",
+              });
+              await openChat(uid);
+            } catch (error) {
+              console.error("Gagal menghapus pesan DM.", error);
+              window.alert("Gagal menghapus pesan.");
+            }
+          });
+          actions.append(editButton, deleteButton);
+          message.appendChild(actions);
+        }
         messageArea.appendChild(message);
       });
       if (!count) {
@@ -849,7 +913,7 @@ function initializeUserModals(): () => void {
   const backToInbox = () => {
     if (inbox) inbox.style.display = "block";
     if (chatArea) chatArea.style.display = "none";
-    const backButton = byId<HTMLButtonElement>("dm-back-btn");
+    const backButton = dmById<HTMLButtonElement>("mikoroku-dm-back-btn");
     if (backButton) backButton.style.display = "none";
     legacy.currentChatUid = null;
     resetChat();
@@ -970,8 +1034,8 @@ function initializeUserModals(): () => void {
   };
   document.addEventListener("click", onModalClick);
   inbox?.addEventListener("click", onInboxClick);
-  byId("dm-close-btn")?.addEventListener("click", closeDm);
-  byId("dm-back-btn")?.addEventListener("click", backToInbox);
+  dmById("mikoroku-dm-close-btn")?.addEventListener("click", closeDm);
+  dmById("mikoroku-dm-back-btn")?.addEventListener("click", backToInbox);
   sendButton?.addEventListener("click", () => void sendMessage());
   messageInput?.addEventListener("keydown", onKeyDown);
   profileModal.addEventListener("click", (event) => {
@@ -990,6 +1054,7 @@ function initializeUserModals(): () => void {
     clearReadingHistory: clearHistory,
     showUserProfile: showProfile,
     closeProfileModal: closeProfile,
+    openMikorokuDmInbox: loadInbox,
     loadDmInbox: loadInbox,
     openChat,
     openDmToUser,
@@ -1008,6 +1073,7 @@ function initializeUserModals(): () => void {
       clearReadingHistory: clearHistory,
       showUserProfile: showProfile,
       closeProfileModal: closeProfile,
+      openMikorokuDmInbox: loadInbox,
       loadDmInbox: loadInbox,
       openChat,
       openDmToUser,
@@ -1026,8 +1092,8 @@ function initializeUserModals(): () => void {
   return () => {
     document.removeEventListener("click", onModalClick);
     inbox?.removeEventListener("click", onInboxClick);
-    byId("dm-close-btn")?.removeEventListener("click", closeDm);
-    byId("dm-back-btn")?.removeEventListener("click", backToInbox);
+    dmById("mikoroku-dm-close-btn")?.removeEventListener("click", closeDm);
+    dmById("mikoroku-dm-back-btn")?.removeEventListener("click", backToInbox);
     messageInput?.removeEventListener("keydown", onKeyDown);
     [notificationModal, dmModal, profileModal].forEach((element) => element.remove());
     style.remove();

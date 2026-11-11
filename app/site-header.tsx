@@ -51,6 +51,7 @@ declare global {
     showReplyNotifications?: () => void;
     closeReplyNotifications?: () => void;
     loadDmInbox?: () => void;
+    openMikorokuDmInbox?: () => Promise<void>;
     openBookmark?: (title: string) => void;
     updateHeaderAuth?: () => Promise<void>;
     syncHeaderDisplayName?: (name: string) => void;
@@ -688,6 +689,14 @@ function HeaderContents() {
 
   const handleMessages = () => {
     closeAuth();
+    if (typeof window.openMikorokuDmInbox === "function") {
+      void window.openMikorokuDmInbox();
+      return;
+    }
+    if (typeof window.loadDmInbox === "function") {
+      void window.loadDmInbox();
+      return;
+    }
     const button = document.getElementById("dm-btn");
     if (button) {
       button.click();
@@ -695,7 +704,6 @@ function HeaderContents() {
     }
     const modal = document.getElementById("dm-modal");
     if (modal) modal.style.display = "flex";
-    window.loadDmInbox?.();
   };
 
   const handleLogout = () => {
@@ -993,9 +1001,6 @@ function HeaderContents() {
                         <div className="truncate text-sm font-bold">{displayName}</div>
                         <div className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{user.email || ""}</div>
                       </div>
-                      <span className="shrink-0 rounded-full border border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--mikoroku-accent)]">
-                        Member
-                      </span>
                     </div>
                     <div className="p-2">
                       <button type="button" onClick={handleProfile} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
