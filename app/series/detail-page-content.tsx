@@ -1978,6 +1978,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       <div
         className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-[1] w-full bg-[linear-gradient(180deg,rgba(20,20,30,0.20)_0%,rgba(20,20,30,0.10)_40%,rgba(20,20,30,0.26)_100%)] dark:bg-[linear-gradient(180deg,rgba(5,5,10,0.88)_0%,rgba(5,5,10,0.52)_40%,rgba(5,5,10,0.60)_70%,rgba(10,5,12,0.90)_100%)] max-md:h-[100dvh] max-md:min-h-[100dvh]"
         aria-hidden="true"
+        style={{ backgroundImage: hideDetailCoverBackground ? "none" : undefined }}
       />
       <main className={`detail-route ${detailPageClasses}`} style={detailLayoutStyle}>
         <div className="container relative z-[2] mx-auto my-0 min-h-screen w-full max-w-[480px] text-[#171717] transition-[margin-left,width,max-width,color] duration-300 dark:text-white md:my-5 md:max-w-[720px] lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)]">
