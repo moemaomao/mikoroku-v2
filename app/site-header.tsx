@@ -730,6 +730,8 @@ function HeaderContents() {
 
   const classButton =
     "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:text-white dark:hover:bg-white/10";
+  const desktopActionClass =
+    `${classButton} min-[769px]:w-auto min-[769px]:gap-2 min-[769px]:border min-[769px]:px-2.5 min-[769px]:text-xs min-[769px]:font-medium`;
   const mainHeaderClass = [
     "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-200 bg-transparent px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-transparent dark:text-white",
     !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
@@ -862,13 +864,14 @@ function HeaderContents() {
           )}
           <a
             id="announcementLink"
-            className={`${classButton} relative no-underline`}
+            className={`${desktopActionClass} min-[769px]:border-rose-300/30 min-[769px]:bg-rose-500/10 min-[769px]:hover:border-rose-300/55 min-[769px]:hover:bg-rose-500/20 relative no-underline`}
             href="/announcements"
             aria-label={announcementLabel}
             title="Announcements"
           >
             <span className="sr-only">Announcements</span>
             <Icon name="megaphone" />
+            <span className="hidden min-[769px]:inline">Announcements</span>
             {unreadAnnouncements > 0 && (
               <span className="absolute right-0 top-0 min-w-4 rounded-full border-2 border-white bg-red-600 px-1 text-center text-[9px] font-bold leading-3 text-white dark:border-zinc-950" aria-label={`${unreadAnnouncements} unread announcements`}>
                 {unreadAnnouncements > 99 ? "99+" : unreadAnnouncements}
@@ -885,13 +888,14 @@ function HeaderContents() {
               localStorage.setItem("darkMode", String(next));
               applyTheme(next);
             }}
-            className={classButton}
+            className={`${desktopActionClass} min-[769px]:border-sky-300/30 min-[769px]:bg-sky-500/10 min-[769px]:hover:border-sky-300/55 min-[769px]:hover:bg-sky-500/20`}
           >
             {dark ? (
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
               </svg>
             ) : <Icon name="sun" />}
+            <span className="hidden min-[769px]:inline">{dark ? "Dark" : "Light"}</span>
           </button>
 
           <div className="relative" ref={bookmarkArea}>
@@ -905,11 +909,12 @@ function HeaderContents() {
                 setHasBookmarks(updateBookmarkIcon());
                 setBookmarksOpen((open) => !open);
               }}
-              className={classButton}
+              className={`${desktopActionClass} min-[769px]:border-amber-300/30 min-[769px]:bg-amber-500/10 min-[769px]:hover:border-amber-300/55 min-[769px]:hover:bg-amber-500/20`}
             >
               <svg id="headerBookmarkIcon" className="h-6 w-6" viewBox="0 0 24 24" fill={hasBookmarks ? "#ffcc00" : "none"} stroke={hasBookmarks ? (dark ? "#ffffff" : "#111827") : "currentColor"} strokeWidth="2" aria-hidden="true">
                 <path d="M6 4h12v18l-6-4-6 4V4z" />
               </svg>
+              <span className="hidden min-[769px]:inline">Bookmark</span>
             </button>
             {bookmarksOpen && (
               <div
@@ -953,7 +958,7 @@ function HeaderContents() {
               aria-expanded={authOpen}
               title="Account"
               onClick={toggleAuth}
-              className={classButton}
+              className={`${desktopActionClass} min-[769px]:border-emerald-300/30 min-[769px]:bg-emerald-500/10 min-[769px]:hover:border-emerald-300/55 min-[769px]:hover:bg-emerald-500/20`}
             >
               {user ? (
                 <img
@@ -963,6 +968,7 @@ function HeaderContents() {
                   className="h-7 w-7 rounded-full border border-black/20 object-cover dark:border-white/20"
                 />
               ) : <Icon name="user" />}
+              {!user && <span className="hidden min-[769px]:inline">Login</span>}
             </button>
             {authOpen && (
               <div
