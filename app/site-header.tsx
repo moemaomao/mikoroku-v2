@@ -978,20 +978,82 @@ function HeaderContents() {
             {authOpen && (
               <div
                 id="authDropdown"
-                className="absolute right-0 top-full z-[10000] mt-2 max-h-[min(80vh,600px)] min-w-[220px] overflow-y-auto rounded-lg border border-zinc-200 bg-white text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                className="absolute right-0 top-full z-[10000] mt-2 max-h-[min(80vh,600px)] w-[min(19rem,calc(100vw-1rem))] overflow-y-auto rounded-xl border border-zinc-200 bg-white/95 text-zinc-900 shadow-2xl shadow-black/30 backdrop-blur-xl dark:border-white/10 dark:bg-[#251920]/95 dark:text-zinc-100"
               >
                 {user ? (
                   <>
-                    <div className="border-b border-black/10 px-4 py-3 text-left dark:border-white/10">
-                      <div className="text-[15px] font-bold">{displayName}</div>
-                      <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{user.email || ""}</div>
+                    <div className="flex items-center gap-3 border-b border-black/10 px-3.5 py-3 dark:border-white/10">
+                      <img
+                        src={avatar}
+                        alt=""
+                        onError={(event) => { event.currentTarget.src = DEFAULT_AVATAR; }}
+                        className="h-10 w-10 shrink-0 rounded-full border border-[var(--mikoroku-accent-border)] object-cover"
+                      />
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="truncate text-sm font-bold">{displayName}</div>
+                        <div className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{user.email || ""}</div>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--mikoroku-accent)]">
+                        Member
+                      </span>
                     </div>
-                    <button type="button" onClick={handleProfile} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="user" className="h-[18px] w-[18px]" />Profil</button>
-                    <button type="button" onClick={handleNotifications} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="bell" className="h-[18px] w-[18px]" />Notifications</button>
-                    <button type="button" onClick={handleMessages} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="message" className="h-[18px] w-[18px]" />Direct Messages</button>
-                    <a href="/settings" onClick={closeAuth} className="flex items-center gap-2 px-3.5 py-2.5 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/10"><Icon name="settings" className="h-[18px] w-[18px]" />Settings</a>
-                    <hr className="my-1 border-0 border-t border-black/[0.08] dark:border-white/10" />
-                    <button type="button" onClick={handleLogout} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-red-600 transition hover:bg-red-500/10"><Icon name="logout" className="h-[18px] w-[18px]" />Logout</button>
+                    <div className="p-2">
+                      <button type="button" onClick={handleProfile} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]"><Icon name="user" className="h-4 w-4" /></span>
+                        View Profile
+                      </button>
+                      <a href="/bookmark" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-500"><Icon name="bookmark" className="h-4 w-4" /></span>
+                        Bookmarks
+                      </a>
+                      <button type="button" onClick={handleNotifications} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><Icon name="bell" className="h-4 w-4" /></span>
+                        Notifications
+                      </button>
+                      <button type="button" onClick={handleMessages} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-500"><Icon name="message" className="h-4 w-4" /></span>
+                        Direct Messages
+                      </button>
+                      <a href="/history" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-500"><Icon name="history" className="h-4 w-4" /></span>
+                        Reading History
+                      </a>
+                    </div>
+                    <div className="border-y border-black/10 px-3.5 py-3 dark:border-white/10">
+                      <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                        <span>Content Filter</span>
+                        <span>{showNsfw ? "NSFW" : "SFW"}</span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={showNsfw}
+                        onClick={() => setShowNsfw(!showNsfw)}
+                        className="flex w-full items-center justify-between rounded-lg bg-black/[0.04] px-3 py-2 text-xs transition hover:bg-black/[0.07] dark:bg-white/[0.05] dark:hover:bg-white/[0.09]"
+                      >
+                        <span>{showNsfw ? "Show mature content" : "Hide mature content"}</span>
+                        <span className={`relative h-5 w-9 rounded-full transition ${showNsfw ? "bg-[var(--mikoroku-accent)]" : "bg-zinc-400 dark:bg-zinc-600"}`}>
+                          <span className={`absolute top-0.5 size-4 rounded-full bg-white transition ${showNsfw ? "left-[18px]" : "left-0.5"}`} />
+                        </span>
+                      </button>
+                    </div>
+                    <div className="p-2">
+                      <a href="/settings" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-zinc-500/10 text-zinc-500"><Icon name="settings" className="h-4 w-4" /></span>
+                        Settings
+                      </a>
+                      <a href="/global-settings" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]"><Icon name="settings" className="h-4 w-4" /></span>
+                        Global Settings
+                      </a>
+                      {canAccessAdminPanels && <a href="/admin/moderation" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-500"><Icon name="shield" className="h-4 w-4" /></span>Moderation</a>}
+                    </div>
+                    <div className="border-t border-black/10 p-2 dark:border-white/10">
+                      <button type="button" onClick={handleLogout} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-red-600 transition hover:bg-red-500/10 dark:text-red-300">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-red-500/10"><Icon name="logout" className="h-4 w-4" /></span>
+                        Log Out
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <div className="p-4">
