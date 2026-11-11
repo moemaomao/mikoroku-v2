@@ -9,6 +9,7 @@ import {
   GLOBAL_APPEARANCE_KEY,
   applyGlobalAppearance,
   defaultGlobalAppearance,
+  getThemeGradientColor,
   readGlobalAppearance,
   saveGlobalAppearance,
   type GlobalAppearanceSettings,
@@ -374,27 +375,36 @@ function AccentColorWheel({
   value,
   onChange,
   onReset,
+  label = "Accent color wheel",
+  allowFullRange = false,
+  vertical = false,
 }: {
   value: string | null;
   onChange: (hex: string) => void;
   onReset: () => void;
+  label?: string;
+  allowFullRange?: boolean;
+  vertical?: boolean;
 }) {
+  const defaultColor = "#9d1018";
   const size = 148;
   const radius = size / 2;
   const innerR = 42;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragging = useRef(false);
-  const hsv = hexToHsv(value || "#7c3aed");
+  const hsv = hexToHsv(value || defaultColor);
+  const saturationMin = allowFullRange ? 0 : 0.15;
+  const brightnessMin = allowFullRange ? 0 : 0.25;
   const [hue, setHue] = useState(hsv.h);
-  const [sat, setSat] = useState(Math.max(hsv.s, 0.55));
-  const [val, setVal] = useState(Math.max(hsv.v, 0.75));
+  const [sat, setSat] = useState(Math.max(hsv.s, saturationMin));
+  const [val, setVal] = useState(Math.max(hsv.v, brightnessMin));
 
   useEffect(() => {
-    const next = hexToHsv(value || "#7c3aed");
+    const next = hexToHsv(value || defaultColor);
     setHue(next.h);
-    setSat(Math.max(next.s, 0.15));
-    setVal(Math.max(next.v, 0.35));
-  }, [value]);
+    setSat(Math.max(next.s, saturationMin));
+    setVal(Math.max(next.v, brightnessMin));
+  }, [value, saturationMin, brightnessMin]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -453,7 +463,7 @@ function AccentColorWheel({
   const preview = hsvToHex(hue, sat, val);
 
   return (
-    <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-end">
+    <div className={`flex items-center gap-3 ${vertical ? "flex-col" : "flex-col sm:flex-row sm:items-end"}`}>
       <div className="relative" style={{ width: size, height: size }}>
         <canvas
           ref={canvasRef}
@@ -461,7 +471,7 @@ function AccentColorWheel({
           height={size}
           className="cursor-crosshair touch-none rounded-full"
           style={{ width: size, height: size }}
-          aria-label="Accent color wheel"
+          aria-label={label}
           onPointerDown={(event) => {
             dragging.current = true;
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -484,12 +494,12 @@ function AccentColorWheel({
           aria-hidden="true"
         />
       </div>
-      <div className="flex w-full min-w-[10rem] flex-col gap-2 sm:w-auto">
+      <div className={`flex flex-col gap-2 ${vertical ? "w-full max-w-[16rem] min-w-0" : "w-full min-w-[10rem] sm:w-auto"}`}>
         <label className="text-xs text-slate-600 dark:text-slate-400">
           Saturation
           <input
             type="range"
-            min={0.15}
+            min={saturationMin}
             max={1}
             step={0.01}
             value={sat}
@@ -505,7 +515,7 @@ function AccentColorWheel({
           Brightness
           <input
             type="range"
-            min={0.25}
+            min={brightnessMin}
             max={1}
             step={0.01}
             value={val}
@@ -538,6 +548,9 @@ function AccentColorWheel({
 
 export default function GlobalSettingsPage() {
   const [settings, setSettings] = useState(defaultGlobalAppearance);
+  const [selectedColorTarget, setSelectedColorTarget] = useState<
+    "accent" | "dark-start" | "dark-end" | "light-start" | "light-end"
+  >("accent");
   const [coverConversion, setCoverConversion] = useState<CoverImageConversionSettings>(
     DEFAULT_COVER_IMAGE_CONVERSION,
   );
@@ -807,7 +820,18 @@ export default function GlobalSettingsPage() {
   }
 
   async function updateAccentColor(accentColor: string | null) {
-    const updated: GlobalAppearanceSettings = { ...settings, accentColor };
+    const activeMode = document.documentElement.classList.contains("dark") ? "dark" : "light";
+    const updated: GlobalAppearanceSettings = {
+      ...settings,
+      accentColor,
+      themeGradient: {
+        ...settings.themeGradient,
+        [activeMode]: {
+          ...settings.themeGradient[activeMode],
+          start: accentColor || defaultGlobalAppearance.themeGradient[activeMode].start,
+        },
+      },
+    };
     try {
       saveGlobalAppearance(updated);
       applyGlobalAppearance(updated);
@@ -817,6 +841,30 @@ export default function GlobalSettingsPage() {
     } catch (error) {
       console.error("Failed to save global appearance preferences.", error);
       setNotice("Appearance took effect and is saved locally, but IndexedDB could not be updated.");
+    }
+  }
+
+  async function updateThemeGradient(
+    mode: "dark" | "light",
+    stop: "start" | "end",
+    color: string,
+  ) {
+    const updated: GlobalAppearanceSettings = {
+      ...settings,
+      themeGradient: {
+        ...settings.themeGradient,
+        [mode]: { ...settings.themeGradient[mode], [stop]: color },
+      },
+    };
+    try {
+      saveGlobalAppearance(updated);
+      applyGlobalAppearance(updated);
+      setSettings(updated);
+      await persistGlobalSetting(GLOBAL_APPEARANCE_KEY);
+      setNotice("Theme gradient saved to this browser.");
+    } catch (error) {
+      console.error("Failed to save theme gradient preferences.", error);
+      setNotice("Theme gradient took effect and is saved locally, but IndexedDB could not be updated.");
     }
   }
 
@@ -887,6 +935,37 @@ export default function GlobalSettingsPage() {
       console.error("Failed to reset Global Settings.", error);
       setNotice("Settings could not be reset. Check your browser storage permissions.");
     }
+  }
+
+  const selectedColor = selectedColorTarget === "accent"
+    ? settings.accentColor
+    : settings.themeGradient[selectedColorTarget.startsWith("dark-") ? "dark" : "light"][
+        selectedColorTarget.endsWith("-start") ? "start" : "end"
+      ];
+  const selectedColorLabel = selectedColorTarget === "accent"
+    ? "Accent and background color"
+    : `${selectedColorTarget.startsWith("dark-") ? "Dark" : "Light"} mode ${
+        selectedColorTarget.endsWith("-start") ? "start" : "end"
+      } color`;
+
+  function updateSelectedColor(color: string) {
+    if (selectedColorTarget === "accent") {
+      void updateAccentColor(color);
+      return;
+    }
+    const mode = selectedColorTarget.startsWith("dark-") ? "dark" : "light";
+    const stop = selectedColorTarget.endsWith("-start") ? "start" : "end";
+    void updateThemeGradient(mode, stop, color);
+  }
+
+  function resetSelectedColor() {
+    if (selectedColorTarget === "accent") {
+      void updateAccentColor(null);
+      return;
+    }
+    const mode = selectedColorTarget.startsWith("dark-") ? "dark" : "light";
+    const stop = selectedColorTarget.endsWith("-start") ? "start" : "end";
+    void updateThemeGradient(mode, stop, defaultGlobalAppearance.themeGradient[mode][stop]);
   }
 
   return (
@@ -1103,16 +1182,94 @@ export default function GlobalSettingsPage() {
             </div>
             <div className="mt-5 border-t border-black/10 pt-4 dark:border-white/10">
               <div className="mb-3">
-                <h3 className="text-sm font-semibold">Custom accent color</h3>
+                <h3 className="text-sm font-semibold">Custom colors</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
-                  Drag on the color wheel to pick a hue, then fine-tune saturation and brightness.
+                  Select a color below, then use the shared wheel. Accent color also updates the active theme background.
                 </p>
               </div>
-              <AccentColorWheel
-                value={settings.accentColor}
-                onChange={(hex) => updateAccentColor(hex)}
-                onReset={() => updateAccentColor(null)}
-              />
+              <button
+                type="button"
+                aria-pressed={selectedColorTarget === "accent"}
+                onClick={() => setSelectedColorTarget("accent")}
+                className={`mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                  selectedColorTarget === "accent"
+                    ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]"
+                    : "border-black/10 dark:border-white/10"
+                }`}
+              >
+                <span
+                  className="size-4 rounded-full border border-black/15 dark:border-white/20"
+                  style={{ backgroundColor: settings.accentColor || "#9d1018" }}
+                  aria-hidden="true"
+                />
+                Accent + background
+              </button>
+              <div className="mt-4">
+                <h4 className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Theme gradients</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(["dark", "light"] as const).map((mode) => {
+                    const gradient = settings.themeGradient[mode];
+                    const title = mode === "dark" ? "Dark mode" : "Light mode";
+                    return (
+                      <div
+                        key={mode}
+                        data-route-card="settings-inset"
+                        className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.03]"
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <h4 className="text-sm font-semibold">{title}</h4>
+                          <div
+                            className="h-8 w-20 rounded-lg border border-black/10 dark:border-white/15"
+                            style={{
+                              background: `linear-gradient(120deg, ${getThemeGradientColor(gradient.start, mode)}, ${getThemeGradientColor(gradient.end, mode)})`,
+                            }}
+                            aria-label={`${title} gradient preview`}
+                            role="img"
+                          />
+                        </div>
+                        <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label={`${title} gradient color`}>
+                          {([
+                            ["start", "Start color", `${mode}-start`],
+                            ["end", "End color", `${mode}-end`],
+                          ] as const).map(([stop, label]) => (
+                            <button
+                              key={stop}
+                              type="button"
+                              aria-pressed={selectedColorTarget === `${mode}-${stop}`}
+                              onClick={() => setSelectedColorTarget(`${mode}-${stop}`)}
+                              className={`flex items-center justify-center gap-2 rounded-lg border px-2 py-2 text-xs font-semibold transition ${
+                                selectedColorTarget === `${mode}-${stop}`
+                                  ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]"
+                                  : "border-black/10 dark:border-white/10"
+                              }`}
+                            >
+                              <span
+                                className="size-4 rounded-full border border-black/15 dark:border-white/20"
+                                style={{ backgroundColor: gradient[stop] }}
+                                aria-hidden="true"
+                              />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+                <h4 className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  Editing: {selectedColorLabel}
+                </h4>
+                <AccentColorWheel
+                  value={selectedColor}
+                  onChange={updateSelectedColor}
+                  onReset={resetSelectedColor}
+                  label={`${selectedColorLabel} color wheel`}
+                  allowFullRange={selectedColorTarget !== "accent"}
+                  vertical
+                />
+              </div>
             </div>
             <p className="mt-3 min-h-5 text-xs text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
               {notice}

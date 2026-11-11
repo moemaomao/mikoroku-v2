@@ -15,6 +15,10 @@ export type GlobalAppearanceSettings = {
   hideDetailCoverBackground: boolean;
   cardDisplay: "default" | "list";
   accentColor: string | null;
+  themeGradient: {
+    dark: { start: string; end: string };
+    light: { start: string; end: string };
+  };
 };
 
 export type GlobalAppearanceToggleSetting =
@@ -34,6 +38,10 @@ export const defaultGlobalAppearance: GlobalAppearanceSettings = {
   hideDetailCoverBackground: false,
   cardDisplay: "default",
   accentColor: null,
+  themeGradient: {
+    dark: { start: "#481126", end: "#120d14" },
+    light: { start: "#fff1f4", end: "#e9eaff" },
+  },
 };
 
 const appearanceTargets: Array<[GlobalAppearanceToggleSetting, string]> = [
@@ -993,6 +1001,26 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
   });
 }
 
+function readThemeGradient(value: unknown): GlobalAppearanceSettings["themeGradient"] {
+  const gradient = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const readColor = (mode: "dark" | "light", stop: "start" | "end") => {
+    const palette = gradient[mode];
+    if (!palette || typeof palette !== "object" || Array.isArray(palette)) {
+      return defaultGlobalAppearance.themeGradient[mode][stop];
+    }
+    const color = (palette as Record<string, unknown>)[stop];
+    return typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)
+      ? color
+      : defaultGlobalAppearance.themeGradient[mode][stop];
+  };
+  return {
+    dark: { start: readColor("dark", "start"), end: readColor("dark", "end") },
+    light: { start: readColor("light", "start"), end: readColor("light", "end") },
+  };
+}
+
 export function readGlobalAppearance(): GlobalAppearanceSettings {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(GLOBAL_APPEARANCE_KEY) || "null");
@@ -1017,6 +1045,7 @@ export function readGlobalAppearance(): GlobalAppearanceSettings {
         settings.accentColor.toLowerCase() !== "#9d1018"
         ? settings.accentColor
         : null,
+      themeGradient: readThemeGradient(settings.themeGradient),
     };
   } catch (error) {
     console.warn("Preferensi appearance global tidak dapat dibaca.", error);
@@ -1049,18 +1078,77 @@ function getContrastSafeAccent(hexColor: string): string {
   return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
+export function getThemeGradientColor(hexColor: string, mode: "dark" | "light"): string {
+  const channels = [1, 3, 5].map((offset) => Number.parseInt(hexColor.slice(offset, offset + 2), 16) / 255);
+  const max = Math.max(...channels);
+  const min = Math.min(...channels);
+  const delta = max - min;
+  let hue = 0;
+  if (delta > 0) {
+    if (max === channels[0]) hue = ((channels[1] - channels[2]) / delta + (channels[1] < channels[2] ? 6 : 0)) / 6;
+    else if (max === channels[1]) hue = ((channels[2] - channels[0]) / delta + 2) / 6;
+    else hue = ((channels[0] - channels[1]) / delta + 4) / 6;
+  }
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  const tonedLightness = mode === "dark"
+    ? Math.min(lightness, 0.2)
+    : Math.min(Math.max(lightness, 0.9), 0.97);
+  const tonedSaturation = Math.min(saturation, mode === "dark" ? 0.55 : 0.38);
+  const chroma = (1 - Math.abs(2 * tonedLightness - 1)) * tonedSaturation;
+  const section = hue * 6;
+  const secondary = chroma * (1 - Math.abs(section % 2 - 1));
+  const offset = tonedLightness - chroma / 2;
+  let rgb: [number, number, number];
+  if (section < 1) rgb = [chroma, secondary, 0];
+  else if (section < 2) rgb = [secondary, chroma, 0];
+  else if (section < 3) rgb = [0, chroma, secondary];
+  else if (section < 4) rgb = [0, secondary, chroma];
+  else if (section < 5) rgb = [secondary, 0, chroma];
+  else rgb = [chroma, 0, secondary];
+  return `#${rgb.map((value) => Math.round((value + offset) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void {
   currentAppearance = settings;
   document.documentElement.dataset.cardDisplay = settings.cardDisplay;
-  const accent = settings.accentColor;
+  const rawAccent = settings.accentColor;
+  const isDark = document.documentElement.classList.contains("dark");
+  const accent = rawAccent
+    ? `color-mix(in srgb, ${rawAccent} ${isDark ? "65%" : "78%"}, ${isDark ? "#ffffff" : "#64748b"})`
+    : null;
   const rootStyle = document.documentElement.style;
+  const theme = isDark
+    ? settings.themeGradient.dark
+    : settings.themeGradient.light;
+  const pageBackground = isDark ? "#0b0b0b" : "#f8f9fa";
+  const gradientStart = getThemeGradientColor(theme.start, isDark ? "dark" : "light");
+  const gradientEnd = getThemeGradientColor(theme.end, isDark ? "dark" : "light");
+  const gradient = `linear-gradient(180deg, ${gradientStart} 0%, ${gradientEnd} 60%, ${pageBackground} 100%)`;
+  rootStyle.setProperty("--mikoroku-sidebar-gradient-start", gradientStart);
+  rootStyle.setProperty("--mikoroku-sidebar-gradient-end", gradientEnd);
+  rootStyle.setProperty(
+    "--mikoroku-theme-gradient",
+    gradient,
+  );
+  rootStyle.setProperty("--mk-page-bg", pageBackground);
+  const applyGradientSurface = (element: HTMLElement) => {
+    element.style.setProperty("background-image", gradient, "important");
+    element.style.setProperty("background-position", "top center", "important");
+    element.style.setProperty("background-repeat", "no-repeat", "important");
+    element.style.setProperty("background-size", "100% 100vh", "important");
+  };
+  applyGradientSurface(document.documentElement);
+  if (document.body) applyGradientSurface(document.body);
+  document.querySelectorAll<HTMLElement>(".route-page-background, .reader-page")
+    .forEach(applyGradientSurface);
   const setAccentVariable = (name: string, customValue: string | null, defaultValue: string) => {
     rootStyle.setProperty(name, customValue || defaultValue);
   };
   const accentSoft = accent ? `color-mix(in srgb, ${accent} 10%, transparent)` : null;
   const accentBorder = accent ? `color-mix(in srgb, ${accent} 28%, transparent)` : null;
-  const globalAccent = accent || "#9d1018";
-  const readerAccent = accent || "#e8798f";
+  const globalAccent = rawAccent || "#9d1018";
+  const readerAccent = rawAccent || "#e8798f";
   const globalAccentSurface = getContrastSafeAccent(globalAccent);
   const readerAccentSurface = getContrastSafeAccent(readerAccent);
   const readerAccentSoft = accentSoft || "rgba(232, 121, 143, 0.12)";

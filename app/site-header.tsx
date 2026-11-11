@@ -223,6 +223,7 @@ function HeaderContents() {
     document.documentElement.style.setProperty("--mk-footer-link", isDark ? "#ff5757" : "#be123c");
     document.documentElement.style.backgroundColor = isDark ? "#0b0b0b" : "#f8f9fa";
     document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+    applyGlobalAppearance(readGlobalAppearance());
     setDark(isDark);
   }, []);
 
@@ -234,7 +235,6 @@ function HeaderContents() {
       console.warn("Preferensi tema tidak dapat dibaca.", error);
     }
     applyTheme(prefersDark);
-    applyGlobalAppearance(readGlobalAppearance());
     const query = window.matchMedia("(min-width: 769px)");
     const applySidebarPreference = () => {
       const desktop = query.matches;
@@ -961,12 +961,17 @@ function HeaderContents() {
               className={`${desktopActionClass} min-[769px]:border-emerald-300/30 min-[769px]:bg-emerald-500/10 min-[769px]:hover:border-emerald-300/55 min-[769px]:hover:bg-emerald-500/20`}
             >
               {user ? (
-                <img
-                  src={avatar}
-                  alt=""
-                  onError={(event) => { event.currentTarget.src = DEFAULT_AVATAR; }}
-                  className="h-7 w-7 rounded-full border border-black/20 object-cover dark:border-white/20"
-                />
+                <>
+                  <img
+                    src={avatar}
+                    alt=""
+                    onError={(event) => { event.currentTarget.src = DEFAULT_AVATAR; }}
+                    className="h-7 w-7 rounded-full border border-black/20 object-cover dark:border-white/20"
+                  />
+                  <span className="hidden max-w-[120px] truncate min-[769px]:inline" title={displayName}>
+                    {displayName}
+                  </span>
+                </>
               ) : <Icon name="user" />}
               {!user && <span className="hidden min-[769px]:inline">Login</span>}
             </button>

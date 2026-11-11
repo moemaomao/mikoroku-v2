@@ -1769,7 +1769,7 @@ export default function ReaderPage({
   return (
     <>
       <SiteChrome showChrome showFooter={false} />
-      <main className={`reader-page [--mikoroku-accent:var(--mikoroku-reader-accent)] [--mikoroku-accent-soft:var(--mikoroku-reader-accent-soft)] [--mikoroku-accent-border:var(--mikoroku-reader-accent-border)] min-h-[calc(100vh-50px)] bg-[#f1f2f4] pb-10 text-[#22242a] dark:bg-[#111216] dark:text-[#f3f3f5] ${activeKind === "novel" ? "novel-reader" : "manga-reader"}`} style={isFullscreen ? {
+      <main className={`reader-page [--mikoroku-accent:var(--mikoroku-reader-accent)] [--mikoroku-accent-soft:var(--mikoroku-reader-accent-soft)] [--mikoroku-accent-border:var(--mikoroku-reader-accent-border)] min-h-[calc(100vh-50px)] bg-transparent pb-10 text-[#22242a] dark:text-[#f3f3f5] ${activeKind === "novel" ? "novel-reader" : "manga-reader"}`} style={isFullscreen ? {
         boxSizing: "border-box",
         height: "100vh",
         maxHeight: "100vh",
@@ -1879,7 +1879,7 @@ export default function ReaderPage({
           </section>
         )
         : activeKind === "manga" ? (
-          <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-white py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] dark:bg-[#0a0a0c] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
+          <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
             {mode === "long-strip" ? data.images.map((image, index) => {
               const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
               return (
@@ -2144,7 +2144,7 @@ export default function ReaderPage({
       </main>
       <SiteChrome
         showChrome={false}
-        footerBackgroundColor="light-dark(#f1f2f4, #111216)"
+        footerBackgroundColor="transparent"
         removeFooterTopGap
       />
     </>
