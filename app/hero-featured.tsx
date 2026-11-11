@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef, type CSSProperties } from "react";
-import { imageProxyUrl } from "../lib/image-proxy";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import { CoverImage } from "./lib/cover-image";
 import styles from "./hero-featured.module.css";
@@ -35,15 +34,6 @@ function resolveCover(value: unknown): string {
   return "";
 }
 
-function thumb(url: string, version = 0): string {
-  if (!url || url.includes("placeholder.com")) return url;
-  try {
-    return imageProxyUrl(url, "cover", version) || url;
-  } catch {
-    return url;
-  }
-}
-
 function shuffle<T>(items: T[]): T[] {
   const shuffled = [...items];
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -66,7 +56,9 @@ function pickFromWindow(limit = 15): HeroCover[] {
     if (typeof item.title !== "string" || !item.title) return;
     const key = normalizeTitle(item.title);
     if (seen.has(key)) return;
-    const raw = resolveCover(item.cover || item.img);
+    const raw = [item.cover, item.img]
+      .map(resolveCover)
+      .find(Boolean) || "";
     if (!raw) return;
     seen.add(key);
     const dataMatch = data?.[String(item.slug || "")] || data?.[key];
@@ -77,7 +69,7 @@ function pickFromWindow(limit = 15): HeroCover[] {
     target.push({
       title: item.title,
       slug: String(item.slug || key),
-      cover: thumb(raw, Number(item.updatedAt) || 0),
+      cover: raw,
       nsfw: resolvedNsfw,
       subtitle: Array.isArray(item.genres)
         ? (item.genres as string[]).slice(0, 2).join(" · ")
@@ -194,6 +186,7 @@ export default function HeroFeatured() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [displayTitle, setDisplayTitle] = useState<HeroCover | null>(null);
   const [titlePhase, setTitlePhase] = useState<"in" | "out">("in");
+  const [failedCovers, setFailedCovers] = useState<Set<string>>(() => new Set());
   const titleToken = useRef(0);
 
   useEffect(() => {
@@ -307,6 +300,15 @@ export default function HeroFeatured() {
     setActive(index);
   };
 
+  const markCoverFailed = (cover: string) => {
+    setFailedCovers((current) => {
+      if (current.has(cover)) return current;
+      const next = new Set(current);
+      next.add(cover);
+      return next;
+    });
+  };
+
   if (hidden) {
     return <section id="heroSection" className={styles.hero} hidden aria-hidden="true" />;
   }
@@ -347,29 +349,40 @@ export default function HeroFeatured() {
               aria-label={item.title}
               aria-current={isMainA ? "true" : undefined}
             >
-              <CoverImage
-                className={styles.glow}
-                src={item.cover}
-                alt=""
-                aria-hidden="true"
-                width={240}
-                height={340}
-                loading={abs <= 2 || isMain ? "eager" : "lazy"}
-                decoding="async"
-                draggable={false}
-                nsfw={item.nsfw === true}
-              />
-              <CoverImage
-                className={styles.cover}
-                src={item.cover}
-                alt={item.title}
-                width={240}
-                height={340}
-                loading={abs <= 2 || isMain ? "eager" : "lazy"}
-                decoding="async"
-                draggable={false}
-                nsfw={item.nsfw === true}
-              />
+              {failedCovers.has(item.cover) || !item.cover ? (
+                <span className={styles.coverFallback} aria-hidden="true">
+                  <strong>{item.title.slice(0, 1)}</strong>
+                  <small>Cover unavailable</small>
+                </span>
+              ) : (
+                <>
+                  <CoverImage
+                    className={styles.glow}
+                    src={item.cover}
+                    alt=""
+                    aria-hidden="true"
+                    width={240}
+                    height={340}
+                    loading={abs <= 2 || isMain ? "eager" : "lazy"}
+                    decoding="async"
+                    draggable={false}
+                    nsfw={item.nsfw === true}
+                    onError={() => markCoverFailed(item.cover)}
+                  />
+                  <CoverImage
+                    className={styles.cover}
+                    src={item.cover}
+                    alt={item.title}
+                    width={240}
+                    height={340}
+                    loading={abs <= 2 || isMain ? "eager" : "lazy"}
+                    decoding="async"
+                    draggable={false}
+                    nsfw={item.nsfw === true}
+                    onError={() => markCoverFailed(item.cover)}
+                  />
+                </>
+              )}
             </button>
           );
         })}

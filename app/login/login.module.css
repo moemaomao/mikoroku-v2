@@ -1,47 +1,29 @@
 .page {
-  --page-background:
-    radial-gradient(ellipse at 50% 0%, rgba(122, 0, 0, 0.18), transparent 55%),
-    #0b0b0e;
-  --panel-background: #151518;
-  --panel-border: rgba(255, 255, 255, 0.09);
-  --text: #f6f3f2;
-  --muted-text: #a8a2a2;
-  --label-text: #e5dddd;
-  --input-background: #211e1e;
-  --input-border: #393333;
+  --accent: #ef414d;
+  --accent-strong: #b51e2d;
+  --panel-background: #1e1c1d;
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --text: #fff8f8;
+  --muted-text: #c0b5b6;
+  --label-text: #eee3e3;
+  --input-background: #272223;
+  --input-border: #443839;
   --input-text: #fff;
-  min-height: calc(100vh - 50px);
-  display: grid;
-  place-items: center;
-  padding: clamp(28px, 5vw, 72px) 20px;
+  position: relative;
+  min-height: 100dvh;
+  margin-top: -56px;
+  padding: 0;
   color: var(--text);
-  background: var(--page-background);
-}
-
-:global(html:not(.dark)) .page {
-  --page-background:
-    radial-gradient(ellipse at 50% 0%, rgba(122, 0, 0, 0.1), transparent 55%),
-    #f1eff0;
-  --panel-background: #fff;
-  --panel-border: rgba(25, 20, 20, 0.1);
-  --text: #252122;
-  --muted-text: #726a6b;
-  --label-text: #383233;
-  --input-background: #f8f6f6;
-  --input-border: #ded8d8;
-  --input-text: #252122;
+  background: #100e0e;
 }
 
 .card {
-  width: min(100%, 920px);
-  min-height: 510px;
+  width: 100%;
+  min-height: 100dvh;
   display: grid;
-  grid-template-columns: 0.92fr 1.08fr;
+  grid-template-columns: minmax(0, 1.18fr) minmax(400px, 0.98fr);
   overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: 18px;
-  background: var(--panel-background);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+  background: #100e0e;
 }
 
 .intro {
@@ -51,44 +33,93 @@
   flex-direction: column;
   justify-content: space-between;
   min-width: 0;
+  min-height: 100dvh;
   overflow: hidden;
-  padding: 34px;
-  border-right: 1px solid var(--panel-border);
-  background:
-    linear-gradient(155deg, rgba(99, 16, 18, 0.92), rgba(38, 13, 15, 0.97) 58%, #181416);
+  padding: clamp(28px, 3.5vw, 52px);
+  background: #181115;
 }
 
-.intro::before,
-.intro::after {
+.coverWall,
+.introShade {
   position: absolute;
   z-index: -1;
-  content: "";
+  inset: -10%;
   pointer-events: none;
 }
 
-.intro::before {
-  inset: 9px;
-  border: 1px solid rgba(255, 220, 210, 0.13);
-  border-radius: 11px;
+.coverWall {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(9px, 1.5vw, 22px);
+  overflow: hidden;
+  transform: rotate(-8deg) scale(1.13);
 }
 
-.intro::after {
-  right: -100px;
-  bottom: -190px;
-  width: 430px;
-  height: 430px;
-  border: 1px solid rgba(255, 215, 200, 0.12);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 28px rgba(255, 215, 200, 0.025),
-    0 0 0 58px rgba(255, 215, 200, 0.025);
+.coverColumn {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(9px, 1.5vw, 22px);
+  animation: coverScroll 52s linear infinite;
+}
+
+.coverColumn:nth-child(even) {
+  animation-direction: reverse;
+  animation-duration: 64s;
+}
+
+.coverColumn:nth-child(3) {
+  animation-duration: 72s;
+}
+
+.cover {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  aspect-ratio: 0.68;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background:
+    linear-gradient(145deg, rgba(145, 32, 45, 0.5), transparent 58%),
+    linear-gradient(35deg, #211719, #59484a);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.cover span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 26px 8px 8px;
+  background: linear-gradient(transparent, rgba(12, 8, 11, 0.87));
+  color: #fff;
+  font-size: clamp(8px, 0.8vw, 11px);
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.introShade {
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(14, 9, 12, 0.8), rgba(17, 10, 14, 0.39) 72%, rgba(17, 10, 14, 0.7)),
+    linear-gradient(0deg, rgba(13, 9, 12, 0.92), transparent 66%),
+    linear-gradient(180deg, rgba(12, 8, 11, 0.52), transparent 30%);
 }
 
 .brand {
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: fit-content;
   color: #fff;
   font-size: 17px;
@@ -96,78 +127,18 @@
   text-decoration: none;
 }
 
-.brandMark {
-  display: grid;
-  width: 31px;
-  height: 31px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.27);
-  border-radius: 9px;
-  background: #8c171a;
-  font-size: 16px;
-}
-
-.art {
-  position: absolute;
-  top: 12%;
-  right: 5%;
-  width: 190px;
-  height: 190px;
-  display: grid;
-  place-items: center;
-  opacity: 0.82;
-  pointer-events: none;
-}
-
-.artGlow {
-  position: absolute;
-  width: 145px;
-  height: 145px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(234, 115, 95, 0.32), transparent 70%);
-  filter: blur(4px);
-}
-
-.artOrbit {
-  position: absolute;
-  width: 132px;
-  height: 132px;
-  border: 1px solid rgba(255, 220, 205, 0.24);
-  border-radius: 50%;
-  transform: rotate(-26deg) scaleY(0.47);
-  box-shadow: 0 0 22px rgba(255, 150, 130, 0.13);
-}
-
-.artBook {
-  display: grid;
-  width: 72px;
-  height: 92px;
-  place-items: center;
-  border: 1px solid rgba(255, 235, 225, 0.62);
-  border-radius: 5px 12px 12px 5px;
-  background: linear-gradient(135deg, rgba(217, 97, 82, 0.9), rgba(74, 20, 25, 0.96));
-  box-shadow: 10px 12px 30px rgba(0, 0, 0, 0.35), inset 5px 0 rgba(255, 255, 255, 0.12);
-  color: #fff2ec;
-  font-family: Georgia, serif;
-  font-size: 34px;
-  font-weight: 700;
-  transform: rotate(8deg);
-}
-
-.artSparkle {
-  position: absolute;
-  top: 37px;
-  right: 34px;
-  color: #f4c5a9;
-  font-size: 20px;
+.brandLogo {
+  display: block;
+  width: 142px;
+  height: auto;
 }
 
 .introCopy {
   position: relative;
   z-index: 1;
-  max-width: 330px;
+  max-width: 480px;
   margin-top: auto;
-  padding-top: 175px;
+  padding-top: 170px;
 }
 
 .eyebrow {
@@ -175,77 +146,98 @@
   align-items: center;
   min-height: 25px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 224, 215, 0.32);
+  border: 1px solid rgba(255, 139, 148, 0.4);
   border-radius: 99px;
-  color: #f4b9a9;
+  background: rgba(19, 12, 16, 0.35);
+  color: #ff555f;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
 }
 
 .introCopy h2 {
-  max-width: 300px;
-  margin: 16px 0 12px;
-  color: #fff8f5;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(32px, 4vw, 43px);
-  font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1.03;
+  margin: 18px 0 12px;
+  color: #fff8f8;
+  font-size: clamp(40px, 5vw, 58px);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 0.99;
+}
+
+.introCopy h2 em {
+  color: #ff3545;
+  font-style: normal;
 }
 
 .introCopy p {
-  max-width: 315px;
   margin: 0;
-  color: rgba(255, 239, 233, 0.73);
+  color: rgba(255, 241, 241, 0.77);
   font-size: 13px;
   line-height: 1.7;
 }
 
 .benefits {
   display: grid;
-  gap: 13px;
-  margin: 24px 0 0;
-  padding: 0;
-  color: rgba(255, 244, 239, 0.9);
-  font-size: 12px;
+  gap: 0;
+  width: min(100%, 380px);
+  margin: 23px 0 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(25, 16, 21, 0.7);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 245, 245, 0.94);
   list-style: none;
 }
 
 .benefits li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
+  min-height: 43px;
 }
 
-.benefits li span {
-  width: 16px;
-  color: #f2a28f;
+.benefits li > span:first-child {
+  width: 22px;
+  color: #f04452;
   font-size: 17px;
   text-align: center;
+}
+
+.benefits li > span:last-child {
+  display: grid;
+  gap: 1px;
+}
+
+.benefits strong {
+  font-size: 11px;
+}
+
+.benefits small {
+  color: rgba(255, 239, 239, 0.65);
+  font-size: 9px;
 }
 
 .panelFootnote {
   z-index: 1;
   margin-top: 28px;
-  color: rgba(255, 230, 221, 0.56);
+  color: rgba(255, 230, 230, 0.62);
   font-size: 10px;
   letter-spacing: 0.03em;
 }
 
 .formPanel {
   align-self: center;
-  width: 100%;
-  max-width: 470px;
+  width: min(100%, 440px);
   margin: 0 auto;
-  padding: 54px clamp(28px, 5vw, 64px);
+  padding: 48px clamp(28px, 4vw, 52px);
 }
 
 .formHeading {
   display: flex;
   align-items: center;
   gap: 13px;
-  margin-bottom: 30px;
+  margin-bottom: 19px;
 }
 
 .accountIcon {
@@ -254,16 +246,16 @@
   height: 42px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid var(--panel-border);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--panel-background), var(--text) 4%);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .accountIcon svg {
   width: 21px;
   height: 21px;
   fill: none;
-  stroke: var(--muted-text);
+  stroke: #f04452;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.5;
@@ -286,6 +278,40 @@
 .form {
   display: grid;
   gap: 8px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: var(--panel-background);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+
+.formTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin-bottom: 8px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 99px;
+  background: rgba(12, 9, 11, 0.4);
+}
+
+.formTabs button {
+  min-height: 29px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--muted-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.formTabs .activeTab {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .form label {
@@ -315,8 +341,8 @@
 }
 
 .form input:focus {
-  border-color: #a74a4a;
-  box-shadow: 0 0 0 3px rgba(163, 74, 74, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(239, 65, 77, 0.16);
 }
 
 .hint {
@@ -334,7 +360,7 @@
   margin-top: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: linear-gradient(135deg, #9d2428, #781216);
+  background: linear-gradient(135deg, #e83446, #a9142b);
   color: #fff;
   cursor: pointer;
   font: inherit;
@@ -360,12 +386,8 @@
   line-height: 1.5;
 }
 
-:global(html:not(.dark)) .error {
-  color: #b4232c;
-}
-
 .switchMode {
-  margin: 22px 0 0;
+  margin: 19px 0 0;
   color: var(--muted-text);
   text-align: center;
   font-size: 11px;
@@ -375,14 +397,10 @@
   padding: 0;
   border: 0;
   background: none;
-  color: #db7775;
+  color: #f04452;
   cursor: pointer;
   font: inherit;
   font-weight: 700;
-}
-
-:global(html:not(.dark)) .switchMode button {
-  color: #9a1b20;
 }
 
 .back {
@@ -398,69 +416,112 @@
   color: var(--text);
 }
 
-@media (max-width: 720px) {
-  .page {
-    min-height: calc(100vh - 50px);
-    padding: 28px 16px;
+@keyframes coverScroll {
+  to {
+    transform: translateY(-50%);
   }
+}
 
+@media (max-width: 760px) {
   .card {
-    width: min(100%, 480px);
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .intro {
-    min-height: 250px;
+    min-height: 350px;
     padding: 25px;
-    border-right: 0;
-    border-bottom: 1px solid var(--panel-border);
-  }
-
-  .art {
-    top: 4%;
-    right: 4%;
-    width: 150px;
-    height: 150px;
   }
 
   .introCopy {
-    max-width: 280px;
-    padding-top: 65px;
+    max-width: 390px;
+    padding-top: 100px;
   }
 
   .introCopy h2 {
-    max-width: 240px;
-    margin: 12px 0 8px;
-    font-size: 31px;
+    font-size: clamp(36px, 9vw, 48px);
   }
 
-  .introCopy p,
-  .benefits,
+  .benefits {
+    display: none;
+  }
+
   .panelFootnote {
     display: none;
   }
 
   .formPanel {
-    max-width: none;
-    padding: 32px clamp(24px, 8vw, 46px) 36px;
+    width: min(100%, 460px);
+    padding: 32px 24px 40px;
   }
 }
 
 @media (max-width: 380px) {
   .intro {
-    min-height: 220px;
+    min-height: 300px;
   }
 
-  .art {
-    right: -8%;
-    opacity: 0.62;
+  .formPanel {
+    padding-right: 17px;
+    padding-left: 17px;
   }
 
-  .introCopy {
-    max-width: 220px;
+  .form {
+    padding: 13px;
   }
+}
 
-  .introCopy h2 {
-    font-size: 28px;
+@media (prefers-reduced-motion: reduce) {
+  .coverColumn {
+    animation: none;
   }
+}
+
+:global(html:not(.dark)) .page {
+  --accent: #d72e3c;
+  --accent-strong: #a71928;
+  --panel-background: #fff;
+  --panel-border: rgba(25, 20, 20, 0.1);
+  --text: #2c2021;
+  --muted-text: #766667;
+  --label-text: #483839;
+  --input-background: #fff;
+  --input-border: #e2d4d5;
+  --input-text: #302323;
+  background: #f6f1f1;
+}
+
+:global(html:not(.dark)) .card {
+  background: #f6f1f1;
+}
+
+:global(html:not(.dark)) .introShade {
+  background:
+    linear-gradient(90deg, rgba(29, 13, 23, 0.68), rgba(32, 13, 24, 0.28) 72%, rgba(32, 13, 24, 0.58)),
+    linear-gradient(0deg, rgba(22, 12, 17, 0.82), transparent 66%),
+    linear-gradient(180deg, rgba(20, 10, 16, 0.4), transparent 30%);
+}
+
+:global(html:not(.dark)) .formTabs {
+  background: rgba(84, 48, 48, 0.06);
+}
+
+:global(html:not(.dark)) .formTabs .activeTab {
+  background: #fff;
+  color: #572d30;
+}
+
+:global(html:not(.dark)) .formHeading h1 {
+  color: var(--text);
+}
+
+:global(html:not(.dark)) .formHeading p {
+  color: var(--muted-text);
+}
+
+:global(html:not(.dark)) .form label {
+  color: var(--label-text);
+}
+
+:global(html:not(.dark)) .form input {
+  color: var(--input-text);
 }

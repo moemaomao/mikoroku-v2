@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import SiteChrome from "../site-chrome";
 import styles from "./login.module.css";
 
 type CompatAuth = {
@@ -9,6 +8,23 @@ type CompatAuth = {
   signInWithEmailAndPassword: (email: string, password: string) => Promise<unknown>;
   createUserWithEmailAndPassword: (email: string, password: string) => Promise<unknown>;
 };
+
+type LoginCover = {
+  title: string;
+  cover: string;
+};
+
+const excludedGenres = new Set([
+  "adult",
+  "hentai",
+  "ecchi",
+  "erotica",
+  "smut",
+  "porn",
+  "pornographic",
+  "mature",
+  "doujinshi",
+]);
 
 const firebaseConfig = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
@@ -84,10 +100,47 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [covers, setCovers] = useState<LoginCover[]>([]);
   const [returnTo, setReturnTo] = useState("/");
   const [auth, setAuth] = useState<CompatAuth | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetch("/catalog/manga.json", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Manga catalog returned HTTP ${response.status}.`);
+        const items: unknown = await response.json();
+        if (!Array.isArray(items)) throw new Error("Manga catalog response must be an array.");
+
+        const safeCovers = items.flatMap((item): LoginCover[] => {
+          if (typeof item !== "object" || item === null) return [];
+          const record = item as Record<string, unknown>;
+          const title = typeof record.title === "string" ? record.title : "";
+          const cover = [record.cover, record.img].find(
+            (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value),
+          ) || "";
+          const genres = Array.isArray(record.genres)
+            ? record.genres.filter((genre): genre is string => typeof genre === "string")
+            : [];
+          if (!title || genres.some((genre) => excludedGenres.has(genre.trim().toLowerCase()))) {
+            return [];
+          }
+          return [{ title, cover }];
+        });
+        setCovers(safeCovers.slice(0, 25));
+      })
+      .catch((loadError: unknown) => {
+        if (!controller.signal.aborted) {
+          console.error("Could not load manga covers for the login page.", loadError);
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const requestedReturn = new URLSearchParams(window.location.search).get("returnTo");
@@ -127,8 +180,13 @@ export default function LoginPage() {
     event.preventDefault();
     if (!auth) return;
 
-    setLoading(true);
     setError("");
+    if (isSignUp && password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
     try {
       if (isSignUp) {
         await auth.createUserWithEmailAndPassword(email.trim(), password);
@@ -143,32 +201,39 @@ export default function LoginPage() {
   }
 
   return (
-    <>
-      <SiteChrome showFooter={false} />
-      <main className={styles.page}>
-        <section className={styles.card} aria-labelledby="auth-title">
+    <main className={styles.page}>
+      <section className={styles.card} aria-labelledby="auth-title">
           <aside className={styles.intro} aria-label="Mikoroku membership">
-            <div className={styles.art} aria-hidden="true">
-              <span className={styles.artGlow} />
-              <span className={styles.artOrbit} />
-              <span className={styles.artBook}>M</span>
-              <span className={styles.artSparkle}>✦</span>
+            <div className={styles.coverWall} aria-hidden="true">
+              {Array.from({ length: 5 }, (_, column) => {
+                const columnCovers = covers.filter((_, index) => index % 5 === column);
+                return (
+                  <div className={styles.coverColumn} key={column}>
+                    {[...columnCovers, ...columnCovers].map((cover, index) => (
+                      <div className={styles.cover} key={`${cover.cover}-${index}`}>
+                        <img alt="" loading="lazy" src={cover.cover} />
+                        <span>{cover.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
+            <div className={styles.introShade} />
             <a className={styles.brand} href="/" aria-label="Mikoroku home">
-              <span className={styles.brandMark}>M</span>
-              <span>Mikoroku</span>
+              <img alt="" className={styles.brandLogo} src="/assets/icons/mikoroku.png" />
             </a>
             <div className={styles.introCopy}>
-              <span className={styles.eyebrow}>YOUR READING, YOUR WAY</span>
-              <h2>Find your next favorite story.</h2>
-              <p>Keep your reading close and pick up right where the story left you.</p>
+              <span className={styles.eyebrow}>YOUR NEXT CHAPTER STARTS HERE</span>
+              <h2>Welcome back,<br /><em>Reader.</em></h2>
+              <p>Pick up right where you left off.</p>
               <ul className={styles.benefits}>
-                <li><span aria-hidden="true">◷</span> Keep track of your reading progress</li>
-                <li><span aria-hidden="true">♡</span> Save series to your bookmarks</li>
-                <li><span aria-hidden="true">✧</span> Join a community of fellow readers</li>
+                <li><span aria-hidden="true">▤</span><span><strong>Explore titles</strong><small>Manga, Manhwa, Manhua &amp; Novels</small></span></li>
+                <li><span aria-hidden="true">♧</span><span><strong>Keep your place</strong><small>Pick up where you left off</small></span></li>
+                <li><span aria-hidden="true">✧</span><span><strong>Save your favorites</strong><small>Build a library that feels like yours</small></span></li>
               </ul>
             </div>
-            <span className={styles.panelFootnote}>A better place for your next chapter.</span>
+            <span className={styles.panelFootnote}>A little more story in every day.</span>
           </aside>
 
           <div className={styles.formPanel}>
@@ -186,6 +251,30 @@ export default function LoginPage() {
             </div>
 
             <form className={styles.form} onSubmit={submit}>
+              <div className={styles.formTabs} role="group" aria-label="Account action">
+                <button
+                  aria-pressed={!isSignUp}
+                  className={!isSignUp ? styles.activeTab : ""}
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setError("");
+                  }}
+                  type="button"
+                >
+                  Log In
+                </button>
+                <button
+                  aria-pressed={isSignUp}
+                  className={isSignUp ? styles.activeTab : ""}
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setError("");
+                  }}
+                  type="button"
+                >
+                  Sign Up
+                </button>
+              </div>
               <label htmlFor="auth-email">Email address</label>
               <input
                 autoComplete="email"
@@ -210,7 +299,23 @@ export default function LoginPage() {
                 type="password"
                 value={password}
               />
-              {isSignUp && <span className={styles.hint}>Use at least 6 characters.</span>}
+              {isSignUp && (
+                <>
+                  <label htmlFor="auth-confirm-password">Confirm password</label>
+                  <input
+                    autoComplete="new-password"
+                    id="auth-confirm-password"
+                    minLength={6}
+                    name="confirmPassword"
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Re-enter your password"
+                    required
+                    type="password"
+                    value={confirmPassword}
+                  />
+                  <span className={styles.hint}>Use at least 6 characters.</span>
+                </>
+              )}
 
               {error && <p className={styles.error} role="alert">{error}</p>}
 
@@ -234,9 +339,7 @@ export default function LoginPage() {
 
             <a className={styles.back} href={returnTo}>Back to previous page</a>
           </div>
-        </section>
-      </main>
-      <SiteChrome showChrome={false} />
-    </>
+      </section>
+    </main>
   );
 }
