@@ -476,7 +476,8 @@
   }
 }
 
-:global(html:not(.dark)) .page {
+:global(html.light) .page,
+:global(body.light) .page {
   --accent: #d72e3c;
   --accent-strong: #a71928;
   --panel-background: #fff;
@@ -490,38 +491,46 @@
   background: #f6f1f1;
 }
 
-:global(html:not(.dark)) .card {
+:global(html.light) .card,
+:global(body.light) .card {
   background: #f6f1f1;
 }
 
-:global(html:not(.dark)) .introShade {
+:global(html.light) .introShade,
+:global(body.light) .introShade {
   background:
     linear-gradient(90deg, rgba(29, 13, 23, 0.68), rgba(32, 13, 24, 0.28) 72%, rgba(32, 13, 24, 0.58)),
     linear-gradient(0deg, rgba(22, 12, 17, 0.82), transparent 66%),
     linear-gradient(180deg, rgba(20, 10, 16, 0.4), transparent 30%);
 }
 
-:global(html:not(.dark)) .formTabs {
+:global(html.light) .formTabs,
+:global(body.light) .formTabs {
   background: rgba(84, 48, 48, 0.06);
 }
 
-:global(html:not(.dark)) .formTabs .activeTab {
+:global(html.light) .formTabs .activeTab,
+:global(body.light) .formTabs .activeTab {
   background: #fff;
   color: #572d30;
 }
 
-:global(html:not(.dark)) .formHeading h1 {
+:global(html.light) .formHeading h1,
+:global(body.light) .formHeading h1 {
   color: var(--text);
 }
 
-:global(html:not(.dark)) .formHeading p {
+:global(html.light) .formHeading p,
+:global(body.light) .formHeading p {
   color: var(--muted-text);
 }
 
-:global(html:not(.dark)) .form label {
+:global(html.light) .form label,
+:global(body.light) .form label {
   color: var(--label-text);
 }
 
-:global(html:not(.dark)) .form input {
+:global(html.light) .form input,
+:global(body.light) .form input {
   color: var(--input-text);
 }

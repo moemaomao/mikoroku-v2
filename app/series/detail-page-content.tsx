@@ -2505,24 +2505,9 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 {chapterState === "ready" && hasMoreChapters && (
                   <div
                     ref={chapterSentinelRef}
-                    className="col-span-full flex min-h-12 w-full flex-col items-center justify-center gap-2 py-4 text-xs text-[#666] dark:text-white/50"
-                  >
-                    <span className="inline-flex items-center gap-2" aria-live="polite">
-                      <i className="fas fa-spinner fa-spin" aria-hidden="true" />
-                      Loading more chapters…
-                    </span>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-black/15 bg-white/80 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:border-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/5 dark:text-zinc-100"
-                      onClick={() =>
-                        setChapterWindow((current) =>
-                          Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
-                        )
-                      }
-                    >
-                      Load more
-                    </button>
-                  </div>
+                    className="col-span-full h-px w-full"
+                    aria-hidden="true"
+                  />
                 )}
               </div>
             </section>
