@@ -75,7 +75,8 @@ export default function SiteFooter({
         <div
           className="site-footer-card mx-auto flex w-[calc(100%-20px)] max-w-[1900px] items-center justify-between gap-5 rounded-[18px] border border-white/10 px-[30px] py-[22px] max-[600px]:w-[calc(100%-1px)] max-[600px]:flex-col max-[600px]:gap-5 max-[600px]:px-5 max-[600px]:py-[25px] min-[768px]:px-10 min-[768px]:py-7"
           style={{
-            backgroundColor: "var(--mk-footer-card-bg, rgba(15, 15, 25, 0.32))",
+            backgroundColor: "transparent",
+            backgroundImage: "var(--mk-footer-card-gradient, linear-gradient(180deg, rgba(15, 15, 25, 0), rgba(15, 15, 25, .48)))",
             borderColor: "var(--mk-footer-card-border, rgba(255, 255, 255, .12))",
             color: "var(--mk-footer-card-text, #d4d4d8)",
             WebkitBackdropFilter: "blur(28px) saturate(1.6)",

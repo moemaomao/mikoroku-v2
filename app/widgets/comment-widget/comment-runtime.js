@@ -2713,6 +2713,22 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
   if (comment.uid) {
     const userId = comment.uid;
     const badgeId = `badge-${comment.id}`;
+    void getCommentLeaderboardRank(userId).then(rank => {
+      if (!Number.isInteger(rank) || rank < 1 || rank > 6) return;
+
+      const authorName = div.querySelector('.author-name');
+      if (!authorName || !authorName.isConnected) return;
+
+      const rankBadge = document.createElement('span');
+      rankBadge.className = `top-comment-rank-badge rank-${rank}`;
+      rankBadge.textContent = `TOP ${rank}`;
+      rankBadge.title = `Top commenter rank #${rank}`;
+      rankBadge.setAttribute('aria-label', `Top commenter rank ${rank}`);
+      authorName.after(rankBadge);
+    }).catch(error => {
+      console.warn('Gagal memuat peringkat leaderboard untuk komentar.', error);
+    });
+
     const cachedStats = userStatsCache[userId];
     const statsRequest = cachedStats
       ? Promise.resolve({
@@ -6104,7 +6120,7 @@ function applyCommentLeaderboardProfileStyle(profileBox, leaderboardRank) {
     statsBox.style.border = rankStyle
       ? `1px solid rgba(${rankStyle.accent},.35)`
       : 'none';
-  }
+  }``
 }
 
 async function showUserProfile(uid, leaderboardRank) {

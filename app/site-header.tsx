@@ -214,6 +214,9 @@ function HeaderContents() {
     document.documentElement.style.setProperty("--mk-commission-card-bg", isDark ? "#171725" : "#ffffff");
     document.documentElement.style.setProperty("--mk-commission-card-text", isDark ? "#e2e8f0" : "#1e293b");
     document.documentElement.style.setProperty("--mk-footer-bg", "transparent");
+    document.documentElement.style.setProperty("--mk-footer-card-gradient", isDark
+      ? "linear-gradient(180deg,rgba(15,15,25,0),rgba(15,15,25,.48))"
+      : "linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.28))");
     document.documentElement.style.setProperty("--mk-footer-card-bg", isDark ? "rgba(15,15,25,0.32)" : "rgba(255,255,255,0.28)");
     document.documentElement.style.setProperty("--mk-footer-card-border", isDark ? "rgba(255,255,255,.1)" : "rgba(15,23,42,.12)");
     document.documentElement.style.setProperty("--mk-footer-card-text", isDark ? "#d4d4d8" : "#334155");
@@ -728,7 +731,7 @@ function HeaderContents() {
   const classButton =
     "flex h-9 min-h-9 w-9 min-w-9 shrink-0 items-center justify-center rounded-md border-0 bg-transparent p-0 text-zinc-800 transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:text-white dark:hover:bg-white/10";
   const mainHeaderClass = [
-    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-200 bg-white/90 px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-zinc-950/90 dark:text-white",
+    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-200 bg-transparent px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-transparent dark:text-white",
     !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
     headerHidden ? "-translate-y-full" : "translate-y-0",
   ].join(" ");
