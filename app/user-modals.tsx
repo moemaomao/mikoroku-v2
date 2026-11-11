@@ -8,7 +8,12 @@ import {
 } from "../lib/reading-history";
 
 type DataRecord = Record<string, unknown>;
-type CompatTimestamp = { toDate?: () => Date };
+type CompatTimestamp = {
+  toDate?: () => Date;
+  toMillis?: () => number;
+  seconds?: number;
+  nanoseconds?: number;
+};
 type CompatDocument = {
   id: string;
   exists: boolean;
@@ -396,18 +401,28 @@ function numberValue(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function formatTimestamp(value: unknown, style: "date" | "time" = "date"): string {
-  if (!value) return "";
-  let date: Date;
-  if (typeof value === "object" && value !== null && "toDate" in value) {
-    const toDate = (value as CompatTimestamp).toDate;
-    if (typeof toDate !== "function") return "";
-    date = toDate();
-  } else if (typeof value === "number" || typeof value === "string") {
-    date = new Date(value);
-  } else {
-    return "";
+function timestampMillis(value: unknown): number {
+  if (typeof value === "number" || typeof value === "string") {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
   }
+  if (!value || typeof value !== "object") return 0;
+  const timestamp = value as CompatTimestamp;
+  try {
+    if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
+    if (typeof timestamp.toDate === "function") return timestamp.toDate().getTime();
+  } catch {
+    // Fall back to the serialized timestamp fields below.
+  }
+  return typeof timestamp.seconds === "number"
+    ? timestamp.seconds * 1000 + numberValue(timestamp.nanoseconds) / 1_000_000
+    : 0;
+}
+
+function formatTimestamp(value: unknown, style: "date" | "time" = "date"): string {
+  const time = timestampMillis(value);
+  if (!time) return "";
+  const date = new Date(time);
   if (Number.isNaN(date.getTime())) return "";
   return style === "time"
     ? date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
@@ -694,14 +709,18 @@ function initializeUserModals(): () => void {
       return;
     }
     try {
-      const result = await firestore
-        .collection("directMessages")
-        .where("participants", "array-contains", user.uid)
-        .orderBy("timestamp", "desc")
-        .limit(50)
-        .get();
+      const messages = firestore.collection("directMessages");
+      const [sent, received] = await Promise.all([
+        messages.where("from", "==", user.uid).limit(100).get(),
+        messages.where("to", "==", user.uid).limit(100).get(),
+      ]);
+      const messageDocs = new Map([...sent.docs, ...received.docs].map((doc) => [doc.id, doc]));
+      const sortedMessages = [...messageDocs.values()].sort(
+        (left, right) => timestampMillis(asRecord(right.data()).timestamp) -
+          timestampMillis(asRecord(left.data()).timestamp),
+      );
       const chats = new Map<string, { name: string; avatar: string; last: string; time: string }>();
-      result.docs.forEach((doc) => {
+      sortedMessages.forEach((doc) => {
         const data = asRecord(doc.data());
         const from = stringValue(data.from);
         const otherUid = from === user.uid ? stringValue(data.to) : from;
@@ -787,17 +806,24 @@ function initializeUserModals(): () => void {
     messageArea.replaceChildren(createElement("div", "dm-empty", "Loading chat..."));
     if (!firestore) return;
     try {
-      const result = await firestore
-        .collection("directMessages")
-        .where("participants", "array-contains", user.uid)
-        .orderBy("timestamp", "asc")
-        .get();
+      const messages = firestore.collection("directMessages");
+      const [sent, received] = await Promise.all([
+        messages.where("from", "==", user.uid).where("to", "==", uid).get(),
+        messages.where("from", "==", uid).where("to", "==", user.uid).get(),
+      ]);
+      const messageDocs = new Map([...sent.docs, ...received.docs].map((doc) => [doc.id, doc]));
+      const sortedMessages = [...messageDocs.values()].sort(
+        (left, right) => timestampMillis(asRecord(left.data()).timestamp) -
+          timestampMillis(asRecord(right.data()).timestamp),
+      );
       messageArea.replaceChildren();
       let count = 0;
-      result.forEach((doc) => {
+      sortedMessages.forEach((doc) => {
         const data = asRecord(doc.data());
-        const participants = Array.isArray(data.participants) ? data.participants : [];
-        if (!participants.includes(uid)) return;
+        const isCurrentConversation =
+          (data.from === user.uid && data.to === uid) ||
+          (data.from === uid && data.to === user.uid);
+        if (!isCurrentConversation) return;
         count += 1;
         const message = createElement("div", `dm-message ${data.from === user.uid ? "me" : "other"}`);
         message.appendChild(createElement("div", undefined, data.deleted ? "Message deleted" : stringValue(data.text)));
