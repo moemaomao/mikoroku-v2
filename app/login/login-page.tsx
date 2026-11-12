@@ -14,6 +14,10 @@ type LoginCover = {
   cover: string;
 };
 
+const COVER_COLUMN_COUNT = 12;
+const COVER_COVERS_PER_COLUMN = 2;
+const COVER_REPEAT_COUNT = 12;
+
 const excludedGenres = new Set([
   "adult",
   "hentai",
@@ -126,12 +130,12 @@ export default function LoginPage() {
           const genres = Array.isArray(record.genres)
             ? record.genres.filter((genre): genre is string => typeof genre === "string")
             : [];
-          if (!title || genres.some((genre) => excludedGenres.has(genre.trim().toLowerCase()))) {
+          if (!title || !cover || genres.some((genre) => excludedGenres.has(genre.trim().toLowerCase()))) {
             return [];
           }
           return [{ title, cover }];
         });
-        setCovers(safeCovers.slice(0, 25));
+        setCovers(safeCovers.slice(0, 40));
       })
       .catch((loadError: unknown) => {
         if (!controller.signal.aborted) {
@@ -205,13 +209,16 @@ export default function LoginPage() {
       <section className={styles.card} aria-labelledby="auth-title">
           <aside className={styles.intro} aria-label="Mikoroku membership">
             <div className={styles.coverWall} aria-hidden="true">
-              {Array.from({ length: 5 }, (_, column) => {
-                const columnCovers = covers.filter((_, index) => index % 5 === column);
+              {Array.from({ length: COVER_COLUMN_COUNT }, (_, column) => {
+                const columnCovers = Array.from({ length: COVER_COVERS_PER_COLUMN }, (_, index) => (
+                  covers.length ? covers[(column * COVER_COVERS_PER_COLUMN + index) % covers.length] : null
+                )).filter((cover): cover is LoginCover => cover !== null);
+                const repeatedCovers = Array.from({ length: COVER_REPEAT_COUNT }, () => columnCovers).flat();
                 return (
                   <div className={styles.coverColumn} key={column}>
-                    {[...columnCovers, ...columnCovers].map((cover, index) => (
+                    {repeatedCovers.map((cover, index) => (
                       <div className={styles.cover} key={`${cover.cover}-${index}`}>
-                        <img alt="" loading="lazy" src={cover.cover} />
+                        <img alt="" loading="eager" src={cover.cover} />
                         <span>{cover.title}</span>
                       </div>
                     ))}
