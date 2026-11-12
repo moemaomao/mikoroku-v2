@@ -2688,6 +2688,7 @@ function RouteIntegrations() {
       firebaseInit.textContent = `if (typeof firebase !== "undefined" && !firebase.apps.some(function(app) { return app.name === "[DEFAULT]"; })) { firebase.initializeApp({ apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4", authDomain: "widget-comment.firebaseapp.com", projectId: "widget-comment", storageBucket: "widget-comment.firebasestorage.app", messagingSenderId: "249700505242", appId: "1:249700505242:web:dab240af09caf30ad7f123" }); }`;
       added.push(firebaseInit);
       document.head.appendChild(firebaseInit);
+      window.dispatchEvent(new Event("firebaseCompatReady"));
     })();
 
     return () => {

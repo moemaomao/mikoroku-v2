@@ -40,7 +40,11 @@ type CompatCollection = CompatQuery & {
 type CompatFirestore = {
   collection: (name: string) => CompatCollection;
 };
+type CompatAuth = {
+  currentUser: CompatUser | null;
+};
 type CompatSdk = {
+  auth?: () => CompatAuth;
   firestore?: (() => CompatFirestore) & {
     FieldValue?: { serverTimestamp?: () => unknown };
   };
@@ -363,14 +367,15 @@ const modalStyles = `
 .dm-user-item{padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);color:white}.dm-user-item:hover{background:rgba(255,255,255,.05)}
 .dm-user-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.1)}.dm-user-info{flex:1;min-width:0}.dm-user-name,.dm-user-lastmsg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dm-user-name{font-size:14px;font-weight:600}.dm-user-lastmsg{font-size:12px;color:#a1a1a1;margin-top:2px}.dm-user-time{font-size:11px;color:#777}
 #dm-chat-area{flex:1;display:none;flex-direction:column;min-width:0;color:white}.dm-chat-header{display:flex;align-items:center;gap:14px;min-height:64px;padding:0 20px;border-bottom:1px solid rgba(255,255,255,.06)}
-#dm-chat-avatar{width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid rgba(77,255,77,.5)}#dm-chat-name{font-weight:700}#dm-chat-status{color:#fbbf24;font-size:.85rem}
+#dm-chat-avatar{width:36px;height:36px;flex:0 0 36px;border-radius:50%;object-fit:cover;border:2px solid rgba(77,255,77,.5)}#dm-chat-name{font-weight:700}#dm-chat-status{color:#fbbf24;font-size:.85rem}
+#mikoroku-dm-modal #mikoroku-dm-chat-avatar{display:block;width:36px;height:36px;flex:0 0 36px;border-radius:50%;object-fit:cover;border:2px solid rgba(77,255,77,.5)}
 #dm-chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px}.dm-message{max-width:75%;padding:11px 16px;border-radius:18px;word-break:break-word;line-height:1.4;background:#334155}.dm-message.me{align-self:flex-end;background:#2563eb}.dm-message.other{align-self:flex-start}.dm-message-time{font-size:.72rem;opacity:.7;margin-top:4px;text-align:right;display:block}
 .dm-input{padding:16px 18px;border-top:1px solid rgba(255,255,255,.06)}.dm-input-wrap{display:flex;align-items:flex-end;gap:12px}#dm-text{flex:1;min-height:48px;max-height:120px;padding:12px 16px;border:0;border-radius:16px;background:rgba(255,255,255,.08);color:white;resize:vertical;font:inherit}.dm-send-btn{width:48px;height:48px;border:0;border-radius:14px;background:linear-gradient(135deg,#62ff4d,#4adc26);color:white;font-size:18px;cursor:pointer}
 .dm-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#777;text-align:center;padding:30px;box-sizing:border-box}.dm-chat-header[hidden]{display:none!important}
 #reply-notif-overlay{z-index:99999;background:rgba(0,20,40,.45)}.notif-box{background:rgba(30,41,59,.97);border:1px solid rgba(96,165,250,.25);color:#e2e8f0;padding:20px;border-radius:16px;max-width:420px;width:92%;max-height:80vh;overflow-y:auto;position:relative}
 .notif-close{position:absolute;top:12px;right:16px;background:none;border:0;color:#93c5fd;font-size:22px;cursor:pointer}.notif-item{padding:14px 16px;margin-bottom:12px;border:1px solid rgba(94,145,255,.4);border-radius:14px;background:rgba(75,102,255,.12)}
 @media(max-width:768px){#dm-modal{padding:8px}.dm-wrapper{height:94vh;max-height:94vh;border-radius:18px}.dm-header{position:relative;z-index:20;padding:0 12px}.dm-header h2{flex:1;text-align:center;margin:0 10px}.dm-body{position:relative;min-height:0}#dm-inbox{width:100%;min-width:100%;height:100%}#dm-chat-area{position:absolute;inset:0;z-index:5;background:rgba(2,7,2,.97)}.dm-chat-header{min-height:64px;padding:0 14px}.dm-chat-header[hidden]{display:none!important}#dm-chat-messages{padding:16px 12px}.dm-input{padding:12px}.dm-input-wrap{gap:8px}#dm-text{min-height:46px}.dm-send-btn{width:46px;height:46px}}
-@media(max-width:480px){.dm-wrapper{height:96vh;max-height:96vh;border-radius:16px}.dm-header{min-height:58px;padding:0 8px}.dm-header h2{font-size:1rem}.dm-chat-header{min-height:58px}#dm-chat-avatar{width:38px;height:38px}#dm-chat-messages{padding:12px 10px}.dm-message{max-width:85%}}
+@media(max-width:480px){.dm-wrapper{height:96vh;max-height:96vh;border-radius:16px}.dm-header{min-height:58px;padding:0 8px}.dm-header h2{font-size:1rem}.dm-chat-header{min-height:58px}#dm-chat-avatar{width:32px;height:32px;flex-basis:32px}#dm-chat-messages{padding:12px 10px}.dm-message{max-width:85%}}
 #mikoroku-dm-modal{z-index:100001;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #mikoroku-dm-modal .dm-wrapper{width:100%;max-width:720px;height:78vh;display:flex;flex-direction:column;overflow:hidden;border-radius:22px;background:rgba(2,7,2,.92);border:1px solid rgba(77,255,101,.18);box-shadow:0 20px 60px rgba(0,0,0,.5)}
 #mikoroku-dm-modal .dm-body{flex:1;display:flex;overflow:hidden;min-height:0}
@@ -381,11 +386,18 @@ const modalStyles = `
 #mikoroku-dm-modal #mikoroku-dm-text{flex:1;min-height:48px;max-height:120px;padding:12px 16px;border:0;border-radius:16px;background:rgba(255,255,255,.08);color:white;resize:vertical;font:inherit}
 #mikoroku-dm-modal .dm-send-btn{width:48px;height:48px;border:0;border-radius:14px;background:linear-gradient(135deg,#62ff4d,#4adc26);color:white;font-size:18px;cursor:pointer}
 #mikoroku-dm-modal #mikoroku-dm-chat-area .dm-chat-header[hidden]{display:none!important}
-#mikoroku-dm-modal .dm-message{position:relative;padding-right:42px}
-#mikoroku-dm-modal .dm-message-actions{position:absolute;top:4px;right:4px;display:flex;gap:2px;opacity:.65}
-#mikoroku-dm-modal .dm-message-actions button{border:0;border-radius:5px;background:rgba(0,0,0,.2);color:white;padding:2px 5px;font-size:11px;cursor:pointer}
-#mikoroku-dm-modal .dm-message-actions button:hover{background:rgba(0,0,0,.4);opacity:1}
+#mikoroku-dm-modal .dm-message{position:relative}
+#mikoroku-dm-modal .dm-message-actions{position:absolute;top:4px;right:-18px;z-index:5}
+#mikoroku-dm-modal .dm-menu-trigger{display:flex;width:24px;height:24px;align-items:center;justify-content:center;padding:0;border:0;border-radius:0;background:transparent;color:white;cursor:pointer}
+#mikoroku-dm-modal .dm-menu-trigger:hover,#mikoroku-dm-modal .dm-message-actions.is-open .dm-menu-trigger{background:transparent}
+#mikoroku-dm-modal .dm-message-menu{position:absolute;top:25px;right:0;display:none;flex-direction:column;gap:2px;min-width:36px;padding:4px;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:#1f2937;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+#mikoroku-dm-modal .dm-message-actions.is-open .dm-message-menu{display:flex}
+#mikoroku-dm-modal .dm-menu-item{display:flex;width:32px;height:32px;align-items:center;justify-content:center;padding:0;border:0;border-radius:7px;background:transparent;cursor:pointer}
+#mikoroku-dm-modal .dm-menu-item:hover{background:rgba(255,255,255,.1)}
+#mikoroku-dm-modal .dm-menu-item-edit{color:#60a5fa}
+#mikoroku-dm-modal .dm-menu-item-delete{color:#ff6b6b}
 @media(max-width:768px){#mikoroku-dm-modal{padding:8px}#mikoroku-dm-modal .dm-wrapper{height:94vh;max-height:94vh;border-radius:18px}#mikoroku-dm-modal .dm-body{position:relative;min-height:0}#mikoroku-dm-modal #mikoroku-dm-inbox{width:100%;min-width:100%;height:100%}#mikoroku-dm-modal #mikoroku-dm-chat-area{position:absolute;inset:0;z-index:5;background:rgba(2,7,2,.97)}#mikoroku-dm-modal #mikoroku-dm-chat-messages{padding:16px 12px}#mikoroku-dm-modal .dm-input{padding:12px}#mikoroku-dm-modal .dm-send-btn{width:46px;height:46px}}
+@media(max-width:768px){#mikoroku-dm-modal .dm-message-actions{right:-10px}}
 @media(max-width:480px){#mikoroku-dm-modal .dm-wrapper{height:96vh;max-height:96vh;border-radius:16px}#mikoroku-dm-modal #mikoroku-dm-chat-messages{padding:12px 10px}.dm-message{max-width:85%}}
 `;
 
@@ -507,6 +519,34 @@ function initializeUserModals(): () => void {
       console.warn("Firestore belum tersedia", error);
       return null;
     }
+  };
+  const waitForFirestore = async (): Promise<CompatFirestore> => {
+    const existing = db();
+    if (existing) return existing;
+
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        window.removeEventListener("firebaseCompatReady", onReady);
+      };
+      const onReady = () => {
+        const firestore = db();
+        if (!firestore) return;
+        cleanup();
+        resolve();
+      };
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Firebase Firestore initialization timed out."));
+      }, 15000);
+
+      window.addEventListener("firebaseCompatReady", onReady);
+      onReady();
+    });
+
+    const firestore = db();
+    if (!firestore) throw new Error("Firebase Firestore is unavailable after initialization.");
+    return firestore;
   };
   const byId = <T extends HTMLElement>(id: string): T | null =>
     document.getElementById(id) as T | null;
@@ -693,29 +733,35 @@ function initializeUserModals(): () => void {
     }
     if (sendButton) sendButton.disabled = true;
   };
+  const closeMessageMenus = () => {
+    dmModal.querySelectorAll<HTMLElement>(".dm-message-actions.is-open").forEach((actions) => {
+      actions.classList.remove("is-open");
+      actions.querySelector("[data-dm-menu-trigger]")?.setAttribute("aria-expanded", "false");
+    });
+  };
   const loadInbox = async (): Promise<void> => {
     dmModal.style.display = "flex";
     if (!inbox) return;
     resetChat();
-    const user = legacy.currentUser;
-    if (!user) {
-      inbox.replaceChildren(createElement("div", "dm-empty", "Login dulu untuk melihat DM"));
-      return;
-    }
     inbox.replaceChildren(createElement("div", "dm-empty", "Loading..."));
-    const firestore = db();
-    if (!firestore) {
-      inbox.replaceChildren(createElement("div", "dm-empty", "Firestore belum dimuat"));
-      return;
-    }
     try {
+      const firestore = await waitForFirestore();
+      const user = legacy.currentUser ||
+        legacy.firebase?.auth?.().currentUser ||
+        (window as Window & { currentUser?: CompatUser | null }).currentUser;
+      if (!user) {
+        inbox.replaceChildren(createElement("div", "dm-empty", "Login dulu untuk melihat DM"));
+        return;
+      }
+      legacy.currentUser = user;
+
       const messages = firestore.collection("directMessages");
-      const [sent, received] = await Promise.all([
-        messages.where("from", "==", user.uid).limit(100).get(),
-        messages.where("to", "==", user.uid).limit(100).get(),
-      ]);
-      const messageDocs = new Map([...sent.docs, ...received.docs].map((doc) => [doc.id, doc]));
-      const sortedMessages = [...messageDocs.values()].sort(
+      const inboxSnapshot = await messages
+        .where("participants", "array-contains", user.uid)
+        .orderBy("timestamp", "desc")
+        .limit(50)
+        .get();
+      const sortedMessages = [...inboxSnapshot.docs].sort(
         (left, right) => timestampMillis(asRecord(right.data()).timestamp) -
           timestampMillis(asRecord(left.data()).timestamp),
       );
@@ -762,7 +808,8 @@ function initializeUserModals(): () => void {
       }
     } catch (error) {
       console.error("DM Inbox error:", error);
-      inbox.replaceChildren(createElement("div", "dm-empty", "Gagal memuat inbox"));
+      const detail = error instanceof Error ? error.message : String(error);
+      inbox.replaceChildren(createElement("div", "dm-empty", `Gagal memuat inbox: ${detail}`));
     }
   };
   const openChat = async (uid: string): Promise<void> => {
@@ -807,15 +854,21 @@ function initializeUserModals(): () => void {
     if (!firestore) return;
     try {
       const messages = firestore.collection("directMessages");
-      const [sent, received] = await Promise.all([
-        messages.where("from", "==", user.uid).where("to", "==", uid).get(),
-        messages.where("from", "==", uid).where("to", "==", user.uid).get(),
-      ]);
-      const messageDocs = new Map([...sent.docs, ...received.docs].map((doc) => [doc.id, doc]));
-      const sortedMessages = [...messageDocs.values()].sort(
-        (left, right) => timestampMillis(asRecord(left.data()).timestamp) -
-          timestampMillis(asRecord(right.data()).timestamp),
-      );
+      const conversationSnapshot = await messages
+        .where("participants", "array-contains", user.uid)
+        .get();
+      const sortedMessages = conversationSnapshot.docs
+        .filter((doc) => {
+          const data = asRecord(doc.data());
+          return (
+            (data.from === user.uid && data.to === uid) ||
+            (data.from === uid && data.to === user.uid)
+          );
+        })
+        .sort(
+          (left, right) => timestampMillis(asRecord(left.data()).timestamp) -
+            timestampMillis(asRecord(right.data()).timestamp),
+        );
       messageArea.replaceChildren();
       let count = 0;
       sortedMessages.forEach((doc) => {
@@ -836,10 +889,23 @@ function initializeUserModals(): () => void {
         );
         if (data.from === user.uid && !data.deleted) {
           const actions = createElement("div", "dm-message-actions");
-          const editButton = createElement("button", undefined, "Edit");
+          const menuButton = createElement("button", "dm-menu-trigger");
+          menuButton.type = "button";
+          menuButton.setAttribute("data-dm-menu-trigger", "");
+          menuButton.setAttribute("aria-label", "Opsi pesan");
+          menuButton.setAttribute("aria-haspopup", "menu");
+          menuButton.setAttribute("aria-expanded", "false");
+          menuButton.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
+          const menu = createElement("div", "dm-message-menu");
+          menu.setAttribute("role", "menu");
+          const editButton = createElement("button", "dm-menu-item dm-menu-item-edit");
           editButton.type = "button";
           editButton.setAttribute("aria-label", "Edit message");
+          editButton.setAttribute("role", "menuitem");
+          editButton.title = "Edit";
+          editButton.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`;
           editButton.addEventListener("click", async () => {
+            closeMessageMenus();
             const currentText = stringValue(data.text);
             const updatedText = window.prompt("Edit message:", currentText)?.trim();
             if (!updatedText || updatedText === currentText) return;
@@ -856,10 +922,14 @@ function initializeUserModals(): () => void {
               window.alert("Gagal mengedit pesan.");
             }
           });
-          const deleteButton = createElement("button", undefined, "Hapus");
+          const deleteButton = createElement("button", "dm-menu-item dm-menu-item-delete");
           deleteButton.type = "button";
           deleteButton.setAttribute("aria-label", "Hapus pesan");
+          deleteButton.setAttribute("role", "menuitem");
+          deleteButton.title = "Hapus";
+          deleteButton.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
           deleteButton.addEventListener("click", async () => {
+            closeMessageMenus();
             if (!window.confirm("Hapus pesan ini?")) return;
             try {
               await firestore.collection("directMessages").doc(doc.id).update({
@@ -872,7 +942,8 @@ function initializeUserModals(): () => void {
               window.alert("Gagal menghapus pesan.");
             }
           });
-          actions.append(editButton, deleteButton);
+          menu.append(editButton, deleteButton);
+          actions.append(menuButton, menu);
           message.appendChild(actions);
         }
         messageArea.appendChild(message);
@@ -1045,6 +1116,18 @@ function initializeUserModals(): () => void {
   const onModalClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    const menuButton = target.closest<HTMLButtonElement>("[data-dm-menu-trigger]");
+    if (menuButton) {
+      const actions = menuButton.closest<HTMLElement>(".dm-message-actions");
+      const shouldOpen = !actions?.classList.contains("is-open");
+      closeMessageMenus();
+      if (actions && shouldOpen) {
+        actions.classList.add("is-open");
+        menuButton.setAttribute("aria-expanded", "true");
+      }
+      return;
+    }
+    if (!target.closest(".dm-message-actions")) closeMessageMenus();
     if (target.closest("[data-close-profile]")) closeProfile();
     else if (target.closest("[data-profile-dm]")) {
       const dmTarget = profileDmTarget;

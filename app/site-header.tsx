@@ -689,17 +689,17 @@ function HeaderContents() {
 
   const handleMessages = () => {
     closeAuth();
+    const button = document.getElementById("dm-btn");
+    if (button) {
+      button.click();
+      return;
+    }
     if (typeof window.openMikorokuDmInbox === "function") {
       void window.openMikorokuDmInbox();
       return;
     }
     if (typeof window.loadDmInbox === "function") {
       void window.loadDmInbox();
-      return;
-    }
-    const button = document.getElementById("dm-btn");
-    if (button) {
-      button.click();
       return;
     }
     const modal = document.getElementById("dm-modal");

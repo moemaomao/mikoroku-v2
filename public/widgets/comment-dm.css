@@ -136,8 +136,9 @@
 }
 
 #dm-chat-avatar{
-  width:46px;
-  height:46px;
+  width:36px;
+  height:36px;
+  flex:0 0 36px;
   border-radius:50%;
   object-fit:cover;
   border:
@@ -247,6 +248,16 @@
       rgba(92, 255, 77, 0.03),
       transparent 50%
     );
+}
+
+#dm-chat-messages > div > div:first-child img{
+  display:block;
+  max-width:min(100%, 180px) !important;
+  max-height:180px !important;
+  width:auto !important;
+  height:auto !important;
+  object-fit:contain;
+  border-radius:8px;
 }
 
 #dm-chat-messages::-webkit-scrollbar{

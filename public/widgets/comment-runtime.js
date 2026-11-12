@@ -6120,7 +6120,7 @@ function applyCommentLeaderboardProfileStyle(profileBox, leaderboardRank) {
     statsBox.style.border = rankStyle
       ? `1px solid rgba(${rankStyle.accent},.35)`
       : 'none';
-  }
+  }``
 }
 
 async function showUserProfile(uid, leaderboardRank) {
@@ -6560,6 +6560,15 @@ window.addEventListener('load', function() {
 async function loadDmInbox() {
   const inboxEl = document.getElementById('dm-inbox');
   if (!inboxEl) return;
+  inboxEl.onclick = (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const chatItem = target.closest('.dm-user-item');
+    if (chatItem?.dataset.chatUid) {
+      void openChat(chatItem.dataset.chatUid);
+    }
+  };
   startDMBadgeLive();
    updateDMMyAvatar();
   inboxEl.innerHTML = '<div style="padding:40px; text-align:center; color:#ccc;">Loading messages...</div>';
@@ -6629,7 +6638,7 @@ async function loadDmInbox() {
     let html = '';
     chats.forEach(chat => {
       html += `
-<div class="dm-user-item" onclick="openChat('${chat.uid}')">
+<div class="dm-user-item" data-chat-uid="${chat.uid}">
 
   <img
     src="${chat.avatar}"
@@ -6753,69 +6762,30 @@ if (!firebase.auth().currentUser) {
   unsubscribeCurrentChat();
   currentChatUid = uid;
 
-  await markMessagesAsRead(uid);
-
   const messagesContainer = document.getElementById('dm-chat-messages');
   const header = document.getElementById('dm-chat-header');
+  const chatArea = document.getElementById('dm-chat-area');
 
   if (header) header.style.display = 'flex';
+  if (chatArea) chatArea.style.display = 'flex';
 
-  const cachedUser = window.dmUserCache?.[uid] || {};
-  let userData = {};
-
-  try {
-    userData = await getUserData(uid);
-  } catch (e) {
-    console.error("Gagal mengambil data user:", e);
+  if (window.innerWidth <= 768) {
+    document.getElementById("dm-inbox")?.classList.add("mobile-hide");
+    document.getElementById("dm-chat-area")?.classList.add("mobile-open");
   }
 
   const textArea = document.getElementById("dm-text");
   const sendBtn = document.getElementById("dm-send-btn");
 
-if (textArea) {
-  textArea.disabled = false;
-  textArea.placeholder = "Type a message...";
-}
-
-if (sendBtn) {
-  sendBtn.disabled = false;
-  sendBtn.style.opacity = "1";
-  sendBtn.style.pointerEvents = "auto";
-}
-
-  const displayName = userData.displayName || 
-                     userData.username || 
-                     cachedUser.displayName || 
-                     "User";
-  const username = userData.username ||
-                    displayName
-                   .toLowerCase()
-                   .replace(/\s+/g, '');
-
-  document.getElementById('dm-chat-name').textContent = displayName;
-
-  const avatar = userData.photoURL || 
-                userData.avatar || 
-                cachedUser.avatar || 
-                ANONYMOUS_AVATAR;
-                
-
-  const statusEl =
-  document.getElementById('dm-chat-status');
-
-if (statusEl) {
-  statusEl.textContent = `@${username}`;
-}
-  const avatarEl = document.getElementById('dm-chat-avatar');
-  if (avatarEl) {
-    avatarEl.src = avatar;
-    avatarEl.onerror = () => avatarEl.src = ANONYMOUS_AVATAR;
+  if (textArea) {
+    textArea.disabled = false;
+    textArea.placeholder = "Type a message...";
   }
 
-  // Mobile handling
-  if (window.innerWidth <= 768) {
-    document.getElementById("dm-inbox")?.classList.add("mobile-hide");
-    document.getElementById("dm-chat-area")?.classList.add("mobile-open");
+  if (sendBtn) {
+    sendBtn.disabled = false;
+    sendBtn.style.opacity = "1";
+    sendBtn.style.pointerEvents = "auto";
   }
 
   messagesContainer.innerHTML = `
@@ -6824,29 +6794,70 @@ if (statusEl) {
     </div>
   `;
 
+  const cachedUser = window.dmUserCache?.[uid] || {};
+  const cachedName = cachedUser.displayName || "User";
+  const cachedUsername = cachedName.toLowerCase().replace(/\s+/g, '');
+  const chatName = document.getElementById('dm-chat-name');
+  const statusEl = document.getElementById('dm-chat-status');
+  const avatarEl = document.getElementById('dm-chat-avatar');
+
+  if (chatName) chatName.textContent = cachedName;
+  if (statusEl) statusEl.textContent = `@${cachedUsername}`;
+  if (avatarEl) {
+    avatarEl.src = cachedUser.avatar || ANONYMOUS_AVATAR;
+    avatarEl.onerror = () => avatarEl.src = ANONYMOUS_AVATAR;
+  }
+
+  void markMessagesAsRead(uid);
+  void getUserData(uid).then(userData => {
+    if (currentChatUid !== uid) return;
+
+    const displayName = userData.displayName ||
+      userData.username ||
+      cachedUser.displayName ||
+      "User";
+    const username = userData.username ||
+      displayName.toLowerCase().replace(/\s+/g, '');
+    const avatar = userData.photoURL ||
+      userData.avatar ||
+      cachedUser.avatar ||
+      ANONYMOUS_AVATAR;
+
+    if (chatName) chatName.textContent = displayName;
+    if (statusEl) statusEl.textContent = `@${username}`;
+    if (avatarEl) avatarEl.src = avatar;
+  }).catch(error => {
+    console.error("Gagal mengambil data user:", error);
+  });
+
   // Listener chat
   const query = db.collection('directMessages')
-    .where('participants', 'array-contains', currentUser.uid)
-    .orderBy('timestamp', 'asc');
+    .where('participants', 'array-contains', currentUser.uid);
 
   currentChatUnsubscribe = query.onSnapshot(
     (snap) => {
+      if (currentChatUid !== uid) return;
 
       messagesContainer.innerHTML = '';
 
       let messageCount = 0;
 
-      snap.forEach(doc => {
+      const chatMessages = snap.docs
+        .filter(doc => {
+          const participants = doc.data().participants;
+          return participants?.includes(uid) &&
+            participants?.includes(currentUser.uid);
+        })
+        .sort((left, right) => {
+          const leftTime = left.data().timestamp?.toMillis?.() || 0;
+          const rightTime = right.data().timestamp?.toMillis?.() || 0;
+          return leftTime - rightTime;
+        });
+
+      chatMessages.forEach(doc => {
 
         const m = doc.data();
         const messageId = doc.id;
-
-        if (
-          !m.participants?.includes(uid) ||
-          !m.participants?.includes(currentUser.uid)
-        ) {
-          return;
-        }
 
         messageCount++;
 
@@ -7073,6 +7084,7 @@ if (statusEl) {
 
     },
     (error) => {
+      if (currentChatUid !== uid) return;
 
       console.error(
         "Chat listener error:",
@@ -7277,6 +7289,7 @@ function backToInbox() {
 window.openDmToUser = async function(uid, displayName, avatar) {
   if (!uid || !currentUser) return;
 
+  window.loadCommentFeatureStyles?.('dm');
   await updateDMMyAvatar();
 
   window.dmUserCache[uid] = {
@@ -7372,6 +7385,7 @@ function initDM() {
   const dmBtn = document.getElementById('dm-btn');
   if (!dmBtn) return;
   dmBtn.onclick = async () => {
+    window.loadCommentFeatureStyles?.('dm');
 
     if (!firebase.auth().currentUser) {
       alert("Silakan login terlebih dahulu");
