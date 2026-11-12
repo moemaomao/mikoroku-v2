@@ -93,28 +93,26 @@
   object-fit: cover;
 }
 
-.cover span {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  overflow: hidden;
-  padding: 26px 8px 8px;
-  background: linear-gradient(transparent, rgba(12, 8, 11, 0.87));
-  color: #fff;
-  font-size: clamp(8px, 0.8vw, 11px);
-  font-weight: 700;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .introShade {
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(14, 9, 12, 0.68), rgba(17, 10, 14, 0.24) 72%, rgba(17, 10, 14, 0.58)),
-    linear-gradient(0deg, rgba(13, 9, 12, 0.78), transparent 66%),
-    linear-gradient(180deg, rgba(12, 8, 11, 0.38), transparent 30%);
+    linear-gradient(
+      90deg,
+      rgba(10, 7, 9, 0.78) 0%,
+      rgba(12, 8, 11, 0.55) 40%,
+      rgba(12, 8, 11, 0.50) 70%,
+      rgba(10, 7, 9, 0.72) 100%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(10, 7, 9, 0.80) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(10, 7, 9, 0.40) 0%,
+      transparent 30%
+    );
 }
 
 .brand {
@@ -442,11 +440,19 @@
   }
 
   .coverWall {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    transform: rotate(-12deg) scale(1.35);
+    transform-origin: center center;
+    inset: -18%;
   }
 
-  .coverColumn:nth-child(n + 7) {
+  .coverColumn:nth-child(n + 5) {
     display: none;
+  }
+
+  .cover {
+    border-radius: 6px;
   }
 
   .introCopy {

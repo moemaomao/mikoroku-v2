@@ -15,20 +15,8 @@ type LoginCover = {
 };
 
 const COVER_COLUMN_COUNT = 12;
-const COVER_COVERS_PER_COLUMN = 2;
-const COVER_REPEAT_COUNT = 12;
-
-const excludedGenres = new Set([
-  "adult",
-  "hentai",
-  "ecchi",
-  "erotica",
-  "smut",
-  "porn",
-  "pornographic",
-  "mature",
-  "doujinshi",
-]);
+const COVERS_PER_COLUMN = 10;
+const COVER_REPEAT_COUNT = 2;
 
 const firebaseConfig = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
@@ -50,7 +38,9 @@ function loadScript(src: string): Promise<void> {
   if (existing) {
     return new Promise((resolve, reject) => {
       existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error(`Gagal memuat ${src}`)), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Gagal memuat ${src}`)), {
+        once: true,
+      });
     });
   }
 
@@ -71,9 +61,10 @@ function loadScript(src: string): Promise<void> {
 }
 
 function getAuthErrorMessage(error: unknown): string {
-  const code = typeof error === "object" && error !== null && "code" in error
-    ? String(error.code)
-    : "";
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String(error.code)
+      : "";
 
   switch (code) {
     case "auth/invalid-email":
@@ -100,6 +91,24 @@ function getAuthErrorMessage(error: unknown): string {
   }
 }
 
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function normalizeCover(url: string): string {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("cover/") || url.startsWith("/cover/")) {
+    return `/catalog/${url.replace(/^\//, "")}`;
+  }
+  return url.startsWith("/") ? url : `/${url}`;
+}
+
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -113,29 +122,39 @@ export default function LoginPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const url = `/catalog/manga.json?t=${Date.now()}`;
 
-    void fetch("/catalog/manga.json", { signal: controller.signal })
+    void fetch(url, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Manga catalog returned HTTP ${response.status}.`);
         const items: unknown = await response.json();
         if (!Array.isArray(items)) throw new Error("Manga catalog response must be an array.");
 
-        const safeCovers = items.flatMap((item): LoginCover[] => {
-          if (typeof item !== "object" || item === null) return [];
+        const seen = new Set<string>();
+        const allCovers: LoginCover[] = [];
+
+        for (const item of items) {
+          if (typeof item !== "object" || item === null) continue;
           const record = item as Record<string, unknown>;
-          const title = typeof record.title === "string" ? record.title : "";
-          const cover = [record.cover, record.img].find(
-            (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value),
-          ) || "";
-          const genres = Array.isArray(record.genres)
-            ? record.genres.filter((genre): genre is string => typeof genre === "string")
-            : [];
-          if (!title || !cover || genres.some((genre) => excludedGenres.has(genre.trim().toLowerCase()))) {
-            return [];
-          }
-          return [{ title, cover }];
-        });
-        setCovers(safeCovers.slice(0, 40));
+
+          const title = typeof record.title === "string" ? record.title.trim() : "";
+          const rawCover =
+            [record.cover, record.img].find(
+              (v): v is string => typeof v === "string" && v.trim().length > 0,
+            ) || "";
+
+          const cover = normalizeCover(rawCover);
+          if (!title || !cover) continue;
+
+          // deduplicate by cover URL
+          if (seen.has(cover)) continue;
+          seen.add(cover);
+
+          allCovers.push({ title, cover });
+        }
+
+        // acak semua, tanpa filter genre
+        setCovers(shuffle(allCovers));
       })
       .catch((loadError: unknown) => {
         if (!controller.signal.aborted) {
@@ -148,9 +167,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     const requestedReturn = new URLSearchParams(window.location.search).get("returnTo");
-    const safeReturnTo = requestedReturn?.startsWith("/") && !requestedReturn.startsWith("//")
-      ? requestedReturn
-      : "/";
+    const safeReturnTo =
+      requestedReturn?.startsWith("/") && !requestedReturn.startsWith("//")
+        ? requestedReturn
+        : "/";
     setReturnTo(safeReturnTo);
 
     let active = true;
@@ -207,145 +227,219 @@ export default function LoginPage() {
   return (
     <main className={styles.page}>
       <section className={styles.card} aria-labelledby="auth-title">
-          <aside className={styles.intro} aria-label="Mikoroku membership">
-            <div className={styles.coverWall} aria-hidden="true">
-              {Array.from({ length: COVER_COLUMN_COUNT }, (_, column) => {
-                const columnCovers = Array.from({ length: COVER_COVERS_PER_COLUMN }, (_, index) => (
-                  covers.length ? covers[(column * COVER_COVERS_PER_COLUMN + index) % covers.length] : null
-                )).filter((cover): cover is LoginCover => cover !== null);
-                const repeatedCovers = Array.from({ length: COVER_REPEAT_COUNT }, () => columnCovers).flat();
-                return (
-                  <div className={styles.coverColumn} key={column}>
-                    {repeatedCovers.map((cover, index) => (
-                      <div className={styles.cover} key={`${cover.cover}-${index}`}>
-                        <img alt="" loading="eager" src={cover.cover} />
-                        <span>{cover.title}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
+        <aside className={styles.intro} aria-label="Mikoroku membership">
+          <div className={styles.coverWall} aria-hidden="true">
+            {Array.from({ length: COVER_COLUMN_COUNT }, (_, column) => {
+              if (covers.length === 0) {
+                return <div className={styles.coverColumn} key={column} />;
+              }
+
+              const start = (column * 7) % covers.length;
+              const columnCovers: LoginCover[] = [];
+              for (let i = 0; i < COVERS_PER_COLUMN; i++) {
+                columnCovers.push(covers[(start + i) % covers.length]);
+              }
+
+              const repeatedCovers = Array.from(
+                { length: COVER_REPEAT_COUNT },
+                () => columnCovers,
+              ).flat();
+
+              return (
+                <div className={styles.coverColumn} key={column}>
+                  {repeatedCovers.map((cover, index) => (
+                    <div
+                      className={styles.cover}
+                      key={`${column}-${index}-${cover.cover}`}
+                    >
+                      <img
+                        alt=""
+                        loading="eager"
+                        src={cover.cover}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className={styles.introShade} />
+
+          <a className={styles.brand} href="/" aria-label="Mikoroku home">
+            <img
+              alt=""
+              className={styles.brandLogo}
+              src="/assets/icons/mikoroku.png"
+            />
+          </a>
+
+          <div className={styles.introCopy}>
+            <span className={styles.eyebrow}>YOUR NEXT CHAPTER STARTS HERE</span>
+            <h2>
+              Welcome back,
+              <br />
+              <em>Reader.</em>
+            </h2>
+            <p>Pick up right where you left off.</p>
+            <ul className={styles.benefits}>
+              <li>
+                <span aria-hidden="true">▤</span>
+                <span>
+                  <strong>Explore titles</strong>
+                  <small>Manga, Manhwa, Manhua &amp; Novels</small>
+                </span>
+              </li>
+              <li>
+                <span aria-hidden="true">♧</span>
+                <span>
+                  <strong>Keep your place</strong>
+                  <small>Pick up where you left off</small>
+                </span>
+              </li>
+              <li>
+                <span aria-hidden="true">✧</span>
+                <span>
+                  <strong>Save your favorites</strong>
+                  <small>Build a library that feels like yours</small>
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <span className={styles.panelFootnote}>
+            A little more story in every day.
+          </span>
+        </aside>
+
+        <div className={styles.formPanel}>
+          <div className={styles.formHeading}>
+            <span className={styles.accountIcon} aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="3.5" />
+                <path d="M5 20c.7-3.5 3.1-5.3 7-5.3s6.3 1.8 7 5.3" />
+              </svg>
+            </span>
+            <div>
+              <h1 id="auth-title">
+                {isSignUp ? "Create your account" : "Welcome back"}
+              </h1>
+              <p>
+                {isSignUp
+                  ? "Join Mikoroku and make it yours."
+                  : "Sign in to continue reading."}
+              </p>
             </div>
-            <div className={styles.introShade} />
-            <a className={styles.brand} href="/" aria-label="Mikoroku home">
-              <img alt="" className={styles.brandLogo} src="/assets/icons/mikoroku.png" />
-            </a>
-            <div className={styles.introCopy}>
-              <span className={styles.eyebrow}>YOUR NEXT CHAPTER STARTS HERE</span>
-              <h2>Welcome back,<br /><em>Reader.</em></h2>
-              <p>Pick up right where you left off.</p>
-              <ul className={styles.benefits}>
-                <li><span aria-hidden="true">▤</span><span><strong>Explore titles</strong><small>Manga, Manhwa, Manhua &amp; Novels</small></span></li>
-                <li><span aria-hidden="true">♧</span><span><strong>Keep your place</strong><small>Pick up where you left off</small></span></li>
-                <li><span aria-hidden="true">✧</span><span><strong>Save your favorites</strong><small>Build a library that feels like yours</small></span></li>
-              </ul>
-            </div>
-            <span className={styles.panelFootnote}>A little more story in every day.</span>
-          </aside>
+          </div>
 
-          <div className={styles.formPanel}>
-            <div className={styles.formHeading}>
-              <span className={styles.accountIcon} aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="8" r="3.5" />
-                  <path d="M5 20c.7-3.5 3.1-5.3 7-5.3s6.3 1.8 7 5.3" />
-                </svg>
-              </span>
-              <div>
-                <h1 id="auth-title">{isSignUp ? "Create your account" : "Welcome back"}</h1>
-                <p>{isSignUp ? "Join Mikoroku and make it yours." : "Sign in to continue reading."}</p>
-              </div>
-            </div>
-
-            <form className={styles.form} onSubmit={submit}>
-              <div className={styles.formTabs} role="group" aria-label="Account action">
-                <button
-                  aria-pressed={!isSignUp}
-                  className={!isSignUp ? styles.activeTab : ""}
-                  onClick={() => {
-                    setIsSignUp(false);
-                    setError("");
-                  }}
-                  type="button"
-                >
-                  Log In
-                </button>
-                <button
-                  aria-pressed={isSignUp}
-                  className={isSignUp ? styles.activeTab : ""}
-                  onClick={() => {
-                    setIsSignUp(true);
-                    setError("");
-                  }}
-                  type="button"
-                >
-                  Sign Up
-                </button>
-              </div>
-              <label htmlFor="auth-email">Email address</label>
-              <input
-                autoComplete="email"
-                id="auth-email"
-                name="email"
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@example.com"
-                required
-                type="email"
-                value={email}
-              />
-
-              <label htmlFor="auth-password">Password</label>
-              <input
-                autoComplete={isSignUp ? "new-password" : "current-password"}
-                id="auth-password"
-                minLength={6}
-                name="password"
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 6 characters"
-                required
-                type="password"
-                value={password}
-              />
-              {isSignUp && (
-                <>
-                  <label htmlFor="auth-confirm-password">Confirm password</label>
-                  <input
-                    autoComplete="new-password"
-                    id="auth-confirm-password"
-                    minLength={6}
-                    name="confirmPassword"
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    placeholder="Re-enter your password"
-                    required
-                    type="password"
-                    value={confirmPassword}
-                  />
-                  <span className={styles.hint}>Use at least 6 characters.</span>
-                </>
-              )}
-
-              {error && <p className={styles.error} role="alert">{error}</p>}
-
-              <button className={styles.submit} disabled={!auth || loading} type="submit">
-                {loading ? "Please wait..." : isSignUp ? "Create account" : "Sign in"}
-              </button>
-            </form>
-
-            <p className={styles.switchMode}>
-              {isSignUp ? "Already have an account?" : "New to Mikoroku?"}{" "}
+          <form className={styles.form} onSubmit={submit}>
+            <div className={styles.formTabs} role="group" aria-label="Account action">
               <button
+                aria-pressed={!isSignUp}
+                className={!isSignUp ? styles.activeTab : ""}
                 onClick={() => {
-                  setIsSignUp((current) => !current);
+                  setIsSignUp(false);
                   setError("");
                 }}
                 type="button"
               >
-                {isSignUp ? "Sign in" : "Create an account"}
+                Log In
               </button>
-            </p>
+              <button
+                aria-pressed={isSignUp}
+                className={isSignUp ? styles.activeTab : ""}
+                onClick={() => {
+                  setIsSignUp(true);
+                  setError("");
+                }}
+                type="button"
+              >
+                Sign Up
+              </button>
+            </div>
 
-            <a className={styles.back} href={returnTo}>Back to previous page</a>
-          </div>
+            <label htmlFor="auth-email">Email address</label>
+            <input
+              autoComplete="email"
+              id="auth-email"
+              name="email"
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com"
+              required
+              type="email"
+              value={email}
+            />
+
+            <label htmlFor="auth-password">Password</label>
+            <input
+              autoComplete={isSignUp ? "new-password" : "current-password"}
+              id="auth-password"
+              minLength={6}
+              name="password"
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+              type="password"
+              value={password}
+            />
+
+            {isSignUp && (
+              <>
+                <label htmlFor="auth-confirm-password">Confirm password</label>
+                <input
+                  autoComplete="new-password"
+                  id="auth-confirm-password"
+                  minLength={6}
+                  name="confirmPassword"
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  required
+                  type="password"
+                  value={confirmPassword}
+                />
+                <span className={styles.hint}>Use at least 6 characters.</span>
+              </>
+            )}
+
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+
+            <button
+              className={styles.submit}
+              disabled={!auth || loading}
+              type="submit"
+            >
+              {loading
+                ? "Please wait..."
+                : isSignUp
+                  ? "Create account"
+                  : "Sign in"}
+            </button>
+          </form>
+
+          <p className={styles.switchMode}>
+            {isSignUp ? "Already have an account?" : "New to Mikoroku?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError("");
+              }}
+            >
+              {isSignUp ? "Sign in" : "Create an account"}
+            </button>
+          </p>
+
+          <a className={styles.back} href={returnTo}>
+            Back to previous page
+          </a>
+        </div>
       </section>
     </main>
   );
