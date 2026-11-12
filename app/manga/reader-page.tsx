@@ -1949,7 +1949,12 @@ export default function ReaderPage({
         paddingBottom: "48px",
       } : undefined}>
       <header className="reader-toolbar reader-accent-toolbar relative z-[2] mt-4 mb-4 border-0 bg-transparent text-left shadow-none">
-        <div className="reader-heading-row reader-accent-heading mx-auto grid min-h-[82px] w-full max-w-[1110px] grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border px-4 py-3">
+        <div className={`reader-heading-row reader-accent-heading mx-auto grid min-h-[82px] grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border px-4 py-3 ${activeKind === "novel"
+          ? `w-[calc(100%-24px)] sm:w-[min(calc(100%-32px),1040px)] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`
+          : mode === "long-strip"
+            ? "w-full max-w-[1000px]"
+            : "w-[calc(100%-16px)] max-w-[964px] sm:w-[min(calc(100%-36px),964px)]"
+        }`}>
           <a className="reader-home-link reader-accent-header-button inline-flex size-[42px] items-center justify-center justify-self-start rounded-[11px] border border-transparent bg-rose-200/15 text-rose-200 transition hover:-translate-y-px hover:bg-rose-200/25" href={`/series/${encodeURIComponent(slug)}`} aria-label="Back to series details" title="Back to series details">
             <svg className="size-[22px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.7]" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M19 12H5m0 0 6-6m-6 6 6 6" />
