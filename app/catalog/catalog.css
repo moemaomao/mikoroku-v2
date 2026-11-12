@@ -309,6 +309,12 @@ body.dark .catalog-toolbar select {
   background: #0a0a0f !important;
 }
 
+.catalog-cover > .cover-image-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
 .catalog-cover img {
   position: absolute;
   inset: 0;

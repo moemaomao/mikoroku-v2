@@ -838,6 +838,7 @@ function HeaderContents() {
                       alt=""
                       loading="lazy"
                       nsfw={manga.nsfw === true}
+                      showNsfwBadge={false}
                       onError={(event) => { event.currentTarget.src = DEFAULT_THUMB; }}
                       className="h-[60px] w-[42px] shrink-0 rounded-md object-cover"
                     />
@@ -945,6 +946,7 @@ function HeaderContents() {
                         alt=""
                         loading="lazy"
                         nsfw={isNsfwManga(bookmark.slug, bookmark.title)}
+                        showNsfwBadge={false}
                         onError={(event) => { event.currentTarget.src = DEFAULT_THUMB; }}
                         className="h-[52px] w-[38px] shrink-0 rounded-md object-cover"
                       />

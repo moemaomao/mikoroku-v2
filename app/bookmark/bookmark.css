@@ -137,12 +137,19 @@ html.dark .bookmark-route .bookmark-notice.logged-in {
 }
 
 .bookmark-route .bookmark-cover {
+  position: relative;
   display: block;
   flex: 0 0 70px;
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border-radius: 8px;
   background: var(--bookmark-cover);
+}
+
+.bookmark-route .bookmark-cover > .cover-image-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
 }
 
 .bookmark-route .bookmark-cover img {

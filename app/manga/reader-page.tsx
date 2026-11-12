@@ -302,16 +302,34 @@ function ReaderImage({
           Image could not be loaded
         </span>
       ) : displaySrc ? (
-        <img
-          className={`${className} relative`}
-          src={displaySrc}
-          alt={alt}
-          loading={loading}
-          fetchPriority={fetchPriority}
-          decoding="async"
-          onLoad={() => setLoaded(true)}
-          onError={handleError}
-        />
+        <>
+          <img
+            className={`${className} relative`}
+            src={displaySrc}
+            alt={alt}
+            loading={loading}
+            fetchPriority={fetchPriority}
+            decoding="async"
+            onLoad={() => setLoaded(true)}
+            onError={handleError}
+          />
+          {concealNsfw && (
+            <span
+              className="pointer-events-none absolute inset-0 z-10 grid place-items-center"
+              role="img"
+              aria-label={`${alt}: R18. Enable NSFW to remove the blur.`}
+            >
+              <span className="flex flex-col items-center gap-2 px-3 text-center">
+                <span className="rounded border border-white/60 bg-red-600/55 px-3 py-1 text-sm font-black tracking-wider text-white shadow-lg">
+                  R18
+                </span>
+                <span className="rounded bg-black/65 px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg">
+                  Enable NSFW to remove the blur
+                </span>
+              </span>
+            </span>
+          )}
+        </>
       ) : (
         <span className="grid min-h-[20vh] place-items-center" aria-hidden="true">
           <span className="size-8 animate-spin rounded-full border-2 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />

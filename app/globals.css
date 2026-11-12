@@ -13,6 +13,26 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant list-mode (&:where(html[data-card-display="list"] *));
 
+.cover-image-frame {
+  position: relative;
+  display: inline-grid;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.thumb > .cover-image-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.cover > .cover-image-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  max-width: none;
+}
+
 :root {
   --mikoroku-theme-gradient: linear-gradient(180deg, #481126 0%, #120d14 60%, #0b0b0b 100%);
   --mikoroku-sidebar-gradient-start: #481126;

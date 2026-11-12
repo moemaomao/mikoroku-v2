@@ -540,6 +540,7 @@ export default function BookmarkPage() {
                         src={bookmark.img || "/assets/icons/favicon.ico"}
                         alt=""
                         nsfw={isNsfwManga(bookmark.slug, bookmark.title)}
+                        showNsfwBadge={false}
                         onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
                       />
                     </span>

@@ -292,12 +292,14 @@ type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   src: string;
   optimizePreset?: ImageProxyPreset;
   nsfw?: boolean;
+  showNsfwBadge?: boolean;
 };
 
 export function CoverImage({
   src,
   optimizePreset = "cover",
   nsfw = false,
+  showNsfwBadge = true,
   loading = "lazy",
   onError,
   ...props
@@ -335,7 +337,7 @@ export function CoverImage({
     return () => observer.disconnect();
   }, [loading, visible]);
 
-  return (
+  const image = (
     <img
       {...props}
       ref={imageRef}
@@ -349,5 +351,44 @@ export function CoverImage({
         onError?.(event);
       }}
     />
+  );
+
+  if (!nsfw || props["aria-hidden"] === true) return image;
+
+  return (
+    <span className={`cover-image-frame${props.className ? ` ${props.className}` : ""}`}>
+      {image}
+      {!showNsfw && showNsfwBadge && (
+        <span
+          role="img"
+          aria-label="R18"
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            pointerEvents: "none",
+          }}
+        >
+          <span
+            style={{
+              padding: "6px 12px",
+              border: "1px solid rgba(255,255,255,.6)",
+              borderRadius: "4px",
+              background: "rgba(220, 38, 38, .52)",
+              boxShadow: "0 2px 8px rgba(0,0,0,.35)",
+              fontSize: "13px",
+              fontWeight: 900,
+              letterSpacing: ".06em",
+              lineHeight: 1,
+            }}
+          >
+            R18
+          </span>
+        </span>
+      )}
+    </span>
   );
 }
