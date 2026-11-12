@@ -23,6 +23,9 @@ import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 type ReaderKind = "manga" | "novel";
 type ReaderMode = "long-strip" | "single" | "double";
 type ReadingDirection = "ltr" | "rtl";
+type NovelPattern = "vine-scroll" | "lotus-vines" | "kawung-blossom" | "fantasy-flora" | "megamendung-rose" | "garden-flowers";
+type NovelPatternColor = "white" | "rose" | "purple" | "gold" | "cyan";
+type NovelBackgroundColor = "dark" | "warm" | "purple";
 type ChapterRecord = {
   id?: string;
   num?: string | number;
@@ -79,6 +82,86 @@ const novelReportTypes = [
   { value: "Terjemahan Salah", label: "Incorrect Translation" },
   { value: "Lainnya", label: "Other" },
 ];
+const novelPatternOptions: Array<{ id: NovelPattern; label: string; description: string }> = [
+  { id: "vine-scroll", label: "Vine Scroll", description: "Simple curling vines and leaves" },
+  { id: "lotus-vines", label: "Lotus & Vines", description: "Large lotuses and curling vines" },
+  { id: "kawung-blossom", label: "Kawung & Petals", description: "Classic batik and blossoms" },
+  { id: "fantasy-flora", label: "Fantasy Flora", description: "Carved flowers and curling branches" },
+  { id: "megamendung-rose", label: "Clouds & Roses", description: "Layered clouds with batik roses" },
+  { id: "garden-flowers", label: "Garden Flowers", description: "Scattered layered blossoms" },
+];
+const novelPatternColors: Array<{ id: NovelPatternColor; label: string; value: string }> = [
+  { id: "white", label: "White", value: "#f8fafc" },
+  { id: "rose", label: "Rose Red", value: "#f43f5e" },
+  { id: "purple", label: "Magic Purple", value: "#a855f7" },
+  { id: "gold", label: "Gold", value: "#eab308" },
+  { id: "cyan", label: "Cyan", value: "#06b6d4" },
+];
+const novelPatternLightColors: Record<NovelPatternColor, string> = {
+  white: "#475569",
+  rose: "#be123c",
+  purple: "#7e22ce",
+  gold: "#a16207",
+  cyan: "#0e7490",
+};
+const novelBackgroundColors: Array<{ id: NovelBackgroundColor; label: string; darkValue: string; lightValue: string }> = [
+  { id: "dark", label: "Neutral", darkValue: "rgba(22, 22, 26, 0.78)", lightValue: "rgba(255, 255, 255, 0.78)" },
+  { id: "warm", label: "Warm", darkValue: "rgba(28, 25, 23, 0.78)", lightValue: "rgba(250, 246, 240, 0.78)" },
+  { id: "purple", label: "Lavender", darkValue: "rgba(24, 20, 30, 0.78)", lightValue: "rgba(248, 245, 255, 0.78)" },
+];
+
+function flowerMarkup(x: number, y: number, scale: number, color: string, opacity: number, petals = 5): string {
+  const petalPaths = Array.from({ length: petals }, (_, index) =>
+    `<path d="M0-8C${petals === 5 ? "16-20 22-40" : "12-20 16-38"} 0-48C-${petals === 5 ? "22-40 16-20" : "16-38 12-20"} 0-8Z" transform="rotate(${index * (360 / petals)})" fill="${color}" fill-opacity="${opacity * 0.22}" stroke-width="1.4"/>`,
+  ).join("");
+  return `<g transform="translate(${x} ${y}) rotate(12) scale(${scale})"><circle r="8" stroke-width="1.3"/><circle r="3" fill="${color}" fill-opacity="${opacity * 0.8}"/>${petalPaths}</g>`;
+}
+
+function leafMarkup(x: number, y: number, color: string, opacity: number, rotation = 0, scale = 1): string {
+  return `<g transform="translate(${x} ${y}) rotate(${rotation}) scale(${scale})"><path d="M0 0C-9-5-10-13 0-19 10-13 9-5 0 0Z" fill="${color}" fill-opacity="${opacity * 0.4}"/><path d="M0-1V-16"/></g>`;
+}
+
+function roseMarkup(x: number, y: number, color: string, opacity: number, scale = 1): string {
+  return `<g transform="translate(${x} ${y}) rotate(-10) scale(${scale})"><path d="M0-46C24-48 46-26 44 0 48 24 26 46 0 44-24 48-46 26-44 0-48-24-26-46 0-44Z" fill="${color}" fill-opacity="${opacity * 0.2}" stroke-width="1.5"/><path d="M0-30C18-32 32-16 30 0 32 18 16 32 0 30-18 32-32 16-30 0-32-18-16-32 0-30Z" transform="rotate(28)" fill="${color}" fill-opacity="${opacity * 0.25}" stroke-width="1.4"/><path d="M0-16C10-18 18-8 16 0 18 10 8 18 0 16-10 18-18 8-16 0-18-10-8-18 0-16Z" transform="rotate(-15)" stroke-width="1.3"/><path d="M0-6C5-6 7-1 4 3 1 7-6 5-6 0-6-6 2-9 7-6" stroke-width="1.3"/>${leafMarkup(42, -15, color, opacity, 45, 0.8)}${leafMarkup(-42, 18, color, opacity, 225, 0.8)}</g>`;
+}
+
+function getNovelPatternArtwork(pattern: NovelPattern, color: string, opacity: number): string {
+  switch (pattern) {
+    case "vine-scroll":
+      return `<path d="M-12 210C35 175 66 138 77 103S91 40 136 25 197 29 217-10M58 123C91 132 121 157 137 190M128 37C157 51 174 76 181 105M75 103C49 94 32 77 27 52" stroke-width="1.5"/>${leafMarkup(57, 118, color, opacity, 205, 1.05)}${leafMarkup(86, 74, color, opacity, 25, 1)}${leafMarkup(149, 45, color, opacity, 205, 1)}${leafMarkup(174, 85, color, opacity, 25, 0.95)}${leafMarkup(119, 164, color, opacity, 35, 1)}${leafMarkup(38, 78, color, opacity, 205, 0.9)}`;
+    case "lotus-vines":
+      return `<path d="M-15 110C35 65 85 155 135 95S210 115 255 85M95-15C65 45 145 95 105 160S130 225 115 255M15 215C65 185 115 225 175 180S225 190 250 175" stroke-width="1.3"/>${leafMarkup(42, 93, color, opacity, 12, 1.1)}${leafMarkup(162, 78, color, opacity, 185, 1.1)}${leafMarkup(108, 135, color, opacity, 75, 1.1)}${flowerMarkup(68, 56, 1.05, color, opacity, 4)}${flowerMarkup(182, 168, 0.82, color, opacity, 4)}<path d="M46 178C38 166 40 156 46 150 52 156 54 166 46 178Z" fill="${color}" fill-opacity="${opacity * 0.3}"/>`;
+    case "kawung-blossom":
+      return `<path d="M0 0C55 30 80 80 110 110S165 190 220 220M220 0C180 50 150 85 110 110S40 170 0 220" stroke-width="1.1"/><g transform="translate(62 66) rotate(12)"><path d="M0 0C14-24 34-24 44 0 34 24 14 24 0 0ZM0 0C-14-24-34-24-44 0-34 24-14 24 0 0ZM0 0C-24-14-24-34 0-44 24-34 24-14 0 0ZM0 0C-24 14-24 34 0 44 24 34 24 14 0 0Z" fill="${color}" fill-opacity="${opacity * 0.25}" stroke-width="1.5"/></g>${flowerMarkup(158, 152, 1, color, opacity, 6)}`;
+    case "fantasy-flora":
+      return `<path d="M25 220C10 150 65 130 95 95S110 15 175 18M95 95C135 110 165 155 225 140M65 135C95 160 85 205 135 225M175 18C195 19 202 35 190 42S174 37 182 32M135 225C150 230 160 218 152 210S138 210 143 216" stroke-width="1.3"/>${flowerMarkup(148, 86, 1, color, opacity)}${flowerMarkup(54, 52, 0.72, color, opacity)}${leafMarkup(44, 152, color, opacity, 12, 1.05)}${leafMarkup(182, 146, color, opacity, 90, 1.05)}${leafMarkup(92, 184, color, opacity, 180, 1.05)}`;
+    case "megamendung-rose":
+      return `<path d="M-10 42C20 18 55 18 75 38S125 22 155 32 210 15 250 35M-10 54C22 32 52 32 72 50S125 35 152 44 210 28 250 47M-10 198C30 175 65 215 105 192S175 210 215 188 242 186 250 192M-10 210C30 188 65 226 105 204S175 222 215 200 242 198 250 204" stroke-width="1.5"/>${roseMarkup(76, 118, color, opacity, 1)}${roseMarkup(184, 108, color, opacity, 0.68)}`;
+    case "garden-flowers":
+      return `${flowerMarkup(168, 64, 1, color, opacity, 8)}${flowerMarkup(72, 164, 0.92, color, opacity, 6)}${flowerMarkup(54, 58, 0.6, color, opacity)}${flowerMarkup(184, 184, 0.58, color, opacity)}${leafMarkup(114, 34, color, opacity, 45, 0.9)}${leafMarkup(124, 126, color, opacity, 135, 0.9)}${leafMarkup(24, 114, color, opacity, 220, 0.9)}`;
+    default:
+      return "";
+  }
+}
+
+function getNovelPatternStyle(pattern: NovelPattern, color: NovelPatternColor, opacity: number, size: number, isDarkMode: boolean) {
+  const colorOption = novelPatternColors.find((option) => option.id === color);
+  const selectedColor = colorOption
+    ? isDarkMode ? colorOption.value : novelPatternLightColors[colorOption.id]
+    : isDarkMode ? "#f8fafc" : "#475569";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"><g fill="none" stroke="${selectedColor}" stroke-opacity="${opacity / 100}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${getNovelPatternArtwork(pattern, selectedColor, opacity / 100)}</g></svg>`;
+  return {
+    backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+    backgroundSize: `${size}px ${size}px`,
+  };
+}
+
+function getNovelBackgroundColor(color: NovelBackgroundColor, isDarkMode: boolean): string {
+  const selectedBackground = novelBackgroundColors.find((option) => option.id === color);
+  return selectedBackground
+    ? isDarkMode ? selectedBackground.darkValue : selectedBackground.lightValue
+    : isDarkMode ? "rgba(22, 22, 26, 0.78)" : "rgba(255, 255, 255, 0.78)";
+}
 
 function imageList(input: unknown, allowAnyUrl = false): string[] {
   if (Array.isArray(input)) {
@@ -1066,6 +1149,29 @@ export default function ReaderPage({
   const [fontSize, setFontSize] = useState(18);
   const [fontFamily, setFontFamily] = useState("Georgia, serif");
   const [columnWidth, setColumnWidth] = useState<"narrow" | "medium" | "wide">("medium");
+  const [novelPattern, setNovelPattern] = useState<NovelPattern>("vine-scroll");
+  const [novelPatternColor, setNovelPatternColor] = useState<NovelPatternColor>("white");
+  const [novelPatternOpacity, setNovelPatternOpacity] = useState(15);
+  const [novelPatternSize, setNovelPatternSize] = useState(500);
+  const [novelBackgroundColor, setNovelBackgroundColor] = useState<NovelBackgroundColor>("dark");
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateTheme = () => setIsDarkMode(root.classList.contains("dark"));
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  const novelPatternStyle = useMemo(
+    () => ({
+      ...getNovelPatternStyle(novelPattern, novelPatternColor, novelPatternOpacity, novelPatternSize, isDarkMode),
+      backgroundColor: getNovelBackgroundColor(novelBackgroundColor, isDarkMode),
+      backgroundRepeat: "repeat",
+      color: isDarkMode ? "#e4e4e7" : "#1e293b",
+    }),
+    [novelPattern, novelPatternColor, novelPatternOpacity, novelPatternSize, novelBackgroundColor, isDarkMode],
+  );
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(50);
   const [autoScrolling, setAutoScrolling] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -1842,20 +1948,20 @@ export default function ReaderPage({
         WebkitOverflowScrolling: "touch",
         paddingBottom: "48px",
       } : undefined}>
-      <header className="reader-toolbar relative z-[2] border-b border-black/10 bg-white text-left shadow-sm dark:border-white/10 dark:bg-[#191a20]">
-        <div className="reader-heading-row mx-auto grid min-h-[62px] w-full max-w-[1000px] grid-cols-[auto_1fr_auto] items-center gap-3 px-2 py-2 sm:px-4">
-          <a className="reader-home-link inline-flex size-[42px] items-center justify-center justify-self-start rounded-[11px] border border-black/10 bg-[#f4f5f7] text-[var(--mikoroku-accent)] transition hover:-translate-y-px hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 dark:bg-[#22242c]" href={`/series/${encodeURIComponent(slug)}`} aria-label="Back to series details" title="Back to series details">
+      <header className="reader-toolbar reader-accent-toolbar relative z-[2] mt-4 mb-4 border-0 bg-transparent text-left shadow-none">
+        <div className="reader-heading-row reader-accent-heading mx-auto grid min-h-[82px] w-full max-w-[1110px] grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border px-4 py-3">
+          <a className="reader-home-link reader-accent-header-button inline-flex size-[42px] items-center justify-center justify-self-start rounded-[11px] border border-transparent bg-rose-200/15 text-rose-200 transition hover:-translate-y-px hover:bg-rose-200/25" href={`/series/${encodeURIComponent(slug)}`} aria-label="Back to series details" title="Back to series details">
             <svg className="size-[22px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.7]" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M19 12H5m0 0 6-6m-6 6 6 6" />
             </svg>
           </a>
           <div className="reader-title-block grid min-w-0 justify-items-center text-center leading-[1.35]">
-            <span className="reader-kind-label text-[10px] font-bold uppercase tracking-[.12em] text-[var(--mikoroku-accent)]">{activeKind === "novel" ? "Novel Reader" : "Manga Reader"}</span>
-            <strong className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-bold sm:text-base">{data?.title || ""}</strong>
-            <span className="text-xs text-[#777983] dark:text-[#a5a5ad]">{data ? data.chapterTitle : `Chapter ${chapter || ""}`}</span>
+            <span className="reader-kind-label text-[10px] font-bold uppercase tracking-[.12em] text-rose-400">{activeKind === "novel" ? "Novel Reader" : "Manga Reader"}</span>
+            <strong className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-lg font-bold text-white sm:text-xl">{data?.title || ""}</strong>
+            <span className="w-full truncate text-[13px] text-zinc-400">{data ? data.chapterTitle : `Chapter ${chapter || ""}`}</span>
           </div>
           <span className="reader-header-actions">
-            <button className="reader-icon-button reader-fullscreen-button inline-grid size-[38px] place-items-center justify-self-end rounded-[11px] border border-black/10 bg-[#f4f5f7] text-inherit dark:border-white/10 dark:bg-[#22242c]" type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
+            <button className="reader-icon-button reader-fullscreen-button reader-accent-header-button inline-grid size-[38px] place-items-center justify-self-end rounded-[11px] border border-transparent bg-rose-200/15 text-rose-200" type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
               <i className={`fas ${isFullscreen ? "fa-compress" : "fa-expand"}`} aria-hidden="true" />
             </button>
           </span>
@@ -2023,24 +2129,24 @@ export default function ReaderPage({
             )}
           </section>
         ) : (
-          <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap" }}>
-            {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
-            {data.images.map((image, index) => {
-              const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
-              return (
-                <ReaderImage
-                  className="mx-auto block h-auto max-w-full"
-                  wrapperClassName="mx-auto my-4 w-full"
-                  key={`${src}:${index}`}
-                  src={src}
-                  alt={`Illustration ${index + 1}`}
-                  loading={index < 3 ? "eager" : "lazy"}
-                  fetchPriority={index < 3 ? "high" : "auto"}
-                  concealNsfw={concealReaderPages}
-                />
-              );
-            })}
-          </article>
+          <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }}>
+              {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
+              {data.images.map((image, index) => {
+                const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
+                return (
+                  <ReaderImage
+                    className="mx-auto block h-auto max-w-full"
+                    wrapperClassName="mx-auto my-4 w-full"
+                    key={`${src}:${index}`}
+                    src={src}
+                    alt={`Illustration ${index + 1}`}
+                    loading={index < 3 ? "eager" : "lazy"}
+                    fetchPriority={index < 3 ? "high" : "auto"}
+                    concealNsfw={concealReaderPages}
+                  />
+                );
+              })}
+            </article>
         )}
 
       {data && <nav className={`reader-bottom-nav fixed bottom-[calc(8px+env(safe-area-inset-bottom))] left-1/2 z-[15] grid w-[calc(100%-8px)] -translate-x-1/2 grid-cols-[64px_minmax(0,1fr)_64px] items-stretch overflow-visible rounded-[10px] border border-black/10 bg-white shadow-lg transition-[opacity,transform,visibility] duration-200 min-[761px]:bottom-[calc(12px+env(safe-area-inset-bottom))] min-[761px]:w-[min(calc(100%-28px),1000px)] min-[761px]:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)] min-[761px]:rounded-[14px] dark:border-white/10 dark:bg-[#191a20]${floatingHidden ? " invisible translate-y-3 opacity-0 pointer-events-none" : ""}`} aria-label="Chapter navigation">
@@ -2210,6 +2316,110 @@ export default function ReaderPage({
             <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="600" max="2000" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
           </label>}
         </> : <>
+          <section className="reader-setting-block border-b border-black/10 py-2.5 text-left dark:border-white/10" aria-label="Novel background settings">
+            <div className="mb-2">
+              <strong className="text-[13px]">Novel background</strong>
+              <p className="mt-1 text-[10px] text-[#83858f] dark:text-[#a6a8b1]">Choose a motif and preview it on the text.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Novel background motif">
+              {novelPatternOptions.map((option) => (
+                <button
+                  className={`rounded-lg border p-1.5 text-left transition ${novelPattern === option.id ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
+                  type="button"
+                  key={option.id}
+                  aria-pressed={novelPattern === option.id}
+                  onClick={() => setNovelPattern(option.id)}
+                >
+                  <span
+                      className="mb-1 block h-14 rounded-lg border border-black/10 bg-[#16161a] dark:border-white/10"
+                      style={{
+                        ...getNovelPatternStyle(option.id, novelPatternColor, 35, 95, isDarkMode),
+                        backgroundColor: getNovelBackgroundColor(novelBackgroundColor, isDarkMode),
+                      }}
+                    aria-hidden="true"
+                  />
+                  <span className="block text-[10px] font-semibold">{option.label}</span>
+                  <span className="mt-0.5 block text-[8px] leading-tight text-slate-500 dark:text-slate-400">{option.description}</span>
+                </button>
+              ))}
+            </div>
+            <label className="mt-2.5 block rounded-lg border border-black/10 p-2 dark:border-white/10">
+              <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
+                <span>Pattern size</span>
+                <span className="text-[var(--mikoroku-accent)]">{novelPatternSize}px</span>
+              </span>
+              <input
+                className="mt-1.5 w-full accent-[var(--mikoroku-accent)]"
+                type="range"
+                min="150"
+                max="800"
+                step="10"
+                value={novelPatternSize}
+                onChange={(event) => setNovelPatternSize(Number(event.target.value))}
+                aria-label="Pattern size"
+              />
+              <span className="mt-1 flex justify-between text-[8px] text-slate-500 dark:text-slate-400">
+                <span>Dense (150px)</span>
+                <span>Large (800px)</span>
+              </span>
+            </label>
+            <label className="mt-2.5 block rounded-lg border border-black/10 p-2 dark:border-white/10">
+              <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
+                <span>Motif opacity</span>
+                <span className="text-[var(--mikoroku-accent)]">
+                  {(novelPatternOpacity / 100).toFixed(2)} ({novelPatternOpacity}%)
+                </span>
+              </span>
+              <input
+                className="mt-1.5 w-full accent-[var(--mikoroku-accent)]"
+                type="range"
+                min="1"
+                max="30"
+                value={novelPatternOpacity}
+                onChange={(event) => setNovelPatternOpacity(Number(event.target.value))}
+                aria-label="Motif opacity"
+              />
+              <span className="mt-1 flex justify-between text-[8px] text-slate-500 dark:text-slate-400">
+                <span>Subtle (1%)</span>
+                <span>Ideal (15%)</span>
+                <span>Bold (30%)</span>
+              </span>
+            </label>
+            <div className="mt-2.5 rounded-lg border border-black/10 p-2 dark:border-white/10">
+              <h3 className="mb-1.5 text-[10px] font-bold">Motif stroke color</h3>
+              <div className="grid grid-cols-2 gap-1" role="group" aria-label="Motif stroke color">
+                {novelPatternColors.map((option) => (
+                  <button
+                    className={`flex min-h-7 items-center gap-1.5 rounded-md border px-1.5 text-[9px] font-semibold transition ${novelPatternColor === option.id ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
+                    type="button"
+                    key={option.id}
+                    aria-pressed={novelPatternColor === option.id}
+                    onClick={() => setNovelPatternColor(option.id)}
+                  >
+                    <span className="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/20" style={{ backgroundColor: option.value }} aria-hidden="true" />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2.5 rounded-lg border border-black/10 p-2 dark:border-white/10">
+              <h3 className="mb-1.5 text-[10px] font-bold">Text box background</h3>
+              <div className="grid grid-cols-3 gap-1" role="group" aria-label="Text box background">
+                {novelBackgroundColors.map((option) => (
+                  <button
+                    className={`flex min-h-8 items-center justify-center gap-1 rounded-md border px-1 text-[9px] font-semibold transition ${novelBackgroundColor === option.id ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
+                    type="button"
+                    key={option.id}
+                    aria-pressed={novelBackgroundColor === option.id}
+                    onClick={() => setNovelBackgroundColor(option.id)}
+                  >
+                    <span className="size-2.5 shrink-0 rounded-full border border-black/20 dark:border-white/30" style={{ backgroundColor: isDarkMode ? option.darkValue : option.lightValue }} aria-hidden="true" />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="grid gap-[3px]"><strong className="text-[13px]">Font size</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{fontSize}px</small></span>
             <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="14" max="28" value={fontSize} onChange={(event) => updateFontSize(Number(event.target.value))} />

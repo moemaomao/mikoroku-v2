@@ -112,6 +112,60 @@ html.light .reader-page .reader-fullscreen-button:hover {
   background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 20%, #ffffff 80%) !important;
 }
 
+.reader-page .reader-accent-toolbar .reader-accent-heading {
+  border-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 34%, rgba(255, 255, 255, .12)) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 12%, #1a0d12) !important;
+}
+
+.reader-page .reader-accent-toolbar .reader-kind-label {
+  color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 65%, #ffffff) !important;
+}
+
+.reader-page .reader-accent-toolbar .reader-title-block strong {
+  color: #ffffff !important;
+}
+
+.reader-page .reader-accent-toolbar .reader-title-block > span:last-child {
+  color: #a5a5ad !important;
+}
+
+.reader-page .reader-accent-toolbar .reader-accent-header-button {
+  border-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 36%, rgba(255, 255, 255, .12)) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 20%, #1a0d12) !important;
+  color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 55%, #ffffff) !important;
+}
+
+.reader-page .reader-accent-toolbar .reader-accent-header-button:hover {
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 32%, #1a0d12) !important;
+}
+
+html.light .reader-page .reader-accent-toolbar .reader-accent-heading {
+  border-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 28%, #e2e8f0) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 10%, #ffffff) !important;
+}
+
+html.light .reader-page .reader-accent-toolbar .reader-kind-label {
+  color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 70%, #1e293b) !important;
+}
+
+html.light .reader-page .reader-accent-toolbar .reader-title-block strong {
+  color: #1e293b !important;
+}
+
+html.light .reader-page .reader-accent-toolbar .reader-title-block > span:last-child {
+  color: #64748b !important;
+}
+
+html.light .reader-page .reader-accent-toolbar .reader-accent-header-button {
+  border-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 30%, #ffffff) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 14%, #ffffff) !important;
+  color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 65%, #1e293b) !important;
+}
+
+html.light .reader-page .reader-accent-toolbar .reader-accent-header-button:hover {
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 22%, #ffffff) !important;
+}
+
 @theme {
   --animate-fade-in-up: fade-in-up 0.35s ease both;
 
