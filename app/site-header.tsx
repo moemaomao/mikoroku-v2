@@ -1060,8 +1060,8 @@ function HeaderContents() {
                   </>
                 ) : (
                   <div className="p-4">
-                    <p className="mb-3 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100">Login with</p>
-                    <div className="flex flex-col gap-2">
+                    <p className="mb-3 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100">Continue with</p>
+                    <div className="grid grid-cols-2 gap-2">
                       {(
                         [
                           {
@@ -1131,9 +1131,10 @@ function HeaderContents() {
                               console.error(`Login ${provider} gagal.`, error);
                             });
                           }}
-                          className={`flex w-full items-center justify-center rounded-lg px-3 py-2.5 transition ${style}`}
+                          className={`flex min-h-[76px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-black/10 px-3 py-2.5 text-xs font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:border-white/10 ${style}`}
                         >
-                          {icon}
+                          <span className="grid size-9 place-items-center rounded-lg bg-black/10">{icon}</span>
+                          <span>{label}</span>
                         </button>
                       ))}
                     </div>
