@@ -2028,7 +2028,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   )}
                   {detailCoverLoaded && (
                     <button
-                      className="absolute left-1/2 top-1/2 z-[2] grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white opacity-0 shadow-lg transition hover:bg-black/75 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white group-hover:opacity-100 max-md:opacity-100"
+                      className="absolute left-1/2 top-1/2 z-[2] grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white opacity-0 shadow-lg transition hover:bg-black/75 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white group-hover:opacity-100 max-md:hidden"
                       type="button"
                       aria-label="View cover"
                       onClick={() => setCoverPreviewOpen(true)}
