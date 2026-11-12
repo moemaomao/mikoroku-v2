@@ -1127,6 +1127,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
   const [showNsfw] = useNsfwVisibility();
   const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
+  const [coverPreviewOpen, setCoverPreviewOpen] = useState(false);
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
   const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
   const chapterCacheSlugRef = useRef(slug);
@@ -1144,10 +1145,26 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     activeCoverUrl,
     manga?.nsfw && !showNsfw ? "nsfwCover" : "coverDetail",
   );
+  const coverPreviewSource = manga?.nsfw && !showNsfw
+    ? cover
+    : imageProxyUrl(originalReaderImageUrl(activeCoverUrl), "readerFallback");
   useEffect(() => {
     setDetailCoverLoaded(false);
     setDetailCoverFailed(false);
   }, [activeCoverUrl]);
+  useEffect(() => {
+    if (!coverPreviewOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCoverPreviewOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [coverPreviewOpen]);
   const [state, setState] = useState<DetailState>("loading");
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
@@ -1985,7 +2002,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           <div className="content">
             <div className="main">
               <div className="left-column">
-                <div className="cover relative grid place-items-center bg-black/10 dark:bg-white/5">
+                <div className="cover group relative grid place-items-center bg-black/10 dark:bg-white/5">
                   <CoverImage
                     key={activeCoverUrl}
                     src={activeCoverUrl || "/assets/icons/favicon.ico"}
@@ -2008,6 +2025,25 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     >
                       {detailCoverFailed ? "Cover unavailable" : "Loading cover..."}
                     </span>
+                  )}
+                  {detailCoverLoaded && (
+                    <button
+                      className="absolute left-1/2 top-1/2 z-[2] grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white opacity-0 shadow-lg transition hover:bg-black/75 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white group-hover:opacity-100 max-md:opacity-100"
+                      type="button"
+                      aria-label="View cover"
+                      onClick={() => setCoverPreviewOpen(true)}
+                    >
+                      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                        <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+                        <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+                        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                        <path d="M8 8 3 3" />
+                        <path d="m16 8 5-5" />
+                        <path d="m8 16-5 5" />
+                        <path d="m16 16 5 5" />
+                      </svg>
+                    </button>
                   )}
                 </div>
                 <div className="rating" id="ratingBox">
@@ -2628,6 +2664,34 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           >
             <i className="fas fa-times" aria-hidden="true" />
           </button>
+        </div>,
+        document.body,
+      )}
+      {coverPreviewOpen && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Cover preview: ${manga.title}`}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setCoverPreviewOpen(false);
+          }}
+        >
+          <button
+            className="fixed right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-black/40 text-white transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            type="button"
+            aria-label="Close cover preview"
+            onClick={() => setCoverPreviewOpen(false)}
+          >
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="m18 6-12 12M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            className="max-h-[calc(100dvh-2rem)] max-w-[min(90vw,560px)] rounded-lg object-contain shadow-2xl"
+            src={coverPreviewSource || cover || activeCoverUrl}
+            alt={`${manga.title} cover`}
+          />
         </div>,
         document.body,
       )}

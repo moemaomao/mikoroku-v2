@@ -843,8 +843,6 @@ function HeaderContents() {
                     />
                     <span className="flex min-w-0 flex-col">
                       <span className="text-xs font-semibold leading-snug text-zinc-900 dark:text-white">{manga.title}</span>
-                      {manga.firestore && <small className="text-indigo-600">Firestore</small>}
-                      {manga.github && <small className="text-emerald-600">GitHub</small>}
                     </span>
                   </button>
                 ))}

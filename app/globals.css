@@ -69,7 +69,6 @@ body,
 }
 
 .reader-page .reader-home-link,
-.reader-page .reader-image-nav,
 .reader-page .reader-fullscreen-button {
   border-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 55%, #ffffff 45%) !important;
   background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 62%, #ffffff 38%) !important;
@@ -77,13 +76,11 @@ body,
 }
 
 .reader-page .reader-home-link:hover,
-.reader-page .reader-image-nav:not(:disabled):hover,
 .reader-page .reader-fullscreen-button:hover {
   background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 48%, #ffffff 52%) !important;
 }
 
 html.light .reader-page .reader-home-link,
-html.light .reader-page .reader-image-nav,
 html.light .reader-page .reader-fullscreen-button {
   border-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 26%, #ffffff 74%) !important;
   background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 12%, #ffffff 88%) !important;
@@ -91,7 +88,6 @@ html.light .reader-page .reader-fullscreen-button {
 }
 
 html.light .reader-page .reader-home-link:hover,
-html.light .reader-page .reader-image-nav:not(:disabled):hover,
 html.light .reader-page .reader-fullscreen-button:hover {
   background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 20%, #ffffff 80%) !important;
 }
@@ -321,6 +317,13 @@ body.light #mainFooter p {
 .reader-settings-panel option {
   border-color: rgba(255, 255, 255, .35) !important;
   background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 94%, transparent) !important;
+  color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+}
+
+.reader-settings-panel .reader-setting-option[aria-pressed="true"] {
+  border-color: var(--mikoroku-reader-accent, #e8798f) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 68%, #000000 32%) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35), 0 0 0 2px color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 55%, transparent) !important;
   color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
 }
 

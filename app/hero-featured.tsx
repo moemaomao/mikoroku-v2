@@ -56,19 +56,23 @@ function pickFromWindow(limit = 15): HeroCover[] {
     if (typeof item.title !== "string" || !item.title) return;
     const key = normalizeTitle(item.title);
     if (seen.has(key)) return;
-    const raw = [item.cover, item.img]
+    const slug = String(item.slug || "");
+    const dataMatch = data?.[slug] || data?.[key];
+    const matchedData = dataMatch && typeof dataMatch === "object"
+      ? dataMatch as Record<string, unknown>
+      : undefined;
+    const raw = [matchedData?.cover, matchedData?.img, item.cover, item.img]
       .map(resolveCover)
       .find(Boolean) || "";
     if (!raw) return;
     seen.add(key);
-    const dataMatch = data?.[String(item.slug || "")] || data?.[key];
     const resolvedNsfw = dataMatch && typeof dataMatch === "object" &&
       typeof (dataMatch as Record<string, unknown>).nsfw === "boolean"
       ? (dataMatch as Record<string, unknown>).nsfw === true
       : item.nsfw === true;
     target.push({
       title: item.title,
-      slug: String(item.slug || key),
+      slug: slug || key,
       cover: raw,
       nsfw: resolvedNsfw,
       subtitle: Array.isArray(item.genres)
@@ -367,7 +371,6 @@ export default function HeroFeatured() {
                     decoding="async"
                     draggable={false}
                     nsfw={item.nsfw === true}
-                    onError={() => markCoverFailed(item.cover)}
                   />
                   <CoverImage
                     className={styles.cover}

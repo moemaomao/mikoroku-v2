@@ -21,6 +21,8 @@ import { initializeFirebaseClient } from "../lib/firebase-client";
 import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
 type ReaderKind = "manga" | "novel";
+type ReaderMode = "long-strip" | "single" | "double";
+type ReadingDirection = "ltr" | "rtl";
 type ChapterRecord = {
   id?: string;
   num?: string | number;
@@ -1041,7 +1043,8 @@ export default function ReaderPage({
     return mode === "sv1" || mode === "sv2" || mode === "es" ? mode : null;
   });
   const [page, setPage] = useState(1);
-  const [mode, setMode] = useState<"long-strip" | "single">("long-strip");
+  const [mode, setMode] = useState<ReaderMode>("long-strip");
+  const [readingDirection, setReadingDirection] = useState<ReadingDirection>("ltr");
   const [fontSize, setFontSize] = useState(18);
   const [fontFamily, setFontFamily] = useState("Georgia, serif");
   const [columnWidth, setColumnWidth] = useState<"narrow" | "medium" | "wide">("medium");
@@ -1063,6 +1066,31 @@ export default function ReaderPage({
   const lastScrollYRef = useRef(0);
   const pageRef = useRef(page);
   pageRef.current = page;
+  const imageCount = data?.kind === "manga" ? data.images.length : 0;
+  const previousPage = mode === "double" ? (page <= 2 ? 1 : page - 2) : page - 1;
+  const nextPage = mode === "double" ? (page === 1 ? 2 : page + 2) : page + 1;
+  const hasPreviousPage = page > 1;
+  const hasNextPage = mode === "double"
+    ? imageCount > (page === 1 ? 1 : page + 1)
+    : page < imageCount;
+  const nextPageOnLeft = mode !== "long-strip" && readingDirection === "rtl";
+  const previousPagePosition = nextPageOnLeft
+    ? "right-2 sm:right-5"
+    : "left-2 sm:left-5";
+  const nextPagePosition = nextPageOnLeft ? "left-2 sm:left-5" : "right-2 sm:right-5";
+  const previousPageIcon = nextPageOnLeft
+    ? "fa-chevron-right"
+    : "fa-chevron-left";
+  const nextPageIcon = nextPageOnLeft ? "fa-chevron-left" : "fa-chevron-right";
+  const doublePageSlots = useMemo((): (number | null)[] => {
+    if (mode !== "double" || imageCount === 0) return [];
+    if (page === 1) return readingDirection === "rtl" ? [null, 0] : [0, null];
+    const firstIndex = Math.min(page - 1, imageCount - 1);
+    const secondIndex = firstIndex + 1 < imageCount ? firstIndex + 1 : null;
+    return readingDirection === "rtl"
+      ? [secondIndex, firstIndex]
+      : [firstIndex, secondIndex];
+  }, [imageCount, mode, page, readingDirection]);
   useEffect(() => {
     if (settingsOpen || reportOpen) setFloatingHidden(false);
   }, [settingsOpen, reportOpen]);
@@ -1152,8 +1180,11 @@ export default function ReaderPage({
   }, [data, slug]);
 
   useEffect(() => {
-    if (!data || data.kind !== "manga" || mode !== "single" || !data.images.length) return;
-    const progress = Math.round((Math.min(page, data.images.length) / data.images.length) * 100);
+    if (!data || data.kind !== "manga" || mode === "long-strip" || !data.images.length) return;
+    const currentPage = mode === "double" && page > 1
+      ? Math.min(page + 1, data.images.length)
+      : page;
+    const progress = Math.round((Math.min(currentPage, data.images.length) / data.images.length) * 100);
     setReaderProgress(progress);
     const historyUrl = `/manga/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`;
     void updateReadingHistoryProgress(historyUrl, progress)
@@ -1169,7 +1200,9 @@ export default function ReaderPage({
 
   useEffect(() => {
     if (activeKind === "manga") {
-      setMode(localStorage.getItem("readerMode") === "page" ? "single" : "long-strip");
+      const storedMode = localStorage.getItem("readerMode");
+      setMode(storedMode === "page" ? "single" : storedMode === "double" ? "double" : "long-strip");
+      setReadingDirection(localStorage.getItem("readerReadingDirection") === "rtl" ? "rtl" : "ltr");
       return;
     }
     const storedFontSize = Number(localStorage.getItem("novelFontSize"));
@@ -1326,18 +1359,22 @@ export default function ReaderPage({
     window.setTimeout(() => setForcedServer(server), 0);
   }, []);
 
-  function toggleMode() {
-    const nextMode = mode === "long-strip" ? "single" : "long-strip";
+  function setReaderLayout(nextMode: ReaderMode) {
     setMode(nextMode);
-    localStorage.setItem("readerMode", nextMode === "single" ? "page" : "webtoon");
+    localStorage.setItem("readerMode", nextMode === "single" ? "page" : nextMode === "double" ? "double" : "webtoon");
     setPage(1);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function changeReadingDirection(direction: ReadingDirection) {
+    setReadingDirection(direction);
+    localStorage.setItem("readerReadingDirection", direction);
   }
 
   useEffect(() => {
     if (!data || kind !== "manga") return;
     const start = Math.max(0, page - 1);
-    const preloadCount = mode === "single" ? 5 : 8;
+    const preloadCount = mode === "single" ? 5 : mode === "double" ? 6 : 8;
     data.images.slice(start, start + preloadCount).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
@@ -1360,22 +1397,24 @@ export default function ReaderPage({
   }, [data, kind, mode]);
 
   useEffect(() => {
-    if (!data || kind !== "manga" || mode !== "single") return;
+    if (!data || kind !== "manga" || mode === "long-strip") return;
     const imageCount = data.images.length;
+    const nextArrow = readingDirection === "rtl" ? "ArrowLeft" : "ArrowRight";
+    const previousArrow = readingDirection === "rtl" ? "ArrowRight" : "ArrowLeft";
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target;
       if (target instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
-      if (event.key === "ArrowLeft" && page > 1) {
+      if (event.key === previousArrow && hasPreviousPage) {
         event.preventDefault();
-        setPage((current) => Math.max(1, current - 1));
-      } else if (event.key === "ArrowRight" && page < imageCount) {
+        setPage(previousPage);
+      } else if (event.key === nextArrow && hasNextPage) {
         event.preventDefault();
-        setPage((current) => Math.min(imageCount, current + 1));
+        setPage(Math.min(imageCount, nextPage));
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [data, kind, mode, page]);
+  }, [data, hasNextPage, hasPreviousPage, kind, mode, nextPage, page, previousPage, readingDirection]);
 
   useEffect(() => {
     setDataSaver(localStorage.getItem("dataSaver") === "true");
@@ -1407,9 +1446,12 @@ export default function ReaderPage({
     let saveTimer = 0;
     lastScrollYRef.current = window.scrollY;
     const calculateContentProgress = () => {
-      if (data.kind === "manga" && mode === "single") {
+      if (data.kind === "manga" && mode !== "long-strip") {
+        const currentPage = mode === "double" && pageRef.current > 1
+          ? Math.min(pageRef.current + 1, data.images.length)
+          : pageRef.current;
         return data.images.length
-          ? Math.round((Math.min(pageRef.current, data.images.length) / data.images.length) * 100)
+          ? Math.round((Math.min(currentPage, data.images.length) / data.images.length) * 100)
           : 0;
       }
 
@@ -1737,9 +1779,12 @@ export default function ReaderPage({
 
   function goToPage(targetPage: number) {
     if (!data || targetPage < 1 || targetPage > data.images.length) return;
-    setPage(targetPage);
+    const resolvedPage = mode === "double" && targetPage > 1 && targetPage % 2 !== 0
+      ? targetPage - 1
+      : targetPage;
+    setPage(resolvedPage);
     if (mode === "long-strip") {
-      document.querySelectorAll(".reader-images.long-strip img")[targetPage - 1]
+      document.querySelectorAll(".reader-images.long-strip img")[resolvedPage - 1]
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }
@@ -1879,7 +1924,7 @@ export default function ReaderPage({
           </section>
         )
         : activeKind === "manga" ? (
-          <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] ${mode === "single" ? "grid min-h-[calc(100vh-190px)] content-center p-[18px]" : ""}`}>
+          <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] ${mode !== "long-strip" ? "grid min-h-[calc(100vh-190px)] content-center p-2 sm:p-[18px]" : ""}`}>
             {mode === "long-strip" ? data.images.map((image, index) => {
               const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
               return (
@@ -1894,7 +1939,7 @@ export default function ReaderPage({
                   concealNsfw={concealReaderPages}
                 />
               );
-            }) : (
+            }) : mode === "single" ? (
               <>
                 <div className="reader-single-page-frame relative grid w-full justify-items-center">
                   <ReaderImage
@@ -1907,14 +1952,55 @@ export default function ReaderPage({
                     fetchPriority="high"
                     concealNsfw={concealReaderPages}
                   />
-                  <button className="reader-image-nav reader-image-nav-previous absolute left-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[var(--mikoroku-accent)] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:left-5 dark:border-white/10 dark:bg-[#191a20]/90" type="button" disabled={page <= 1} onClick={() => goToPage(page - 1)} aria-label="Previous page" title="Previous page">
-                    <i className="fas fa-chevron-left" aria-hidden="true" />
+                  <button className={`reader-image-nav reader-image-nav-previous absolute ${previousPagePosition} top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center border-0 bg-transparent text-lg text-[var(--mikoroku-accent)] opacity-80 shadow-none transition hover:scale-105 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25`} type="button" disabled={!hasPreviousPage} onClick={() => goToPage(previousPage)} aria-label="Previous page" title="Previous page">
+                    <i className={`fas ${previousPageIcon}`} aria-hidden="true" />
                   </button>
-                  <button className="reader-image-nav reader-image-nav-next absolute right-2 top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center rounded-[14px] border border-black/10 bg-white/90 text-lg text-[var(--mikoroku-accent)] shadow-lg backdrop-blur transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-35 sm:right-5 dark:border-white/10 dark:bg-[#191a20]/90" type="button" disabled={page >= data.images.length} onClick={() => goToPage(page + 1)} aria-label="Next page" title="Next page">
-                    <i className="fas fa-chevron-right" aria-hidden="true" />
+                  <button className={`reader-image-nav reader-image-nav-next absolute ${nextPagePosition} top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center border-0 bg-transparent text-lg text-[var(--mikoroku-accent)] opacity-80 shadow-none transition hover:scale-105 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25`} type="button" disabled={!hasNextPage} onClick={() => goToPage(nextPage)} aria-label="Next page" title="Next page">
+                    <i className={`fas ${nextPageIcon}`} aria-hidden="true" />
                   </button>
                 </div>
                 <div className="reader-page-navigation py-3 text-center"><span>Page {page} / {data.images.length}</span></div>
+              </>
+            ) : (
+              <>
+                <div className="reader-double-page-frame relative grid w-full grid-cols-2 items-center gap-0">
+                  {doublePageSlots.map((imageIndex, slotIndex) => {
+                    const isNextSide = slotIndex === (nextPageOnLeft ? 0 : 1);
+                    const disabled = isNextSide ? !hasNextPage : !hasPreviousPage;
+                    const destination = isNextSide ? nextPage : previousPage;
+                    return (
+                      <button
+                        className="relative grid min-h-[30vh] min-w-0 w-full place-items-center border-0 bg-transparent p-0 text-inherit focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--mikoroku-accent)] disabled:cursor-default"
+                        type="button"
+                        key={imageIndex === null ? `empty-${slotIndex}` : readerPageImageUrl(data.images[imageIndex], dataSaver, imageQuality, mangaNsfw, showNsfw)}
+                        disabled={disabled}
+                        onClick={() => goToPage(destination)}
+                        aria-label={isNextSide ? "Next spread" : "Previous spread"}
+                        title={isNextSide ? "Next spread" : "Previous spread"}
+                      >
+                        {imageIndex === null ? (
+                          <span className="min-h-[30vh] w-full" aria-hidden="true" />
+                        ) : (
+                          <ReaderImage
+                            className="block h-auto max-h-[calc(100dvh-190px)] w-full max-w-full object-contain"
+                            wrapperClassName="grid min-h-[30vh] min-w-0 w-full place-items-center"
+                            src={readerPageImageUrl(data.images[imageIndex], dataSaver, imageQuality, mangaNsfw, showNsfw)}
+                            alt={`Page ${imageIndex + 1}`}
+                            loading="eager"
+                            fetchPriority="high"
+                            concealNsfw={concealReaderPages}
+                          />
+                        )}
+                        <span className={`reader-image-nav pointer-events-none absolute ${slotIndex === 0 ? "left-2 sm:left-5" : "right-2 sm:right-5"} top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center border-0 bg-transparent text-lg text-[var(--mikoroku-accent)] opacity-80 shadow-none transition`} aria-hidden="true">
+                          <i className={`fas ${slotIndex === 0 ? "fa-chevron-left" : "fa-chevron-right"}`} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="reader-page-navigation py-3 text-center">
+                  <span>{page === 1 || page === data.images.length ? `Page ${page}` : `Pages ${page}-${Math.min(page + 1, data.images.length)}`} / {data.images.length}</span>
+                </div>
               </>
             )}
           </section>
@@ -2045,12 +2131,52 @@ export default function ReaderPage({
           <button className="size-[34px] rounded-[10px] bg-black/5 text-[22px] dark:bg-white/10" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
         </div>
         {activeKind === "manga" ? <>
-          <div className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
+          <div className="reader-setting-block w-full border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <div className="grid gap-[3px]"><strong className="text-[13px]">Reading mode</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose how pages are displayed</small></div>
-            <button type="button" className="min-h-[34px] rounded-lg border border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] px-2.5 text-[11px] font-bold text-[var(--mikoroku-accent)]" onClick={toggleMode}>
-              {mode === "long-strip" ? "Single page" : "Scroll"}
-            </button>
+            <div className="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Reading mode">
+              {([
+                ["long-strip", "Long strip"],
+                ["single", "Page by page"],
+                ["double", "Double page"],
+              ] as const).map(([layout, label]) => (
+                <button
+                  className={`reader-setting-option min-h-[36px] rounded-lg border px-1 text-[10px] font-bold sm:text-[11px] ${mode === layout ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                  type="button"
+                  key={layout}
+                  aria-pressed={mode === layout}
+                  onClick={() => setReaderLayout(layout)}
+                >
+                  <span className="flex items-center justify-center gap-1">
+                    {mode === layout && <i className="fas fa-check text-[9px]" aria-hidden="true" />}
+                    {label}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
+          {mode !== "long-strip" && <div className="reader-setting-block w-full border-b border-black/10 py-2.5 text-left dark:border-white/10">
+            <div className="grid gap-[3px]"><strong className="text-[13px]">Reading direction</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose the page-turn direction</small></div>
+            <div className="mt-2 grid grid-cols-2 gap-1" role="group" aria-label="Reading direction">
+              <button
+                className={`reader-setting-option grid min-h-[48px] content-center rounded-lg border px-2 text-left ${readingDirection === "ltr" ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                type="button"
+                aria-pressed={readingDirection === "ltr"}
+                onClick={() => changeReadingDirection("ltr")}
+              >
+                <strong className="flex items-center gap-1 text-[11px]">{readingDirection === "ltr" && <i className="fas fa-check text-[9px]" aria-hidden="true" />}Left to right</strong>
+                <small className="text-[10px] opacity-70">Tap right to go on</small>
+              </button>
+              <button
+                className={`reader-setting-option grid min-h-[48px] content-center rounded-lg border px-2 text-left ${readingDirection === "rtl" ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                type="button"
+                aria-pressed={readingDirection === "rtl"}
+                onClick={() => changeReadingDirection("rtl")}
+              >
+                <strong className="flex items-center gap-1 text-[11px]">{readingDirection === "rtl" && <i className="fas fa-check text-[9px]" aria-hidden="true" />}Right to left</strong>
+                <small className="text-[10px] opacity-70">Tap left to go on</small>
+              </button>
+            </div>
+          </div>}
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="grid gap-[3px]"><strong className="text-[13px]">Go to page</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{data ? `${page} of ${data.images.length}` : "Loading pages"}</small></span>
             <select className="min-h-9 max-w-[150px] rounded-lg border border-black/15 bg-white px-2.5 text-xs dark:border-white/15 dark:bg-[#191a20]" aria-label="Select page" value={page} disabled={!data} onChange={(event) => goToPage(Number(event.target.value))}>
