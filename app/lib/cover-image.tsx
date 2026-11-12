@@ -27,14 +27,26 @@ function resolveCoverSource(source: string): string {
       : "";
 }
 
-function getOptimizedCoverUrl(source: string, preset: ImageProxyPreset): string {
+function isGoogleusercontentUrl(source: string): boolean {
+  try {
+    return /(^|\.)googleusercontent\.com$/i.test(new URL(source).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function getOptimizedCoverUrl(
+  source: string,
+  preset: ImageProxyPreset,
+  useSavedPreferences = true,
+): string {
   const resolvedSource = resolveCoverSource(source);
   if (!resolvedSource) return "";
   if (resolvedSource.startsWith("/") || /^(data|blob):/i.test(resolvedSource)) {
     return resolvedSource;
   }
 
-  return imageProxyUrl(resolvedSource, preset);
+  return imageProxyUrl(resolvedSource, preset, undefined, useSavedPreferences);
 }
 
 function openCoverCache(): Promise<IDBDatabase> {
@@ -234,7 +246,12 @@ export function useCoverImageSource(source: string, preset: ImageProxyPreset = "
     }
 
     const optimizedUrl = getOptimizedCoverUrl(source, preset);
-    if (optimizedUrl === source || !/^https?:\/\//i.test(optimizedUrl) || !enabled) {
+    if (
+      optimizedUrl === source ||
+      !/^https?:\/\//i.test(optimizedUrl) ||
+      !enabled ||
+      isGoogleusercontentUrl(optimizedUrl)
+    ) {
       setResolved({ key: sourceKey, source: enabled ? optimizedUrl : "" });
       return;
     }
@@ -268,7 +285,7 @@ export function useCoverImageSource(source: string, preset: ImageProxyPreset = "
   if (!enabled) return "";
   return resolved.key === sourceKey
     ? resolved.source
-    : getOptimizedCoverUrl(source, preset);
+    : getOptimizedCoverUrl(source, preset, false);
 }
 
 type CoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {

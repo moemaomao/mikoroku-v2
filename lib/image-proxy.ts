@@ -116,6 +116,7 @@ export function imageProxyUrl(
   source: string,
   preset: ImageProxyPreset,
   version?: number,
+  useSavedPreferences = true,
 ): string {
   const trimmedSource = source.trim();
   if (!trimmedSource || trimmedSource === "-" || /^(\/(?!\/)|data:|blob:)/i.test(trimmedSource)) {
@@ -126,11 +127,15 @@ export function imageProxyUrl(
     : trimmedSource;
 
   const settings = IMAGE_PROXY_PRESETS[preset];
-  const coverConversion = USER_COVER_PRESETS.has(preset) && preset !== "headerPreview" ? readCoverImageConversion() : null;
+  const coverConversion = USER_COVER_PRESETS.has(preset) && preset !== "headerPreview"
+    ? useSavedPreferences ? readCoverImageConversion() : DEFAULT_COVER_IMAGE_CONVERSION
+    : null;
   const userQuality = coverConversion
     ? (coverConversion.preset === "custom" ? 80 : { low: 55, medium: 72, high: 85 }[coverConversion.preset])
     : null;
-  const userWidth = coverConversion ? readCoverImageWidth() : null;
+  const userWidth = coverConversion
+    ? useSavedPreferences ? readCoverImageWidth() : DEFAULT_COVER_IMAGE_CONVERSION.customWidth
+    : null;
   let originalUrl: URL;
   let existingWidth = 0;
   let existingQuality = 0;
@@ -163,14 +168,16 @@ export function imageProxyUrl(
   optimizedUrl.searchParams.set("url", originalUrl.toString());
   if ("width" in settings) {
     const width = preset === "chapterThumbnail"
-      ? readChapterThumbnailSize()
+      ? useSavedPreferences ? readChapterThumbnailSize() : DEFAULT_CHAPTER_THUMBNAIL_SIZE
       : userWidth || (existingWidth ? Math.min(settings.width, existingWidth) : settings.width);
     optimizedUrl.searchParams.set("w", String(width));
   }
   if ("height" in settings) {
     optimizedUrl.searchParams.set(
       "h",
-      String(preset === "chapterThumbnail" ? readChapterThumbnailSize() : settings.height),
+      String(preset === "chapterThumbnail"
+        ? useSavedPreferences ? readChapterThumbnailSize() : DEFAULT_CHAPTER_THUMBNAIL_SIZE
+        : settings.height),
     );
   }
   if ("fit" in settings) optimizedUrl.searchParams.set("fit", settings.fit);
