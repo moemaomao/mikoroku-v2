@@ -123,6 +123,50 @@ const readingMedals: Array<{
   },
 ];
 
+const statsSectionSettings = [
+  {
+    id: "stat-cards",
+    label: "Overview cards",
+    description: "Series, chapters, bookmarks, progress, activity, manga, novels, and sources.",
+  },
+  {
+    id: "medals",
+    label: "Reading medals",
+    description: "Milestones and unlocked medals.",
+  },
+  {
+    id: "reading-charts",
+    label: "Reading charts",
+    description: "Series mix and reading progress charts.",
+  },
+  {
+    id: "reading-activity",
+    label: "Reading activity",
+    description: "Chapter activity for the last seven days.",
+  },
+  {
+    id: "reading-progress",
+    label: "Reading progress",
+    description: "Recently saved manga and novel progress.",
+  },
+  {
+    id: "comment-history",
+    label: "Comment history",
+    description: "Recent comments and links to their discussion threads.",
+  },
+] as const;
+
+type StatsSectionId = (typeof statsSectionSettings)[number]["id"];
+
+const statsSectionIds = new Set<string>(statsSectionSettings.map(({ id }) => id));
+
+function getHiddenStatsSections(value: unknown): StatsSectionId[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter(
+    (section): section is StatsSectionId => typeof section === "string" && statsSectionIds.has(section),
+  ))];
+}
+
 async function detectNewMedalUnlocks(totalChaptersRead: number) {
   const previously = new Set(await getUnlockedMedals());
   const newly = readingMedals.filter(
@@ -770,7 +814,12 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [isOwner, setIsOwner] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerError, setBannerError] = useState("");
+  const [statsSettingsOpen, setStatsSettingsOpen] = useState(false);
+  const [hiddenStatsDraft, setHiddenStatsDraft] = useState<StatsSectionId[]>([]);
+  const [statsSettingsSaving, setStatsSettingsSaving] = useState(false);
+  const [statsSettingsError, setStatsSettingsError] = useState("");
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const statsSettingsDialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -855,6 +904,21 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     };
   }, [uid]);
 
+  useEffect(() => {
+    if (!statsSettingsOpen || !isOwner) return;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStatsSettingsOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    statsSettingsDialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOwner, statsSettingsOpen]);
+
   async function handleBannerFile(file?: File) {
     setBannerError("");
     if (!file) return;
@@ -897,11 +961,46 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     }
   }
 
+  async function saveStatsSettings() {
+    setStatsSettingsError("");
+    setStatsSettingsSaving(true);
+    try {
+      const firebase = (window as ProfileBannerWindow).firebase;
+      const user = firebase?.auth?.().currentUser;
+      const firestore = firebase?.firestore?.();
+      if (!user || user.uid !== uid || !firestore) {
+        throw new Error("Sign in as the profile owner to update stats settings.");
+      }
+
+      const hiddenStatsSections = getHiddenStatsSections(hiddenStatsDraft);
+      await firestore.collection("userStats").doc(uid).set({ hiddenStatsSections }, { merge: true });
+
+      if (stats) {
+        const updatedStats = {
+          ...stats,
+          profile: { ...stats.profile, hiddenStatsSections },
+        };
+        setStats(updatedStats);
+        void setCachedReadingStats(uid, updatedStats);
+      }
+      setStatsSettingsOpen(false);
+      window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
+    } catch (saveError) {
+      console.error("Stats settings could not be saved.", saveError);
+      setStatsSettingsError(saveError instanceof Error
+        ? saveError.message
+        : "Stats settings could not be saved. Please try again.");
+    } finally {
+      setStatsSettingsSaving(false);
+    }
+  }
+
   const profile = stats?.profile || {};
   const name = stringValue(profile.displayName) || stringValue(profile.username) || "Reader";
   const username = stringValue(profile.username);
   const avatar = stringValue(profile.avatar) || "/assets/icons/favicon.ico";
   const profileBanner = stringValue(profile.profileBanner);
+  const hiddenStatsSections = getHiddenStatsSections(profile.hiddenStatsSections);
   const progress = stats?.progress || [];
   const visibleProgress = progress.slice(0, visibleProgressCount);
   const activity = stats?.activity || [];
@@ -972,22 +1071,21 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                 />
                 <button
                   type="button"
-                  onClick={() => bannerInputRef.current?.click()}
-                  disabled={bannerUploading}
-                  aria-label={bannerUploading ? "Uploading profile banner" : profileBanner ? "Change profile banner" : "Add profile banner"}
-                  title={profileBanner ? "Change banner" : "Add banner"}
+                  onClick={() => {
+                    setHiddenStatsDraft(getHiddenStatsSections(profile.hiddenStatsSections));
+                    setStatsSettingsError("");
+                    setStatsSettingsOpen(true);
+                  }}
+                  aria-label="Open stats settings"
+                  title="Stats settings"
                   className="absolute right-3 top-3 z-20 grid size-9 place-items-center rounded-lg border border-black/15 bg-white/85 text-slate-800 shadow-sm backdrop-blur transition hover:bg-white disabled:cursor-wait disabled:opacity-70 dark:border-white/20 dark:bg-black/50 dark:text-white dark:hover:bg-black/70"
                 >
-                  {bannerUploading ? (
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4 animate-spin">
-                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3" />
-                      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
-                    </svg>
-                  ) : (
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4">
-                      <path d="m16 5 3 3M4 20l4.5-1 11-11a2.12 2.12 0 0 0-3-3l-11 11L4 20Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                    </svg>
-                  )}
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4">
+                    <path d="M4 7h10m4 0h2M4 17h2m4 0h10M4 12h2m4 0h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                    <circle cx="16" cy="7" r="2" fill="currentColor" />
+                    <circle cx="8" cy="12" r="2" fill="currentColor" />
+                    <circle cx="8" cy="17" r="2" fill="currentColor" />
+                  </svg>
                 </button>
               </>
             )}
@@ -1054,7 +1152,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                 </div>
               </div>
             </div>
-            {isOwner && bannerError && (
+            {isOwner && bannerError && !statsSettingsOpen && (
               <p role="alert" className="relative z-10 mt-3 rounded-lg bg-red-100/90 px-3 py-2 text-xs text-red-800 dark:bg-red-950/80 dark:text-red-100">
                 {bannerError}
               </p>
@@ -1084,130 +1182,278 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
           {stats && (
             <>
-              <section className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
-                <StatsCard label="Series tracked" value={progress.length.toLocaleString()} detail="Tracked manga + novels" icon="▤" tone="rose" />
-                <StatsCard label="Chapters read" value={stats.totalChaptersRead.toLocaleString()} detail="Lifetime chapter total" icon="▣" tone="amber" />
-                <StatsCard label="Bookmarks" value={stats.bookmarksCount === null ? "—" : stats.bookmarksCount.toLocaleString()} detail={stats.bookmarksCount === null ? "Not publicly available" : "Saved series"} icon="☆" tone="violet" />
-                <StatsCard label="Progress" value={averageProgress === null ? "—" : `${averageProgress}%`} detail={`${knownSeriesProgress.length} series with data`} icon="◔" tone="blue" />
-                <StatsCard label="Chapter opens" value={totalWeeklyChapters.toLocaleString()} detail={`${activeDays} active days this week`} icon="↗" tone="cyan" />
-                <StatsCard label="Manga" value={mangaCount.toLocaleString()} detail="Manga with progress" icon="▣" tone="emerald" />
-                <StatsCard label="Novels" value={novelCount.toLocaleString()} detail="Novels with progress" icon="▥" tone="orange" />
-                <StatsCard label="Sources" value={sourceCount.toLocaleString()} detail="Source types used" icon="⌘" tone="pink" />
-              </section>
+              {!hiddenStatsSections.includes("stat-cards") && (
+                <section className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
+                  <StatsCard label="Series tracked" value={progress.length.toLocaleString()} detail="Tracked manga + novels" icon="▤" tone="rose" />
+                  <StatsCard label="Chapters read" value={stats.totalChaptersRead.toLocaleString()} detail="Lifetime chapter total" icon="▣" tone="amber" />
+                  <StatsCard label="Bookmarks" value={stats.bookmarksCount === null ? "—" : stats.bookmarksCount.toLocaleString()} detail={stats.bookmarksCount === null ? "Not publicly available" : "Saved series"} icon="☆" tone="violet" />
+                  <StatsCard label="Progress" value={averageProgress === null ? "—" : `${averageProgress}%`} detail={`${knownSeriesProgress.length} series with data`} icon="◔" tone="blue" />
+                  <StatsCard label="Chapter opens" value={totalWeeklyChapters.toLocaleString()} detail={`${activeDays} active days this week`} icon="↗" tone="cyan" />
+                  <StatsCard label="Manga" value={mangaCount.toLocaleString()} detail="Manga with progress" icon="▣" tone="emerald" />
+                  <StatsCard label="Novels" value={novelCount.toLocaleString()} detail="Novels with progress" icon="▥" tone="orange" />
+                  <StatsCard label="Sources" value={sourceCount.toLocaleString()} detail="Source types used" icon="⌘" tone="pink" />
+                </section>
+              )}
 
-              <ReadingMedals totalChaptersRead={stats.totalChaptersRead} />
+              {!hiddenStatsSections.includes("medals") && (
+                <ReadingMedals totalChaptersRead={stats.totalChaptersRead} />
+              )}
 
-              <section className="grid gap-3 md:grid-cols-2">
-                <DonutCard
-                  title="Series mix: Manga vs Novel"
-                  mangaValue={mangaCount}
-                  novelValue={novelCount}
-                  centerValue={progress.length.toLocaleString()}
-                  centerLabel="series"
-                  mangaDetail={`${mangaCount.toLocaleString()} (${progress.length ? Math.round((mangaCount / progress.length) * 100) : 0}%)`}
-                  novelDetail={`${novelCount.toLocaleString()} (${progress.length ? Math.round((novelCount / progress.length) * 100) : 0}%)`}
-                />
-                <DonutCard
-                  title="Reading progress by format"
-                  mangaValue={mangaProgressTotal}
-                  novelValue={novelProgressTotal}
-                  centerValue={averageProgress === null ? "—" : `${averageProgress}%`}
-                  centerLabel="average"
-                  mangaDetail={mangaAverage === null ? "— average" : `${mangaAverage}% average`}
-                  novelDetail={novelAverage === null ? "— average" : `${novelAverage}% average`}
-                />
-              </section>
+              {!hiddenStatsSections.includes("reading-charts") && (
+                <section className="grid gap-3 md:grid-cols-2">
+                  <DonutCard
+                    title="Series mix: Manga vs Novel"
+                    mangaValue={mangaCount}
+                    novelValue={novelCount}
+                    centerValue={progress.length.toLocaleString()}
+                    centerLabel="series"
+                    mangaDetail={`${mangaCount.toLocaleString()} (${progress.length ? Math.round((mangaCount / progress.length) * 100) : 0}%)`}
+                    novelDetail={`${novelCount.toLocaleString()} (${progress.length ? Math.round((novelCount / progress.length) * 100) : 0}%)`}
+                  />
+                  <DonutCard
+                    title="Reading progress by format"
+                    mangaValue={mangaProgressTotal}
+                    novelValue={novelProgressTotal}
+                    centerValue={averageProgress === null ? "—" : `${averageProgress}%`}
+                    centerLabel="average"
+                    mangaDetail={mangaAverage === null ? "— average" : `${mangaAverage}% average`}
+                    novelDetail={novelAverage === null ? "— average" : `${novelAverage}% average`}
+                  />
+                </section>
+              )}
 
-              <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
-                <div className="flex flex-wrap items-end justify-between gap-2">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading activity</h2>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">Chapter opens and saved history · last 7 days (UTC)</p>
+              {!hiddenStatsSections.includes("reading-activity") && (
+                <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading activity</h2>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">Chapter opens and saved history · last 7 days (UTC)</p>
+                    </div>
+                    <p className="text-sm font-semibold text-[var(--mikoroku-accent)]">{totalWeeklyChapters} chapter opens</p>
                   </div>
-                  <p className="text-sm font-semibold text-[var(--mikoroku-accent)]">{totalWeeklyChapters} chapter opens</p>
-                </div>
-                <div className="mt-6 grid grid-cols-7 gap-2 sm:gap-4">
-                  {activity.map((day) => {
-                    const height = day.chapters
-                      ? Math.max(8, (day.chapters / maxActivity) * 100)
-                      : 3;
-                    return (
-                      <div key={day.date} className="flex min-w-0 flex-col items-center gap-2" title={`${day.date}: ${day.chapters} chapters`}>
-                        <span className="h-4 text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                          {day.chapters ? day.chapters : ""}
-                        </span>
-                        <div className="flex h-32 w-full items-end rounded-t-lg border-b border-black/10 bg-slate-100/70 px-1 dark:border-white/10 dark:bg-black/15">
-                          <div
-                            className={`w-full rounded-t-md transition-[height] ${day.chapters ? "shadow-[0_0_16px_color-mix(in_srgb,var(--mikoroku-accent)_20%,transparent)]" : "bg-slate-300 dark:bg-white/10"}`}
-                            style={{
-                              height: `${height}%`,
-                              ...(day.chapters ? { backgroundColor: "var(--mikoroku-accent)" } : {}),
-                            }}
-                            role="img"
-                            aria-label={`${day.chapters} chapters`}
-                          />
+                  <div className="mt-6 grid grid-cols-7 gap-2 sm:gap-4">
+                    {activity.map((day) => {
+                      const height = day.chapters
+                        ? Math.max(8, (day.chapters / maxActivity) * 100)
+                        : 3;
+                      return (
+                        <div key={day.date} className="flex min-w-0 flex-col items-center gap-2" title={`${day.date}: ${day.chapters} chapters`}>
+                          <span className="h-4 text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                            {day.chapters ? day.chapters : ""}
+                          </span>
+                          <div className="flex h-32 w-full items-end rounded-t-lg border-b border-black/10 bg-slate-100/70 px-1 dark:border-white/10 dark:bg-black/15">
+                            <div
+                              className={`w-full rounded-t-md transition-[height] ${day.chapters ? "shadow-[0_0_16px_color-mix(in_srgb,var(--mikoroku-accent)_20%,transparent)]" : "bg-slate-300 dark:bg-white/10"}`}
+                              style={{
+                                height: `${height}%`,
+                                ...(day.chapters ? { backgroundColor: "var(--mikoroku-accent)" } : {}),
+                              }}
+                              role="img"
+                              aria-label={`${day.chapters} chapters`}
+                            />
+                          </div>
+                          <span className="truncate text-[10px] text-slate-500 dark:text-zinc-500 sm:text-xs">
+                            {getActivityDayLabel(day.date)}
+                          </span>
                         </div>
-                        <span className="truncate text-[10px] text-slate-500 dark:text-zinc-500 sm:text-xs">
-                          {getActivityDayLabel(day.date)}
-                        </span>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {!hiddenStatsSections.includes("reading-progress") && (
+                <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
+                  <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading progress</h2>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">Latest saved chapter, chapter progress, and estimated series progress</p>
+                    </div>
+                    <span className="text-xs text-slate-500 dark:text-zinc-500">
+                      Showing {visibleProgress.length} of {progress.length} series
+                    </span>
+                  </div>
+                  {progress.length ? (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {visibleProgress.map((item) => (
+                          <ProgressCard key={`${item.kind}:${item.slug}`} item={item} />
+                        ))}
                       </div>
+                      {visibleProgress.length < progress.length && (
+                        <button
+                          type="button"
+                          onClick={() => setVisibleProgressCount((count) => Math.min(count + 10, progress.length))}
+                          className="mt-4 w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                        >
+                          Load more series
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-black/20 px-5 py-10 text-center dark:border-white/15">
+                      <p className="font-semibold text-slate-800 dark:text-zinc-200">No saved reading progress yet</p>
+                      <p className="mt-1 text-sm text-slate-600 dark:text-zinc-500">Progress and activity charts will appear as the user reads while signed in.</p>
+                      <a href="/manga-list" className="mt-4 inline-flex rounded-xl bg-[var(--mikoroku-accent-surface)] px-4 py-2 text-sm font-semibold text-[var(--mikoroku-accent-foreground)] transition hover:opacity-90">
+                        Explore manga
+                      </a>
+                    </div>
+                  )}
+                  {progress.length > 0 && (
+                    <p className="mt-4 text-[11px] text-slate-500 dark:text-zinc-500">
+                      Series progress is calculated from the chapter list available while reading. Older history without chapter-list data shows chapter progress only.
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {!hiddenStatsSections.includes("comment-history") && (
+                <CommentHistorySection
+                  key={uid}
+                  comments={stats.commentHistory}
+                  error={stats.commentHistoryError}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </main>
+      {isOwner && statsSettingsOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setStatsSettingsOpen(false);
+          }}
+        >
+          <div
+            ref={statsSettingsDialogRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stats-settings-title"
+            className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-black/10 bg-white shadow-2xl outline-none dark:border-white/15 dark:bg-[#15151d]"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-4 dark:border-white/10 sm:px-6">
+              <div>
+                <h2 id="stats-settings-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                  Stats Settings
+                </h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                  Manage your banner and choose which stats visitors can see.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatsSettingsOpen(false)}
+                aria-label="Close stats settings"
+                className="grid size-9 shrink-0 place-items-center rounded-xl border border-black/10 text-slate-600 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
+              >
+                <span aria-hidden="true" className="text-xl leading-none">×</span>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-5 py-5 sm:px-6">
+              <section className="rounded-2xl border border-black/10 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.035]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Profile banner</h3>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                      {profileBanner ? "A banner is currently set." : "No banner has been added."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => bannerInputRef.current?.click()}
+                    disabled={bannerUploading}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--mikoroku-accent)] px-4 py-2.5 text-xs font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {bannerUploading && (
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4 animate-spin">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3" />
+                        <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+                      </svg>
+                    )}
+                    {bannerUploading ? "Uploading..." : profileBanner ? "Change banner" : "Add banner"}
+                  </button>
+                </div>
+                {bannerError && (
+                  <p role="alert" className="mt-3 rounded-lg bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-950/70 dark:text-red-100">
+                    {bannerError}
+                  </p>
+                )}
+              </section>
+
+              <section className="mt-5">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Public stats visibility</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-zinc-400">
+                  Select sections to hide from everyone. Your profile header and banner remain visible.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {statsSectionSettings.map((section) => {
+                    const hidden = hiddenStatsDraft.includes(section.id);
+                    return (
+                      <label
+                        key={section.id}
+                        className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-3 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.05]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-800 dark:text-zinc-100">
+                            {section.label}
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-5 text-slate-500 dark:text-zinc-400">
+                            {section.description}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-400">
+                            {hidden ? "Hidden" : "Visible"}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={hidden}
+                            disabled={statsSettingsSaving}
+                            onChange={(event) => {
+                              setHiddenStatsDraft((current) => event.target.checked
+                                ? [...current, section.id]
+                                : current.filter((id) => id !== section.id));
+                            }}
+                            aria-label={`Hide ${section.label} from public stats`}
+                            className="size-4 accent-[var(--mikoroku-accent)]"
+                          />
+                        </span>
+                      </label>
                     );
                   })}
                 </div>
               </section>
 
-              <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
-                <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading progress</h2>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">Latest saved chapter, chapter progress, and estimated series progress</p>
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-zinc-500">
-                    Showing {visibleProgress.length} of {progress.length} series
-                  </span>
-                </div>
-                {progress.length ? (
-                  <>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {visibleProgress.map((item) => (
-                        <ProgressCard key={`${item.kind}:${item.slug}`} item={item} />
-                      ))}
-                    </div>
-                    {visibleProgress.length < progress.length && (
-                      <button
-                        type="button"
-                        onClick={() => setVisibleProgressCount((count) => Math.min(count + 10, progress.length))}
-                        className="mt-4 w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
-                      >
-                        Load more series
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-black/20 px-5 py-10 text-center dark:border-white/15">
-                    <p className="font-semibold text-slate-800 dark:text-zinc-200">No saved reading progress yet</p>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-zinc-500">Progress and activity charts will appear as the user reads while signed in.</p>
-                    <a href="/manga-list" className="mt-4 inline-flex rounded-xl bg-[var(--mikoroku-accent-surface)] px-4 py-2 text-sm font-semibold text-[var(--mikoroku-accent-foreground)] transition hover:opacity-90">
-                      Explore manga
-                    </a>
-                  </div>
-                )}
-                {progress.length > 0 && (
-                  <p className="mt-4 text-[11px] text-slate-500 dark:text-zinc-500">
-                    Series progress is calculated from the chapter list available while reading. Older history without chapter-list data shows chapter progress only.
-                  </p>
-                )}
-              </section>
+              {statsSettingsError && (
+                <p role="alert" className="mt-4 rounded-lg bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-950/70 dark:text-red-100">
+                  {statsSettingsError}
+                </p>
+              )}
+            </div>
 
-              <CommentHistorySection
-                key={uid}
-                comments={stats.commentHistory}
-                error={stats.commentHistoryError}
-              />
-            </>
-          )}
+            <div className="flex justify-end gap-2 border-t border-black/10 px-5 py-4 dark:border-white/10 sm:px-6">
+              <button
+                type="button"
+                onClick={() => setStatsSettingsOpen(false)}
+                className="rounded-xl border border-black/10 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveStatsSettings()}
+                disabled={statsSettingsSaving}
+                className="rounded-xl bg-[var(--mikoroku-accent)] px-4 py-2.5 text-xs font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70"
+              >
+                {statsSettingsSaving ? "Saving..." : "Save settings"}
+              </button>
+            </div>
+          </div>
         </div>
-      </main>
+      )}
     </>
   );
 }
