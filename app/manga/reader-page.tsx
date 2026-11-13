@@ -13,6 +13,7 @@ import {
   updateReadingHistoryProgress,
   upsertReadingHistoryEntry,
 } from "../../lib/reading-history";
+import { saveReaderStats, type ReaderStatsInput } from "../../lib/reading-stats";
 import {
   readCachedReaderData,
   writeCachedReaderData,
@@ -59,6 +60,22 @@ type ReaderData = {
   nsfw?: boolean;
 };
 
+function getReaderStatsInput(data: ReaderData, slug: string, progress: number): ReaderStatsInput {
+  const chapterIndex = data.chapters.indexOf(data.chapter);
+  return {
+    slug,
+    title: data.title,
+    cover: data.cover,
+    kind: data.kind,
+    chapter: data.chapter,
+    chapterTitle: data.chapterTitle,
+    chapterProgress: progress,
+    chapterPosition: chapterIndex >= 0 ? chapterIndex + 1 : 0,
+    chapterCount: data.chapters.length,
+    source: data.source || "",
+  };
+}
+
 const mangaDatasetUrl = "/catalog/manga.json";
 const bloggerChapterSources = [
   { source: "blogger", domain: "https://www.mikodrive.my.id" },
@@ -83,7 +100,7 @@ const novelReportTypes = [
   { value: "Lainnya", label: "Other" },
 ];
 const novelPatternOptions: Array<{ id: NovelPattern; label: string; description: string }> = [
-  { id: "vine-scroll", label: "Vine Scroll", description: "Simple curling vines and leaves" },
+  { id: "vine-scroll", label: "Akatsuki Cloud", description: "Simple curling vines and leaves" },
   { id: "lotus-vines", label: "Lotus & Vines", description: "Large lotuses and curling vines" },
   { id: "kawung-blossom", label: "Kawung & Petals", description: "Classic batik and blossoms" },
   { id: "fantasy-flora", label: "Fantasy Flora", description: "Carved flowers and curling branches" },
@@ -128,7 +145,7 @@ function roseMarkup(x: number, y: number, color: string, opacity: number, scale 
 function getNovelPatternArtwork(pattern: NovelPattern, color: string, opacity: number): string {
   switch (pattern) {
     case "vine-scroll":
-      return `<path d="M-12 210C35 175 66 138 77 103S91 40 136 25 197 29 217-10M58 123C91 132 121 157 137 190M128 37C157 51 174 76 181 105M75 103C49 94 32 77 27 52" stroke-width="1.5"/>${leafMarkup(57, 118, color, opacity, 205, 1.05)}${leafMarkup(86, 74, color, opacity, 25, 1)}${leafMarkup(149, 45, color, opacity, 205, 1)}${leafMarkup(174, 85, color, opacity, 25, 0.95)}${leafMarkup(119, 164, color, opacity, 35, 1)}${leafMarkup(38, 78, color, opacity, 205, 0.9)}`;
+      return `<path fill="${color}" fill-opacity="${opacity}" stroke="none" d="M73.23,40.41a14.88,14.88,0,0,0-5.42-1.25,11.34,11.34,0,0,0-21.09-2.45,7.57,7.57,0,0,0-6,.51A11.23,11.23,0,0,0,34.77,46a7.25,7.25,0,0,0-6.51,2.77A4.94,4.94,0,0,1,22,49.94a1.16,1.16,0,0,0-1.07-.1,1.18,1.18,0,0,0-.69.83,8.35,8.35,0,0,0,.8,5.78A12.61,12.61,0,0,0,34,63a9.85,9.85,0,0,0,4.62,5.3,9.74,9.74,0,0,0,4.6,1.15,9.89,9.89,0,0,0,7.43-3.34,7.6,7.6,0,0,0,5.6,2.14A11.29,11.29,0,0,0,66,61.82a11.41,11.41,0,0,0,13-6.46h0A11.38,11.38,0,0,0,73.23,40.41Zm3.69,14a9,9,0,0,1-11.18,4.89h0l-.24-.09a5.5,5.5,0,0,1-3.63-5.08,5.31,5.31,0,0,1,2.26-4.3,1.16,1.16,0,0,0,.4-1.44h0a1.16,1.16,0,0,0-1.69-.5,7.59,7.59,0,0,0,1,13.09,9,9,0,0,1-7.66,4.93,5.35,5.35,0,0,1-4.6-2.33,1.15,1.15,0,0,0-1-.52,1.19,1.19,0,0,0-1,.54,7.52,7.52,0,0,1-13.37-6.73,4.56,4.56,0,0,1,5.17-3,4.42,4.42,0,0,1,2.69,1.88,1.17,1.17,0,0,0,1.4.49h0a1.15,1.15,0,0,0,.61-1.66A6.68,6.68,0,0,0,34.56,55a9.86,9.86,0,0,0-1.09,5.74,10.31,10.31,0,0,1-10.42-5.36,6.1,6.1,0,0,1-.72-2.72A7.37,7.37,0,0,0,30,50.29a4.94,4.94,0,0,1,5.52-1.76,1.12,1.12,0,0,0,1-.19,1.14,1.14,0,0,0,.46-1,8.91,8.91,0,0,1,4.75-8.12,5.27,5.27,0,0,1,4.11-.37c0,.15-.1.29-.14.44a7.78,7.78,0,0,0,.42,5,7.59,7.59,0,0,0,5.62,4.41,7.16,7.16,0,0,0,1.38.13,7.64,7.64,0,0,0,7.13-5,1.17,1.17,0,0,0-2.2-.77,5.19,5.19,0,0,1-1.94,2.48,5.29,5.29,0,0,1-7.61-1.72,6.67,6.67,0,0,1-.33-4.72c.05-.16.11-.32.17-.48h0a9,9,0,0,1,17.3,1.84,1.21,1.21,0,0,0,1.18,1,12.7,12.7,0,0,1,5.42,1.06A9,9,0,0,1,76.92,54.43Z"/>`;
     case "lotus-vines":
       return `<path d="M-15 110C35 65 85 155 135 95S210 115 255 85M95-15C65 45 145 95 105 160S130 225 115 255M15 215C65 185 115 225 175 180S225 190 250 175" stroke-width="1.3"/>${leafMarkup(42, 93, color, opacity, 12, 1.1)}${leafMarkup(162, 78, color, opacity, 185, 1.1)}${leafMarkup(108, 135, color, opacity, 75, 1.1)}${flowerMarkup(68, 56, 1.05, color, opacity, 4)}${flowerMarkup(182, 168, 0.82, color, opacity, 4)}<path d="M46 178C38 166 40 156 46 150 52 156 54 166 46 178Z" fill="${color}" fill-opacity="${opacity * 0.3}"/>`;
     case "kawung-blossom":
@@ -149,10 +166,16 @@ function getNovelPatternStyle(pattern: NovelPattern, color: NovelPatternColor, o
   const selectedColor = colorOption
     ? isDarkMode ? colorOption.value : novelPatternLightColors[colorOption.id]
     : isDarkMode ? "#f8fafc" : "#475569";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"><g fill="none" stroke="${selectedColor}" stroke-opacity="${opacity / 100}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${getNovelPatternArtwork(pattern, selectedColor, opacity / 100)}</g></svg>`;
+  const isVineScroll = pattern === "vine-scroll";
+  const artwork = getNovelPatternArtwork(pattern, selectedColor, opacity / 100);
+  const vinePlacements = [[0, 0], [119, 3], [56, 38], [132, 47], [6, 79], [87, 91], [137, 95]];
+  const artworkCopies = isVineScroll
+    ? vinePlacements.map(([x, y]) => `<g transform="translate(${x} ${y}) translate(-18 -28)">${artwork}</g>`).join("")
+    : artwork;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${isVineScroll ? 300 : 240}" height="${isVineScroll ? 206 : 240}" viewBox="${isVineScroll ? "0 0 192 132" : "0 0 240 240"}"><g fill="none" stroke="${selectedColor}" stroke-opacity="${opacity / 100}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${artworkCopies}</g></svg>`;
   return {
     backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
-    backgroundSize: `${size}px ${size}px`,
+    backgroundSize: isVineScroll ? `${size * 3}px auto` : `${size}px ${size}px`,
   };
 }
 
@@ -1132,6 +1155,22 @@ export default function ReaderPage({
   preferStoredChapter?: boolean;
 }) {
   const [data, setData] = useState<ReaderData | null>(null);
+  const [infiniteRead, setInfiniteRead] = useState(false);
+  const [infiniteChapters, setInfiniteChapters] = useState<ReaderData[]>([]);
+  const [loadingNextChapter, setLoadingNextChapter] = useState(false);
+  const [nextChapterError, setNextChapterError] = useState("");
+  const [nextChapterRetry, setNextChapterRetry] = useState(0);
+  const [activeReadingChapter, setActiveReadingChapter] = useState("");
+  const infiniteSentinelRef = useRef<HTMLDivElement | null>(null);
+  const nextChapterAbortRef = useRef<AbortController | null>(null);
+  const nextChapterLoadingRef = useRef(false);
+  const currentStatsProgressRef = useRef<{ data: ReaderData | null; progress: number }>({
+    data: null,
+    progress: 0,
+  });
+  const lastStatsChapterRef = useRef("");
+  const lastStatsActivityRef = useRef("");
+  const lastStatsProgressRef = useRef("");
   const [showNsfw] = useNsfwVisibility();
   const [mangaNsfw, setMangaNsfw] = useState(() =>
     isNsfwManga(slug),
@@ -1219,7 +1258,6 @@ export default function ReaderPage({
     if (settingsOpen || reportOpen) setFloatingHidden(false);
   }, [settingsOpen, reportOpen]);
 
-  const [chapterListOpen, setChapterListOpen] = useState(false);
   const [bottomChapterListOpen, setBottomChapterListOpen] = useState(false);
   const [bottomPageListOpen, setBottomPageListOpen] = useState(false);
   const bottomChaptersRef = useRef<HTMLDivElement | null>(null);
@@ -1248,6 +1286,16 @@ export default function ReaderPage({
   const [imageQuality, setImageQuality] = useState(600);
   const [readerProgress, setReaderProgress] = useState(0);
   const activeKind = data?.kind || kind;
+  const readerChapters = useMemo(
+    () => data ? [data, ...infiniteChapters] : [],
+    [data, infiniteChapters],
+  );
+  const activeReaderData = useMemo(
+    () => readerChapters.find((item) => item.chapter === activeReadingChapter) || data,
+    [activeReadingChapter, data, readerChapters],
+  );
+  const activeImageCount = activeReaderData?.kind === "manga" ? activeReaderData.images.length : 0;
+  const hasInfiniteContent = infiniteRead || infiniteChapters.length > 0;
   const concealReaderPages = mangaNsfw && !showNsfw;
 
   useEffect(() => {
@@ -1260,16 +1308,16 @@ export default function ReaderPage({
   }, [data?.nsfw, data?.title, slug]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!activeReaderData) return;
 
-    const title = `${data.chapterTitle} - ${data.title} | Mikoroku`;
-    const description = `Baca ${data.chapterTitle} ${data.title} di Mikoroku.`;
+    const title = `${activeReaderData.chapterTitle} - ${activeReaderData.title} | Mikoroku`;
+    const description = `Baca ${activeReaderData.chapterTitle} ${activeReaderData.title} di Mikoroku.`;
     const pageUrl = new URL(
-      `/${data.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`,
+      `/${activeReaderData.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(activeReaderData.chapter)}`,
       window.location.origin,
     ).href;
     const imageUrl = new URL(
-      `/og/${data.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`,
+      `/og/${activeReaderData.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(activeReaderData.chapter)}`,
       window.location.origin,
     ).href;
 
@@ -1301,10 +1349,11 @@ export default function ReaderPage({
       document.head.append(canonical);
     }
     canonical.href = pageUrl;
-  }, [data, slug]);
+  }, [activeReaderData, slug]);
 
   useEffect(() => {
     if (!data || data.kind !== "manga" || mode === "long-strip" || !data.images.length) return;
+    if (infiniteRead) return;
     const currentPage = mode === "double" && page > 1
       ? Math.min(page + 1, data.images.length)
       : page;
@@ -1314,7 +1363,7 @@ export default function ReaderPage({
     void updateReadingHistoryProgress(historyUrl, progress)
       .then(() => window.dispatchEvent(new Event("mikoroku:reading-history-updated")))
       .catch((historyError: unknown) => console.error("Reading progress could not be saved.", historyError));
-  }, [data, mode, page, slug]);
+  }, [data, infiniteRead, mode, page, slug]);
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -1349,6 +1398,13 @@ export default function ReaderPage({
       const cached = getCurrentChapterCache(slug);
       if (cached?.num) targetChapter = String(cached.num);
     }
+    nextChapterAbortRef.current?.abort(new DOMException("Reader chapter changed.", "AbortError"));
+    nextChapterAbortRef.current = null;
+    nextChapterLoadingRef.current = false;
+    setInfiniteChapters([]);
+    setLoadingNextChapter(false);
+    setNextChapterError("");
+    setActiveReadingChapter(targetChapter);
     const cachedData = getCachedReaderData(slug, targetChapter, kind, forcedServer);
     hasUsableData = Boolean(cachedData);
     setData(cachedData);
@@ -1461,14 +1517,139 @@ export default function ReaderPage({
   }, [chapter, forcedServer, kind, preferStoredChapter, slug]);
 
   const chapterIndex = useMemo(
-    () => data?.chapters.indexOf(data.chapter) ?? -1,
-    [data],
+    () => data?.chapters.indexOf(activeReaderData?.chapter || data.chapter) ?? -1,
+    [activeReaderData, data],
   );
+
+  useEffect(() => {
+    currentStatsProgressRef.current = { data: activeReaderData, progress: readerProgress };
+  }, [activeReaderData, readerProgress]);
+
+  useEffect(() => {
+    if (!activeReaderData) return;
+    const input = getReaderStatsInput(activeReaderData, slug, readerProgress);
+    const chapterKey = `${slug}:${activeReaderData.kind}:${activeReaderData.chapter}`;
+    if (lastStatsChapterRef.current === chapterKey) return;
+    lastStatsChapterRef.current = chapterKey;
+
+    void saveReaderStats(input, true).then((saved) => {
+      if (saved) {
+        lastStatsActivityRef.current = chapterKey;
+        lastStatsProgressRef.current = `${chapterKey}:${Math.round(input.chapterProgress)}`;
+      }
+    }).catch((statsError: unknown) => {
+      if (lastStatsChapterRef.current === chapterKey) lastStatsChapterRef.current = "";
+      console.error("Reading stats could not be saved.", statsError);
+    });
+  }, [activeReaderData, readerProgress, slug]);
+
+  useEffect(() => {
+    const saveLatestProgress = (force = false) => {
+      const current = currentStatsProgressRef.current;
+      if (!current.data || (!force && document.visibilityState === "hidden")) return;
+      const input = getReaderStatsInput(current.data, slug, current.progress);
+      const chapterKey = `${slug}:${current.data.kind}:${current.data.chapter}`;
+      const progressKey = `${chapterKey}:${Math.round(input.chapterProgress)}`;
+      const needsActivity = lastStatsActivityRef.current !== chapterKey;
+      if (!needsActivity && lastStatsProgressRef.current === progressKey) return;
+
+      void saveReaderStats(input, needsActivity).then((saved) => {
+        if (saved) {
+          if (needsActivity) lastStatsActivityRef.current = chapterKey;
+          lastStatsProgressRef.current = progressKey;
+        }
+      }).catch((statsError: unknown) => {
+        console.error("Reading progress stats could not be saved.", statsError);
+      });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") saveLatestProgress(true);
+    };
+    const interval = window.setInterval(saveLatestProgress, 15000);
+    const onPageHide = () => saveLatestProgress(true);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [slug]);
+
+  useEffect(() => {
+    if (!infiniteRead || !data || nextChapterError) return;
+    if (data.kind === "manga" && mode !== "long-strip") return;
+    const baseChapterIndex = data.chapters.indexOf(data.chapter);
+    if (baseChapterIndex < 0) return;
+    const nextChapter = data.chapters[baseChapterIndex + infiniteChapters.length + 1];
+    const sentinel = infiniteSentinelRef.current;
+    if (!nextChapter || !sentinel) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting) || nextChapterLoadingRef.current) return;
+      const controller = new AbortController();
+      nextChapterAbortRef.current = controller;
+      nextChapterLoadingRef.current = true;
+      setLoadingNextChapter(true);
+      setNextChapterError("");
+
+      void loadReaderData(slug, nextChapter, data.kind, controller.signal, forcedServer)
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          if (result.kind !== data.kind || result.chapter !== nextChapter) {
+            throw new Error(`Could not load the next ${data.kind} chapter (${nextChapter}).`);
+          }
+          setInfiniteChapters((loaded) => (
+            loaded.some((item) => item.chapter === result.chapter) ? loaded : [...loaded, result]
+          ));
+          if (result.kind === "manga") {
+            void writeCachedReaderData(slug, { ...result, kind: "manga" }).catch((cacheError: unknown) => {
+              console.warn("Could not cache the infinite-read chapter.", cacheError);
+            });
+          }
+        })
+        .catch((loadError: unknown) => {
+          if (controller.signal.aborted || isAbortError(loadError)) return;
+          console.error("Infinite read could not load the next chapter.", loadError);
+          setNextChapterError(loadError instanceof Error ? loadError.message : "Could not load the next chapter.");
+        })
+        .finally(() => {
+          if (nextChapterAbortRef.current !== controller) return;
+          nextChapterAbortRef.current = null;
+          nextChapterLoadingRef.current = false;
+          setLoadingNextChapter(false);
+        });
+    }, { rootMargin: "900px 0px" });
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+      const controller = nextChapterAbortRef.current;
+      if (controller && !controller.signal.aborted && nextChapterLoadingRef.current) {
+        controller.abort(new DOMException("Infinite read request was superseded.", "AbortError"));
+        nextChapterAbortRef.current = null;
+        nextChapterLoadingRef.current = false;
+      }
+    };
+  }, [data, forcedServer, infiniteChapters.length, infiniteRead, kind, mode, nextChapterError, nextChapterRetry, slug]);
 
   const changeChapter = useCallback((target: string) => {
     const path = activeKind === "novel" ? "/novel" : "/manga";
     window.location.replace(`${path}/${encodeURIComponent(slug)}/${encodeURIComponent(target)}`);
   }, [activeKind, slug]);
+
+  function goToReaderChapter(target: string) {
+    const loadedSection = infiniteRead
+      ? [...document.querySelectorAll<HTMLElement>("[data-reader-chapter]")]
+        .find((section) => section.dataset.readerChapter === target)
+      : undefined;
+    if (loadedSection) {
+      loadedSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      setBottomChapterListOpen(false);
+      return;
+    }
+    changeChapter(target);
+  }
 
   const tryServer = useCallback((server: "sv1" | "sv2" | "es") => {
     try {
@@ -1486,8 +1667,37 @@ export default function ReaderPage({
   function setReaderLayout(nextMode: ReaderMode) {
     setMode(nextMode);
     localStorage.setItem("readerMode", nextMode === "single" ? "page" : nextMode === "double" ? "double" : "webtoon");
+    if (infiniteRead && nextMode !== "long-strip") {
+      localStorage.setItem("readerInfiniteRead", "false");
+      setInfiniteRead(false);
+      setInfiniteChapters([]);
+      setActiveReadingChapter(data?.chapter || "");
+      nextChapterAbortRef.current?.abort(new DOMException("Infinite read was disabled.", "AbortError"));
+      nextChapterAbortRef.current = null;
+      nextChapterLoadingRef.current = false;
+      setLoadingNextChapter(false);
+      if (data) {
+        const baseUrl = `/${data.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(data.chapter)}`;
+        if (window.location.pathname !== baseUrl) window.history.replaceState(window.history.state, "", baseUrl);
+      }
+    }
     setPage(1);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function toggleInfiniteRead() {
+    const nextValue = !infiniteRead;
+    localStorage.setItem("readerInfiniteRead", String(nextValue));
+    setInfiniteRead(nextValue);
+    setNextChapterError("");
+    if (!nextValue) {
+      nextChapterAbortRef.current?.abort(new DOMException("Infinite read was disabled.", "AbortError"));
+      nextChapterAbortRef.current = null;
+      nextChapterLoadingRef.current = false;
+      setLoadingNextChapter(false);
+    } else if (activeKind === "manga" && mode !== "long-strip") {
+      setReaderLayout("long-strip");
+    }
   }
 
   function changeReadingDirection(direction: ReadingDirection) {
@@ -1507,7 +1717,7 @@ export default function ReaderPage({
   }, [data, dataSaver, imageQuality, kind, mangaNsfw, mode, page, showNsfw]);
 
   useEffect(() => {
-    if (!data || kind !== "manga" || mode !== "long-strip") return;
+    if (!data || kind !== "manga" || mode !== "long-strip" || infiniteRead) return;
     const images = [...document.querySelectorAll<HTMLImageElement>(".reader-images.long-strip img")];
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.filter((entry) => entry.isIntersecting)
@@ -1518,7 +1728,7 @@ export default function ReaderPage({
     }, { rootMargin: "-40% 0px -40% 0px" });
     images.forEach((image) => observer.observe(image));
     return () => observer.disconnect();
-  }, [data, kind, mode]);
+  }, [data, infiniteRead, kind, mode]);
 
   useEffect(() => {
     if (!data || kind !== "manga" || mode === "long-strip") return;
@@ -1542,6 +1752,12 @@ export default function ReaderPage({
 
   useEffect(() => {
     setDataSaver(localStorage.getItem("dataSaver") === "true");
+    const savedInfiniteRead = localStorage.getItem("readerInfiniteRead") === "true";
+    setInfiniteRead(savedInfiniteRead);
+    if (savedInfiniteRead && kind === "manga") {
+      setMode("long-strip");
+      localStorage.setItem("readerMode", "webtoon");
+    }
     const savedQuality = Number(localStorage.getItem("imageQuality"));
     if ([600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000].includes(savedQuality)) {
       setImageQuality(savedQuality);
@@ -1553,7 +1769,6 @@ export default function ReaderPage({
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setSettingsOpen(false);
-        setChapterListOpen(false);
       }
     }
     window.addEventListener("keydown", closeOnEscape);
@@ -1562,6 +1777,7 @@ export default function ReaderPage({
 
   useEffect(() => {
     if (!data) return;
+    if (hasInfiniteContent && (data.kind === "novel" || mode === "long-strip")) return;
     const scrollKey = `scrollPos_${slug}_${data.chapter}`;
     const savedPosition = Number(localStorage.getItem(scrollKey));
     if (savedPosition > 0 && mode === "long-strip") {
@@ -1677,7 +1893,135 @@ export default function ReaderPage({
       window.removeEventListener("resize", updateProgress);
       document.removeEventListener("scroll", onScroll, { capture: true } as EventListenerOptions);
     };
-  }, [data, mode, slug]);
+  }, [data, hasInfiniteContent, infiniteRead, mode, slug]);
+
+  useEffect(() => {
+    if (!data || !hasInfiniteContent || (data.kind === "manga" && mode !== "long-strip")) return;
+    const root = document.querySelector<HTMLElement>(".reader-page");
+    const sections = [...document.querySelectorAll<HTMLElement>("[data-reader-chapter]")];
+    if (!sections.length) return;
+    const fullscreen = document.fullscreenElement === root;
+    const viewport = fullscreen && root ? root.getBoundingClientRect() : null;
+    const viewportTop = viewport?.top ?? 0;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    let saveTimer = 0;
+    lastScrollYRef.current = fullscreen && root ? root.scrollTop : window.scrollY;
+
+    const getCurrentSection = () => {
+      const readingLine = viewportTop + viewportHeight * 0.55;
+      const currentSection = sections.find((item) => {
+        const bounds = item.getBoundingClientRect();
+        return bounds.top <= readingLine && bounds.bottom > readingLine;
+      });
+      const section = currentSection
+        || sections.find((item) => item.getBoundingClientRect().top > readingLine)
+        || sections[sections.length - 1];
+      const currentData = readerChapters.find((item) => item.chapter === section.dataset.readerChapter) || data;
+      return { section, currentData };
+    };
+
+    const updateProgress = () => {
+      const { section, currentData } = getCurrentSection();
+      const bounds = section.getBoundingClientRect();
+      const scrollableHeight = bounds.height - viewportHeight;
+      const progress = scrollableHeight > 0
+        ? Math.round(Math.max(0, Math.min(100, ((viewportTop - bounds.top) / scrollableHeight) * 100)))
+        : bounds.bottom <= viewportTop + viewportHeight ? 100 : 0;
+      const scrollPosition = fullscreen && root ? root.scrollTop : window.scrollY;
+      const sectionStartPosition = fullscreen && root
+        ? root.scrollTop + bounds.top - root.getBoundingClientRect().top
+        : window.scrollY + bounds.top;
+      const chapterScrollPosition = Math.max(0, scrollPosition - sectionStartPosition);
+      setActiveReadingChapter(currentData.chapter);
+      setReaderProgress(progress);
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        localStorage.setItem(`infiniteScrollPos_${slug}_${currentData.chapter}`, String(chapterScrollPosition));
+        const historyUrl = `/${currentData.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(currentData.chapter)}`;
+        void updateReadingHistoryProgress(historyUrl, progress).then(() => {
+          window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
+        }).catch((historyError: unknown) => {
+          console.error("Reading progress could not be saved.", historyError);
+        });
+      }, 250);
+
+      const currentY = fullscreen && root ? root.scrollTop : window.scrollY;
+      const delta = currentY - lastScrollYRef.current;
+      if (currentY < 48) setFloatingHidden(false);
+      else if (delta > 8) setFloatingHidden(true);
+      else if (delta < -8) setFloatingHidden(false);
+      if (data.kind === "manga") {
+        const images = [...section.querySelectorAll<HTMLImageElement>("img")];
+        const readingLine = viewportTop + viewportHeight * 0.55;
+        const visibleIndex = images.findIndex((image) => image.getBoundingClientRect().bottom >= readingLine);
+        const currentPage = visibleIndex >= 0 ? visibleIndex + 1 : images.length;
+        if (currentPage > 0) setPage((previous) => previous === currentPage ? previous : currentPage);
+      }
+      lastScrollYRef.current = currentY;
+    };
+    const onScroll = () => updateProgress();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    root?.addEventListener("scroll", onScroll, { passive: true });
+    const contentResizeObserver = new ResizeObserver(updateProgress);
+    sections.forEach((section) => contentResizeObserver.observe(section));
+    updateProgress();
+    return () => {
+      window.clearTimeout(saveTimer);
+      contentResizeObserver.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      root?.removeEventListener("scroll", onScroll);
+    };
+  }, [data, hasInfiniteContent, infiniteChapters, mode, readerChapters, slug]);
+
+  useEffect(() => {
+    if (!data || !infiniteRead || (data.kind === "manga" && mode !== "long-strip")) return;
+    const savedPosition = Number(localStorage.getItem(`infiniteScrollPos_${slug}_${data.chapter}`));
+    if (savedPosition > 0) {
+      const timer = window.setTimeout(() => {
+        const section = [...document.querySelectorAll<HTMLElement>("[data-reader-chapter]")]
+          .find((item) => item.dataset.readerChapter === data.chapter);
+        const sectionStart = section ? window.scrollY + section.getBoundingClientRect().top : 0;
+        window.scrollTo({ top: sectionStart + savedPosition });
+      }, 120);
+      return () => window.clearTimeout(timer);
+    }
+  }, [data?.chapter, infiniteRead, mode, slug]);
+
+  useEffect(() => {
+    if (!data || !activeReaderData || !hasInfiniteContent) return;
+    const chapterUrl = `/${activeReaderData.kind}/${encodeURIComponent(slug)}/${encodeURIComponent(activeReaderData.chapter)}`;
+    if (window.location.pathname !== chapterUrl) {
+      window.history.replaceState(window.history.state, "", chapterUrl);
+    }
+    localStorage.setItem("currentChapter", JSON.stringify({
+      ...getCurrentChapterCache(slug),
+      slug,
+      id: activeReaderData.id,
+      num: activeReaderData.chapter,
+      title: activeReaderData.title,
+      cover: activeReaderData.cover,
+      label: activeReaderData.chapterTitle,
+      images: activeReaderData.images,
+      source: activeReaderData.source || "firestore",
+    }));
+    if (activeReaderData.chapter === data.chapter) return;
+    void upsertReadingHistoryEntry({
+      series: activeReaderData.title,
+      title: activeReaderData.title,
+      chapter: activeReaderData.chapterTitle,
+      cover: activeReaderData.cover,
+      slug,
+      url: chapterUrl,
+      time: Date.now(),
+      progress: 0,
+    }).then(() => window.dispatchEvent(new Event("mikoroku:reading-history-updated")))
+      .catch((historyError: unknown) => {
+        console.error("Infinite-read chapter could not be saved to reading history.", historyError);
+      });
+    window.dispatchEvent(new Event("mikoroku:chapter-read"));
+  }, [activeReaderData, data, hasInfiniteContent, slug]);
 
   useEffect(() => {
     if (!autoScrolling || kind !== "novel") return;
@@ -1902,13 +2246,16 @@ export default function ReaderPage({
   }
 
   function goToPage(targetPage: number) {
-    if (!data || targetPage < 1 || targetPage > data.images.length) return;
+    const currentData = activeReaderData || data;
+    if (!currentData || currentData.kind !== "manga" || targetPage < 1 || targetPage > currentData.images.length) return;
     const resolvedPage = mode === "double" && targetPage > 1 && targetPage % 2 !== 0
       ? targetPage - 1
       : targetPage;
     setPage(resolvedPage);
     if (mode === "long-strip") {
-      document.querySelectorAll(".reader-images.long-strip img")[resolvedPage - 1]
+      const currentSection = [...document.querySelectorAll<HTMLElement>("[data-reader-chapter]")]
+        .find((section) => section.dataset.readerChapter === currentData.chapter);
+      currentSection?.querySelectorAll("img")[resolvedPage - 1]
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }
@@ -1963,7 +2310,7 @@ export default function ReaderPage({
           <div className="reader-title-block grid min-w-0 justify-items-center text-center leading-[1.35]">
             <span className="reader-kind-label text-[10px] font-bold uppercase tracking-[.12em] text-rose-400">{activeKind === "novel" ? "Novel Reader" : "Manga Reader"}</span>
             <strong className="w-full overflow-hidden text-ellipsis whitespace-nowrap text-lg font-bold text-white sm:text-xl">{data?.title || ""}</strong>
-            <span className="w-full truncate text-[13px] text-zinc-400">{data ? data.chapterTitle : `Chapter ${chapter || ""}`}</span>
+            <span className="w-full truncate text-[13px] text-zinc-400">{activeReaderData ? activeReaderData.chapterTitle : `Chapter ${chapter || ""}`}</span>
           </div>
           <span className="reader-header-actions">
             <button className="reader-icon-button reader-fullscreen-button reader-accent-header-button inline-grid size-[38px] place-items-center justify-self-end rounded-[11px] border border-transparent bg-rose-200/15 text-rose-200" type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
@@ -2053,7 +2400,7 @@ export default function ReaderPage({
           </section>
         )
         : activeKind === "manga" ? (
-          <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] ${mode !== "long-strip" ? "grid min-h-[calc(100vh-190px)] content-center p-2 sm:p-[18px]" : ""}`}>
+          <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] ${mode !== "long-strip" ? "grid min-h-[calc(100vh-190px)] content-center p-2 sm:p-[18px]" : ""}`} data-reader-chapter={data.chapter}>
             {mode === "long-strip" ? data.images.map((image, index) => {
               const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
               return (
@@ -2134,7 +2481,7 @@ export default function ReaderPage({
             )}
           </section>
         ) : (
-          <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }}>
+          <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={data.chapter}>
               {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
               {data.images.map((image, index) => {
                 const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
@@ -2158,28 +2505,28 @@ export default function ReaderPage({
         {downloading && <span className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 overflow-hidden rounded-t-[10px] bg-black/10 min-[761px]:rounded-t-[14px] dark:bg-white/10" aria-hidden="true">
           <span className="block h-full bg-[var(--mikoroku-accent)] transition-[width] duration-200" style={{ width: `${downloadProgress}%` }} />
         </span>}
-        <button className="reader-bottom-button reader-bottom-previous flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-r border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 min-[761px]:text-sm dark:border-white/10 rounded-l-[10px] min-[761px]:rounded-l-[14px]" type="button" onClick={() => chapterIndex > 0 && changeChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
+        <button className="reader-bottom-button reader-bottom-previous flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-r border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 min-[761px]:text-sm dark:border-white/10 rounded-l-[10px] min-[761px]:rounded-l-[14px]" type="button" onClick={() => chapterIndex > 0 && goToReaderChapter(data.chapters[chapterIndex - 1])} disabled={chapterIndex <= 0} aria-label="Previous chapter" title="Previous chapter">
           <i className="fas fa-chevron-left" aria-hidden="true" /><span className="reader-bottom-label"><strong>Prev</strong></span>
         </button>
-        <div className={`reader-bottom-middle grid min-w-0 w-full items-stretch ${data.kind === "manga" && data.images.length > 0 ? "grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] min-[761px]:grid-cols-3" : "grid-cols-1"}`}>
+        <div className={`reader-bottom-middle grid min-w-0 w-full items-stretch ${data.kind === "manga" && activeImageCount > 0 ? "grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] min-[761px]:grid-cols-3" : "grid-cols-1"}`}>
           <div className="reader-bottom-chapters relative z-[2] flex min-w-0 w-full border-r border-black/10 dark:border-white/10" ref={bottomChaptersRef}>
             <button className={`reader-bottom-button reader-bottom-list flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold text-[var(--mikoroku-accent)] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomChapterListOpen ? "is-active" : ""}`} type="button" onClick={() => setBottomChapterListOpen((open) => !open)} aria-expanded={bottomChapterListOpen}>
-              <span className="reader-bottom-label min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"><strong aria-label={`Chapter ${data.chapter}`}>Ch. {data.chapter}</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron hidden sm:inline`} aria-hidden="true" />
+              <span className="reader-bottom-label min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"><strong aria-label={`Chapter ${activeReaderData?.chapter || data.chapter}`}>Ch. {activeReaderData?.chapter || data.chapter}</strong></span><i className={`fas ${bottomChapterListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron hidden sm:inline`} aria-hidden="true" />
             </button>
             {bottomChapterListOpen && <div className="reader-bottom-chapter-menu fixed bottom-[calc(100%+10px)] left-1/2 z-30 max-h-[min(58vh,440px)] w-[min(320px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-[15px] border border-black/10 bg-white p-2 shadow-xl min-[761px]:absolute min-[761px]:w-[min(320px,calc(100vw-32px))] dark:border-white/10 dark:bg-[#191a20]" role="listbox" aria-label="Chapter list">
               <div className="reader-bottom-menu-heading sticky top-[-8px] -mx-2 -mt-2 mb-1.5 flex min-h-[42px] items-center justify-between border-b border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-[#191a20]"><strong>{data.chapters.length} chapters</strong><button className="size-7 rounded-lg bg-black/5 text-lg dark:bg-white/10" type="button" onClick={() => setBottomChapterListOpen(false)} aria-label="Close chapter list">×</button></div>
               {[...data.chapters].reverse().map((item) => (
-                <button type="button" role="option" aria-selected={item === data.chapter} key={item} className={`flex min-h-[38px] w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-[var(--mikoroku-accent-soft)] font-bold text-[var(--mikoroku-accent)]" : ""}`} onClick={() => changeChapter(item)}>
-                  <span>Ch. {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
+                <button type="button" role="option" aria-selected={item === (activeReaderData?.chapter || data.chapter)} key={item} className={`flex min-h-[38px] w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === (activeReaderData?.chapter || data.chapter) ? "bg-[var(--mikoroku-accent-soft)] font-bold text-[var(--mikoroku-accent)]" : ""}`} onClick={() => goToReaderChapter(item)}>
+                  <span>Ch. {item}</span>{item === (activeReaderData?.chapter || data.chapter) && <i className="fas fa-check" aria-hidden="true" />}
                 </button>
               ))}
             </div>}
           </div>
-          {data.kind === "manga" && data.images.length > 0 && <button
+          {data.kind === "manga" && activeImageCount > 0 && <button
             className="flex min-h-10 min-w-0 flex-col items-center justify-center gap-0.5 border-r border-black/10 bg-transparent text-[var(--mikoroku-accent)] hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60 min-[761px]:min-h-12 dark:border-white/10 dark:hover:bg-white/5"
             type="button"
             onClick={() => void downloadChapter()}
-            disabled={downloading || !data.images.length}
+            disabled={downloading || !activeImageCount}
             aria-label={downloading ? `Downloading chapter, ${downloadProgress}%` : "Download chapter"}
             title={downloading ? `Downloading ${downloadProgress}%` : "Download chapter"}
           >
@@ -2191,23 +2538,23 @@ export default function ReaderPage({
               </svg>
             </> : <i className="fas fa-download text-sm" aria-hidden="true" />}
           </button>}
-          {data.kind === "manga" && data.images.length > 0 && (
+          {data.kind === "manga" && activeImageCount > 0 && (
             <div className="reader-bottom-pages relative z-[2] flex min-w-0 w-full border-r border-black/10 dark:border-white/10" ref={bottomPagesRef}>
               <button
                 className={`reader-bottom-button reader-bottom-page-count flex min-h-10 w-full min-w-0 items-center justify-center gap-1 bg-transparent px-1 text-center text-xs font-bold tabular-nums text-[var(--mikoroku-accent)] hover:bg-black/5 sm:min-h-12 sm:gap-2 sm:px-2 dark:hover:bg-white/5 ${bottomPageListOpen ? "is-active" : ""}`}
                 type="button"
-                aria-label={`Jump to page ${page} of ${data.images.length}`}
+                aria-label={`Jump to page ${page} of ${activeImageCount}`}
                 aria-haspopup="listbox"
                 aria-expanded={bottomPageListOpen}
                 onClick={() => setBottomPageListOpen((open) => !open)}
               >
-                <span className="reader-bottom-label"><strong>Pg. {page}/{data.images.length}</strong></span>
+                <span className="reader-bottom-label"><strong>Pg. {page}/{activeImageCount}</strong></span>
                 <i className={`fas ${bottomPageListOpen ? "fa-chevron-up" : "fa-chevron-down"} reader-bottom-chevron`} aria-hidden="true" />
               </button>
               {bottomPageListOpen && <div className="reader-bottom-page-menu fixed bottom-[calc(100%+8px)] left-1/2 z-30 max-h-[min(58vh,420px)] w-[min(280px,calc(100vw-24px))] -translate-x-1/2 overflow-auto rounded-xl border border-[var(--mikoroku-reader-page-soft)] bg-white p-2 shadow-xl min-[761px]:absolute dark:bg-[#191a20]" role="listbox" aria-label="Jump to page">
                 <div className="reader-bottom-menu-heading sticky top-[-8px] -mx-2 -mt-2 mb-1.5 flex min-h-[42px] items-center justify-between border-b border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-[#191a20]"><strong>Go to page</strong><button className="size-7 rounded-lg bg-black/5 text-lg dark:bg-white/10" type="button" onClick={() => setBottomPageListOpen(false)} aria-label="Close page list">×</button></div>
                 <div className="reader-bottom-page-options grid grid-cols-5 gap-1">
-                  {data.images.map((_, index) => {
+                  {activeReaderData?.images.map((_, index) => {
                     const pageNumber = index + 1;
                     return (
                       <button
@@ -2230,7 +2577,7 @@ export default function ReaderPage({
             </div>
           )}
         </div>
-        <button className="reader-bottom-button reader-bottom-next flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-l border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 dark:border-white/10 rounded-r-[10px] min-[761px]:rounded-r-[14px]" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && changeChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
+        <button className="reader-bottom-button reader-bottom-next flex min-h-10 w-[64px] min-w-0 items-center justify-center gap-1 border-l border-black/10 bg-transparent px-0 text-center text-[var(--mikoroku-accent)] disabled:cursor-not-allowed disabled:opacity-40 min-[761px]:min-h-12 min-[761px]:w-full min-[761px]:gap-2 min-[761px]:px-2 dark:border-white/10 rounded-r-[10px] min-[761px]:rounded-r-[14px]" type="button" onClick={() => chapterIndex < data.chapters.length - 1 && goToReaderChapter(data.chapters[chapterIndex + 1])} disabled={chapterIndex >= data.chapters.length - 1} aria-label="Next chapter" title="Next chapter">
           <span className="reader-bottom-label"><strong>Next</strong></span><i className="fas fa-chevron-right" aria-hidden="true" />
         </button>
       </nav>}
@@ -2242,7 +2589,6 @@ export default function ReaderPage({
         }} aria-label="Back to top" title="Back to top"><i className="fas fa-arrow-up" aria-hidden="true" /></button>
         <button className={`grid size-[38px] place-items-center rounded-xl border border-black/10 text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 min-[761px]:size-11 min-[761px]:rounded-[14px] ${settingsOpen ? "bg-[var(--mikoroku-accent-soft)]" : "bg-white dark:bg-[#191a20]"}`} type="button" onClick={() => {
           setSettingsOpen((open) => !open);
-          setChapterListOpen(false);
         }} aria-label="Reader settings" aria-expanded={settingsOpen} title="Reader settings">
           <i className="fas fa-sliders" aria-hidden="true" />
         </button>
@@ -2251,7 +2597,6 @@ export default function ReaderPage({
       {settingsOpen && <div className="reader-settings-backdrop fixed inset-0 z-40 flex items-end justify-center p-3 min-[761px]:justify-end min-[761px]:p-[18px_76px_18px_18px]" onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           setSettingsOpen(false);
-          setChapterListOpen(false);
         }
       }}>
       <div className="reader-settings-panel pointer-events-auto max-h-[min(76vh,640px)] w-full max-w-[480px] overflow-auto rounded-[18px] border border-black/10 bg-white p-[18px] text-inherit shadow-2xl min-[761px]:max-h-[min(78vh,680px)] min-[761px]:max-w-[360px] min-[761px]:rounded-[20px] dark:border-white/10 dark:bg-[#191a20]" role="dialog" aria-label="Reader settings" aria-modal="true">
@@ -2259,6 +2604,10 @@ export default function ReaderPage({
           <div className="grid gap-[3px]"><span className="text-[10px] font-extrabold tracking-[.12em] text-[var(--mikoroku-accent)]">READER</span><strong className="text-[17px]">Reading settings</strong></div>
           <button className="size-[34px] rounded-[10px] bg-black/5 text-[22px] dark:bg-white/10" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
         </div>
+        <label className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
+          <span className="grid gap-[3px]"><strong className="text-[13px]">Infinite read</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Automatically continue with the next chapter</small></span>
+          <input className="size-[18px] accent-[var(--mikoroku-accent)]" type="checkbox" checked={infiniteRead} onChange={toggleInfiniteRead} />
+        </label>
         {activeKind === "manga" ? <>
           <div className="reader-setting-block w-full border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <div className="grid gap-[3px]"><strong className="text-[13px]">Reading mode</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose how pages are displayed</small></div>
@@ -2307,9 +2656,9 @@ export default function ReaderPage({
             </div>
           </div>}
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
-            <span className="grid gap-[3px]"><strong className="text-[13px]">Go to page</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{data ? `${page} of ${data.images.length}` : "Loading pages"}</small></span>
-            <select className="min-h-9 max-w-[150px] rounded-lg border border-black/15 bg-white px-2.5 text-xs dark:border-white/15 dark:bg-[#191a20]" aria-label="Select page" value={page} disabled={!data} onChange={(event) => goToPage(Number(event.target.value))}>
-              {data?.images.map((_, index) => <option key={index + 1} value={index + 1}>Page {index + 1}</option>)}
+            <span className="grid gap-[3px]"><strong className="text-[13px]">Go to page</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{activeReaderData ? `${page} of ${activeImageCount}` : "Loading pages"}</small></span>
+            <select className="min-h-9 max-w-[150px] rounded-lg border border-black/15 bg-white px-2.5 text-xs dark:border-white/15 dark:bg-[#191a20]" aria-label="Select page" value={page} disabled={!activeReaderData || activeImageCount === 0} onChange={(event) => goToPage(Number(event.target.value))}>
+              {activeReaderData?.images.map((_, index) => <option key={index + 1} value={index + 1}>Page {index + 1}</option>)}
             </select>
           </label>
           <label className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
@@ -2329,7 +2678,7 @@ export default function ReaderPage({
             <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Novel background motif">
               {novelPatternOptions.map((option) => (
                 <button
-                  className={`rounded-lg border p-1.5 text-left transition ${novelPattern === option.id ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
+                  className={`reader-setting-option rounded-lg border p-1.5 text-left transition ${novelPattern === option.id ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
                   type="button"
                   key={option.id}
                   aria-pressed={novelPattern === option.id}
@@ -2395,7 +2744,7 @@ export default function ReaderPage({
               <div className="grid grid-cols-2 gap-1" role="group" aria-label="Motif stroke color">
                 {novelPatternColors.map((option) => (
                   <button
-                    className={`flex min-h-7 items-center gap-1.5 rounded-md border px-1.5 text-[9px] font-semibold transition ${novelPatternColor === option.id ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
+                    className={`reader-setting-option flex min-h-7 items-center gap-1.5 rounded-md border px-1.5 text-[9px] font-semibold transition ${novelPatternColor === option.id ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
                     type="button"
                     key={option.id}
                     aria-pressed={novelPatternColor === option.id}
@@ -2412,7 +2761,7 @@ export default function ReaderPage({
               <div className="grid grid-cols-3 gap-1" role="group" aria-label="Text box background">
                 {novelBackgroundColors.map((option) => (
                   <button
-                    className={`flex min-h-8 items-center justify-center gap-1 rounded-md border px-1 text-[9px] font-semibold transition ${novelBackgroundColor === option.id ? "border-[var(--mikoroku-accent)] bg-[var(--mikoroku-accent-soft)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
+                    className={`reader-setting-option flex min-h-8 items-center justify-center gap-1 rounded-md border px-1 text-[9px] font-semibold transition ${novelBackgroundColor === option.id ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
                     type="button"
                     key={option.id}
                     aria-pressed={novelBackgroundColor === option.id}
@@ -2464,22 +2813,65 @@ export default function ReaderPage({
             <i className={`fas ${speaking ? "fa-stop" : "fa-volume-high"}`} aria-hidden="true" />
           </button>
         </>}
-        <div className="reader-settings-divider my-[7px] h-px bg-black/10 dark:bg-white/10" />
-        <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10" onClick={() => setChapterListOpen((open) => !open)} disabled={!data} aria-expanded={chapterListOpen}>
-          <div className="grid gap-[3px]"><strong className="text-[13px]">Chapter list</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{data ? `${data.chapters.length} chapters available` : "Loading chapter list"}</small></div>
-          <i className={`fas ${chapterListOpen ? "fa-chevron-up" : "fa-chevron-down"}`} aria-hidden="true" />
-        </button>
-        {chapterListOpen && data && <div className="reader-settings-chapter-list grid max-h-[200px] overflow-auto py-1 pl-2.5">
-          {[...data.chapters].reverse().map((item) => (
-            <button type="button" key={item} className={`flex min-h-9 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 ${item === data.chapter ? "bg-[var(--mikoroku-accent-soft)] font-bold text-[var(--mikoroku-accent)]" : ""}`} onClick={() => changeChapter(item)}>
-              <span>Chapter {item}</span>{item === data.chapter && <i className="fas fa-check" aria-hidden="true" />}
-            </button>
-          ))}
-        </div>}
       </div>
       </div>}
+      {infiniteChapters.map((nextData) => nextData.kind === "manga" ? (
+        <section key={nextData.chapter} className="reader-images long-strip mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6" data-reader-chapter={nextData.chapter}>
+          <h2 className="mx-3 mb-3 rounded-xl border border-black/10 bg-white/80 px-4 py-3 text-center text-sm font-bold dark:border-white/10 dark:bg-[#191a20]/80">{nextData.chapterTitle}</h2>
+          {nextData.images.map((image, index) => {
+            const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
+            return <ReaderImage
+              className="block h-auto w-full"
+              wrapperClassName="w-full"
+              key={`${src}:${index}`}
+              src={src}
+              alt={`${nextData.chapterTitle}, page ${index + 1}`}
+              loading={index < 3 ? "eager" : "lazy"}
+              fetchPriority={index === 0 ? "high" : "auto"}
+              concealNsfw={concealReaderPages}
+            />;
+          })}
+        </section>
+      ) : (
+        <article key={nextData.chapter} className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={nextData.chapter}>
+          <h2 className="mb-6 text-center text-xl font-bold">{nextData.chapterTitle}</h2>
+          {nextData.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
+          {nextData.images.map((image, index) => {
+            const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
+            return <ReaderImage
+              className="mx-auto block h-auto max-w-full"
+              wrapperClassName="mx-auto my-4 w-full"
+              key={`${src}:${index}`}
+              src={src}
+              alt={`${nextData.chapterTitle}, illustration ${index + 1}`}
+              loading={index < 3 ? "eager" : "lazy"}
+              fetchPriority={index === 0 ? "high" : "auto"}
+              concealNsfw={concealReaderPages}
+            />;
+          })}
+        </article>
+      ))}
+      {infiniteRead && data && (data.kind === "novel" || mode === "long-strip") && <div
+        key={infiniteChapters.length}
+        ref={infiniteSentinelRef}
+        className="mx-auto my-6 flex min-h-12 w-[calc(100%-28px)] max-w-[1000px] items-center justify-center text-center text-sm text-slate-500 dark:text-slate-400"
+        role="status"
+        aria-live="polite"
+      >
+        {loadingNextChapter ? "Loading next chapter..." : nextChapterError ? (
+          <span className="flex flex-col items-center gap-2">
+            <span>{nextChapterError}</span>
+            <button type="button" className="rounded-lg border border-black/15 px-3 py-1.5 font-semibold text-[var(--mikoroku-accent)] dark:border-white/15" onClick={() => {
+              setNextChapterError("");
+              setNextChapterRetry((retry) => retry + 1);
+            }}>Try again</button>
+          </span>
+        ) : data.chapters.indexOf(data.chapter) + infiniteChapters.length >= data.chapters.length - 1
+          ? "You have reached the last chapter."
+          : null}
+      </div>}
       <BannerAdSlot placement="reader-after-content" />
-      {data && <CommunityWidgets className="reader-community mx-auto my-6 w-[calc(100%-28px)] max-w-[1000px]" pageId={`reader_${slug}_${data.chapter}`} />}
+      {data && <CommunityWidgets className="reader-community mx-auto my-6 w-[calc(100%-28px)] max-w-[1000px]" pageId={`reader_${slug}_${activeReaderData?.chapter || data.chapter}`} />}
       {reportOpen && <div className="reader-report-backdrop fixed inset-0 z-20 grid place-items-center bg-black/70 p-4" role="presentation" onMouseDown={(event) => {
         if (event.target === event.currentTarget) setReportOpen(false);
       }}>

@@ -1007,6 +1007,10 @@ function HeaderContents() {
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]"><Icon name="user" className="h-4 w-4" /></span>
                         View Profile
                       </button>
+                      <a href={`/stats/${encodeURIComponent(user.uid)}`} onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-rose-500/10 text-rose-500"><Icon name="trophy" className="h-4 w-4" /></span>
+                        My Stats
+                      </a>
                       <a href="/bookmark" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-500"><Icon name="bookmark" className="h-4 w-4" /></span>
                         Bookmarks
