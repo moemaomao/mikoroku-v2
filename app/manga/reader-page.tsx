@@ -1483,6 +1483,10 @@ export default function ReaderPage({
           url: `${readerRoute}/${encodeURIComponent(slug)}/${encodeURIComponent(result.chapter)}`,
           time: Date.now(),
           progress: 0,
+          kind: result.kind,
+          chapterPosition: Math.max(0, result.chapters.indexOf(result.chapter) + 1),
+          chapterCount: result.chapters.length,
+          source: result.source || "",
         };
         void upsertReadingHistoryEntry(historyItem).then(() => {
           window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
@@ -2016,6 +2020,10 @@ export default function ReaderPage({
       url: chapterUrl,
       time: Date.now(),
       progress: 0,
+      kind: activeReaderData.kind,
+      chapterPosition: Math.max(0, activeReaderData.chapters.indexOf(activeReaderData.chapter) + 1),
+      chapterCount: activeReaderData.chapters.length,
+      source: activeReaderData.source || "",
     }).then(() => window.dispatchEvent(new Event("mikoroku:reading-history-updated")))
       .catch((historyError: unknown) => {
         console.error("Infinite-read chapter could not be saved to reading history.", historyError);

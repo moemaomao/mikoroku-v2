@@ -37,6 +37,8 @@ function formatElapsed(time: number): string {
 export default function ReadingHistoryPage() {
   const [history, setHistory] = useState<ReadingHistoryEntry[]>([]);
   const [error, setError] = useState("");
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(() => {
     void readReadingHistory().then(setHistory).catch((loadError: unknown) => {
@@ -46,12 +48,25 @@ export default function ReadingHistoryPage() {
   }, []);
 
   useEffect(() => {
+    const onSyncSuccess = () => {
+      setSyncError("");
+      setSyncMessage("History sudah tersinkron ke akun dan Reader Stats.");
+    };
+    const onSyncError = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      setSyncMessage("");
+      setSyncError(`History lokal tetap tersimpan, tetapi sinkronisasi Firestore gagal${detail?.message ? `: ${detail.message}` : "."}`);
+    };
     refresh();
     window.addEventListener("storage", refresh);
     window.addEventListener("mikoroku:reading-history-updated", refresh);
+    window.addEventListener("mikoroku:reading-history-synced", onSyncSuccess);
+    window.addEventListener("mikoroku:reading-history-sync-error", onSyncError);
     return () => {
       window.removeEventListener("storage", refresh);
       window.removeEventListener("mikoroku:reading-history-updated", refresh);
+      window.removeEventListener("mikoroku:reading-history-synced", onSyncSuccess);
+      window.removeEventListener("mikoroku:reading-history-sync-error", onSyncError);
     };
   }, [refresh]);
 
@@ -64,7 +79,7 @@ export default function ReadingHistoryPage() {
       window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
     } catch (error) {
       console.error("Could not remove reading history entry.", error);
-      setError("Could not delete the reading history entry from browser storage.");
+      setError("Could not delete the history entry from local storage or the synced account.");
     } finally {
       setBusy(false);
     }
@@ -80,7 +95,7 @@ export default function ReadingHistoryPage() {
       window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
     } catch (error) {
       console.error("Could not clear reading history.", error);
-      setError("Could not clear reading history from every browser storage location.");
+      setError("Could not clear history from local storage or the synced account.");
     } finally {
       setBusy(false);
     }
@@ -107,6 +122,8 @@ export default function ReadingHistoryPage() {
           </header>
 
           {error && <p className="reading-history-error" role="alert">{error}</p>}
+          {syncError && <p className="reading-history-error" role="alert">{syncError}</p>}
+          {syncMessage && <p className="reading-history-sync-status" role="status">{syncMessage}</p>}
 
           {history.length === 0 ? (
             <div className="reading-history-empty">

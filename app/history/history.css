@@ -72,6 +72,16 @@ html.dark .reading-history-header p {
   font-size: 13px;
 }
 
+.reading-history-sync-status {
+  margin: 0 20px 12px;
+  color: #15803d;
+  font-size: 13px;
+}
+
+html.dark .reading-history-sync-status {
+  color: #86efac;
+}
+
 .reading-history-list {
   display: grid;
   gap: 10px;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { syncReadingHistoryWithUser } from "../lib/reading-history";
 
 type AuthProvider = {
   new (): unknown;
@@ -54,6 +55,11 @@ export default function GlobalAuth() {
         authInstance.onAuthStateChanged((user) => {
           window.currentUser = user;
           void window.updateHeaderAuth?.();
+          if (user) {
+            void syncReadingHistoryWithUser(user.uid).catch((error: unknown) => {
+              console.error("Could not sync reading history for the signed-in user.", error);
+            });
+          }
         });
       }
       return true;

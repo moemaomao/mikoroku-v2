@@ -82,6 +82,7 @@ export type PublicReadingStats = {
   profile: Record<string, unknown>;
   progress: ReadingProgressItem[];
   activity: ReadingActivityDay[];
+  totalChaptersRead: number;
   bookmarksCount: number | null;
 };
 
@@ -197,6 +198,7 @@ export async function saveReaderStats(
     readingStats.activity = {
       [day]: { chapters: increment(1) },
     };
+    readingStats.totalChaptersRead = increment(1);
   }
 
   await userReference.set({
@@ -280,6 +282,16 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
     date,
     chapters: numberValue(asRecord(activityByDate[date]).chapters),
   }));
+  const activityTotal = Object.values(activityByDate).reduce<number>(
+    (total, day) => total + numberValue(asRecord(day).chapters),
+    0,
+  );
+  const historyTotal = Array.isArray(profile.readingHistory) ? profile.readingHistory.length : 0;
+  const totalChaptersRead = Math.max(
+    numberValue(readingStats.totalChaptersRead),
+    activityTotal,
+    historyTotal,
+  );
 
   let bookmarksCount: number | null = null;
   try {
@@ -295,6 +307,7 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
     profile,
     progress,
     activity,
+    totalChaptersRead,
     bookmarksCount,
   };
 }
