@@ -56,6 +56,10 @@ type CompatUser = {
   photoURL?: string | null;
   metadata?: { creationTime?: string };
 };
+type UserProfileCacheEntry = {
+  cachedAt: number;
+  data: DataRecord;
+};
 type HistoryEntry = {
   series?: string;
   title?: string;
@@ -96,9 +100,13 @@ type LegacyModalWindow = {
   openDmToUser?: (uid: string, name?: string, avatar?: string) => void;
   loadUserNotifications?: () => void;
   closeReplyNotifications?: () => void;
+  userStatsCache?: Record<string, DataRecord>;
 };
 
 const HISTORY_KEY = "readingHistory";
+const USER_PROFILE_CACHE_KEY = "mikoroku:user-profile-cache:v1";
+const USER_PROFILE_CACHE_LIMIT = 100;
+const pendingUserProfileRequests = new Map<string, Promise<DataRecord>>();
 const DEFAULT_AVATAR =
   "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 const FALLBACK_COVER = "/assets/icons/favicon.ico";
@@ -418,6 +426,89 @@ function numberValue(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function getUserProfileCacheData(data: DataRecord): DataRecord {
+  const cached: DataRecord = {};
+  for (const key of [
+    "displayName",
+    "username",
+    "avatar",
+    "bio",
+    "bioLink",
+    "commentCount",
+    "points",
+    "reputation",
+    "customBadges",
+    "customBadge",
+    "gameRoles",
+  ]) {
+    if (data[key] !== undefined) cached[key] = data[key];
+  }
+  const joinedAt = timestampMillis(data.joinedAt || data.createdAt);
+  if (joinedAt) cached.joinedAt = joinedAt;
+  return cached;
+}
+
+function readUserProfileCache(uid: string, legacy: LegacyModalWindow): DataRecord | null {
+  const inMemory = legacy.userStatsCache?.[uid];
+  if (inMemory && !inMemory._empty && Object.keys(inMemory).length > 0) return inMemory;
+
+  try {
+    const raw = window.localStorage.getItem(USER_PROFILE_CACHE_KEY);
+    if (raw) {
+      const cache = asRecord(JSON.parse(raw));
+      const entry = asRecord(cache[uid]) as UserProfileCacheEntry;
+      if (entry.data && typeof entry.cachedAt === "number") {
+        legacy.userStatsCache ||= {};
+        legacy.userStatsCache[uid] = entry.data;
+        return entry.data;
+      }
+    }
+
+    const legacyCache = asRecord(JSON.parse(window.localStorage.getItem("userStatsCache_v1") || "null"));
+    const legacyEntry = asRecord(legacyCache[uid]);
+    if (Object.keys(legacyEntry).length && !legacyEntry._empty) {
+      legacy.userStatsCache ||= {};
+      legacy.userStatsCache[uid] = legacyEntry;
+      return legacyEntry;
+    }
+  } catch (error) {
+    console.warn("Cached user profile could not be read.", error);
+  }
+  return null;
+}
+
+function writeUserProfileCache(uid: string, data: DataRecord, legacy: LegacyModalWindow): void {
+  const cachedData = getUserProfileCacheData(data);
+  legacy.userStatsCache ||= {};
+  legacy.userStatsCache[uid] = { ...legacy.userStatsCache[uid], ...cachedData };
+  try {
+    const cache = asRecord(JSON.parse(window.localStorage.getItem(USER_PROFILE_CACHE_KEY) || "{}"));
+    cache[uid] = { cachedAt: Date.now(), data: cachedData } satisfies UserProfileCacheEntry;
+    const entries = Object.entries(cache)
+      .sort((left, right) => numberValue(asRecord(right[1]).cachedAt) - numberValue(asRecord(left[1]).cachedAt))
+      .slice(0, USER_PROFILE_CACHE_LIMIT);
+    window.localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch (error) {
+    console.warn("User profile cache could not be saved.", error);
+  }
+}
+
+function loadUserProfile(
+  firestore: CompatFirestore,
+  uid: string,
+): Promise<DataRecord> {
+  const pending = pendingUserProfileRequests.get(uid);
+  if (pending) return pending;
+  const request = firestore.collection("userStats").doc(uid).get()
+    .then((snapshot) => snapshot.exists ? asRecord(snapshot.data()) : {});
+  pendingUserProfileRequests.set(uid, request);
+  const clearPending = () => {
+    if (pendingUserProfileRequests.get(uid) === request) pendingUserProfileRequests.delete(uid);
+  };
+  void request.then(clearPending, clearPending);
+  return request;
+}
+
 function timestampMillis(value: unknown): number {
   if (typeof value === "number" || typeof value === "string") {
     const parsed = new Date(value).getTime();
@@ -618,15 +709,98 @@ function initializeUserModals(): () => void {
   };
 
   let profileDmTarget: { uid: string; name: string; avatar: string } | null = null;
+  let activeProfileUid: string | null = null;
+  const renderUserProfile = (uid: string, data: DataRecord) => {
+    const displayName = stringValue(data.displayName, "Anonymous");
+    const avatarUrl = stringValue(data.avatar, DEFAULT_AVATAR) || DEFAULT_AVATAR;
+    profileDmTarget = { uid, name: displayName, avatar: avatarUrl };
+    const avatar = profileField("avatar") as HTMLImageElement | null;
+    if (avatar) avatar.src = avatarUrl;
+    setText(profileField("displayName"), displayName);
+    setText(profileField("username"), data.username ? `@${String(data.username)}` : "");
+    setText(profileField("bio"), stringValue(data.bio, "Belum ada bio."));
+    const bioLinkElement = profileField("bioLink") as HTMLAnchorElement | null;
+    const safeBioLink = normalizeProfileLink(data.bioLink);
+    if (bioLinkElement) {
+      bioLinkElement.hidden = !safeBioLink;
+      if (safeBioLink) {
+        bioLinkElement.href = safeBioLink;
+        bioLinkElement.textContent = safeBioLink;
+      } else {
+        bioLinkElement.removeAttribute("href");
+        bioLinkElement.textContent = "";
+      }
+    }
+
+    const joinedTimestamp = timestampMillis(data.joinedAt || data.createdAt) ||
+      (legacy.currentUser?.uid === uid
+        ? timestampMillis(legacy.currentUser.metadata?.creationTime)
+        : 0);
+    setText(
+      profileField("joined"),
+      joinedTimestamp
+        ? new Date(joinedTimestamp).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          })
+        : "—",
+    );
+
+    const comments = numberValue(data.commentCount);
+    const points = numberValue(data.points);
+    const reputation = numberValue(data.reputation);
+    setText(profileField("level"), `Lv. ${Math.floor(comments / 5) + 1}`);
+    setText(profileField("points"), `${points.toLocaleString()} pts`);
+    setText(profileField("comments"), comments.toLocaleString());
+    const reputationElement = profileField("reputation");
+    setText(
+      reputationElement,
+      reputation >= 0 ? `+${reputation.toLocaleString()}` : reputation.toLocaleString(),
+    );
+    if (reputationElement) {
+      reputationElement.style.color = reputation > 0 ? "#4ade80" : reputation < 0 ? "#ef4444" : "#aaa";
+    }
+
+    const badgeContainer = profileField("badges");
+    const rolesContainer = profileField("roles");
+    badgeContainer?.replaceChildren();
+    rolesContainer?.replaceChildren();
+    const customBadges = Array.isArray(data.customBadges)
+      ? data.customBadges.filter((badge): badge is string => typeof badge === "string")
+      : [];
+    const primaryCustomBadge = stringValue(data.customBadge);
+    if (primaryCustomBadge) customBadges.push(primaryCustomBadge);
+    if (badgeContainer) {
+      [...new Set(customBadges)].forEach((customBadge) => {
+        const badgeLabel = BADGE_LABELS.get(customBadge);
+        if (!badgeLabel) return;
+        const badge = createElement(
+          "span",
+          `user-custom-badge settings-badge-option profile-custom-badge badge-${customBadge}`,
+          badgeLabel,
+        );
+        badgeContainer.appendChild(badge);
+      });
+    }
+    if (rolesContainer && Array.isArray(data.gameRoles) && data.gameRoles.length) {
+      const title = createElement("div", "profile-badge-title", "Game Roles");
+      rolesContainer.appendChild(title);
+      data.gameRoles.forEach((roleId) => {
+        if (typeof roleId !== "string") return;
+        const roleInfo = GAME_ROLES.get(roleId);
+        if (!roleInfo) return;
+        const role = createElement("span", "game-role", `${roleInfo.icon} ${roleInfo.name}`);
+        role.style.color = roleInfo.color;
+        rolesContainer.appendChild(role);
+      });
+    }
+  };
   const showProfile = async (uid: string, leaderboardRank?: number): Promise<void> => {
     if (!uid) return;
+    activeProfileUid = uid;
     const statsLink = profileModal.querySelector<HTMLAnchorElement>("[data-profile-stats]");
     if (statsLink) statsLink.href = `/stats/${encodeURIComponent(uid)}`;
-    const firestore = db();
-    if (!firestore) {
-      window.alert("Firestore belum dimuat");
-      return;
-    }
     const profileBox = profileModal.querySelector<HTMLElement>(".profile-box");
     profileBox?.classList.remove(
       "leaderboard-profile",
@@ -648,110 +822,46 @@ function initializeUserModals(): () => void {
     }
     profileModal.style.display = "flex";
     profileDmTarget = { uid, name: "Anonymous", avatar: DEFAULT_AVATAR };
-    setText(profileField("displayName"), "Loading...");
-    setText(profileField("username"), "");
-    setText(profileField("bio"), "");
-    const bioLinkElement = profileField("bioLink") as HTMLAnchorElement | null;
-    if (bioLinkElement) {
-      bioLinkElement.hidden = true;
-      bioLinkElement.removeAttribute("href");
-      bioLinkElement.textContent = "";
+    const cachedProfile = readUserProfileCache(uid, legacy);
+    if (cachedProfile) {
+      renderUserProfile(uid, cachedProfile);
+    } else {
+      setText(profileField("displayName"), "Loading...");
+      setText(profileField("username"), "");
+      setText(profileField("bio"), "Belum ada bio.");
+      setText(profileField("level"), "");
+      setText(profileField("points"), "");
+      setText(profileField("comments"), "");
+      setText(profileField("reputation"), "");
+      setText(profileField("joined"), "—");
+      const bioLinkElement = profileField("bioLink") as HTMLAnchorElement | null;
+      if (bioLinkElement) {
+        bioLinkElement.hidden = true;
+        bioLinkElement.removeAttribute("href");
+        bioLinkElement.textContent = "";
+      }
+      const avatar = profileField("avatar") as HTMLImageElement | null;
+      if (avatar) avatar.src = DEFAULT_AVATAR;
+      profileField("badges")?.replaceChildren();
+      profileField("roles")?.replaceChildren();
     }
-    setText(profileField("joined"), "—");
-    const badgeContainer = profileField("badges");
-    const rolesContainer = profileField("roles");
-    badgeContainer?.replaceChildren();
-    rolesContainer?.replaceChildren();
-    const avatar = profileField("avatar") as HTMLImageElement | null;
-    if (avatar) avatar.src = DEFAULT_AVATAR;
     try {
-      const snapshot = await firestore.collection("userStats").doc(uid).get();
-      const data = snapshot.exists ? asRecord(snapshot.data()) : {};
-      const displayName = stringValue(data.displayName, "Anonymous");
-      const avatarUrl = stringValue(data.avatar, DEFAULT_AVATAR) || DEFAULT_AVATAR;
-      profileDmTarget = { uid, name: displayName, avatar: avatarUrl };
-      if (avatar) avatar.src = avatarUrl;
-      setText(profileField("displayName"), displayName);
-      setText(profileField("username"), data.username ? `@${String(data.username)}` : "");
-      setText(profileField("bio"), stringValue(data.bio, "Belum ada bio."));
-      const safeBioLink = normalizeProfileLink(data.bioLink);
-      if (bioLinkElement && safeBioLink) {
-        bioLinkElement.href = safeBioLink;
-        bioLinkElement.textContent = safeBioLink;
-        bioLinkElement.hidden = false;
-      }
-      const joinedAt = data.joinedAt || data.createdAt;
-      let joined = "";
-      if (joinedAt) {
-        const date =
-          typeof joinedAt === "object" && joinedAt !== null && "toDate" in joinedAt
-            ? (joinedAt as CompatTimestamp).toDate?.()
-            : new Date(joinedAt as string | number);
-        if (date && !Number.isNaN(date.getTime())) {
-          joined = date.toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-          });
-        }
-      }
-      if (!joined && legacy.currentUser?.uid === uid && legacy.currentUser.metadata?.creationTime) {
-        joined = new Date(legacy.currentUser.metadata.creationTime).toLocaleDateString("id-ID", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        });
-      }
-      setText(profileField("joined"), joined || "—");
-      const comments = numberValue(data.commentCount);
-      const points = numberValue(data.points);
-      const reputation = numberValue(data.reputation);
-      setText(profileField("level"), `Lv. ${Math.floor(comments / 5) + 1}`);
-      setText(profileField("points"), `${points.toLocaleString()} pts`);
-      setText(profileField("comments"), comments.toLocaleString());
-      const reputationElement = profileField("reputation");
-      setText(
-        reputationElement,
-        reputation >= 0 ? `+${reputation.toLocaleString()}` : reputation.toLocaleString(),
-      );
-      if (reputationElement) {
-        reputationElement.style.color = reputation > 0 ? "#4ade80" : reputation < 0 ? "#ef4444" : "#aaa";
-      }
-      const customBadges = Array.isArray(data.customBadges)
-        ? data.customBadges.filter((badge): badge is string => typeof badge === "string")
-        : [];
-      const primaryCustomBadge = stringValue(data.customBadge);
-      if (primaryCustomBadge) customBadges.push(primaryCustomBadge);
-      if (badgeContainer) {
-        [...new Set(customBadges)].forEach((customBadge) => {
-          const badgeLabel = BADGE_LABELS.get(customBadge);
-          if (!badgeLabel) return;
-          const badge = createElement(
-            "span",
-            `user-custom-badge settings-badge-option profile-custom-badge badge-${customBadge}`,
-            badgeLabel,
-          );
-          badgeContainer.appendChild(badge);
-        });
-      }
-      if (rolesContainer && Array.isArray(data.gameRoles) && data.gameRoles.length) {
-        const title = createElement("div", "profile-badge-title", "Game Roles");
-        rolesContainer.appendChild(title);
-        data.gameRoles.forEach((roleId) => {
-          if (typeof roleId !== "string") return;
-          const roleInfo = GAME_ROLES.get(roleId);
-          if (!roleInfo) return;
-          const role = createElement("span", "game-role", `${roleInfo.icon} ${roleInfo.name}`);
-          role.style.color = roleInfo.color;
-          rolesContainer.appendChild(role);
-        });
+      const firestore = await waitForFirestore();
+      const data = await loadUserProfile(firestore, uid);
+      writeUserProfileCache(uid, data, legacy);
+      if (activeProfileUid === uid) {
+        renderUserProfile(uid, data);
       }
     } catch (error) {
-      console.error("Error loading profile:", error);
-      setText(profileField("joined"), "—");
+      console.error("User profile could not be refreshed.", error);
+      if (activeProfileUid === uid && !cachedProfile) {
+        setText(profileField("displayName"), "Profile unavailable");
+        setText(profileField("joined"), "—");
+      }
     }
   };
   const closeProfile = () => {
+    activeProfileUid = null;
     profileModal.style.display = "none";
   };
 
