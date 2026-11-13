@@ -1046,6 +1046,16 @@ html.no-animations .comment.transcendent,
   object-fit: cover;
 }                                                           
 
+#comment-widget .avatar-wrapper > img.avatar-ring {
+  box-sizing: border-box !important;
+}
+
+#comment-widget .avatar-wrapper > img.avatar-custom-frame {
+  max-width: none !important;
+  width: 130% !important;
+  height: 130% !important;
+}
+
 .comment-author img:not(.avatar-custom-frame):hover {
   transform: scale(1.08);
   box-shadow: 0 8px 25px rgba(0,0,0,0.5);

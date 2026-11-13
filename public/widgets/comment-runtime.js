@@ -2537,18 +2537,9 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
   if (comment.uid) {
     const userId = comment.uid;
     const badgeId = `badge-${comment.id}`;
+    applyTopCommentRankBadge(div, getCachedCommentLeaderboardRank(userId));
     void getCommentLeaderboardRank(userId).then(rank => {
-      if (!Number.isInteger(rank) || rank < 1 || rank > 6) return;
-
-      const authorName = div.querySelector('.author-name');
-      if (!authorName || !authorName.isConnected) return;
-
-      const rankBadge = document.createElement('span');
-      rankBadge.className = `top-comment-rank-badge rank-${rank}`;
-      rankBadge.textContent = `TOP ${rank}`;
-      rankBadge.title = `Top commenter rank #${rank}`;
-      rankBadge.setAttribute('aria-label', `Top commenter rank ${rank}`);
-      authorName.after(rankBadge);
+      applyTopCommentRankBadge(div, rank);
     }).catch(error => {
       console.warn('Gagal memuat peringkat leaderboard untuk komentar.', error);
     });
@@ -5854,17 +5845,56 @@ function calculateLevel(commentCount = 0) {
 }
 
 
+const COMMENT_LEADERBOARD_CACHE_KEY = 'mikoroku:comment-leaderboard-top-users:v1';
+const COMMENT_LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
 let cachedCommentLeaderboardTopUsers = null;
 let cachedCommentLeaderboardAt = 0;
 let commentLeaderboardRequest = null;
 
-async function getCommentLeaderboardRank(uid) {
+try {
+  const cachedLeaderboard = JSON.parse(localStorage.getItem(COMMENT_LEADERBOARD_CACHE_KEY) || 'null');
+  if (
+    cachedLeaderboard &&
+    typeof cachedLeaderboard.updatedAt === 'number' &&
+    Array.isArray(cachedLeaderboard.users) &&
+    cachedLeaderboard.users.length <= 6 &&
+    cachedLeaderboard.users.every(uid => typeof uid === 'string')
+  ) {
+    cachedCommentLeaderboardTopUsers = cachedLeaderboard.users;
+    cachedCommentLeaderboardAt = cachedLeaderboard.updatedAt;
+  }
+} catch (error) {
+  console.warn('Gagal membaca cache leaderboard komentar.', error);
+}
+
+function getCachedCommentLeaderboardRank(uid) {
+  const index = cachedCommentLeaderboardTopUsers?.indexOf(uid) ?? -1;
+  return index >= 0 ? index + 1 : null;
+}
+
+function applyTopCommentRankBadge(commentElement, rank) {
+  let rankBadge = commentElement.querySelector('.top-comment-rank-badge');
+  if (!Number.isInteger(rank) || rank < 1 || rank > 6) {
+    rankBadge?.remove();
+    return;
+  }
+  const authorName = commentElement.querySelector('.author-name');
+  if (!authorName) return;
+
+  if (!rankBadge) rankBadge = document.createElement('span');
+  rankBadge.className = `top-comment-rank-badge rank-${rank}`;
+  rankBadge.textContent = `TOP ${rank}`;
+  rankBadge.title = `Top commenter rank #${rank}`;
+  rankBadge.setAttribute('aria-label', `Top commenter rank ${rank}`);
+  authorName.after(rankBadge);
+}
+
+function loadCommentLeaderboardTopUsers() {
   if (
     cachedCommentLeaderboardTopUsers &&
-    Date.now() - cachedCommentLeaderboardAt < 5 * 60 * 1000
+    Date.now() - cachedCommentLeaderboardAt < COMMENT_LEADERBOARD_CACHE_TTL_MS
   ) {
-    const index = cachedCommentLeaderboardTopUsers.indexOf(uid);
-    return index >= 0 ? index + 1 : null;
+    return Promise.resolve(cachedCommentLeaderboardTopUsers);
   }
 
   if (!commentLeaderboardRequest) {
@@ -5880,6 +5910,14 @@ async function getCommentLeaderboardRank(uid) {
           }
         });
         cachedCommentLeaderboardAt = Date.now();
+        try {
+          localStorage.setItem(COMMENT_LEADERBOARD_CACHE_KEY, JSON.stringify({
+            updatedAt: cachedCommentLeaderboardAt,
+            users: cachedCommentLeaderboardTopUsers
+          }));
+        } catch (error) {
+          console.warn('Gagal menyimpan cache leaderboard komentar.', error);
+        }
         return cachedCommentLeaderboardTopUsers;
       })
       .finally(() => {
@@ -5887,10 +5925,18 @@ async function getCommentLeaderboardRank(uid) {
       });
   }
 
-  const topUsers = await commentLeaderboardRequest;
+  return commentLeaderboardRequest;
+}
+
+async function getCommentLeaderboardRank(uid) {
+  const topUsers = await loadCommentLeaderboardTopUsers();
   const index = topUsers.indexOf(uid);
   return index >= 0 ? index + 1 : null;
 }
+
+void loadCommentLeaderboardTopUsers().catch(error => {
+  console.warn('Gagal memuat peringkat leaderboard komentar.', error);
+});
 
 async function showCommentUserProfile(uid, leaderboardRank, commentAvatar) {
   if (!uid) return;

@@ -358,6 +358,7 @@
 .avatar-wrapper img.avatar-ring {
   width: 100% !important;
   height: 100% !important;
+  box-sizing: border-box !important;
   border-radius: 50% !important;
   z-index: 1 !important;
 }
@@ -374,10 +375,10 @@
   image-rendering: crisp-edges;
 }
 
-/* DESKTOP */
 .avatar-custom-frame {
-  width: 155% !important;
-  height: 155% !important;
+  max-width: none !important;
+  width: 130% !important;
+  height: 130% !important;
 }
 
 /* MOBILE - FORCE SCALE */
@@ -388,8 +389,8 @@
   }
 
   .avatar-custom-frame {
-    width: 155% !important;
-    height: 155% !important;
+    width: 130% !important;
+    height: 130% !important;
     z-index: 20 !important;
   }
 

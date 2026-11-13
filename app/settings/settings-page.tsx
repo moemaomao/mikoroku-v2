@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { normalizeProfileLink } from "../lib/profile-link";
 import "./settings.css";
@@ -85,8 +85,69 @@ const badges = [
 ];
 
 function getBadgeSelectionLimit(commentCount: unknown) {
-  const count = typeof commentCount === "number" ? commentCount : 0;
-  return Math.floor(count / 5) + 1 >= 110 ? 2 : 1;
+  return getCommentLevel(commentCount) >= 110 ? 2 : 1;
+}
+
+function getCommentLevel(commentCount: unknown) {
+  const count = typeof commentCount === "number" && Number.isFinite(commentCount)
+    ? Math.max(0, commentCount)
+    : 0;
+  return Math.floor(count / 5) + 1;
+}
+
+const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
+const MAX_COMMENT_BACKGROUND_FILE_SIZE = 20 * 1024 * 1024;
+
+function compressCommentBackground(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    createImageBitmap(file).then((bitmap) => {
+      const scale = Math.min(1, 1600 / bitmap.width, 1600 / bitmap.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        bitmap.close();
+        reject(new Error("Browser image processing is unavailable."));
+        return;
+      }
+
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("The background image could not be compressed."));
+      }, "image/webp", 0.72);
+    }).catch((error: unknown) => {
+      reject(error instanceof Error ? error : new Error("The background image could not be processed."));
+    });
+  });
+}
+
+async function uploadCommentBackground(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please choose an image file.");
+  }
+  if (file.size > MAX_COMMENT_BACKGROUND_FILE_SIZE) {
+    throw new Error("Background images must be 20 MB or smaller.");
+  }
+
+  const compressedImage = await compressCommentBackground(file);
+  const formData = new FormData();
+  formData.append("image", compressedImage, "comment-background.webp");
+  const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+    method: "POST",
+    body: formData,
+  });
+  const result: {
+    success?: boolean;
+    data?: { url?: string };
+    error?: { message?: string };
+  } = await response.json();
+  if (!response.ok || !result.success || !result.data?.url) {
+    throw new Error(result.error?.message || `Image upload failed (${response.status}).`);
+  }
+  return result.data.url;
 }
 
 function normalizeBadges(data: Partial<Settings> & { commentCount?: unknown }) {
@@ -147,6 +208,19 @@ const shapes = [
   ["dashed", "Dashed"], ["dotted", "Dotted"], ["diagonal", "Diagonal Line"],
   ["zigzag", "Zigzag"], ["grid", "Tech Grid"],
 ];
+const settingsSections = [
+  ["profile", "Profile"],
+  ["performance", "Performance"],
+  ["custom-badges", "Custom Badges"],
+  ["game-roles", "Game Player Roles"],
+  ["avatar-frame", "Avatar Frame"],
+  ["font-style", "Font Style"],
+  ["border-effect", "Border Effect"],
+  ["border-shape", "Border Shape"],
+  ["comment-background", "Comment Background"],
+] as const;
+type SettingsSection = (typeof settingsSections)[number][0];
+
 const initialSettings: Settings = {
   displayName: "",
   username: "",
@@ -169,10 +243,16 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [status, setStatus] = useState<"loading" | "guest" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"info" | "success" | "error">("info");
   const [saving, setSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
   const [allBadgesExpanded, setAllBadgesExpanded] = useState(false);
   const [badgeLimit, setBadgeLimit] = useState(1);
+  const [userLevel, setUserLevel] = useState(0);
+  const [customBgError, setCustomBgError] = useState("");
+  const [customBgUploading, setCustomBgUploading] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
+  const settingsContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +287,7 @@ export default function SettingsPage() {
         const snapshot = await window.firebase!.firestore().collection("userStats").doc(user.uid).get();
         const data = (snapshot.exists ? snapshot.data() || {} : {}) as Partial<Settings> & { commentCount?: unknown };
         if (!active) return;
+        setUserLevel(getCommentLevel(data.commentCount));
         setBadgeLimit(getBadgeSelectionLimit(data.commentCount));
         setSettings({
           ...initialSettings,
@@ -232,6 +313,7 @@ export default function SettingsPage() {
         if (active) {
           setStatus((prev) => {
             if (prev === "ready") return prev;
+            setMessageType("error");
             setMessage("Your settings could not be loaded. Check your connection and try again.");
             return "error";
           });
@@ -267,6 +349,7 @@ export default function SettingsPage() {
         if (attempts >= 50 && active) {
           window.clearInterval(poll);
           setStatus("error");
+          setMessageType("error");
           setMessage("Authentication service is unavailable.");
         }
       }, 100);
@@ -283,6 +366,17 @@ export default function SettingsPage() {
       unsubscribe?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!message || status !== "ready" || customBgUploading) return;
+    const timeout = window.setTimeout(() => setMessage(""), messageType === "error" ? 7000 : 5000);
+    return () => window.clearTimeout(timeout);
+  }, [message, messageType, status, customBgUploading]);
+
+  function showNotification(text: string, type: "info" | "success" | "error") {
+    setMessageType(type);
+    setMessage(text);
+  }
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -325,12 +419,36 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
+  async function uploadCustomCommentBg(file?: File, input?: HTMLInputElement) {
+    setCustomBgError("");
+    if (!file) return;
+    if (userLevel < 120) {
+      setCustomBgError("Custom comment backgrounds unlock at level 120.");
+      return;
+    }
+
+    setCustomBgUploading(true);
+    showNotification("Compressing and uploading the background...", "info");
+    try {
+      const url = await uploadCommentBackground(file);
+      update("customCommentBg", url);
+      showNotification("Custom comment background uploaded. Save settings to apply it.", "success");
+    } catch (error) {
+      console.error("Custom comment background upload failed.", error);
+      setCustomBgError(error instanceof Error ? error.message : "The background image could not be uploaded.");
+      setMessage("");
+    } finally {
+      setCustomBgUploading(false);
+      if (input) input.value = "";
+    }
+  }
+
   async function saveSettings(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!account || !window.firebase) return;
     const bioLink = normalizeProfileLink(settings.bioLink);
     if (settings.bioLink.trim() && !bioLink) {
-      setMessage("Enter a valid website URL.");
+      showNotification("Enter a valid website URL.", "error");
       return;
     }
     setSaving(true);
@@ -352,10 +470,10 @@ export default function SettingsPage() {
       window.userStatsCache = window.userStatsCache || {};
       window.userStatsCache[account.uid] = next;
       setSettings(next);
-      setMessage("Your settings have been saved.");
+      showNotification("Your settings have been saved.", "success");
     } catch (error) {
       console.error("User settings failed to save.", error);
-      setMessage("Your settings could not be saved. Please try again.");
+      showNotification("Your settings could not be saved. Please try again.", "error");
     } finally {
       setSaving(false);
     }
@@ -375,40 +493,62 @@ export default function SettingsPage() {
           {status === "error" && <p role="alert">{message}</p>}
           {status === "ready" && (
             <form onSubmit={saveSettings}>
-              <section className="settings-section">
-                <h2>Avatar</h2>
-                <div className="settings-avatar-row">
-                  <span className="settings-avatar-wrap">
-                    <img className="settings-avatar-preview" src={settings.avatar || anonymousAvatar} alt="Avatar preview" />
-                    {settings.customAvatarFrame && <img className="settings-avatar-frame" src={settings.customAvatarFrame} alt="" />}
-                  </span>
-                  <label className="settings-upload-label">Upload Avatar<input type="file" accept="image/*" onChange={(event) => void selectAvatar(event.target.files?.[0])} /></label>
+              <div className="settings-form-layout">
+                <nav className="settings-navigation" aria-label="Settings sections">
+                  {settingsSections.map(([id, label]) => (
+                    <button type="button" key={id}
+                      className={`settings-navigation-option${activeSection === id ? " active" : ""}`}
+                      aria-current={activeSection === id ? "page" : undefined}
+                      onClick={() => {
+                        setActiveSection(id);
+                        settingsContentRef.current?.scrollTo({ top: 0 });
+                      }}>{label}</button>
+                  ))}
+                </nav>
+                <div className="settings-content" ref={settingsContentRef}>
+              <section className="settings-section" hidden={activeSection !== "profile"}>
+                <h2>Profile</h2>
+                <div className="settings-profile-grid">
+                  <div className="settings-profile-field">
+                    <h3>Avatar</h3>
+                    <div className="settings-avatar-row">
+                      <span className="settings-avatar-wrap">
+                        <img className="settings-avatar-preview" src={settings.avatar || anonymousAvatar} alt="Avatar preview" />
+                        {settings.customAvatarFrame && <img className="settings-avatar-frame" src={settings.customAvatarFrame} alt="" />}
+                      </span>
+                      <label className="settings-upload-label">Upload Avatar<input type="file" accept="image/*" onChange={(event) => void selectAvatar(event.target.files?.[0])} /></label>
+                    </div>
+                    {avatarError && <p className="settings-error" role="alert">{avatarError}</p>}
+                  </div>
+
+                  <div className="settings-profile-field">
+                    <label htmlFor="settings-display-name">Display Name</label>
+                    <input id="settings-display-name" type="text" value={settings.displayName} maxLength={50}
+                      onChange={(event) => update("displayName", event.target.value)} placeholder="Name shown in comments..." />
+                  </div>
+
+                  <div className="settings-profile-field">
+                    <label htmlFor="settings-username">Username <span className="settings-muted">(@handle)</span></label>
+                    <input id="settings-username" type="text" value={settings.username} maxLength={30}
+                      onChange={(event) => update("username", event.target.value)} placeholder="username" />
+                  </div>
+
+                  <div className="settings-profile-field">
+                    <label htmlFor="settings-bio-link">Bio Link <span className="settings-muted">(optional)</span></label>
+                    <input id="settings-bio-link" type="text" inputMode="url" value={settings.bioLink} maxLength={2048}
+                      onChange={(event) => update("bioLink", event.target.value)} placeholder="https://example.com" />
+                    <p className="settings-hint">Add a website or social profile link. Domains without a scheme use HTTPS.</p>
+                  </div>
+
+                  <div className="settings-profile-field settings-profile-bio">
+                    <label htmlFor="settings-bio">Bio <span className="settings-muted">(max 160 characters)</span></label>
+                    <textarea id="settings-bio" value={settings.bio} maxLength={160}
+                      onChange={(event) => update("bio", event.target.value)} placeholder="Describe yourself..." />
+                  </div>
                 </div>
-                {avatarError && <p className="settings-error" role="alert">{avatarError}</p>}
               </section>
 
-              <section className="settings-section">
-                <h2>Display Name</h2>
-                <input type="text" value={settings.displayName} maxLength={50} onChange={(event) => update("displayName", event.target.value)} placeholder="Name shown in comments..." />
-              </section>
-
-              <section className="settings-section">
-                <h2>Username <span className="settings-muted">(@handle)</span></h2>
-                <input type="text" value={settings.username} maxLength={30} onChange={(event) => update("username", event.target.value)} placeholder="username" />
-              </section>
-
-              <section className="settings-section">
-                <h2>Bio <span className="settings-muted">(max 160 characters)</span></h2>
-                <textarea value={settings.bio} maxLength={160} onChange={(event) => update("bio", event.target.value)} placeholder="Describe yourself..." />
-              </section>
-
-              <section className="settings-section">
-                <h2>Bio Link <span className="settings-muted">(optional)</span></h2>
-                <input type="text" inputMode="url" value={settings.bioLink} maxLength={2048} onChange={(event) => update("bioLink", event.target.value)} placeholder="https://example.com" />
-                <p className="settings-hint">Add a website or social profile link. Domains without a scheme use HTTPS.</p>
-              </section>
-
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "performance"}>
                 <h2>Performance</h2>
                 <label className="settings-performance">
                   <input type="checkbox" checked={settings.disableAnimations} onChange={(event) => update("disableAnimations", event.target.checked)} />
@@ -416,15 +556,18 @@ export default function SettingsPage() {
                 </label>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "custom-badges"}>
                 <h2>Custom Badges</h2>
                 <div className="settings-badge-grid">
-                  {(allBadgesExpanded ? badges : badges.slice(0, 16)).map(([id, name]) => (
-                    <button type="button" key={id || "none"} className={`settings-badge-option badge-${id || "none"}${settings.customBadges.includes(id) ? " selected" : ""}`}
-                      onClick={() => toggleBadge(id)}>{name}</button>
-                  ))}
+                  {(allBadgesExpanded ? badges : badges.slice(0, 16)).map(([id, name]) => {
+                    const selected = id ? settings.customBadges.includes(id) : settings.customBadges.length === 0;
+                    return <button type="button" key={id || "none"}
+                      className={`settings-badge-option badge-${id || "none"}${selected ? " selected" : ""}`}
+                      aria-pressed={selected} onClick={() => toggleBadge(id)}>{name}</button>;
+                  })}
                   {settings.customBadges.filter((selected) => !badges.some(([id]) => id === selected)).map((selected) => (
-                    <button type="button" key={selected} className="settings-badge-option selected" onClick={() => toggleBadge(selected)}>{selected}</button>
+                    <button type="button" key={selected} className="settings-badge-option selected" aria-pressed={true}
+                      onClick={() => toggleBadge(selected)}>{selected}</button>
                   ))}
                 </div>
                 <p className="settings-hint">
@@ -437,7 +580,7 @@ export default function SettingsPage() {
                 </button>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "game-roles"}>
                 <h2>Game Player Roles</h2>
                 <p className="settings-hint">Multiple selections allowed.</p>
                 <div className="settings-role-grid">
@@ -446,7 +589,7 @@ export default function SettingsPage() {
                 </div>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "avatar-frame"}>
                 <h2>Avatar Frame</h2>
                 <div className="settings-frame-grid">
                   <button type="button" className={`settings-frame-option${settings.customAvatarFrame ? "" : " selected"}`} onClick={() => update("customAvatarFrame", "")}>None</button>
@@ -461,7 +604,7 @@ export default function SettingsPage() {
                 </div>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "font-style"}>
                 <h2>Font Style</h2>
                 <div className="settings-choice-grid">
                   {fonts.map(([id, name, preview]) => <button type="button" key={id || "default"}
@@ -472,16 +615,19 @@ export default function SettingsPage() {
                 </div>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "border-effect"}>
                 <h2>Visual Border Effect</h2>
                 <div className="settings-choice-grid">
-                  {borders.map(([id, name]) => <button type="button" key={id || "default"}
-                    className={`settings-border-option ${id ? `border-${id}` : ""}${settings.customBorder === (id ? `border-${id}` : "") ? " selected" : ""}`}
-                    onClick={() => update("customBorder", id ? `border-${id}` : "")}>{name}</button>)}
+                  {borders.map(([id, name]) => {
+                    const selected = settings.customBorder === (id ? `border-${id}` : "");
+                    return <button type="button" key={id || "default"}
+                      className={`settings-border-option ${id ? `border-${id}` : ""}${selected ? " selected" : ""}`}
+                      aria-pressed={selected} onClick={() => update("customBorder", id ? `border-${id}` : "")}>{name}</button>;
+                  })}
                 </div>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section" hidden={activeSection !== "border-shape"}>
                 <h2>Border Shape</h2>
                 <div className="settings-shape-grid">
                   {shapes.map(([id, name]) => <button type="button" key={id || "default"}
@@ -490,30 +636,62 @@ export default function SettingsPage() {
                 </div>
               </section>
 
-              <section className="settings-section">
-                <h2>Comment Background <span className="settings-premium">(Lv 110 Transcendent Only)</span></h2>
-                <div className="settings-background-grid">
+              <section className="settings-section" hidden={activeSection !== "comment-background"}>
+                <h2>Comment Background <span className="settings-premium">(Lv 110+)</span></h2>
+                {userLevel < 110 && <p className="settings-hint" role="status">
+                  Locked: reach level 110 to use Comment Background. Your current level is {userLevel}.
+                </p>}
+                <div className={`settings-background-grid${userLevel < 110 ? " is-locked" : ""}`}>
                   <button type="button" className={`settings-background-option settings-background-default${settings.customCommentBg ? "" : " selected"}`}
+                    disabled={userLevel < 110}
                     onClick={() => update("customCommentBg", "")}><span>Default</span></button>
                   {Array.from({ length: 8 }, (_, index) => {
                     const url = `/assets/hakoroku/backgrounds/${index + 1}.jpg`;
                     return <button type="button" key={url} className={`settings-background-option${settings.customCommentBg === url ? " selected" : ""}`}
+                      disabled={userLevel < 110}
                       style={{ backgroundImage: `url("${url}")` }} onClick={() => update("customCommentBg", url)}>
                       <span>Background {index + 1}</span>
                     </button>;
                   })}
+                  {userLevel >= 120 && <label
+                    className={`settings-background-option settings-background-upload-option${settings.customCommentBg && !settings.customCommentBg.startsWith("/assets/hakoroku/backgrounds/") ? " selected" : ""}${customBgUploading ? " is-uploading" : ""}`}
+                    style={settings.customCommentBg && !settings.customCommentBg.startsWith("/assets/hakoroku/backgrounds/")
+                      ? { backgroundImage: `url("${settings.customCommentBg}")` }
+                      : undefined}>
+                    <input type="file" accept="image/*" disabled={customBgUploading}
+                      onChange={(event) => void uploadCustomCommentBg(event.currentTarget.files?.[0], event.currentTarget)} />
+                    <span>{customBgUploading ? "Uploading..." : "Upload Custom BG"}</span>
+                  </label>}
                 </div>
-                {settings.customCommentBg && <div className="settings-background-preview">
+                {userLevel >= 120 ? <p className="settings-hint">
+                  Level 120+ only. Images are resized to at most 1600 px and compressed to WebP before uploading to ImgBB.
+                </p> : <p className="settings-hint">
+                  Custom background uploads unlock at level 120. Your current level is {userLevel}.
+                </p>}
+                {customBgError && <p className="settings-error" role="alert">{customBgError}</p>}
+                {settings.customCommentBg && userLevel >= 110 && <div className="settings-background-preview">
                   <img src={settings.customCommentBg} alt="Selected comment background preview" />
-                  <button type="button" onClick={() => update("customCommentBg", "")}>🗑 Reset Background</button>
+                  <button type="button" disabled={userLevel < 110 || customBgUploading}
+                    onClick={() => update("customCommentBg", "")}>🗑 Reset Background</button>
                 </div>}
               </section>
-
-              <button className="settings-save" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Settings"}</button>
-              {message && status === "ready" && <p role="status">{message}</p>}
+                  <div className="settings-actions">
+                    <button className="settings-save" type="submit" disabled={saving || customBgUploading}>
+                      {saving ? "Saving..." : customBgUploading ? "Uploading Background..." : "Save Settings"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </form>
           )}
         </section>
+        {message && status === "ready" && <div
+          className={`settings-notification settings-notification-${messageType}`}
+          role={messageType === "error" ? "alert" : "status"}
+          aria-live={messageType === "error" ? "assertive" : "polite"}>
+          <span>{message}</span>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setMessage("")}>×</button>
+        </div>}
       </main>
       <SiteChrome showChrome={false} />
     </>

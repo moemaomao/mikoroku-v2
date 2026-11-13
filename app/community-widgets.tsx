@@ -26,7 +26,7 @@ type CommunityWidgetRuntime = {
   emojiElement: (HTMLElement & { pageId?: string }) | null;
 };
 
-const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js";
+const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=avatar-frame-fit-2";
 const EMOJI_SCRIPT_SRC = "/widgets/emoji-reaction.js";
 
 function getCommunityRuntime(): CommunityWidgetRuntime {

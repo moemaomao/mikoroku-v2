@@ -22,7 +22,7 @@
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
     settings: "/widgets/comment-settings.css",
-    effects: "/widgets/comment-effects.css",
+    effects: "/widgets/comment-effects.css?v=avatar-frame-fit-2",
   };
   const externalScripts = [
     ["https://cdn.jsdelivr.net/npm/dompurify@3.2.7/dist/purify.min.js", () => Boolean(window.DOMPurify)],
@@ -98,7 +98,7 @@
   }
 
   onMount(() => {
-    loadCommentStyles("/widgets/comment-widget.css");
+    loadCommentStyles("/widgets/comment-widget.css?v=avatar-frame-fit-2");
     window.loadCommentFeatureStyles = loadFeatureStyles;
     const idle = "requestIdleCallback" in window
       ? window.requestIdleCallback(() => loadFeatureStyles("effects"), { timeout: 2500 })
