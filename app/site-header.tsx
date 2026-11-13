@@ -46,7 +46,7 @@ declare global {
     announcementBadgeCheck?: number;
     triggerLogin?: (provider?: string) => Promise<void>;
     showHistory?: () => void;
-    showUserProfile?: (uid: string, leaderboardRank?: number) => void | Promise<void>;
+    showUserProfile?: (uid: string, leaderboardRank?: number, avatar?: string) => void | Promise<void>;
     loadUserNotifications?: () => void;
     showReplyNotifications?: () => void;
     closeReplyNotifications?: () => void;

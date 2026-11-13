@@ -2639,7 +2639,7 @@ if (level >= 110) {
     avatarContainer.style.cursor = 'pointer';
     avatarContainer.onclick = (e) => {
       e.stopImmediatePropagation();
-      showCommentUserProfile(comment.uid);
+      showCommentUserProfile(comment.uid, undefined, comment.avatar);
     };
   }
 
@@ -5892,7 +5892,7 @@ async function getCommentLeaderboardRank(uid) {
   return index >= 0 ? index + 1 : null;
 }
 
-async function showCommentUserProfile(uid, leaderboardRank) {
+async function showCommentUserProfile(uid, leaderboardRank, commentAvatar) {
   if (!uid) return;
   const showProfile = window.showUserProfile;
   if (typeof showProfile !== 'function') {
@@ -5900,13 +5900,20 @@ async function showCommentUserProfile(uid, leaderboardRank) {
     return;
   }
   try {
+    if (commentAvatar && !window.userStatsCache?.[uid]?.avatar) {
+      window.userStatsCache ||= {};
+      window.userStatsCache[uid] = {
+        ...window.userStatsCache[uid],
+        avatar: commentAvatar
+      };
+    }
     const cachedRank = cachedCommentLeaderboardTopUsers?.indexOf(uid);
     const rank = Number.isInteger(leaderboardRank)
       ? leaderboardRank
       : cachedRank >= 0
         ? cachedRank + 1
         : undefined;
-    await showProfile(uid, rank);
+    await showProfile(uid, rank, commentAvatar);
   } catch (error) {
     console.error('Could not open the shared user profile modal.', error);
   }

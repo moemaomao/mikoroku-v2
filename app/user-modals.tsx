@@ -90,7 +90,7 @@ type LegacyModalWindow = {
   getReadingHistory?: () => HistoryEntry[];
   deleteHistoryItem?: (url: string) => void;
   clearReadingHistory?: () => void;
-  showUserProfile?: (uid: string, leaderboardRank?: number) => Promise<void>;
+  showUserProfile?: (uid: string, leaderboardRank?: number, avatar?: string) => Promise<void>;
   closeProfileModal?: () => void;
   openMikorokuDmInbox?: () => Promise<void>;
   openMikorokuDmToUser?: (uid: string, name?: string, avatar?: string) => void;
@@ -716,9 +716,12 @@ function initializeUserModals(): () => void {
 
   let profileDmTarget: { uid: string; name: string; avatar: string } | null = null;
   let activeProfileUid: string | null = null;
-  const renderUserProfile = (uid: string, data: DataRecord) => {
+  const renderUserProfile = (uid: string, data: DataRecord, preferredAvatar?: string) => {
     const displayName = stringValue(data.displayName, "Anonymous");
-    const avatarUrl = stringValue(data.avatar, DEFAULT_AVATAR) || DEFAULT_AVATAR;
+    const avatarUrl = stringValue(preferredAvatar) ||
+      stringValue(data.avatar) ||
+      stringValue(legacy.userStatsCache?.[uid]?.avatar, DEFAULT_AVATAR) ||
+      DEFAULT_AVATAR;
     profileDmTarget = { uid, name: displayName, avatar: avatarUrl };
     const avatar = profileField("avatar") as HTMLImageElement | null;
     if (avatar) avatar.src = avatarUrl;
@@ -802,7 +805,11 @@ function initializeUserModals(): () => void {
       });
     }
   };
-  const showProfile = async (uid: string, leaderboardRank?: number): Promise<void> => {
+  const showProfile = async (
+    uid: string,
+    leaderboardRank?: number,
+    commentAvatar?: string,
+  ): Promise<void> => {
     if (!uid) return;
     activeProfileUid = uid;
     const statsLink = profileModal.querySelector<HTMLAnchorElement>("[data-profile-stats]");
@@ -828,9 +835,16 @@ function initializeUserModals(): () => void {
     }
     profileModal.style.display = "flex";
     profileDmTarget = { uid, name: "Anonymous", avatar: DEFAULT_AVATAR };
+    if (commentAvatar && !legacy.userStatsCache?.[uid]?.avatar) {
+      legacy.userStatsCache ||= {};
+      legacy.userStatsCache[uid] = {
+        ...legacy.userStatsCache[uid],
+        avatar: commentAvatar,
+      };
+    }
     const cachedProfile = readUserProfileCache(uid, legacy);
     if (cachedProfile) {
-      renderUserProfile(uid, cachedProfile);
+      renderUserProfile(uid, cachedProfile, commentAvatar);
     } else {
       setText(profileField("displayName"), "Loading...");
       setText(profileField("username"), "");
@@ -856,7 +870,7 @@ function initializeUserModals(): () => void {
       const data = await loadUserProfile(firestore, uid);
       writeUserProfileCache(uid, data, legacy);
       if (activeProfileUid === uid) {
-        renderUserProfile(uid, data);
+        renderUserProfile(uid, data, commentAvatar);
       }
     } catch (error) {
       console.error("User profile could not be refreshed.", error);

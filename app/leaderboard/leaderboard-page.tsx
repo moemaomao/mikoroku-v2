@@ -14,6 +14,12 @@ type LeaderboardUser = {
   hidden: boolean;
 };
 
+declare global {
+  interface Window {
+    userStatsCache?: Record<string, Record<string, unknown>>;
+  }
+}
+
 const defaultAvatar = "/assets/icons/favicon.ico";
 const leaderboardDatabaseName = "mikoroku-leaderboard";
 const leaderboardStoreName = "cache";
@@ -45,6 +51,17 @@ function numberValue(value: unknown): number {
 
 function displayName(user: LeaderboardUser): string {
   return user.name || user.username || "Anonymous";
+}
+
+function openRankedProfile(user: LeaderboardUser, rank: number): void {
+  if (user.avatar) {
+    window.userStatsCache ||= {};
+    window.userStatsCache[user.uid] = {
+      ...window.userStatsCache[user.uid],
+      avatar: user.avatar,
+    };
+  }
+  window.showUserProfile?.(user.uid, rank, user.avatar);
 }
 
 function commentLevel(commentCount: number): number {
@@ -349,10 +366,10 @@ export default function LeaderboardPage() {
                   <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white/35 text-xs font-bold text-slate-700 dark:border-white/15 dark:bg-black/20 dark:text-white">
                     {index === 0 ? "🏆" : index + 1}
                   </span>
-                  <button type="button" onClick={() => window.showUserProfile?.(user.uid, index + 1)} aria-label={`Open profile of ${displayName(user)}`} className="mx-auto block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">
+                  <button type="button" onClick={() => openRankedProfile(user, index + 1)} aria-label={`Open profile of ${displayName(user)}`} className="mx-auto block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">
                     <img src={optimizedAvatarUrl(user.avatar, 64)} alt="" width={64} height={64} fetchPriority="high" decoding="async" className="h-16 w-16 rounded-full border-2 border-white object-cover shadow dark:border-slate-600" />
                   </button>
-                  <button type="button" onClick={() => window.showUserProfile?.(user.uid, index + 1)} className="mx-auto mt-3 block max-w-full truncate text-center text-sm font-bold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">{displayName(user)}</button>
+                  <button type="button" onClick={() => openRankedProfile(user, index + 1)} className="mx-auto mt-3 block max-w-full truncate text-center text-sm font-bold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">{displayName(user)}</button>
                   {user.username && <p className="truncate text-center text-[10px] text-slate-500 dark:text-slate-400">@{user.username}</p>}
                   <span className="mx-auto mt-2 block w-fit rounded-full border border-black/10 bg-white/40 px-2 py-0.5 text-[9px] font-bold text-slate-700 dark:border-white/15 dark:bg-black/20 dark:text-white">LV {commentLevel(user.commentCount)}</span>
                   <p className={`mt-4 text-center text-xl font-black ${
