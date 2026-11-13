@@ -774,44 +774,50 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
   useEffect(() => {
     let active = true;
+    let freshStatsLoaded = false;
+    let freshStatsError = "";
     setVisibleProgressCount(10);
     setError("");
 
-    const applyFresh = async (forceNetwork = false) => {
+    const applyFresh = async () => {
       try {
         const result = await loadPublicReadingStats(uid);
         if (!active) return;
+        freshStatsLoaded = true;
         setStats(result);
         setError("");
         void setCachedReadingStats(uid, result);
       } catch (loadError: unknown) {
         console.error("Public reading stats could not be loaded.", loadError);
         if (!active) return;
-        // Keep showing cache if we already have it; only surface error when empty
+        freshStatsError = loadError instanceof Error
+          ? loadError.message
+          : "Reading stats could not be loaded.";
         setStats((current) => {
           if (current) return current;
-          setError(loadError instanceof Error
-            ? loadError.message
-            : "Reading stats could not be loaded.");
+          setError(freshStatsError);
           return current;
         });
       }
     };
 
     const loadStats = async () => {
-      // 1) paint from IndexedDB immediately
+      const freshRequest = applyFresh();
       const cached = await getCachedReadingStats(uid);
       if (!active) return;
       if (cached?.data) {
-        setStats(cached.data);
-      } else {
+        if (!freshStatsLoaded) {
+          setStats(cached.data);
+          setError("");
+        }
+      } else if (!freshStatsLoaded) {
         setStats(null);
+        if (freshStatsError) setError(freshStatsError);
       }
-      // 2) always revalidate from network
-      await applyFresh();
+      await freshRequest;
     };
 
-    const onStatsUpdated = () => { void applyFresh(true); };
+    const onStatsUpdated = () => { void applyFresh(); };
     void loadStats();
     window.addEventListener("mikoroku:reading-stats-updated", onStatsUpdated);
     return () => {

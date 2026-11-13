@@ -461,7 +461,44 @@ function parseProgressItem(value: unknown): ReadingProgressItem | null {
 export async function loadPublicReadingStats(uid: string): Promise<PublicReadingStats> {
   const firestore = await waitForFirestore();
   const userReference = firestore.collection("userStats").doc(uid);
-  const profileSnapshot = await userReference.get();
+  const profileSnapshotPromise = userReference.get();
+  const commentSnapshotPromise = (async () => {
+    try {
+      if (typeof firestore.collectionGroup !== "function") {
+        throw new Error("Firestore collection-group queries are unavailable.");
+      }
+      const commentsQuery = firestore.collectionGroup("postComments");
+      if (typeof commentsQuery.where !== "function") {
+        throw new Error("Firestore comment filtering is unavailable.");
+      }
+      return {
+        snapshot: await commentsQuery.where("uid", "==", uid).get(),
+        error: "",
+      };
+    } catch (error) {
+      console.warn("Comment history could not be loaded for this user.", error);
+      return {
+        snapshot: null,
+        error: error instanceof Error ? error.message : "Comment history could not be loaded.",
+      };
+    }
+  })();
+  const bookmarksCountPromise = (async () => {
+    try {
+      const bookmarks = await firestore.collection("users").doc(uid).collection("bookmarks").limit(1000).get();
+      let count = 0;
+      bookmarks.forEach(() => { count += 1; });
+      return count;
+    } catch (error) {
+      console.warn("Bookmark count is not publicly available for this user.", error);
+      return null;
+    }
+  })();
+  const [profileSnapshot, commentSnapshotResult, bookmarksCount] = await Promise.all([
+    profileSnapshotPromise,
+    commentSnapshotPromise,
+    bookmarksCountPromise,
+  ]);
   const profile = profileSnapshot.exists ? profileSnapshot.data() || {} : {};
   const readingStats = asRecord(profile.readingStats);
   const progressBySlug = asRecord(readingStats.progress);
@@ -486,45 +523,29 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
   );
 
   const commentHistory: CommentHistoryItem[] = [];
-  let commentHistoryError = "";
-  try {
-    if (typeof firestore.collectionGroup !== "function") {
-      throw new Error("Firestore collection-group queries are unavailable.");
-    }
-    const commentsQuery = firestore.collectionGroup("postComments");
-    if (typeof commentsQuery.where !== "function") {
-      throw new Error("Firestore comment filtering is unavailable.");
-    }
-    const snapshot = await commentsQuery.where("uid", "==", uid).get();
-    snapshot.forEach((document) => {
-      const data = document.data();
-      if (stringValue(data.uid) !== uid) return;
-      const postId = document.ref?.parent.parent?.id;
-      if (!postId) return;
-      commentHistory.push({
-        id: document.id,
-        text: stringValue(data.text),
-        hasImage: Boolean(data.image),
-        createdAt: timestampValue(data.date),
-        isReply: Boolean(data.parentId),
-        linkTitle: getCommentLinkTitle(postId, data.postTitle, data.postUrl, profile),
-        threadUrl: getCommentThreadUrl(postId, data.postUrl, profile),
+  let commentHistoryError = commentSnapshotResult.error;
+  if (commentSnapshotResult.snapshot) {
+    try {
+      commentSnapshotResult.snapshot.forEach((document) => {
+        const data = document.data();
+        if (stringValue(data.uid) !== uid) return;
+        const postId = document.ref?.parent.parent?.id;
+        if (!postId) return;
+        commentHistory.push({
+          id: document.id,
+          text: stringValue(data.text),
+          hasImage: Boolean(data.image),
+          createdAt: timestampValue(data.date),
+          isReply: Boolean(data.parentId),
+          linkTitle: getCommentLinkTitle(postId, data.postTitle, data.postUrl, profile),
+          threadUrl: getCommentThreadUrl(postId, data.postUrl, profile),
+        });
       });
-    });
-    commentHistory.sort((left, right) => right.createdAt - left.createdAt);
-  } catch (error) {
-    console.warn("Comment history could not be loaded for this user.", error);
-    commentHistoryError = error instanceof Error ? error.message : "Comment history could not be loaded.";
-  }
-
-  let bookmarksCount: number | null = null;
-  try {
-    const bookmarks = await firestore.collection("users").doc(uid).collection("bookmarks").limit(1000).get();
-    let count = 0;
-    bookmarks.forEach(() => { count += 1; });
-    bookmarksCount = count;
-  } catch (error) {
-    console.warn("Bookmark count is not publicly available for this user.", error);
+      commentHistory.sort((left, right) => right.createdAt - left.createdAt);
+    } catch (error) {
+      console.warn("Comment history could not be loaded for this user.", error);
+      commentHistoryError = error instanceof Error ? error.message : "Comment history could not be loaded.";
+    }
   }
 
   return {
