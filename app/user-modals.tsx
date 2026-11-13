@@ -692,11 +692,22 @@ function initializeUserModals(): () => void {
       if (reputationElement) {
         reputationElement.style.color = reputation > 0 ? "#4ade80" : reputation < 0 ? "#ef4444" : "#aaa";
       }
-      const customBadge = stringValue(data.customBadge);
-      const badgeLabel = BADGE_LABELS.get(customBadge);
-      if (badgeContainer && customBadge && badgeLabel) {
-        const badge = createElement("span", `user-custom-badge ${customBadge}`, badgeLabel);
-        badgeContainer.appendChild(badge);
+      const customBadges = Array.isArray(data.customBadges)
+        ? data.customBadges.filter((badge): badge is string => typeof badge === "string")
+        : [];
+      const primaryCustomBadge = stringValue(data.customBadge);
+      if (primaryCustomBadge) customBadges.push(primaryCustomBadge);
+      if (badgeContainer) {
+        [...new Set(customBadges)].forEach((customBadge) => {
+          const badgeLabel = BADGE_LABELS.get(customBadge);
+          if (!badgeLabel) return;
+          const badge = createElement(
+            "span",
+            `user-custom-badge settings-badge-option profile-custom-badge badge-${customBadge}`,
+            badgeLabel,
+          );
+          badgeContainer.appendChild(badge);
+        });
       }
       if (rolesContainer && Array.isArray(data.gameRoles) && data.gameRoles.length) {
         const title = createElement("div", "profile-badge-title", "Game Roles");
