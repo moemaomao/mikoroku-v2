@@ -356,13 +356,19 @@ const modalStyles = `
 .profile-box.leaderboard-rank-4{--profile-rank-color:234 179 8}
 .profile-box.leaderboard-rank-5{--profile-rank-color:59 130 246}
 .profile-box.leaderboard-rank-6{--profile-rank-color:34 197 94}
-.profile-box.leaderboard-rank-1{background:linear-gradient(145deg,#3b1f5b,#21152f)}
-.profile-box.leaderboard-rank-2{background:linear-gradient(145deg,#5b2027,#30161b)}
-.profile-box.leaderboard-rank-3{background:linear-gradient(145deg,#5b321c,#301d12)}
-.profile-box.leaderboard-rank-4{background:linear-gradient(145deg,#514816,#302c12)}
-.profile-box.leaderboard-rank-5{background:linear-gradient(145deg,#1e3a5f,#15283f)}
-.profile-box.leaderboard-rank-6{background:linear-gradient(145deg,#1d4b2b,#142b1d)}
-.leaderboard-profile .profile-stats{border:1px solid rgb(var(--profile-rank-color)/35%);background:linear-gradient(145deg,rgb(var(--profile-rank-color)/24%),rgb(var(--profile-rank-color)/12%))}
+.profile-box.leaderboard-rank-1{background:linear-gradient(145deg,#f2e8ff,#d8b4fe)}
+.profile-box.leaderboard-rank-2{background:linear-gradient(145deg,#ffe4e6,#fecdd3)}
+.profile-box.leaderboard-rank-3{background:linear-gradient(145deg,#ffedd5,#fed7aa)}
+.profile-box.leaderboard-rank-4{background:linear-gradient(145deg,#fef9c3,#fde68a)}
+.profile-box.leaderboard-rank-5{background:linear-gradient(145deg,#dbeafe,#bfdbfe)}
+.profile-box.leaderboard-rank-6{background:linear-gradient(145deg,#dcfce7,#bbf7d0)}
+html.dark .profile-box.leaderboard-rank-1{background:linear-gradient(145deg,#3b1f5b,#21152f)}
+html.dark .profile-box.leaderboard-rank-2{background:linear-gradient(145deg,#5b2027,#30161b)}
+html.dark .profile-box.leaderboard-rank-3{background:linear-gradient(145deg,#5b321c,#301d12)}
+html.dark .profile-box.leaderboard-rank-4{background:linear-gradient(145deg,#514816,#302c12)}
+html.dark .profile-box.leaderboard-rank-5{background:linear-gradient(145deg,#1e3a5f,#15283f)}
+html.dark .profile-box.leaderboard-rank-6{background:linear-gradient(145deg,#1d4b2b,#142b1d)}
+.leaderboard-profile .profile-stats{border:1px solid rgb(var(--profile-rank-color)/35%);background:inherit}
 @keyframes leaderboard-profile-gradient{from{background-position:0% 50%}to{background-position:100% 50%}}
 @media(prefers-reduced-motion:reduce){.profile-box.leaderboard-profile:before{animation:none}}
 .profile-close{position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;color:#aaa;cursor:pointer}

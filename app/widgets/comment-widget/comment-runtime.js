@@ -5900,7 +5900,13 @@ async function showCommentUserProfile(uid, leaderboardRank) {
     return;
   }
   try {
-    await showProfile(uid, leaderboardRank);
+    const cachedRank = cachedCommentLeaderboardTopUsers?.indexOf(uid);
+    const rank = Number.isInteger(leaderboardRank)
+      ? leaderboardRank
+      : cachedRank >= 0
+        ? cachedRank + 1
+        : undefined;
+    await showProfile(uid, rank);
   } catch (error) {
     console.error('Could not open the shared user profile modal.', error);
   }
