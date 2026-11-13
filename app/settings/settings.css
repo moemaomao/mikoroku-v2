@@ -916,6 +916,16 @@ html.dark .settings-shape-option.selected {
   font-size: .85rem;
 }
 
+html.dark .settings-profile-field input[type="text"],
+html.dark .settings-profile-field textarea {
+  background-color: color-mix(in srgb, var(--us-accent) 20%, var(--us-surface));
+}
+
+html.dark .settings-profile-field input[type="text"]:focus,
+html.dark .settings-profile-field textarea:focus {
+  background-color: color-mix(in srgb, var(--us-accent) 28%, var(--us-surface));
+}
+
 @keyframes settings-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-1px); } 50% { transform: translateX(1px); } 75% { transform: translateX(-1px); } }
 @keyframes settings-glitch { 0%, 100% { transform: translate(0); } 25% { transform: translate(-2px, 1px); } 50% { transform: translate(2px, -1px); } 75% { transform: translate(-1px, -1px); } }
 @keyframes settings-flicker { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
