@@ -3310,6 +3310,8 @@ function generateUsername(user, fallbackName = '') {
     text: text.trim(),
     image: image || null,
     date: firebase.firestore.FieldValue.serverTimestamp(),
+    postUrl: `${window.location.pathname}${window.location.search}`,
+    postTitle: document.title,
     parentId: parentId || null,
     avatar: currentUser ? currentUser.photoURL : ANONYMOUS_AVATAR,
     email: currentUser ? currentUser.email : null,

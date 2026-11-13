@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   loadPublicReadingStats,
+  type CommentHistoryItem,
   type PublicReadingStats,
   type ReadingProgressItem,
 } from "../../lib/reading-stats";
@@ -162,15 +163,23 @@ async function uploadProfileBanner(file: File): Promise<string> {
 
 function formatUpdatedAt(timestamp: number): string {
   if (!timestamp) return "Recently read";
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
   }).format(timestamp);
 }
 
+function formatCommentDate(timestamp: number): string {
+  if (!timestamp) return "Date unavailable";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(timestamp);
+}
+
 function getActivityDayLabel(date: string): string {
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat("en-US", {
     weekday: "short",
     timeZone: "UTC",
   }).format(new Date(`${date}T00:00:00Z`));
@@ -427,10 +436,84 @@ function ProgressCard({ item }: { item: ReadingProgressItem }) {
   );
 }
 
+function CommentHistorySection({
+  comments,
+  error,
+}: {
+  comments: CommentHistoryItem[];
+  error: string;
+}) {
+  const [visibleCount, setVisibleCount] = useState(10);
+  const visibleComments = comments.slice(0, visibleCount);
+
+  return (
+    <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Comment history</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
+            Showing {visibleComments.length} of {comments.length} comments · newest first
+          </p>
+        </div>
+      </div>
+      {error ? (
+        <p role="status" className="mt-4 rounded-xl border border-amber-300/50 bg-amber-100/70 p-3 text-sm text-amber-900 dark:border-amber-300/20 dark:bg-amber-950/30 dark:text-amber-100">
+          Comment history could not be loaded: {error}
+        </p>
+      ) : comments.length ? (
+        <div className="mt-4 space-y-3">
+          {visibleComments.map((comment) => (
+            <article
+              key={`${comment.threadUrl}:${comment.id}`}
+              className="rounded-2xl border border-black/10 bg-white/60 p-3 dark:border-white/10 dark:bg-black/15 sm:p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {comment.isReply && (
+                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-400/15 dark:text-violet-200">
+                    Reply
+                  </span>
+                )}
+                <time className="ml-auto text-[11px] text-slate-500 dark:text-zinc-500">
+                  {formatCommentDate(comment.createdAt)}
+                </time>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-zinc-200">
+                {comment.text || (comment.hasImage ? "Image comment." : "Empty comment.")}
+              </p>
+              {comment.threadUrl && (
+                <a
+                  href={comment.threadUrl}
+                  className="mt-3 inline-flex text-xs font-semibold text-[var(--mikoroku-accent)] underline-offset-4 hover:underline"
+                >
+                  {comment.linkTitle}
+                </a>
+              )}
+            </article>
+          ))}
+          {visibleCount < comments.length && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => Math.min(count + 10, comments.length))}
+              className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+            >
+              Load more comments
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-2xl border border-dashed border-black/20 px-4 py-8 text-center text-sm text-slate-500 dark:border-white/15 dark:text-zinc-500">
+          No comment history to display yet.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [stats, setStats] = useState<PublicReadingStats | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [visibleProgressCount, setVisibleProgressCount] = useState(10);
   const [isOwner, setIsOwner] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerError, setBannerError] = useState("");
@@ -438,6 +521,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
   useEffect(() => {
     let active = true;
+    setVisibleProgressCount(10);
     setError("");
     setStats(null);
     const loadStats = () => loadPublicReadingStats(uid).then((result) => {
@@ -492,11 +576,11 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     setBannerError("");
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setBannerError("Pilih file gambar untuk banner.");
+      setBannerError("Choose an image file for the banner.");
       return;
     }
     if (file.size > 15 * 1024 * 1024) {
-      setBannerError("Ukuran gambar sebelum kompresi maksimal 15 MB.");
+      setBannerError("The image must be no larger than 15 MB before compression.");
       return;
     }
 
@@ -506,12 +590,12 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       const user = firebase?.auth?.().currentUser;
       const firestore = firebase?.firestore?.();
       if (!user || user.uid !== uid || !firestore) {
-        throw new Error("Login sebagai pemilik profil untuk mengunggah banner.");
+        throw new Error("Sign in as the profile owner to upload a banner.");
       }
 
       const imageUrl = await uploadProfileBanner(file);
       if (firebase.auth?.().currentUser?.uid !== uid) {
-        throw new Error("Akun berubah sebelum banner selesai disimpan. Silakan coba lagi.");
+        throw new Error("The signed-in account changed before the banner was saved. Please try again.");
       }
       await firestore.collection("userStats").doc(uid).set({ profileBanner: imageUrl }, { merge: true });
       setStats((current) => current
@@ -523,7 +607,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       console.error("Profile banner upload failed.", uploadError);
       setBannerError(uploadError instanceof Error
         ? uploadError.message
-        : "Banner gagal diunggah. Silakan coba lagi.");
+        : "Banner upload failed. Please try again.");
     } finally {
       setBannerUploading(false);
       if (bannerInputRef.current) bannerInputRef.current.value = "";
@@ -536,6 +620,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const avatar = stringValue(profile.avatar) || "/assets/icons/favicon.ico";
   const profileBanner = stringValue(profile.profileBanner);
   const progress = stats?.progress || [];
+  const visibleProgress = progress.slice(0, visibleProgressCount);
   const activity = stats?.activity || [];
   const totalWeeklyChapters = activity.reduce((total, day) => total + day.chapters, 0);
   const activeDays = activity.filter((day) => day.chapters > 0).length;
@@ -695,13 +780,13 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
           {error && (
             <section role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-400/30 dark:bg-red-950/30 dark:text-red-100">
-              <span>Stats gagal dimuat: {error}</span>
+              <span>Stats could not be loaded: {error}</span>
               <button
                 type="button"
                 onClick={() => setRetry((current) => current + 1)}
                 className="rounded-lg border border-red-400/50 px-3 py-2 font-semibold transition hover:bg-red-400/10 dark:border-red-300/30"
               >
-                Coba lagi
+                Retry
               </button>
             </section>
           )}
@@ -794,29 +879,48 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                     <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading progress</h2>
                     <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">Latest saved chapter, chapter progress, and estimated series progress</p>
                   </div>
-                  <span className="text-xs text-slate-500 dark:text-zinc-500">{progress.length} series</span>
+                  <span className="text-xs text-slate-500 dark:text-zinc-500">
+                    Showing {visibleProgress.length} of {progress.length} series
+                  </span>
                 </div>
                 {progress.length ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {progress.map((item) => (
-                      <ProgressCard key={`${item.kind}:${item.slug}`} item={item} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {visibleProgress.map((item) => (
+                        <ProgressCard key={`${item.kind}:${item.slug}`} item={item} />
+                      ))}
+                    </div>
+                    {visibleProgress.length < progress.length && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleProgressCount((count) => Math.min(count + 10, progress.length))}
+                        className="mt-4 w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                      >
+                        Load more series
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-black/20 px-5 py-10 text-center dark:border-white/15">
-                    <p className="font-semibold text-slate-800 dark:text-zinc-200">Belum ada progres tersimpan</p>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-zinc-500">Progres dan grafik aktivitas akan terisi saat pengguna membaca sambil login.</p>
+                    <p className="font-semibold text-slate-800 dark:text-zinc-200">No saved reading progress yet</p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-zinc-500">Progress and activity charts will appear as the user reads while signed in.</p>
                     <a href="/manga-list" className="mt-4 inline-flex rounded-xl bg-[var(--mikoroku-accent-surface)] px-4 py-2 text-sm font-semibold text-[var(--mikoroku-accent-foreground)] transition hover:opacity-90">
-                      Jelajahi manga
+                      Explore manga
                     </a>
                   </div>
                 )}
                 {progress.length > 0 && (
                   <p className="mt-4 text-[11px] text-slate-500 dark:text-zinc-500">
-                    Progres seri dihitung dari daftar chapter saat dibaca. History lama tanpa data daftar chapter menampilkan progres chapter saja.
+                    Series progress is calculated from the chapter list available while reading. Older history without chapter-list data shows chapter progress only.
                   </p>
                 )}
               </section>
+
+              <CommentHistorySection
+                key={uid}
+                comments={stats.commentHistory}
+                error={stats.commentHistoryError}
+              />
             </>
           )}
         </div>

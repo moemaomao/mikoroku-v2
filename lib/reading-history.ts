@@ -130,35 +130,56 @@ function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function normalizeHistoryUrl(value: unknown): string {
+  const rawUrl = stringValue(value).trim();
+  if (!rawUrl) return "";
+  if (rawUrl.startsWith("/") && !rawUrl.startsWith("//")) return rawUrl;
+
+  try {
+    const url = new URL(rawUrl, window.location.origin);
+    const hostname = url.hostname.toLowerCase();
+    const currentHostname = window.location.hostname.toLowerCase();
+    const knownSite = hostname === "mikoroku.top" || hostname === "www.mikoroku.top";
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      (!knownSite && hostname !== currentHostname)
+    ) {
+      return "";
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "";
+  }
+}
+
 function normalizeHistory(value: unknown): ReadingHistoryEntry[] {
   if (!Array.isArray(value)) return [];
   return value
-    .filter((entry): entry is Record<string, unknown> => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
-      const url = stringValue((entry as Record<string, unknown>).url);
-      return url.startsWith("/") && !url.startsWith("//");
-    })
-    .map((entry) => {
-      const time = numberValue(entry.time);
-      const progress = numberValue(entry.progress);
+    .map((entry): ReadingHistoryEntry | null => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+      const data = entry as Record<string, unknown>;
+      const url = normalizeHistoryUrl(data.url);
+      if (!url) return null;
+      const time = numberValue(data.time);
       const kind: ReadingHistoryEntry["kind"] =
-        entry.kind === "manga" || entry.kind === "novel" ? entry.kind : undefined;
+        data.kind === "manga" || data.kind === "novel" ? data.kind : undefined;
       return {
-        series: stringValue(entry.series),
-        title: stringValue(entry.title),
-        chapter: stringValue(entry.chapter),
-        cover: stringValue(entry.cover),
-        slug: stringValue(entry.slug),
-        url: stringValue(entry.url),
+        series: stringValue(data.series),
+        title: stringValue(data.title),
+        chapter: stringValue(data.chapter),
+        cover: stringValue(data.cover),
+        slug: stringValue(data.slug),
+        url,
         time,
-        progress: Math.max(0, Math.min(100, progress)),
-        updatedAt: numberValue(entry.updatedAt) || time,
+        progress: Math.max(0, Math.min(100, numberValue(data.progress))),
+        updatedAt: numberValue(data.updatedAt) || time,
         ...(kind ? { kind } : {}),
-        chapterPosition: Math.max(0, numberValue(entry.chapterPosition)),
-        chapterCount: Math.max(0, numberValue(entry.chapterCount)),
-        source: stringValue(entry.source),
+        chapterPosition: Math.max(0, numberValue(data.chapterPosition)),
+        chapterCount: Math.max(0, numberValue(data.chapterCount)),
+        source: stringValue(data.source),
       };
     })
+    .filter((entry): entry is ReadingHistoryEntry => entry !== null)
     .sort((left, right) => right.time - left.time)
     .slice(0, HISTORY_LIMIT);
 }
