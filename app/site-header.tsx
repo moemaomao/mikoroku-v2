@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   applyGlobalAppearance,
   GLOBAL_APPEARANCE_KEY,
@@ -65,9 +65,12 @@ const DEFAULT_AVATAR = "/assets/icons/favicon.ico";
 const DEFAULT_THUMB = "https://mikoroku.com/default-thumb.jpg";
 const DISPLAY_NAME_KEY = "commentWidget_displayName";
 const AVATAR_KEY = "commentWidget_avatar";
+const HEADER_USER_CACHE_KEY = "mikoroku:header-user:v1";
+const HEADER_AUTH_CHANGE_EVENT = "mikoroku:header-auth-changed";
 const SIDEBAR_PREF_KEY = "mk_sidebar_open";
 const ADMIN_PANEL_EMAILS = ["mikorokuscan@gmail.com", "moemaomao@gmail.com"];
 let desktopSidebarPreference: boolean | null = null;
+let cachedHeaderUser: HeaderUser | null | undefined;
 const ANNOUNCEMENT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87WhV3FagJZSy_uhuoI",
   authDomain: "mikoroku.firebaseapp.com",
@@ -108,11 +111,45 @@ function getMangaEntry(value: unknown): MangaEntry | undefined {
 
 function getCurrentUser(): HeaderUser | null {
   const currentUser = window.currentUser as HeaderUser | null | undefined;
-  if (currentUser) return currentUser;
+  if (currentUser !== undefined) return currentUser;
 
   const firebase = window.firebase;
   if (!firebase?.auth || !firebase.apps.some((app) => app.name === "[DEFAULT]")) return null;
   return (firebase.auth().currentUser as HeaderUser | null | undefined) || null;
+}
+
+function subscribeToHeaderUser(callback: () => void): () => void {
+  window.addEventListener(HEADER_AUTH_CHANGE_EVENT, callback);
+  return () => window.removeEventListener(HEADER_AUTH_CHANGE_EVENT, callback);
+}
+
+function getHeaderUserSnapshot(): HeaderUser | null {
+  if (typeof window === "undefined") return null;
+  if (window.currentUser !== undefined) return window.currentUser;
+  const firebaseUser = getCurrentUser();
+  if (firebaseUser) return firebaseUser;
+  if (cachedHeaderUser !== undefined) return cachedHeaderUser;
+  try {
+    const cached: unknown = JSON.parse(localStorage.getItem(HEADER_USER_CACHE_KEY) || "null");
+    if (cached && typeof cached === "object" && typeof (cached as HeaderUser).uid === "string") {
+      const user = cached as HeaderUser;
+      cachedHeaderUser = {
+        uid: user.uid,
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+      };
+      return cachedHeaderUser;
+    }
+  } catch (error) {
+    console.warn("Sesi header tersimpan tidak dapat dibaca.", error);
+  }
+  cachedHeaderUser = null;
+  return null;
+}
+
+function getServerHeaderUserSnapshot(): null {
+  return null;
 }
 
 function getDisplayName(user: HeaderUser | null): string {
@@ -127,6 +164,19 @@ function getDisplayName(user: HeaderUser | null): string {
     console.warn("Nama pengguna tersimpan tidak dapat dibaca.", error);
   }
   return user.displayName || user.email?.split("@")[0] || "User";
+}
+
+function getCachedAvatar(user: HeaderUser | null): string {
+  if (!user) return DEFAULT_AVATAR;
+  const cachedAvatar = window.userStatsCache?.[user.uid]?.avatar;
+  if (typeof cachedAvatar === "string" && cachedAvatar) return cachedAvatar;
+  try {
+    const storedAvatar = localStorage.getItem(AVATAR_KEY);
+    if (storedAvatar) return storedAvatar;
+  } catch (error) {
+    console.warn("Avatar cache tidak dapat dibaca.", error);
+  }
+  return user.photoURL || DEFAULT_AVATAR;
 }
 
 function navigateToManga(title: string): void {
@@ -179,9 +229,17 @@ function HeaderContents() {
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<HeaderBookmark[]>([]);
   const [hasBookmarks, setHasBookmarks] = useState(false);
-  const [user, setUser] = useState<HeaderUser | null>(null);
-  const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
-  const [displayName, setDisplayName] = useState("User");
+  const user = useSyncExternalStore(
+    subscribeToHeaderUser,
+    getHeaderUserSnapshot,
+    getServerHeaderUserSnapshot,
+  );
+  const [avatarOverride, setAvatarOverride] = useState<{ uid: string; url: string } | null>(null);
+  const [, setDisplayNameRevision] = useState(0);
+  const avatar = user
+    ? avatarOverride?.uid === user.uid ? avatarOverride.url : getCachedAvatar(user)
+    : DEFAULT_AVATAR;
+  const displayName = user ? getDisplayName(user) : "User";
   const [authOpen, setAuthOpen] = useState(false);
   const [unreadAnnouncements, setUnreadAnnouncements] = useState(0);
   const [announcementLabel, setAnnouncementLabel] = useState("Announcements");
@@ -428,10 +486,27 @@ function HeaderContents() {
   useEffect(() => {
     let active = true;
     const updateUser = (nextUser: HeaderUser | null) => {
-      setUser(nextUser);
+      window.currentUser = nextUser;
+      cachedHeaderUser = nextUser
+        ? {
+            uid: nextUser.uid,
+            displayName: nextUser.displayName,
+            email: nextUser.email,
+            photoURL: nextUser.photoURL,
+          }
+        : null;
+      try {
+        if (cachedHeaderUser) {
+          localStorage.setItem(HEADER_USER_CACHE_KEY, JSON.stringify(cachedHeaderUser));
+        } else {
+          localStorage.removeItem(HEADER_USER_CACHE_KEY);
+        }
+      } catch (error) {
+        console.warn("Sesi header tidak dapat disimpan.", error);
+      }
+      window.dispatchEvent(new Event(HEADER_AUTH_CHANGE_EVENT));
       if (!nextUser) {
-        setDisplayName("User");
-        setAvatar(DEFAULT_AVATAR);
+        setAvatarOverride(null);
         window.commentDisplayName = null;
         window._headerAvatar = null;
         try {
@@ -442,43 +517,49 @@ function HeaderContents() {
         return;
       }
       const nextName = getDisplayName(nextUser);
-      setDisplayName(nextName);
       window.commentDisplayName = nextName;
-      const quickAvatar = String(
-        window.userStatsCache?.[nextUser.uid]?.avatar ||
-        localStorage.getItem(AVATAR_KEY) ||
-        nextUser.photoURL ||
-        DEFAULT_AVATAR,
-      );
-      setAvatar(quickAvatar);
+      const quickAvatar = getCachedAvatar(nextUser);
+      setAvatarOverride({ uid: nextUser.uid, url: quickAvatar });
       window._headerAvatar = quickAvatar;
       void resolveAvatar(nextUser).then((photo) => {
         if (!active) return;
-        setAvatar(photo);
+        setAvatarOverride({ uid: nextUser.uid, url: photo });
         window._headerAvatar = photo;
       });
     };
 
-    const refreshUser = () => updateUser(getCurrentUser());
-    const handleUserStats = () => refreshUser();
+    const refreshUser = () => {
+      const currentUser = getCurrentUser();
+      if (currentUser || window.currentUser !== undefined) updateUser(currentUser);
+    };
+    const handleUserStats = () => {
+      setDisplayNameRevision((revision) => revision + 1);
+      refreshUser();
+    };
     window.addEventListener("userStatsReady", handleUserStats);
     window.updateHeaderAuth = async () => refreshUser();
     window.syncHeaderDisplayName = (name) => {
       if (!name) return;
       window.commentDisplayName = name;
-      setDisplayName(name);
       try {
         localStorage.setItem(DISPLAY_NAME_KEY, name);
       } catch (error) {
         console.warn("Nama pengguna tidak dapat disimpan.", error);
       }
+      const current = getCurrentUser();
+      if (current) {
+        window.userStatsCache ||= {};
+        window.userStatsCache[current.uid] ||= {};
+        window.userStatsCache[current.uid].displayName = name;
+        setDisplayNameRevision((revision) => revision + 1);
+      }
       if (getCurrentUser()) refreshUser();
     };
     window.syncHeaderAvatar = (url) => {
       if (!url) return;
-      setAvatar(url);
-      window._headerAvatar = url;
       const current = getCurrentUser();
+      if (current) setAvatarOverride({ uid: current.uid, url });
+      window._headerAvatar = url;
       if (current) {
         window.userStatsCache ||= {};
         window.userStatsCache[current.uid] ||= {};
@@ -514,8 +595,6 @@ function HeaderContents() {
         if (authCheck !== undefined) window.clearInterval(authCheck);
         authCheck = undefined;
       }, 200);
-    } else {
-      refreshUser();
     }
     const refreshTimers = [
       window.setTimeout(refreshUser, 1500),
@@ -661,8 +740,10 @@ function HeaderContents() {
 
   const toggleAuth = () => {
     const current = getCurrentUser();
-    setUser(current);
-    setDisplayName(getDisplayName(current));
+    if (window.currentUser !== current) {
+      window.currentUser = current;
+      window.dispatchEvent(new Event(HEADER_AUTH_CHANGE_EVENT));
+    }
     setAuthOpen((open) => !open);
   };
 
@@ -708,8 +789,9 @@ function HeaderContents() {
 
   const handleLogout = () => {
     closeAuth();
-    setUser(null);
-    setDisplayName("User");
+    window.currentUser = null;
+    window.dispatchEvent(new Event(HEADER_AUTH_CHANGE_EVENT));
+    setAvatarOverride(null);
 
     type CompatAuth = {
       signOut: () => Promise<void>;
@@ -727,10 +809,7 @@ function HeaderContents() {
     }
 
     void auth.signOut()
-      .then(() => {
-        setUser(null);
-        setDisplayName("User");
-      })
+      .then(() => undefined)
       .catch((error: unknown) => {
         console.error("Logout failed.", error);
       });
