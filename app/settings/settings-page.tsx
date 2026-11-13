@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import SiteChrome from "../site-chrome";
+import { normalizeProfileLink } from "../lib/profile-link";
 import "./settings.css";
 
 type Settings = {
   displayName: string;
   username: string;
   bio: string;
+  bioLink: string;
   avatar: string;
   customBadge: string;
   customBadges: string[];
@@ -149,6 +151,7 @@ const initialSettings: Settings = {
   displayName: "",
   username: "",
   bio: "",
+  bioLink: "",
   avatar: "",
   customBadge: "",
   customBadges: [],
@@ -188,6 +191,7 @@ export default function SettingsPage() {
             ...initialSettings,
             ...parsed,
             displayName: String(parsed.displayName || user.displayName || ""),
+            bioLink: String(parsed.bioLink || ""),
             avatar: String(parsed.avatar || user.photoURL || anonymousAvatar),
             customBadge: String(parsed.customBadge || parsed.customBadges?.[0] || ""),
             customBadges: normalizeBadges(parsed),
@@ -209,6 +213,7 @@ export default function SettingsPage() {
           displayName: String(data.displayName || user.displayName || ""),
           username: String(data.username || ""),
           bio: String(data.bio || ""),
+          bioLink: String(data.bioLink || ""),
           avatar: String(data.avatar || user.photoURL || anonymousAvatar),
           customBadge: String(data.customBadge || data.customBadges?.[0] || ""),
           customBadges: normalizeBadges(data),
@@ -323,6 +328,11 @@ export default function SettingsPage() {
   async function saveSettings(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!account || !window.firebase) return;
+    const bioLink = normalizeProfileLink(settings.bioLink);
+    if (settings.bioLink.trim() && !bioLink) {
+      setMessage("Enter a valid website URL.");
+      return;
+    }
     setSaving(true);
     setMessage("");
     const sanitizedUsername = settings.username.toLowerCase().replace(/[^a-z0-9._-]/g, "");
@@ -333,6 +343,7 @@ export default function SettingsPage() {
       displayName: settings.displayName.trim() || "Anonymous",
       username: sanitizedUsername,
       bio: settings.bio.trim(),
+      bioLink,
     };
     try {
       await window.firebase.firestore().collection("userStats").doc(account.uid).set(next, { merge: true });
@@ -356,7 +367,7 @@ export default function SettingsPage() {
   return (
     <>
       <SiteChrome showFooter={false} />
-      <main className="settings-page">
+      <main className="settings-page route-page-background">
         <section className="settings-panel">
           <header className="settings-header"><h1>⚙️ User Settings</h1><p>Customize your profile and comment appearance.</p></header>
           {status === "loading" && <p className="settings-state" role="status">Checking your account...</p>}
@@ -389,6 +400,12 @@ export default function SettingsPage() {
               <section className="settings-section">
                 <h2>Bio <span className="settings-muted">(max 160 characters)</span></h2>
                 <textarea value={settings.bio} maxLength={160} onChange={(event) => update("bio", event.target.value)} placeholder="Describe yourself..." />
+              </section>
+
+              <section className="settings-section">
+                <h2>Bio Link <span className="settings-muted">(optional)</span></h2>
+                <input type="text" inputMode="url" value={settings.bioLink} maxLength={2048} onChange={(event) => update("bioLink", event.target.value)} placeholder="https://example.com" />
+                <p className="settings-hint">Add a website or social profile link. Domains without a scheme use HTTPS.</p>
               </section>
 
               <section className="settings-section">

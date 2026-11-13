@@ -1,5 +1,4 @@
 .settings-page {
-  --us-bg: #f4f0fa;
   --us-surface: #fff;
   --us-surface-2: #f0eaf8;
   --us-border: rgba(124, 58, 237, .22);
@@ -17,13 +16,12 @@
   --us-danger-border: rgba(220, 50, 50, .28);
   min-height: calc(100vh - 50px);
   padding: 40px 28px 56px;
-  background: var(--us-bg);
+  background-color: transparent;
   color: var(--us-text);
   transition: background .25s ease, color .25s ease;
 }
 
 html.dark .settings-page {
-  --us-bg: #0b0b12;
   --us-surface: #151020;
   --us-surface-2: #1b1328;
   --us-border: rgba(180, 120, 255, .22);

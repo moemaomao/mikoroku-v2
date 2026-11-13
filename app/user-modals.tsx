@@ -6,6 +6,7 @@ import {
   deleteReadingHistoryEntry,
   upsertReadingHistoryEntry,
 } from "../lib/reading-history";
+import { normalizeProfileLink } from "./lib/profile-link";
 
 type DataRecord = Record<string, unknown>;
 type CompatTimestamp = {
@@ -88,6 +89,8 @@ type LegacyModalWindow = {
   showUserProfile?: (uid: string, leaderboardRank?: number) => Promise<void>;
   closeProfileModal?: () => void;
   openMikorokuDmInbox?: () => Promise<void>;
+  openMikorokuDmToUser?: (uid: string, name?: string, avatar?: string) => void;
+  openMikorokuNotifications?: () => void;
   loadDmInbox?: () => Promise<void>;
   openChat?: (uid: string) => Promise<void>;
   openDmToUser?: (uid: string, name?: string, avatar?: string) => void;
@@ -356,6 +359,7 @@ const modalStyles = `
 @media(prefers-reduced-motion:reduce){.profile-box.leaderboard-profile:before{animation:none}}
 .profile-close{position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;color:#aaa;cursor:pointer}
 .profile-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}.profile-avatar{width:80px;height:80px;border-radius:15px;border:3px solid #7c3aed;object-fit:cover}
+.profile-bio-link{display:block;width:fit-content;max-width:100%;margin-top:8px;color:#93c5fd;font-size:.82rem;line-height:1.35;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:2px}.profile-bio-link:hover{color:#bfdbfe}.profile-bio-link[hidden]{display:none}
 .profile-dm{width:100%;height:34px;background:transparent;color:#22c55e;border:1px solid #22c55e;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px}
 .profile-stats-link{display:block;width:100%;height:34px;box-sizing:border-box;margin-bottom:12px;border:1px solid #f472b6;border-radius:8px;color:#f9a8d4;font-size:12px;font-weight:600;line-height:32px;text-align:center;text-decoration:none;transition:background .2s,color .2s}.profile-stats-link:hover{background:rgba(244,114,182,.12);color:#fff}
 .profile-stats{background:#28283a;border-radius:12px;padding:14px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center}.profile-stat-label{color:#aaa;font-size:.75rem}.profile-badge-title{display:flex;align-items:center;gap:10px;margin:12px 0;color:#ddd;font-size:13px;font-weight:700}.profile-badge-title:after{content:"";flex:1;height:1px;background:rgba(255,255,255,.15)}
@@ -487,6 +491,8 @@ function initializeUserModals(): () => void {
     showUserProfile: legacy.showUserProfile,
     closeProfileModal: legacy.closeProfileModal,
     openMikorokuDmInbox: legacy.openMikorokuDmInbox,
+    openMikorokuDmToUser: legacy.openMikorokuDmToUser,
+    openMikorokuNotifications: legacy.openMikorokuNotifications,
     loadDmInbox: legacy.loadDmInbox,
     openChat: legacy.openChat,
     openDmToUser: legacy.openDmToUser,
@@ -501,6 +507,13 @@ function initializeUserModals(): () => void {
   const profileModal = createElement("div");
   profileModal.id = "user-profile-modal";
   profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><button type="button" class="profile-dm" data-profile-dm>Message</button><a class="profile-stats-link" data-profile-stats href="#">View Reading Stats</a><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
+  const bioLink = document.createElement("a");
+  bioLink.className = "profile-bio-link";
+  bioLink.dataset.profile = "bioLink";
+  bioLink.target = "_blank";
+  bioLink.rel = "noopener noreferrer";
+  bioLink.hidden = true;
+  profileModal.querySelector('[data-profile="bio"]')?.after(bioLink);
 
   const dmModal = createElement("div");
   dmModal.id = "mikoroku-dm-modal";
@@ -638,6 +651,12 @@ function initializeUserModals(): () => void {
     setText(profileField("displayName"), "Loading...");
     setText(profileField("username"), "");
     setText(profileField("bio"), "");
+    const bioLinkElement = profileField("bioLink") as HTMLAnchorElement | null;
+    if (bioLinkElement) {
+      bioLinkElement.hidden = true;
+      bioLinkElement.removeAttribute("href");
+      bioLinkElement.textContent = "";
+    }
     setText(profileField("joined"), "—");
     const badgeContainer = profileField("badges");
     const rolesContainer = profileField("roles");
@@ -655,6 +674,12 @@ function initializeUserModals(): () => void {
       setText(profileField("displayName"), displayName);
       setText(profileField("username"), data.username ? `@${String(data.username)}` : "");
       setText(profileField("bio"), stringValue(data.bio, "Belum ada bio."));
+      const safeBioLink = normalizeProfileLink(data.bioLink);
+      if (bioLinkElement && safeBioLink) {
+        bioLinkElement.href = safeBioLink;
+        bioLinkElement.textContent = safeBioLink;
+        bioLinkElement.hidden = false;
+      }
       const joinedAt = data.joinedAt || data.createdAt;
       let joined = "";
       if (joinedAt) {
@@ -1178,6 +1203,8 @@ function initializeUserModals(): () => void {
     showUserProfile: showProfile,
     closeProfileModal: closeProfile,
     openMikorokuDmInbox: loadInbox,
+    openMikorokuDmToUser: openDmToUser,
+    openMikorokuNotifications: loadNotifications,
     loadDmInbox: loadInbox,
     openChat,
     openDmToUser,
@@ -1197,6 +1224,8 @@ function initializeUserModals(): () => void {
       showUserProfile: showProfile,
       closeProfileModal: closeProfile,
       openMikorokuDmInbox: loadInbox,
+      openMikorokuDmToUser: openDmToUser,
+      openMikorokuNotifications: loadNotifications,
       loadDmInbox: loadInbox,
       openChat,
       openDmToUser,

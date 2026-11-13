@@ -862,178 +862,16 @@ function handleQuoteBtnClick(e) {
 }
 
     function showReplyNotifications() {
-      const overlay = document.getElementById('reply-notif-overlay');
-      const list = document.getElementById('reply-notif-list');
-
-      if (!overlay || !list) return;
-
-      list.innerHTML = '';
-
-      if (replyNotifications.length === 0) {
-        list.innerHTML = '<p style="text-align:center;color:#ccc;">No new replies</p>';
-      } else {
-        replyNotifications.forEach(function(notif, index) {
-          const author = notif.author || 'Unknown';
-          const text = notif.text || '[reply masih error]';
-          const timeStr = notif.date ? new Date(notif.date).toLocaleString() : 'Baru saja';
-          const snippet = text.substring(0, 100);
-          const ellipsis = text.length > 100 ? '...' : '';
-          const formattedSnippet = snippet.replace(
-              /@([a-zA-Z0-9._-]+)/g,
-             '<span class="notif-mention">@$1</span>'
-              );
-
-          const postLink = getNotificationPostUrl(notif);
-
-          const postTitle = notif.postTitle || notif.title || "Postingan";
-          const isMention = notif.notifType === 'mention';
-          const html =
-            '<div class="notif-item">' +
-              '<div>' +
-                (isMention 
-                  ? `<span class="author">${author}</span> mention kamu:` 
-                  : `<span class="author">${author}</span> membalas komentarmu:`) +
-              '</div>' +
-
-              '<div style="margin:8px 0 10px 0; font-size:0.95em; line-height:1.45;">' +
-                 formattedSnippet + ellipsis +
-              '</div>' +
-
-              '<div class="time" style="font-size:0.82em; color:#ccc;">' +
-                timeStr +
-              '</div>' +
-
-              `<a href="${postLink}" target="_blank" style="display:block; margin-top:12px; padding:13px 20px; background:linear-gradient(90deg,#7c5cf6,#a78bfa); color:white; border-radius:12px; text-decoration:none; font-weight:600; text-align:center;">` +
-                postTitle +
-              '</a>' +
-
-            '</div>';
-
-          const item = document.createElement('div');
-          item.innerHTML = html;
-          list.appendChild(item);
-        });
+      if (typeof window.openMikorokuNotifications !== 'function') {
+        console.error('The shared notifications modal is unavailable.');
+        return;
       }
-
-      overlay.style.display = 'flex';
+      window.openMikorokuNotifications();
     }
 
-    async function openUserSettings() {
-  window.loadCommentFeatureStyles?.('settings');
-  if (!currentUser) {
-    alert("Harap login terlebih dahulu!");
-    return;
-  }
-
-  const modal = document.getElementById('user-settings-modal');
-  if (!modal) {
-    console.error("user-settings-modal tidak ditemukan");
-    return;
-  }
-
-  modal.style.display = 'flex';
-
-  const toggle = document.getElementById('disable-animations-toggle');
-  if (toggle) {
-    const saved = localStorage.getItem('commentWidget_disableAnimations') === 'true';
-    toggle.checked = saved;
-    applyAnimationSetting(saved);
-  }
-
-  loadCurrentUserSettings();
-
-  const statsDoc = await db.collection('userStats').doc(currentUser.uid).get();
-  const stats = statsDoc.exists ? statsDoc.data() : (userStatsCache[currentUser.uid] || {});
-  userStatsCache[currentUser.uid] = { ...userStatsCache[currentUser.uid], ...stats };
-
-  // Badge
-  window.badgeSelectionLimit = getBadgeLimit(stats);
-  window.selectedBadges = getSelectedBadges(stats);
-  window.selectedBadge = window.selectedBadges[0] || "";
-  allBadgesExpanded = false;
-
-  renderBadges(false);
-  renderFontPicker();
-  renderBorderShapePicker();
-  
-  const expandBtn = document.getElementById('expand-badges-btn');
-  if (expandBtn) {
-    expandBtn.textContent = '↓ Expand All Badges';
-  }
-
-  document.querySelectorAll('.custom-badge-option').forEach(btn => {
-    btn.classList.toggle(
-      'active',
-      window.selectedBadges.includes(btn.dataset.badge)
-    );
-  });
-
-  // Border
-  selectedBorderClass = stats.customBorder || "";
-  renderBorderPicker();
-
-  // Frame
-  window.selectedFrame = stats.customAvatarFrame || "";
-  updateSettingsAvatarPreview();
-
-  // Display Name
-  const displayNameInput = document.getElementById('custom-displayname-input');
-  if (displayNameInput) {
-    displayNameInput.value =
-      stats.displayName ||
-      currentUser.displayName ||
-      "";
-  }
-
-  // Username
-  const usernameInput = document.getElementById('custom-username-input');
-  if (usernameInput) {
-    usernameInput.value = stats.username || "";
-  }
-
-  // BIO USER
-  const bioInput = document.getElementById('custom-bio-input');
-  if (bioInput) {
-    bioInput.value = stats.bio || "";
-  }
-
-  // Avatar Preview
-  const avatarPreview = document.getElementById('settings-avatar-preview');
-  if (avatarPreview) {
-    avatarPreview.src =
-      stats.avatar ||
-      currentUser.photoURL ||
-      ANONYMOUS_AVATAR;
-  }
-
-  // Background Preview
-  selectedCustomBg = stats.customCommentBg || "";
-
-  const bgPreview = document.getElementById('bg-preview');
-  const bgImg = document.getElementById('bg-preview-img');
-
-  if (bgPreview && bgImg) {
-    if (selectedCustomBg) {
-      bgImg.src = selectedCustomBg;
-      bgPreview.style.display = 'block';
-    } else {
-      bgPreview.style.display = 'none';
+    function openUserSettings() {
+      window.location.assign("/settings");
     }
-  }
-
-  // Level
-  const level = stats.commentCount
-    ? getCommentLevel(stats.commentCount)
-    : 1;
-
-  const transcendentSection =
-    document.getElementById('transcendent-bg-section');
-
-  if (transcendentSection) {
-    transcendentSection.style.display =
-      level >= 110 ? 'block' : 'none';
-  }
-}
 
 function initUserSettingsModal() {
 
@@ -1440,20 +1278,6 @@ if (typeof window.updateHeaderAuth === "function") {
 
 
 
-    function closeReplyNotifications() {
-      document.getElementById('reply-notif-overlay').style.display = 'none';
-      unreadReplies = 0;
-      replyNotifications = [];
-      updateReplyBadge();
-
-      if (currentUser) {
-        db.collection('notifications').doc(currentUser.uid).set({
-  replies: [],
-  mentions: []
-    }, { merge: true });
-      }
-    }
-
     async function addReplyNotification(parentComment, replyText) {
 
   if (!parentComment.uid) return;
@@ -1589,7 +1413,7 @@ async function addMentionNotifications(text) {
   }
 }
 
-    function loadUserNotifications() {
+    function subscribeToUserNotifications() {
   if (!currentUser) return;
   db.collection('notifications')
     .doc(currentUser.uid)
@@ -2815,7 +2639,7 @@ if (level >= 110) {
     avatarContainer.style.cursor = 'pointer';
     avatarContainer.onclick = (e) => {
       e.stopImmediatePropagation();
-      showUserProfile(comment.uid);
+      showCommentUserProfile(comment.uid);
     };
   }
 
@@ -4190,7 +4014,7 @@ if (user) {
   userStatsCache[user.uid] = doc.exists ? doc.data() : {};
   listenUserStats(user.uid);
   updateUI();
-  loadUserNotifications();
+  subscribeToUserNotifications();
   updateTranscendentGear();
   refreshDMBadgeOnce();
 
@@ -4440,11 +4264,6 @@ window.currentProfileUser = {
   avatar: data.avatar || ANONYMOUS_AVATAR
 };
       
-      const modal = document.getElementById('legacy-comment-profile-modal');
-      if (modal && modal.style.display !== 'none') {
-        showUserProfile(uid);
-      }
-
       document.querySelectorAll(`[data-uid="${uid}"]`).forEach(el => {
         const badgeEl = el.querySelector('.badge');
         if (badgeEl) {
@@ -5345,13 +5164,7 @@ function renderBorderShapePicker() {
   });
 }
 
-const originalOpenUserSettings = openUserSettings;
-openUserSettings = function() {
-  if (typeof originalOpenUserSettings === 'function') originalOpenUserSettings();
-  setTimeout(() => {
-    renderBorderShapePicker();
-  }, 100);
-};
+openUserSettings = () => window.location.assign("/settings");
 
 let selectedBorderClass = "";
 
@@ -6041,15 +5854,6 @@ function calculateLevel(commentCount = 0) {
 }
 
 
-const leaderboardProfileStyles = [
-  null,
-  { background: 'linear-gradient(145deg,#3b1f5b,#21152f)', accent: '139,92,246' },
-  { background: 'linear-gradient(145deg,#5b2027,#30161b)', accent: '244,63,94' },
-  { background: 'linear-gradient(145deg,#5b321c,#301d12)', accent: '249,115,22' },
-  { background: 'linear-gradient(145deg,#514816,#302c12)', accent: '234,179,8' },
-  { background: 'linear-gradient(145deg,#1e3a5f,#15283f)', accent: '59,130,246' },
-  { background: 'linear-gradient(145deg,#1d4b2b,#142b1d)', accent: '34,197,94' }
-];
 let cachedCommentLeaderboardTopUsers = null;
 let cachedCommentLeaderboardAt = 0;
 let commentLeaderboardRequest = null;
@@ -6088,390 +5892,19 @@ async function getCommentLeaderboardRank(uid) {
   return index >= 0 ? index + 1 : null;
 }
 
-function applyCommentLeaderboardProfileStyle(profileBox, leaderboardRank) {
-  const rankStyle = Number.isInteger(leaderboardRank)
-    ? leaderboardProfileStyles[leaderboardRank]
-    : null;
-  const statsBox = profileBox.querySelector('#modal-profile-stats');
-  profileBox.classList.remove(
-    'leaderboard-profile',
-    'leaderboard-rank-1',
-    'leaderboard-rank-2',
-    'leaderboard-rank-3',
-    'leaderboard-rank-4',
-    'leaderboard-rank-5',
-    'leaderboard-rank-6'
-  );
-  if (rankStyle) {
-    profileBox.classList.add('leaderboard-profile', `leaderboard-rank-${leaderboardRank}`);
-    profileBox.style.setProperty('--profile-rank-color', rankStyle.accent);
-  } else {
-    profileBox.style.removeProperty('--profile-rank-color');
-  }
-  profileBox.style.background = rankStyle?.background || '#1f1f2e';
-  profileBox.style.border = rankStyle
-    ? `1px solid rgba(${rankStyle.accent},.55)`
-    : '1px solid transparent';
-  profileBox.style.boxShadow = rankStyle
-    ? `0 0 28px rgba(${rankStyle.accent},.24)`
-    : 'none';
-  if (statsBox) {
-    statsBox.style.background = rankStyle
-      ? `linear-gradient(145deg,rgba(${rankStyle.accent},.24),rgba(${rankStyle.accent},.12))`
-      : '#28283a';
-    statsBox.style.border = rankStyle
-      ? `1px solid rgba(${rankStyle.accent},.35)`
-      : 'none';
-  }``
-}
-
-async function showUserProfile(uid, leaderboardRank) {
-  let modal = document.getElementById('legacy-comment-profile-modal');
-
-  if (!modal) {
-    console.log("Creating user profile modal...");
-    if (!document.getElementById('legacy-comment-profile-styles')) {
-      const style = document.createElement('style');
-      style.id = 'legacy-comment-profile-styles';
-      style.textContent = `
-        .legacy-comment-profile-box.leaderboard-profile {
-          isolation: isolate;
-        }
-        .legacy-comment-profile-box.leaderboard-profile::before {
-          position: absolute;
-          z-index: 0;
-          inset: 0;
-          border-radius: inherit;
-          background: linear-gradient(
-            115deg,
-            transparent 25%,
-            rgba(var(--profile-rank-color), .08) 38%,
-            rgba(var(--profile-rank-color), .42) 50%,
-            rgba(var(--profile-rank-color), .08) 62%,
-            transparent 75%
-          );
-          background-size: 250% 250%;
-          animation: leaderboard-profile-gradient 3.5s ease-in-out infinite alternate;
-          content: "";
-          pointer-events: none;
-        }
-        .legacy-comment-profile-box.leaderboard-profile > * {
-          position: relative;
-          z-index: 1;
-        }
-        .legacy-comment-profile-box.leaderboard-profile > button:first-child {
-          z-index: 2;
-        }
-        .legacy-comment-profile-box.leaderboard-rank-1 { --profile-rank-color: 139,92,246; }
-        .legacy-comment-profile-box.leaderboard-rank-2 { --profile-rank-color: 244,63,94; }
-        .legacy-comment-profile-box.leaderboard-rank-3 { --profile-rank-color: 249,115,22; }
-        .legacy-comment-profile-box.leaderboard-rank-4 { --profile-rank-color: 234,179,8; }
-        .legacy-comment-profile-box.leaderboard-rank-5 { --profile-rank-color: 59,130,246; }
-        .legacy-comment-profile-box.leaderboard-rank-6 { --profile-rank-color: 34,197,94; }
-        @keyframes leaderboard-profile-gradient {
-          from { background-position: 0% 50%; }
-          to { background-position: 100% 50%; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .legacy-comment-profile-box.leaderboard-profile::before { animation: none; }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    modal = document.createElement('div');
-    modal.id = 'legacy-comment-profile-modal';
-    modal.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.6); z-index: 99999; display: none;
-      align-items: center; justify-content: center; padding: 12px; box-sizing: border-box;
-    `;
-
-    modal.innerHTML = `
-      <div class="legacy-comment-profile-box" style="background:#1f1f2e; width:100%; max-width:380px; border-radius:14px; padding:18px; position:relative; color:white; box-shadow:none;">
-        <button onclick="closeProfileModal()" style="position:absolute; top:10px; right:14px; background:none; border:none; font-size:24px; color:#aaa; cursor:pointer;">×</button>
-
-        <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;">
-          <div style="display:flex; flex-direction:column; align-items:flex-start; flex-shrink:0;">
-            <img id="modal-avatar" src="" style="width:80px; height:80px; border-radius:15px; border:3px solid #7c3aed; object-fit:cover;">
-            <div style="margin-top:8px; font-size:0.78em; color:#aaa; text-align:left;">
-              <div style="color:#777;">Joined</div>
-              <div id="modal-joined" style="color:#60a5fa; font-weight:600;">—</div>
-            </div>
-          </div>
-
-          <div style="flex:1; min-width:0;">
-            <h2 id="modal-displayname" style="margin:0; font-size:1.15rem; font-weight:700; line-height:1.3; word-break:break-word;">Loading all...</h2>
-            <p id="modal-username" style="margin:4px 0; color:#aaa; font-size:0.85rem;"></p>
-            <p id="modal-bio" style="margin:6px 0 0; color:#ccc; font-size:0.85rem; line-height:1.4; word-break:break-word;"></p>
-          </div>
-        </div>
-
-         <button
-  id="profile-dm-btn"
-  style="
-    width:100%;
-    height:34px;
-    background:transparent;
-    color:#22c55e;
-    border:1px solid #22c55e;
-    border-radius:8px;
-    font-size:12px;
-    font-weight:600;
-    cursor:pointer;
-    margin-bottom:12px;
-  "
->
-  Message
-</button>
-
-        <div id="modal-profile-stats" style="background:#28283a; border-radius:12px; padding:14px; margin-bottom:14px;">
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:center;">
-            <div><div style="color:#aaa;font-size:.75rem;">Level</div><div id="modal-level" style="color:#ffd700;font-weight:700;margin-top:4px;"></div></div>
-            <div><div style="color:#aaa;font-size:.75rem;">Points</div><div id="modal-points" style="color:#ffd700;font-weight:700;margin-top:4px;"></div></div>
-            <div><div style="color:#aaa;font-size:.75rem;">Comments</div><div id="modal-commentcount" style="margin-top:4px;"></div></div>
-            <div><div style="color:#aaa;font-size:.75rem;">Reputation</div><div id="modal-reputation" style="font-weight:700;margin-top:4px;"></div></div>
-          </div>
-        </div>
-
-
-        <div style="
-  width:100%;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin-bottom:12px;
-  color:#ddd;
-  font-size:13px;
-  font-weight:700;
-">
-  <span>Badge Collection</span>
-  <div style="
-    flex:1;
-    height:1px;
-    background:rgba(255,255,255,.15);
-  "></div>
-</div>
-
-<div id="modal-badge" style="text-align:center; min-height:32px;"></div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  }
-
-  if (modal.parentElement !== document.body) {
-    document.body.appendChild(modal);
-  }
-
-  const profileBox = modal.firstElementChild;
-  const hasLeaderboardRank = Number.isInteger(leaderboardRank) &&
-    leaderboardRank >= 1 && leaderboardRank <= 6;
-  if (profileBox) applyCommentLeaderboardProfileStyle(profileBox, hasLeaderboardRank ? leaderboardRank : null);
-
-  // Reset
-  modal.querySelector('#modal-avatar').src = ANONYMOUS_AVATAR || '';
-  modal.querySelector('#modal-displayname').textContent = 'Memuat profil...';
-  modal.querySelector('#modal-username').textContent = '';
-  modal.querySelector('#modal-bio').textContent = '';
-  modal.querySelector('#modal-joined').textContent = '—';
-  modal.style.setProperty('display', 'flex', 'important');
-
-  try {
-    const doc = await db.collection('userStats').doc(uid).get();
-    const data = doc.exists ? doc.data() : {};
-
-    if (!hasLeaderboardRank && profileBox) {
-      try {
-        const rank = await getCommentLeaderboardRank(uid);
-        applyCommentLeaderboardProfileStyle(profileBox, rank);
-      } catch (error) {
-        console.warn('Gagal memuat peringkat user untuk warna profil.', error);
-      }
-    }
-    
-    const dmBtn = modal.querySelector('#profile-dm-btn');
-
-if (dmBtn) {
-  dmBtn.onclick = () => {
-    openDmToUser(
-      uid,
-      data.displayName || 'Anonymous',
-      data.avatar || ANONYMOUS_AVATAR
-    );
-  };
-}
-    
-console.log("UID:", uid);
-console.log("DATA:", data);
-console.log("joinedAt:", data.joinedAt);
-console.log("createdAt:", data.createdAt);
-
-    modal.querySelector('#modal-avatar').src = data.avatar || ANONYMOUS_AVATAR;
-    modal.querySelector('#modal-displayname').textContent = data.displayName || 'Anonymous';
-    modal.querySelector('#modal-username').textContent = data.username ? '@' + data.username : '';
-    modal.querySelector('#modal-bio').textContent = data.bio || 'Belum ada bio.';
-
-    // ==================== JOINED DATE FIXED ====================
-const joinedEl = modal.querySelector('#modal-joined');
-let joinedDate = '—';
-
-const getJoinedDate = (timestamp) => {
-  if (!timestamp) return '—';
-  
-  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-  
-  return date.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-};
-
-if (data.joinedAt) {
-  joinedDate = getJoinedDate(data.joinedAt);
-} else if (data.createdAt) {
-  joinedDate = getJoinedDate(data.createdAt);
-} else if (uid === currentUser?.uid && currentUser.metadata?.creationTime) {
-  joinedDate = new Date(currentUser.metadata.creationTime).toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
-
-    if (joinedEl) joinedEl.textContent = joinedDate;
-    // ==================== END FIX ====================
-
-    const level = calculateLevel(data.commentCount || 0);
-    modal.querySelector('#modal-level').textContent = `Lv. ${level}`;
-
-    modal.querySelector('#modal-points').textContent = `${(data.points || 0).toLocaleString()} pts`;
-    modal.querySelector('#modal-commentcount').textContent = (data.commentCount || 0).toLocaleString();
-
-    const reputation = data.reputation || 0;
-    const repEl = modal.querySelector('#modal-reputation');
-    repEl.textContent = reputation >= 0 ? `+${reputation.toLocaleString()}` : reputation.toLocaleString();
-    repEl.style.color = reputation > 0 ? '#4ade80' : reputation < 0 ? '#ef4444' : '#aaa';
-
-    // Badge
-    const badgeDiv = modal.querySelector('#modal-badge');
-    badgeDiv.innerHTML = '';
-    getSelectedBadges(data).forEach(badgeId => {
-      const badge = BADGES.find(b => b.id === badgeId);
-      if (badge) {
-        const el = document.createElement('span');
-        el.className = `user-custom-badge ${badge.id}`;
-        el.style.cssText = badge.style || '';
-        el.textContent = badge.text;
-        badgeDiv.appendChild(el);
-      }
-    });
-
-        // ==================== GAME ROLES DISPLAY ====================
-    let existingRoles = modal.querySelector('#modal-game-roles');
-    if (existingRoles) existingRoles.remove();
-
-    const rolesDiv = document.createElement('div');
-    rolesDiv.id = 'modal-game-roles';
-    rolesDiv.style.cssText = `
-  margin-top:14px;
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:center;
-  align-items:center;
-  gap:6px;
-`;
-
-    if (data.gameRoles && Array.isArray(data.gameRoles) && data.gameRoles.length > 0) {
-
-  const title = document.createElement('div');
-  title.style.cssText = `
-  width:100%;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin:0 0 12px 0;
-  color:#fff;
-  font-size:13px;
-  font-weight:700;
-  letter-spacing:.5px;
-`;
-
-  title.innerHTML = `
-    <span>Game Roles</span>
-    <div style="
-      flex:1;
-      height:1px;
-      background:rgba(255,255,255,.15);
-    "></div>
-  `;
-
-  rolesDiv.appendChild(title);
-
-  data.gameRoles.forEach(rId => {
-    const role = GAME_ROLES.find(r => r.id === rId);
-
-    if (role) {
-      const badge = document.createElement('span');
-
-      badge.style.cssText = `
-  padding:3px 8px;
-  border-radius:8px;
-  background:rgba(255,255,255,.06);
-  color:${role.color};
-  font-size:.72em;
-  font-weight:600;
-  border:1px solid rgba(255,255,255,.08);
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
-`;
-
-      badge.innerHTML = `${role.icon} ${role.name}`;
-      rolesDiv.appendChild(badge);
-    }
-  });
-}
-
-    const badgeContainer = modal.querySelector('#modal-badge');
-    if (badgeContainer && badgeContainer.parentNode) {
-      badgeContainer.parentNode.appendChild(rolesDiv);
-    }
-
-    modal.style.display = 'flex';
-
-  } catch (e) {
-    console.error('Error loading profile:', e);
-    modal.querySelector('#modal-displayname').textContent = 'Profil tidak tersedia';
-    modal.querySelector('#modal-bio').textContent = 'Gagal memuat data profil. Coba lagi nanti.';
-  }
-}
-
-async function addUserPoints(uid, amount) {
+async function showCommentUserProfile(uid, leaderboardRank) {
   if (!uid) return;
-
-  const ref =
-    db.collection('userStats').doc(uid);
-
-  await ref.set({
-    points: firebase.firestore.FieldValue.increment(amount)
-  }, { merge: true });
-
-  if (userStatsCache[uid]) {
-    userStatsCache[uid].points =
-      (userStatsCache[uid].points || 0) +
-      amount;
+  const showProfile = window.showUserProfile;
+  if (typeof showProfile !== 'function') {
+    console.error('The shared user profile modal is unavailable.');
+    return;
+  }
+  try {
+    await showProfile(uid, leaderboardRank);
+  } catch (error) {
+    console.error('Could not open the shared user profile modal.', error);
   }
 }
-
-function closeProfileModal() {
-  const modal =
-    document.getElementById('legacy-comment-profile-modal');
-
-  if (modal) {
-    modal.style.setProperty('display', 'none', 'important');
-  }
-}
-
 // ==================== CLICK AVATAR TOP BAR PROFILE ====================
 function setupUserAvatarClick() {
   const userInfo = document.getElementById('user-info');
@@ -6487,7 +5920,7 @@ function setupUserAvatarClick() {
     }
 
     if (currentUser && currentUser.uid) {
-      showUserProfile(currentUser.uid);
+      showCommentUserProfile(currentUser.uid);
     } else {
       alert("Silakan login terlebih dahulu untuk melihat profil.");
     }
@@ -6500,7 +5933,7 @@ function setupUserAvatarClick() {
     avatar.onclick = (e) => {
       e.stopImmediatePropagation();
       if (currentUser && currentUser.uid) {
-        showUserProfile(currentUser.uid);
+        showCommentUserProfile(currentUser.uid);
       } else {
         alert("Silakan login terlebih dahulu untuk melihat profil.");
       }
@@ -7288,22 +6721,13 @@ function backToInbox() {
 }
 
 
-window.openDmToUser = async function(uid, displayName, avatar) {
-  if (!uid || !currentUser) return;
-
-  window.loadCommentFeatureStyles?.('dm');
-  await updateDMMyAvatar();
-
-  window.dmUserCache[uid] = {
-    displayName: displayName || "User",
-    avatar: avatar || ANONYMOUS_AVATAR
-  };
-
-  closeProfileModal();
-
-  const dmModal = document.getElementById('dm-modal');
-  if (dmModal) dmModal.style.display = 'flex';
-  openChat(uid);
+window.openDmToUser = function(uid, displayName, avatar) {
+  if (!uid) return;
+  if (typeof window.openMikorokuDmToUser !== 'function') {
+    console.error('The shared direct message modal is unavailable.');
+    return;
+  }
+  window.openMikorokuDmToUser(uid, displayName, avatar);
 };
 
 function initDMButtons() {
