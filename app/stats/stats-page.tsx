@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import "./stats-animations.css";
 import {
   loadPublicReadingStats,
   type CommentHistoryItem,
   type PublicReadingStats,
   type ReadingProgressItem,
 } from "../../lib/reading-stats";
+import {
+  getCachedReadingStats,
+  setCachedReadingStats,
+  getUnlockedMedals,
+  setUnlockedMedals,
+} from "../lib/reading-stats-cache";
 import SiteChrome from "../site-chrome";
 import { CoverImage } from "../lib/cover-image";
 import { isNsfwManga } from "../lib/nsfw";
 
-type MedalSymbol = "spark" | "book" | "flame" | "crown" | "laurel" | "comet" | "gem";
+type MedalSymbol = "spark" | "book" | "flame" | "crown" | "laurel" | "comet" | "gem" | "infinity";
 
 type ProfileBannerUser = { uid: string } | null;
 type ProfileBannerFirebase = {
@@ -38,16 +45,96 @@ const readingMedals: Array<{
   name: string;
   description: string;
   color: string;
+  gradient: string;
   symbol: MedalSymbol;
+  unlockMessage: string;
 }> = [
-  { chapters: 10, name: "First Spark", description: "Started the reading journey", color: "#b7791f", symbol: "spark" },
-  { chapters: 25, name: "Page Scout", description: "Explored the first stories", color: "#64748b", symbol: "book" },
-  { chapters: 50, name: "Story Seeker", description: "Kept turning the pages", color: "#c2410c", symbol: "flame" },
-  { chapters: 100, name: "Chapter Champion", description: "Reached a century of chapters", color: "#2563eb", symbol: "crown" },
-  { chapters: 250, name: "Lore Keeper", description: "Collected stories across series", color: "#7c3aed", symbol: "laurel" },
-  { chapters: 500, name: "Story Sage", description: "A seasoned reader", color: "#c026d3", symbol: "comet" },
-  { chapters: 1000, name: "Eternal Reader", description: "Master of a thousand chapters", color: "#d97706", symbol: "gem" },
+  {
+    chapters: 10,
+    name: "First Spark",
+    description: "Started the reading journey",
+    color: "#b7791f",
+    gradient: "linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #f59e0b 100%)",
+    symbol: "spark",
+    unlockMessage: "The journey begins. Keep turning those pages!",
+  },
+  {
+    chapters: 25,
+    name: "Page Scout",
+    description: "Explored the first stories",
+    color: "#64748b",
+    gradient: "linear-gradient(135deg, #e2e8f0 0%, #94a3b8 45%, #64748b 100%)",
+    symbol: "book",
+    unlockMessage: "You're officially exploring the library.",
+  },
+  {
+    chapters: 50,
+    name: "Story Seeker",
+    description: "Kept turning the pages",
+    color: "#c2410c",
+    gradient: "linear-gradient(135deg, #ffedd5 0%, #fdba74 40%, #ea580c 100%)",
+    symbol: "flame",
+    unlockMessage: "Stories are calling. You're answering.",
+  },
+  {
+    chapters: 100,
+    name: "Chapter Champion",
+    description: "Reached a century of chapters",
+    color: "#2563eb",
+    gradient: "linear-gradient(135deg, #dbeafe 0%, #60a5fa 40%, #2563eb 100%)",
+    symbol: "crown",
+    unlockMessage: "100 chapters! True champion energy.",
+  },
+  {
+    chapters: 250,
+    name: "Lore Keeper",
+    description: "Collected stories across series",
+    color: "#7c3aed",
+    gradient: "linear-gradient(135deg, #ede9fe 0%, #a78bfa 40%, #7c3aed 100%)",
+    symbol: "laurel",
+    unlockMessage: "Lore is safe with you. Keep collecting.",
+  },
+  {
+    chapters: 500,
+    name: "Story Sage",
+    description: "A seasoned reader",
+    color: "#c026d3",
+    gradient: "linear-gradient(135deg, #fae8ff 0%, #e879f9 35%, #c026d3 70%, #86198f 100%)",
+    symbol: "comet",
+    unlockMessage: "Seasoned. Wise. Still hungry for more.",
+  },
+  {
+    chapters: 1000,
+    name: "Eternal Reader",
+    description: "Master of a thousand chapters",
+    color: "#d97706",
+    gradient: "linear-gradient(135deg, #fef3c7 0%, #fbbf24 30%, #f59e0b 55%, #ea580c 80%, #c2410c 100%)",
+    symbol: "gem",
+    unlockMessage: "A thousand chapters. You are legend.",
+  },
+  {
+    chapters: 1500,
+    name: "Infinity Archive",
+    description: "Beyond the final page",
+    color: "#06b6d4",
+    gradient: "linear-gradient(135deg, #a5f3fc 0%, #22d3ee 20%, #a78bfa 45%, #f472b6 70%, #fbbf24 100%)",
+    symbol: "infinity",
+    unlockMessage: "1500 chapters. The archive has no end — and neither do you.",
+  },
 ];
+
+async function detectNewMedalUnlocks(totalChaptersRead: number) {
+  const previously = new Set(await getUnlockedMedals());
+  const newly = readingMedals.filter(
+    (medal) => totalChaptersRead >= medal.chapters && !previously.has(medal.chapters),
+  );
+  if (newly.length > 0) {
+    await setUnlockedMedals(
+      readingMedals.filter((m) => totalChaptersRead >= m.chapters).map((m) => m.chapters),
+    );
+  }
+  return newly;
+}
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -260,7 +347,124 @@ function MedalLogo({ symbol, color, locked = false }: {
       {symbol === "gem" && (
         <path d="m15 17 5-4h8l5 4-9 19-9-19Zm0 0h18m-13-4 4 23m8-23-4 23m-9-19 9 19 9-19" fill="none" stroke="white" strokeLinejoin="round" strokeWidth="1.8" />
       )}
+      {symbol === "infinity" && (
+        <path
+          d="M12 24c0-4 3.2-7 7-7 2.6 0 4.6 1.3 6 3.2C26.4 18.3 28.4 17 31 17c3.8 0 7 3 7 7s-3.2 7-7 7c-2.6 0-4.6-1.3-6-3.2C23.6 29.7 21.6 31 19 31c-3.8 0-7-3-7-7Zm7-4.5c-2.4 0-4.2 1.9-4.2 4.5s1.8 4.5 4.2 4.5c1.6 0 2.9-.8 3.9-2.3l.6-.9.6.9c1 1.5 2.3 2.3 3.9 2.3 2.4 0 4.2-1.9 4.2-4.5s-1.8-4.5-4.2-4.5c-1.6 0-2.9.8-3.9 2.3l-.6.9-.6-.9c-1-1.5-2.3-2.3-3.9-2.3Z"
+          fill="white"
+        />
+      )}
     </svg>
+  );
+}
+function MedalUnlockModal({
+  medal,
+  onClose,
+}: {
+  medal: (typeof readingMedals)[number];
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [entered, setEntered] = useState(false);
+  const medalThemeStyle: CSSProperties & { "--stats-medal-color": string } = {
+    "--stats-medal-color": medal.color,
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    dialogRef.current?.focus();
+    // entrance animation
+    const t = window.setTimeout(() => setEntered(true), 20);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.clearTimeout(t);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="medal-unlock-title"
+    >
+      <div
+        className="stats-medal-backdrop absolute inset-0 transition-opacity duration-300"
+        style={{ ...medalThemeStyle, opacity: entered ? 1 : 0 }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="stats-gradient-card stats-medal-modal relative z-10 w-full max-w-sm overflow-hidden rounded-3xl border border-black/10 shadow-2xl outline-none transition-opacity duration-300 dark:border-white/15"
+        style={{
+          ...medalThemeStyle,
+          boxShadow: `0 0 0 1px ${medal.color}44, 0 0 80px ${medal.color}33, 0 25px 50px -12px rgba(0,0,0,.35)`,
+          opacity: entered ? 1 : 0,
+        }}
+      >
+        <div
+          className="relative aspect-[5/4] w-full overflow-hidden"
+          style={medalThemeStyle}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="stats-gradient-card relative rounded-full p-2"
+              style={{
+                ...medalThemeStyle,
+                background: `linear-gradient(145deg, ${medal.color}aa, ${medal.color}44)`,
+                boxShadow: `0 0 40px ${medal.color}88, 0 8px 24px rgba(0,0,0,.35)`,
+              }}
+            >
+                <div className="rounded-full bg-white/90 p-2 dark:bg-[#12121a]/90">
+                  <MedalLogo symbol={medal.symbol} color={medal.color} />
+                </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Content */}
+        <div className="relative px-6 pb-6 pt-1 text-center">
+          <p
+            className="text-[11px] font-bold uppercase tracking-[0.22em]"
+            style={{ color: medal.color }}
+          >
+            Medal Unlocked
+          </p>
+          <h2
+            id="medal-unlock-title"
+            className="mt-2 text-2xl font-bold text-slate-900 dark:text-white"
+            style={{ textShadow: `0 0 28px ${medal.color}66` }}
+          >
+            {medal.name}
+          </h2>
+          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-zinc-400">
+            {medal.chapters.toLocaleString()} chapters
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-zinc-300">
+            {medal.unlockMessage}
+          </p>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-6 w-full rounded-xl px-4 py-3 text-sm font-bold text-white transition hover:brightness-110 active:scale-[0.98]"
+            style={{
+              background: `linear-gradient(135deg, ${medal.color}, ${medal.color}cc)`,
+              boxShadow: `0 8px 24px ${medal.color}44`,
+            }}
+          >
+            Nice!
+          </button>
+        </div>
+      </div>
+
+    </div>
   );
 }
 
@@ -274,61 +478,110 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
     ? Math.max(0, Math.min(100, ((totalChaptersRead - previousMilestone) / (nextMedal.chapters - previousMilestone)) * 100))
     : 100;
 
+  const [queue, setQueue] = useState<Array<(typeof readingMedals)[number]>>([]);
+  const [current, setCurrent] = useState<(typeof readingMedals)[number] | null>(null);
+
+  useEffect(() => {
+    if (totalChaptersRead <= 0) return;
+    let cancelled = false;
+    void (async () => {
+      const newly = await detectNewMedalUnlocks(totalChaptersRead);
+      if (cancelled || newly.length === 0) return;
+      const sorted = [...newly].sort((a, b) => b.chapters - a.chapters);
+      setQueue((prev) => [...prev, ...sorted]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [totalChaptersRead]);
+
+  useEffect(() => {
+    if (current || queue.length === 0) return;
+    const [next, ...rest] = queue;
+    setCurrent(next);
+    setQueue(rest);
+  }, [current, queue]);
+
   return (
-    <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading Medals</h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-            {totalChaptersRead.toLocaleString()} chapters read across manga and novels
-          </p>
-        </div>
-        <span className="text-xs font-semibold text-slate-600 dark:text-zinc-400">
-          {unlockedCount} / {readingMedals.length} unlocked
-        </span>
-      </div>
-      {nextMedal ? (
-        <div className="mt-4">
-          <div className="mb-1.5 flex justify-between gap-3 text-xs text-slate-600 dark:text-zinc-400">
-            <span>Next: {nextMedal.name}</span>
-            <span>{Math.max(0, nextMedal.chapters - totalChaptersRead).toLocaleString()} to go</span>
+    <>
+      <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading Medals</h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
+              {totalChaptersRead.toLocaleString()} chapters read across manga and novels
+            </p>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
-            <div
-              className="h-full rounded-full transition-[width]"
-              style={{ width: `${progressToNext}%`, backgroundColor: "var(--mikoroku-accent)" }}
-            />
-          </div>
+          <span className="text-xs font-semibold text-slate-600 dark:text-zinc-400">
+            {unlockedCount} / {readingMedals.length} unlocked
+          </span>
         </div>
-      ) : (
-        <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All reading medals earned!</p>
-      )}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {readingMedals.map((medal) => {
-          const unlocked = totalChaptersRead >= medal.chapters;
-          return (
-            <article
-              key={medal.chapters}
-              className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3 ${
-                unlocked
-                  ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)]"
-                  : "border-black/10 bg-slate-50/70 dark:border-white/10 dark:bg-black/10"
-              }`}
-              aria-label={`${medal.name}, ${medal.chapters} chapters, ${unlocked ? "unlocked" : "locked"}`}
-            >
-              <MedalLogo symbol={medal.symbol} color={medal.color} locked={!unlocked} />
-              <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{medal.name}</p>
-                <p className="mt-0.5 text-[10px] text-slate-600 dark:text-zinc-400">{medal.chapters.toLocaleString()} chapters</p>
-                <p className={`mt-1 text-[10px] font-semibold ${unlocked ? "text-[var(--mikoroku-accent)]" : "text-slate-500 dark:text-zinc-500"}`}>
-                  {unlocked ? "Unlocked" : medal.description}
-                </p>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
+        {nextMedal ? (
+          <div className="mt-4">
+            <div className="mb-1.5 flex justify-between gap-3 text-xs text-slate-600 dark:text-zinc-400">
+              <span>Next: {nextMedal.name}</span>
+              <span>{Math.max(0, nextMedal.chapters - totalChaptersRead).toLocaleString()} to go</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+              <div
+                className="h-full rounded-full transition-[width]"
+                style={{ width: `${progressToNext}%`, backgroundColor: "var(--mikoroku-accent)" }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All reading medals earned!</p>
+        )}
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {readingMedals.map((medal) => {
+            const unlocked = totalChaptersRead >= medal.chapters;
+            const medalTileStyle: CSSProperties & { "--stats-medal-color": string } = {
+              "--stats-medal-color": medal.color,
+              background: medal.gradient,
+            };
+            return (
+              <article
+                key={medal.chapters}
+                role={unlocked ? "button" : undefined}
+                tabIndex={unlocked ? 0 : undefined}
+                onClick={() => {
+                  if (unlocked) setCurrent(medal);
+                }}
+                onKeyDown={(event) => {
+                  if (!unlocked) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setCurrent(medal);
+                  }
+                }}
+                className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition ${
+                  unlocked
+                    ? "stats-gradient-card cursor-pointer border-black/10 shadow-md hover:brightness-105 hover:shadow-lg active:scale-[0.98] dark:border-white/15"
+                    : "border-black/10 bg-slate-100/80 dark:border-white/10 dark:bg-black/20"
+                }`}
+                style={unlocked ? medalTileStyle : undefined}
+                aria-label={`${medal.name}, ${medal.chapters} chapters, ${unlocked ? "unlocked, click to view celebration" : "locked"}`}
+                title={unlocked ? "Click to view celebration" : undefined}
+              >
+                <MedalLogo symbol={medal.symbol} color={medal.color} locked={!unlocked} />
+                <div className="min-w-0">
+                  <p className={`truncate text-xs font-bold ${unlocked ? "text-slate-900 drop-shadow-sm" : "text-slate-900 dark:text-white"}`}>
+                    {medal.name}
+                  </p>
+                  <p className={`mt-0.5 text-[10px] ${unlocked ? "text-slate-800/80" : "text-slate-600 dark:text-zinc-400"}`}>
+                    {medal.chapters.toLocaleString()} chapters
+                  </p>
+                  <p className={`mt-1 text-[10px] font-semibold ${unlocked ? "text-slate-900/90" : "text-slate-500 dark:text-zinc-500"}`}>
+                    {unlocked ? "Unlocked · view" : medal.description}
+                  </p>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+      {current && <MedalUnlockModal medal={current} onClose={() => setCurrent(null)} />}
+    </>
   );
 }
 
@@ -523,18 +776,42 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     let active = true;
     setVisibleProgressCount(10);
     setError("");
-    setStats(null);
-    const loadStats = () => loadPublicReadingStats(uid).then((result) => {
-      if (active) setStats(result);
-    }).catch((loadError: unknown) => {
-      console.error("Public reading stats could not be loaded.", loadError);
-      if (active) {
-        setError(loadError instanceof Error
-          ? loadError.message
-          : "Reading stats could not be loaded.");
+
+    const applyFresh = async (forceNetwork = false) => {
+      try {
+        const result = await loadPublicReadingStats(uid);
+        if (!active) return;
+        setStats(result);
+        setError("");
+        void setCachedReadingStats(uid, result);
+      } catch (loadError: unknown) {
+        console.error("Public reading stats could not be loaded.", loadError);
+        if (!active) return;
+        // Keep showing cache if we already have it; only surface error when empty
+        setStats((current) => {
+          if (current) return current;
+          setError(loadError instanceof Error
+            ? loadError.message
+            : "Reading stats could not be loaded.");
+          return current;
+        });
       }
-    });
-    const onStatsUpdated = () => { void loadStats(); };
+    };
+
+    const loadStats = async () => {
+      // 1) paint from IndexedDB immediately
+      const cached = await getCachedReadingStats(uid);
+      if (!active) return;
+      if (cached?.data) {
+        setStats(cached.data);
+      } else {
+        setStats(null);
+      }
+      // 2) always revalidate from network
+      await applyFresh();
+    };
+
+    const onStatsUpdated = () => { void applyFresh(true); };
     void loadStats();
     window.addEventListener("mikoroku:reading-stats-updated", onStatsUpdated);
     return () => {
@@ -794,7 +1071,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
           {!stats && !error && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading reader stats">
               {Array.from({ length: 7 }, (_, index) => (
-                <div key={index} className="h-28 animate-pulse rounded-2xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-white/[0.04]" />
+                <div key={index} className="h-28 rounded-2xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-white/[0.04]" />
               ))}
             </div>
           )}
