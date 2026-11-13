@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getApps, initializeApp } from "firebase/app";
-import { collection, getDocs, getFirestore, limit, orderBy, query, startAfter, type QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, collectionGroup, getDocs, getFirestore, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot } from "firebase/firestore";
 import SiteChrome from "../site-chrome";
 
 type LeaderboardUser = {
@@ -41,6 +41,9 @@ type LeaderboardCache = {
   updatedAt: number;
 };
 
+const commentAvatarCache = new Map<string, string>();
+const pendingCommentAvatarRequests = new Map<string, Promise<string>>();
+
 function stringValue(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -53,15 +56,125 @@ function displayName(user: LeaderboardUser): string {
   return user.name || user.username || "Anonymous";
 }
 
+function timestampValue(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (!value || typeof value !== "object") return 0;
+  const timestamp = value as { toMillis?: () => number; seconds?: number };
+  if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
+  return typeof timestamp.seconds === "number" ? timestamp.seconds * 1000 : 0;
+}
+
+function isDefaultAvatar(avatar: string): boolean {
+  if (!avatar) return true;
+  try {
+    return new URL(avatar, window.location.origin).pathname === defaultAvatar;
+  } catch {
+    return avatar === defaultAvatar;
+  }
+}
+
+function loadCommentAvatar(uid: string): Promise<string> {
+  const cachedAvatar = commentAvatarCache.get(uid);
+  if (cachedAvatar) return Promise.resolve(cachedAvatar);
+  const pendingRequest = pendingCommentAvatarRequests.get(uid);
+  if (pendingRequest) return pendingRequest;
+
+  let request: Promise<string>;
+  try {
+    request = getDocs(query(
+      collectionGroup(getCommentFirestore(), "postComments"),
+      where("uid", "==", uid),
+      limit(20),
+    ))
+      .then((snapshot) => {
+        let avatar = "";
+        let latestTimestamp = -1;
+        snapshot.forEach((comment) => {
+          const data = comment.data();
+          const candidate = stringValue(data.avatar);
+          const timestamp = timestampValue(data.date);
+          if (candidate && !isDefaultAvatar(candidate) && timestamp >= latestTimestamp) {
+            avatar = candidate;
+            latestTimestamp = timestamp;
+          }
+        });
+        if (avatar) commentAvatarCache.set(uid, avatar);
+        return avatar;
+      });
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  pendingCommentAvatarRequests.set(uid, request);
+  const clearPending = () => {
+    if (pendingCommentAvatarRequests.get(uid) === request) {
+      pendingCommentAvatarRequests.delete(uid);
+    }
+  };
+  void request.then(clearPending, clearPending);
+  return request;
+}
+
+function cacheUserAvatar(uid: string, avatar: string): void {
+  window.userStatsCache ||= {};
+  window.userStatsCache[uid] = {
+    ...window.userStatsCache[uid],
+    avatar,
+  };
+}
+
+function updateOpenProfileAvatar(uid: string, avatar: string): void {
+  const modal = document.getElementById("user-profile-modal");
+  if (modal?.dataset.profileUid !== uid) return;
+  const image = modal.querySelector<HTMLImageElement>('[data-profile="avatar"]');
+  if (image) image.src = avatar;
+}
+
 function openRankedProfile(user: LeaderboardUser, rank: number): void {
   if (user.avatar) {
-    window.userStatsCache ||= {};
-    window.userStatsCache[user.uid] = {
-      ...window.userStatsCache[user.uid],
-      avatar: user.avatar,
-    };
+    cacheUserAvatar(user.uid, user.avatar);
   }
-  window.showUserProfile?.(user.uid, rank, user.avatar);
+  const avatar = isDefaultAvatar(user.avatar) ? undefined : user.avatar;
+  window.showUserProfile?.(user.uid, rank, avatar);
+  if (avatar) return;
+
+  void loadCommentAvatar(user.uid)
+    .then((commentAvatar) => {
+      if (!commentAvatar) return;
+      cacheUserAvatar(user.uid, commentAvatar);
+      updateOpenProfileAvatar(user.uid, commentAvatar);
+    })
+    .catch((error) => {
+      console.warn("Could not load the user's comment avatar for the leaderboard profile.", error);
+    });
+}
+
+function handleAvatarError(image: HTMLImageElement): void {
+  if (image.dataset.fallbackApplied) return;
+  image.dataset.fallbackApplied = "true";
+  image.src = defaultAvatar;
+}
+
+function handleRankedAvatarError(user: LeaderboardUser, image: HTMLImageElement): void {
+  if (image.dataset.commentAvatarLookupAttempted) {
+    handleAvatarError(image);
+    return;
+  }
+  image.dataset.commentAvatarLookupAttempted = "true";
+
+  void loadCommentAvatar(user.uid)
+    .then((avatar) => {
+      if (!avatar || avatar === user.avatar) {
+        handleAvatarError(image);
+        return;
+      }
+      cacheUserAvatar(user.uid, avatar);
+      updateOpenProfileAvatar(user.uid, avatar);
+      image.src = optimizedAvatarUrl(avatar, 64);
+    })
+    .catch((error) => {
+      console.warn("Could not load a replacement leaderboard avatar.", error);
+      handleAvatarError(image);
+    });
 }
 
 function commentLevel(commentCount: number): number {
@@ -75,9 +188,7 @@ function openProfile(uid: string): void {
 function optimizedAvatarUrl(avatarUrl: string, size: number): string {
   if (!avatarUrl || avatarUrl === defaultAvatar) return defaultAvatar;
   if (avatarUrl.includes("googleusercontent.com") || avatarUrl.includes("lh3.googleusercontent.com")) {
-    return avatarUrl.includes("=s")
-      ? avatarUrl.replace(/=s\d+/, `=s${size}`)
-      : `${avatarUrl}=s${size}`;
+    return avatarUrl;
   }
   if (avatarUrl.includes("gravatar.com")) {
     try {
@@ -122,6 +233,7 @@ function LazyAvatar({ src, alt, width, height, className }: {
     <img
       ref={imageRef}
       src={loadedSrc ? optimizedAvatarUrl(loadedSrc, width) : defaultAvatar}
+      onError={(event) => handleAvatarError(event.currentTarget)}
       alt={alt}
       width={width}
       height={height}
@@ -367,7 +479,7 @@ export default function LeaderboardPage() {
                     {index === 0 ? "🏆" : index + 1}
                   </span>
                   <button type="button" onClick={() => openRankedProfile(user, index + 1)} aria-label={`Open profile of ${displayName(user)}`} className="mx-auto block rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">
-                    <img src={optimizedAvatarUrl(user.avatar, 64)} alt="" width={64} height={64} fetchPriority="high" decoding="async" className="h-16 w-16 rounded-full border-2 border-white object-cover shadow dark:border-slate-600" />
+                    <img src={optimizedAvatarUrl(user.avatar, 64)} onError={(event) => handleRankedAvatarError(user, event.currentTarget)} alt="" width={64} height={64} fetchPriority="high" decoding="async" className="h-16 w-16 rounded-full border-2 border-white object-cover shadow dark:border-slate-600" />
                   </button>
                   <button type="button" onClick={() => openRankedProfile(user, index + 1)} className="mx-auto mt-3 block max-w-full truncate text-center text-sm font-bold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent,#9d1018)]">{displayName(user)}</button>
                   {user.username && <p className="truncate text-center text-[10px] text-slate-500 dark:text-slate-400">@{user.username}</p>}

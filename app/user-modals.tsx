@@ -724,7 +724,13 @@ function initializeUserModals(): () => void {
       DEFAULT_AVATAR;
     profileDmTarget = { uid, name: displayName, avatar: avatarUrl };
     const avatar = profileField("avatar") as HTMLImageElement | null;
-    if (avatar) avatar.src = avatarUrl;
+    if (avatar) {
+      avatar.onerror = () => {
+        avatar.onerror = null;
+        avatar.src = "/assets/icons/favicon.ico";
+      };
+      avatar.src = avatarUrl;
+    }
     setText(profileField("displayName"), displayName);
     setText(profileField("username"), data.username ? `@${String(data.username)}` : "");
     setText(profileField("bio"), stringValue(data.bio, "Belum ada bio."));
@@ -812,6 +818,7 @@ function initializeUserModals(): () => void {
   ): Promise<void> => {
     if (!uid) return;
     activeProfileUid = uid;
+    profileModal.dataset.profileUid = uid;
     const statsLink = profileModal.querySelector<HTMLAnchorElement>("[data-profile-stats]");
     if (statsLink) statsLink.href = `/stats/${encodeURIComponent(uid)}`;
     const profileBox = profileModal.querySelector<HTMLElement>(".profile-box");
@@ -882,6 +889,7 @@ function initializeUserModals(): () => void {
   };
   const closeProfile = () => {
     activeProfileUid = null;
+    delete profileModal.dataset.profileUid;
     profileModal.style.display = "none";
   };
 
