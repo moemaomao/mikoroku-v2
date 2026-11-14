@@ -128,9 +128,9 @@ const medalImageMap: Record<MedalSymbol, string> = {
   book: "/assets/medals/2.webp",
   flame: "/assets/medals/3.webp",
   crown: "/assets/medals/4.webp",
-  laurel: "/assets/medals/6.webp",
-  comet: "/assets/medals/7.webp",
-  gem: "/assets/medals/8.webp",
+  laurel: "/assets/medals/5.webp",
+  comet: "/assets/medals/6.webp",
+  gem: "/assets/medals/7.webp",
   infinity: "/assets/medals/8.webp",
 };
 
