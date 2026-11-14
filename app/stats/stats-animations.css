@@ -74,3 +74,86 @@
     filter: none;
   }
 }
+
+/* ---------- Firefly particles around medal ---------- */
+.medal-fireflies {
+  position: absolute;
+  inset: -12%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+
+.medal-firefly {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px 2px currentColor;
+  opacity: 0;
+  animation: medal-firefly-float var(--ff-dur, 3.2s) ease-in-out infinite;
+  animation-delay: var(--ff-delay, 0s);
+  color: var(--stats-medal-color, #f5d76e);
+}
+
+@keyframes medal-firefly-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  15% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.7;
+    transform: translate(var(--ff-x, 20px), var(--ff-y, -30px)) scale(1);
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--ff-x, 20px) * 1.4), calc(var(--ff-y, -30px) * 1.3)) scale(0.3);
+  }
+}
+
+.medal-fireflies[data-medal="spark"] .medal-firefly {
+  --ff-dur: 2.4s;
+  color: #fbbf24;
+}
+.medal-fireflies[data-medal="book"] .medal-firefly {
+  --ff-dur: 3.6s;
+  color: #94a3b8;
+}
+.medal-fireflies[data-medal="flame"] .medal-firefly {
+  --ff-dur: 2.2s;
+  color: #fb923c;
+}
+.medal-fireflies[data-medal="crown"] .medal-firefly {
+  --ff-dur: 3s;
+  color: #60a5fa;
+}
+.medal-fireflies[data-medal="laurel"] .medal-firefly {
+  --ff-dur: 3.8s;
+  color: #a78bfa;
+}
+.medal-fireflies[data-medal="comet"] .medal-firefly {
+  --ff-dur: 2.6s;
+  color: #e879f9;
+}
+.medal-fireflies[data-medal="gem"] .medal-firefly {
+  --ff-dur: 3.2s;
+  color: #fbbf24;
+}
+.medal-fireflies[data-medal="infinity"] .medal-firefly {
+  --ff-dur: 4s;
+  color: #22d3ee;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .medal-firefly {
+    animation: none;
+    opacity: 0;
+  }
+}

@@ -416,13 +416,41 @@ function MedalUnlockModal({
         style={{ opacity: entered ? 1 : 0 }}
       >
         <div className="relative mx-auto w-[min(100%,280px)]">
-          <img
-            src={medalImage}
-            alt={medal.name}
-            className={`h-auto w-full object-contain ${entered ? "medal-img-enter" : "opacity-0"}`}
-            draggable={false}
-          />
-        </div>
+  <div className="medal-fireflies" data-medal={medal.symbol} aria-hidden="true">
+    {[
+      { top: "8%", left: "18%", x: "28px", y: "-36px", delay: "0s" },
+      { top: "14%", left: "72%", x: "-24px", y: "-28px", delay: "0.4s" },
+      { top: "38%", left: "6%", x: "36px", y: "18px", delay: "0.8s" },
+      { top: "42%", left: "88%", x: "-32px", y: "12px", delay: "1.1s" },
+      { top: "68%", left: "16%", x: "22px", y: "-20px", delay: "1.5s" },
+      { top: "72%", left: "78%", x: "-26px", y: "-16px", delay: "1.9s" },
+      { top: "22%", left: "48%", x: "14px", y: "-42px", delay: "0.2s" },
+      { top: "58%", left: "52%", x: "-12px", y: "30px", delay: "1.3s" },
+      { top: "4%", left: "40%", x: "8px", y: "24px", delay: "0.6s" },
+      { top: "86%", left: "44%", x: "-10px", y: "-22px", delay: "2.1s" },
+    ].map((p, i) => (
+      <span
+        key={i}
+        className="medal-firefly"
+        style={
+          {
+            top: p.top,
+            left: p.left,
+            ["--ff-x" as string]: p.x,
+            ["--ff-y" as string]: p.y,
+            ["--ff-delay" as string]: p.delay,
+          } as CSSProperties
+        }
+      />
+    ))}
+  </div>
+  <img
+    src={medalImage}
+    alt={medal.name}
+    className={`relative z-[1] h-auto w-full object-contain ${entered ? "medal-img-enter" : "opacity-0"}`}
+    draggable={false}
+  />
+</div>
 
         <div className="mt-4 px-2 text-center">
           <p
