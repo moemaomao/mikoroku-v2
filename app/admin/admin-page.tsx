@@ -2940,11 +2940,7 @@ export default function AdminPage() {
                   role="tab"
                   aria-selected={detailTab === "info"}
                   className={detailTab === "info" ? styles.activeDetailTab : ""}
-                  onClick={() => {
-                    setDetailTab("info");
-                    setEditing(selectedManga);
-                    setDraft(toDraft(selectedManga));
-                  }}
+                  onClick={() => void openEditor(selectedManga)}
                 >✎ Info &amp; Metadata</button>
                 <button
                   role="tab"
