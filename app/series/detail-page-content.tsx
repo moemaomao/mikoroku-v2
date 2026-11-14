@@ -1202,15 +1202,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [state, setState] = useState<DetailState>("loading");
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
-  const [metadataExpanded, setMetadataExpanded] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("seriesMetadataExpanded") === "true";
-    } catch (error) {
-      console.warn("Could not read the series metadata display preference.", error);
-      return false;
-    }
-  });
+  const [metadataExpanded, setMetadataExpanded] = useState(false);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
@@ -1221,9 +1213,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("text-grid");
   const [detailTab, setDetailTab] = useState<"chapters" | "synopsis" | "covers" | "discussion">("chapters");
-  const [hideDetailCoverBackground, setHideDetailCoverBackground] = useState(
-    () => readGlobalAppearance().hideDetailCoverBackground,
-  );
+  const [hideDetailCoverBackground, setHideDetailCoverBackground] = useState(false);
   const [chapterSearch, setChapterSearch] = useState("");
   const [chapterWindow, setChapterWindow] = useState(CHAPTER_UI_BATCH);
   const chapterSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -1245,6 +1235,14 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
   const mangaTitle = manga?.title;
+
+  useEffect(() => {
+    try {
+      setMetadataExpanded(window.localStorage.getItem("seriesMetadataExpanded") === "true");
+    } catch (error) {
+      console.warn("Could not read the series metadata display preference.", error);
+    }
+  }, []);
 
   useEffect(() => {
     if (!reportOpen) return;
@@ -1278,13 +1276,17 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   }, [reportToast]);
 
   useEffect(() => {
-    const syncAppearance = (event: StorageEvent) => {
+    const syncAppearance = () => {
+      setHideDetailCoverBackground(readGlobalAppearance().hideDetailCoverBackground);
+    };
+    const onStorage = (event: StorageEvent) => {
       if (event.key === GLOBAL_APPEARANCE_KEY || event.key === null) {
-        setHideDetailCoverBackground(readGlobalAppearance().hideDetailCoverBackground);
+        syncAppearance();
       }
     };
-    window.addEventListener("storage", syncAppearance);
-    return () => window.removeEventListener("storage", syncAppearance);
+    syncAppearance();
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   useEffect(() => {

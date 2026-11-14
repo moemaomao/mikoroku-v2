@@ -74,6 +74,8 @@ const HISTORY_SYNC_COLLECTION = "userStats";
 const HISTORY_SYNC_ERROR_EVENT = "mikoroku:reading-history-sync-error";
 const HISTORY_SYNCED_EVENT = "mikoroku:reading-history-synced";
 const HISTORY_PROGRESS_SYNC_DELAY = 4000;
+const ACCOUNT_CHANGED_DURING_SYNC_ERROR =
+  "The signed-in account changed during history synchronization.";
 
 let pendingSyncTimer: number | null = null;
 let pendingSyncUid = "";
@@ -463,11 +465,12 @@ async function syncHistoryToCloud(
 ): Promise<ReadingHistoryEntry[]> {
   const firestore = await waitForFirestore();
   const user = currentUser();
-  if (!user || user.uid !== uid) throw new Error("The signed-in account changed during history synchronization.");
+  if (!user || user.uid !== uid) throw new Error(ACCOUNT_CHANGED_DURING_SYNC_ERROR);
 
   const normalizedLocalEntries = normalizeHistory(localEntries);
   const userReference = firestore.collection(HISTORY_SYNC_COLLECTION).doc(uid);
   const snapshot = await userReference.get();
+  if (currentUser()?.uid !== uid) throw new Error(ACCOUNT_CHANGED_DURING_SYNC_ERROR);
   const profile = snapshot.exists ? snapshot.data() || {} : {};
   const remoteState = normalizeRemoteState(profile);
   let deleted = remoteState.deleted;
@@ -575,10 +578,13 @@ export async function writeReadingHistory(entries: ReadingHistoryEntry[]): Promi
 export async function syncReadingHistoryWithUser(uid: string): Promise<ReadingHistoryEntry[]> {
   if (!uid) throw new Error("A signed-in user is required to synchronize reading history.");
   cancelPendingSync();
+  const localEntries = await readReadingHistory();
   try {
-    const localEntries = await readReadingHistory();
     return await syncHistoryToCloud(uid, localEntries, { type: "sync" });
   } catch (error) {
+    if (error instanceof Error && error.message === ACCOUNT_CHANGED_DURING_SYNC_ERROR) {
+      return localEntries;
+    }
     emitSyncError(error);
     throw error;
   }
