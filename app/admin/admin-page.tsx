@@ -326,33 +326,33 @@ function fromFirestore(slug: string, data: Record<string, unknown>): MangaRecord
   return {
     ...mangaData,
     slug,
-    title: firstText(data.title, info.title) || slug,
-    altTitle: firstText(data.altTitle, data.alternative, info.altTitle, info.alternative),
-    cover: firstText(data.cover, data.img, info.cover, info.img),
-    covers: firstList(data.covers, info.covers),
+    title: firstText(info.title, data.title) || slug,
+    altTitle: firstText(info.altTitle, info.alternative, data.altTitle, data.alternative),
+    cover: firstText(info.cover, info.img, data.cover, data.img),
+    covers: firstList(info.covers, data.covers),
     coverNumbers: data.coverNumbers && typeof data.coverNumbers === "object"
       ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, text(number)]))
       : {},
     coverUpdatedAt: typeof data.coverUpdatedAt === "number" ? data.coverUpdatedAt : 0,
-    desc: firstText(data.desc, data.description, data.synopsis, data.sinopsis, info.desc, info.description, info.synopsis, info.sinopsis),
-    type: firstText(data.type, info.type) || "manga",
-    commissionEnabled: data.commissionEnabled === true || info.commissionEnabled === true,
-    nsfw: data.nsfw === true || info.nsfw === true,
-    status: firstText(data.status, info.status) || "unknown",
-    author: firstText(data.author, data.authors, info.author, info.authors),
-    artist: firstText(data.artist, data.artists, info.artist, info.artists),
-    circle: firstText(data.circle, info.circle),
-    group: firstText(data.group, info.group),
-    series: firstText(data.series, info.series),
-    serialization: firstText(data.serialization, info.serialization),
-    publication: firstText(data.publication, data.year, info.publication, info.year),
-    genres: firstList(data.genres, data.genre, info.genres, info.genre),
-    demographic: firstList(data.demographic, info.demographic),
-    femaleTags: firstList(data.femaleTags, info.femaleTags),
-    maleTags: firstList(data.maleTags, info.maleTags),
-    tags: firstList(data.tags, info.tags),
-    characters: firstList(data.characters, info.characters),
-    rating: firstNumber(data.rating, info.rating),
+    desc: firstText(info.desc, info.description, info.synopsis, info.sinopsis, data.desc, data.description, data.synopsis, data.sinopsis),
+    type: firstText(info.type, data.type) || "manga",
+    commissionEnabled: typeof info.commissionEnabled === "boolean" ? info.commissionEnabled : data.commissionEnabled === true,
+    nsfw: typeof info.nsfw === "boolean" ? info.nsfw : data.nsfw === true,
+    status: firstText(info.status, data.status) || "unknown",
+    author: firstText(info.author, info.authors, data.author, data.authors),
+    artist: firstText(info.artist, info.artists, data.artist, data.artists),
+    circle: firstText(info.circle, data.circle),
+    group: firstText(info.group, data.group),
+    series: firstText(info.series, data.series),
+    serialization: firstText(info.serialization, data.serialization),
+    publication: firstText(info.publication, info.year, data.publication, data.year),
+    genres: firstList(info.genres, info.genre, data.genres, data.genre),
+    demographic: firstList(info.demographic, data.demographic),
+    femaleTags: firstList(info.femaleTags, data.femaleTags),
+    maleTags: firstList(info.maleTags, data.maleTags),
+    tags: firstList(info.tags, data.tags),
+    characters: firstList(info.characters, data.characters),
+    rating: firstNumber(info.rating, data.rating),
     chapterCount:
       typeof data.chapterCount === "number"
         ? data.chapterCount
@@ -1238,6 +1238,7 @@ export default function AdminPage() {
     }
     setBusy(true);
     setMessage("");
+    let writeCompleted = false;
     try {
       const { firestore } = getAdminFirebase();
       const mangaRef = doc(firestore, "manga", slug);
@@ -1278,13 +1279,8 @@ export default function AdminPage() {
           .filter((volume) => existingVolumeNumbers[volume]?.trim())
           .map((volume) => [volume, existingVolumeNumbers[volume].trim()]),
       );
-      const data = {
-        title: draft.title.trim(),
+      const metadata = {
         altTitle: draft.altTitle.trim(),
-        cover: mainCover,
-        covers,
-        coverNumbers,
-        coverUpdatedAt: mainCover !== editing?.cover ? Date.now() : editing?.coverUpdatedAt || 0,
         desc: draft.desc.trim(),
         type: draft.type,
         commissionEnabled: draft.commissionEnabled,
@@ -1304,6 +1300,15 @@ export default function AdminPage() {
         tags: splitList(draft.tags),
         characters: splitList(draft.characters),
         rating: draft.rating.trim() ? Math.min(10, Math.max(0, parsedRating)) : 0,
+      };
+      const data = {
+        title: draft.title.trim(),
+        cover: mainCover,
+        covers,
+        coverNumbers,
+        coverUpdatedAt: mainCover !== editing?.cover ? Date.now() : editing?.coverUpdatedAt || 0,
+        ...metadata,
+        metadata,
         isDraft: draft.isDraft,
         managedByAdmin: true,
         origin: isGithub ? "github" : "firestore",
@@ -1314,13 +1319,25 @@ export default function AdminPage() {
         latestUpdate: updatedAt,
       };
       await setDoc(mangaRef, data, { merge: true });
+      writeCompleted = true;
 
-      const savedManga = fromFirestore(slug, {
-        ...data,
-        slug,
-        source: data.source,
-        origin: data.origin,
-      });
+      const savedSnapshot = await getDocFromServer(mangaRef);
+      if (!savedSnapshot.exists()) {
+        throw new Error("Firestore did not return the saved manga document.");
+      }
+      const savedData = savedSnapshot.data();
+      const savedMetadata = savedData.metadata;
+      if (!savedMetadata || typeof savedMetadata !== "object" || Array.isArray(savedMetadata)) {
+        throw new Error("Firestore did not return the saved metadata object.");
+      }
+      const savedMetadataRecord = savedMetadata as Record<string, unknown>;
+      const unverifiedFields = Object.entries(metadata)
+        .filter(([key, value]) => JSON.stringify(savedMetadataRecord[key]) !== JSON.stringify(value))
+        .map(([key]) => key);
+      if (unverifiedFields.length) {
+        throw new Error(`Firestore did not confirm these metadata fields: ${unverifiedFields.join(", ")}.`);
+      }
+      const savedManga = fromFirestore(slug, savedData);
 
       setManga((current) => {
         const next = mergeGithubMetadata(
@@ -1364,8 +1381,12 @@ export default function AdminPage() {
         setActiveSection("manga-list");
       }
     } catch (error) {
-      console.error("Failed to save the manga.", error);
-      setMessage(`Failed to save manga: ${getErrorMessage(error)}`);
+      console.error(writeCompleted ? "Manga saved but metadata verification failed." : "Failed to save the manga.", error);
+      setMessage(
+        writeCompleted
+          ? `Manga was written, but Firestore did not verify its metadata: ${getErrorMessage(error)}`
+          : `Failed to save manga: ${getErrorMessage(error)}`,
+      );
     } finally {
       setBusy(false);
     }

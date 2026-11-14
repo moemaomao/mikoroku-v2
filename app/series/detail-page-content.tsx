@@ -288,39 +288,40 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     ...(value.info && typeof value.info === "object" ? value.info as Record<string, unknown> : {}),
     ...(value.metadata && typeof value.metadata === "object" ? value.metadata as Record<string, unknown> : {}),
   };
-  const cover = resolveCover(value.img || value.cover || value.image || value.thumbnail || value.thumb);
-  const genres = value.genres ?? info.genres;
+  const cover = resolveCover(value.img || value.cover || value.image || value.thumbnail || value.thumb || info.cover || info.img);
+  const genres = info.genres ?? info.genre ?? value.genres ?? value.genre;
+  const coverNumbers = info.coverNumbers ?? value.coverNumbers;
 
   return {
     slug,
     title: rawTitle,
     img: cover,
     cover,
-    covers: asStringList(value.covers).map(resolveCover).filter(Boolean),
-    nsfw: value.nsfw === true || info.nsfw === true,
-    coverNumbers: value.coverNumbers && typeof value.coverNumbers === "object"
-      ? Object.fromEntries(Object.entries(value.coverNumbers).map(([url, number]) => [url, asString(number)]))
+    covers: asStringList(info.covers ?? value.covers).map(resolveCover).filter(Boolean),
+    nsfw: typeof info.nsfw === "boolean" ? info.nsfw : value.nsfw === true,
+    coverNumbers: coverNumbers && typeof coverNumbers === "object" && !Array.isArray(coverNumbers)
+      ? Object.fromEntries(Object.entries(coverNumbers).map(([url, number]) => [url, asString(number)]))
       : {},
-    desc: asString(value.desc || value.description || value.synopsis || value.sinopsis || info.desc || info.description || info.synopsis || info.sinopsis),
+    desc: asString(info.desc || info.description || info.synopsis || info.sinopsis || value.desc || value.description || value.synopsis || value.sinopsis),
     genres: Array.isArray(genres) ? genres.map((genre) => asString(genre)) : asStringList(genres),
-    rating: (value.rating ?? info.rating) as number | string | null | undefined,
-    status: asString(value.status || info.status, "UNKNOWN"),
-    type: asString(value.type || info.type, "Manga"),
-    altTitle: asString(value.altTitle || info.altTitle),
-    author: asString(value.author || info.author, "-"),
-    artist: asString(value.artist || info.artist, "-"),
-    publication: asString(value.publication || info.publication, "-"),
-    serialization: asString(value.serialization || info.serialization, "-"),
-    demographic: (value.demographic || info.demographic) as string | string[] | undefined,
-    series: asString(value.series || info.series),
-    characters: (value.characters || info.characters) as string | string[] | undefined,
-    circle: asString(value.circle || info.circle),
-    group: asString(value.group || info.group),
-    femaleTags: (value.femaleTags || info.femaleTags) as string | string[] | undefined,
-    maleTags: (value.maleTags || info.maleTags) as string | string[] | undefined,
-    updatedAt: asString(value.updatedAt || value.latestUpdate || info.updatedAt || info.latestUpdate || info.date),
-    latestUpdate: asString(value.latestUpdate || value.updatedAt || info.latestUpdate || info.updatedAt || info.date),
-    coverUpdatedAt: asString(value.coverUpdatedAt || info.coverUpdatedAt),
+    rating: (info.rating ?? value.rating) as number | string | null | undefined,
+    status: asString(info.status || value.status, "UNKNOWN"),
+    type: asString(info.type || value.type, "Manga"),
+    altTitle: asString(info.altTitle || value.altTitle),
+    author: asString(info.author || value.author, "-"),
+    artist: asString(info.artist || value.artist, "-"),
+    publication: asString(info.publication || info.year || value.publication || value.year, "-"),
+    serialization: asString(info.serialization || value.serialization, "-"),
+    demographic: (info.demographic || value.demographic) as string | string[] | undefined,
+    series: asString(info.series || value.series),
+    characters: (info.characters || value.characters) as string | string[] | undefined,
+    circle: asString(info.circle || value.circle),
+    group: asString(info.group || value.group),
+    femaleTags: (info.femaleTags || value.femaleTags) as string | string[] | undefined,
+    maleTags: (info.maleTags || value.maleTags) as string | string[] | undefined,
+    updatedAt: asString(info.updatedAt || info.latestUpdate || info.date || value.updatedAt || value.latestUpdate),
+    latestUpdate: asString(info.latestUpdate || info.updatedAt || info.date || value.latestUpdate || value.updatedAt),
+    coverUpdatedAt: asString(info.coverUpdatedAt || value.coverUpdatedAt),
     info,
   };
 }
