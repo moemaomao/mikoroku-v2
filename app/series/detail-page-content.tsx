@@ -324,6 +324,20 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
   };
 }
 
+function hasMetadataValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized !== "" && normalized !== "-" && normalized !== "unknown";
+  }
+  if (typeof value === "number") return Number.isFinite(value) && value !== 0;
+  return value !== null && value !== undefined;
+}
+
+function preferMetadata<T>(preferred: T | undefined, fallback: T | undefined): T | undefined {
+  return hasMetadataValue(preferred) ? preferred : fallback;
+}
+
 const SERIES_COVER_PREFERENCE_DB = "mikoroku-series-cover-preferences";
 const SERIES_COVER_PREFERENCE_STORE = "selections";
 type SeriesCoverPreference = { slug: string; url: string };
@@ -619,6 +633,23 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   let manga = githubManga && firestoreManga
     ? {
         ...githubManga,
+        desc: preferMetadata(firestoreManga.desc, githubManga.desc),
+        genres: preferMetadata(firestoreManga.genres, githubManga.genres),
+        rating: preferMetadata(firestoreManga.rating, githubManga.rating),
+        status: preferMetadata(firestoreManga.status, githubManga.status),
+        type: firestoreManga.type === "Manga" ? githubManga.type : firestoreManga.type,
+        altTitle: preferMetadata(firestoreManga.altTitle, githubManga.altTitle),
+        author: preferMetadata(firestoreManga.author, githubManga.author),
+        artist: preferMetadata(firestoreManga.artist, githubManga.artist),
+        publication: preferMetadata(firestoreManga.publication, githubManga.publication),
+        serialization: preferMetadata(firestoreManga.serialization, githubManga.serialization),
+        demographic: preferMetadata(firestoreManga.demographic, githubManga.demographic),
+        series: preferMetadata(firestoreManga.series, githubManga.series),
+        characters: preferMetadata(firestoreManga.characters, githubManga.characters),
+        circle: preferMetadata(firestoreManga.circle, githubManga.circle),
+        group: preferMetadata(firestoreManga.group, githubManga.group),
+        femaleTags: preferMetadata(firestoreManga.femaleTags, githubManga.femaleTags),
+        maleTags: preferMetadata(firestoreManga.maleTags, githubManga.maleTags),
         covers: firestoreManga.covers?.length
           ? firestoreManga.covers
           : cachedManga?.covers?.length

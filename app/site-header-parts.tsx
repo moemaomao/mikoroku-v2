@@ -124,6 +124,7 @@ export function SiteSidebar({
             </span>
           </button>
           <SidebarLink href="/manga-list" icon="book" onClick={closeOnMobile}>Manga List</SidebarLink>
+          <SidebarLink href="/novel-list" icon="book" onClick={closeOnMobile}>Novel List</SidebarLink>
           <SidebarLink href="/hentai-list" icon="book" onClick={closeOnMobile}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={closeOnMobile}>Genre List</SidebarLink>
           <SidebarLink href="/bookmark" icon="bookmark" onClick={closeOnMobile}>Bookmark</SidebarLink>

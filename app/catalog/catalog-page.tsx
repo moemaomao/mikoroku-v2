@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { CoverImage } from "../lib/cover-image";
+import { isNovelSeries } from "../../lib/reader-kind";
 import "./catalog.css";
 
 type Manga = {
+  [key: string]: unknown;
   title?: string;
   name?: string;
   slug?: string;
@@ -34,7 +36,7 @@ type Manga = {
   nsfw?: boolean;
 };
 
-export type CatalogKind = "manga" | "hentai" | "genre";
+export type CatalogKind = "manga" | "hentai" | "genre" | "novel";
 type SortOrder = "latest" | "az" | "za";
 type DateValue = string | number | { toMillis?: () => number; seconds?: number };
 type MangaDataWindow = Window & { mangaData?: Record<string, Manga> };
@@ -276,9 +278,12 @@ function mangaTags(manga: Manga): string[] {
 }
 
 function isAdultCatalog(manga: Manga): boolean {
-  return mangaTags(manga).some((tag) =>
-    ["hentai", "doujin", "smut", "adult"].some((term) => tag.includes(term)),
-  );
+  return mangaTags(manga).some((tag) => {
+    const normalizedTag = tag.replace(/[_-]+/g, " ");
+    return normalizedTag === "cg" ||
+      normalizedTag.includes("cg collection") ||
+      ["hentai", "doujin", "smut", "adult"].some((term) => normalizedTag.includes(term));
+  });
 }
 
 function genresOf(manga: Manga): string[] {
@@ -311,7 +316,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
   useEffect(() => {
     firestoreManga.current = [];
     try {
-      const saved = localStorage.getItem(kind === "hentai" ? "hentaiSortMode" : kind === "genre" ? "genreListSort" : "mangaListSortMode");
+      const saved = localStorage.getItem(kind === "hentai" ? "hentaiSortMode" : kind === "genre" ? "genreListSort" : kind === "novel" ? "novelListSort" : "mangaListSortMode");
       if (saved === "latest" || saved === "az" || saved === "za") setSort(saved);
       const params = new URLSearchParams(window.location.search);
       const genre = params.get("genre");
@@ -381,7 +386,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
   }, [kind]);
 
   useEffect(() => {
-    if (kind !== "manga" && kind !== "hentai") return;
+    if (kind !== "manga" && kind !== "hentai" && kind !== "novel") return;
     let mounted = true;
     const addFirestoreManga = () => {
       const mangaData = (window as MangaDataWindow).mangaData;
@@ -420,8 +425,9 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
 
   const visibleManga = useMemo(() => {
     let list = allManga.filter((manga) => {
-      if (kind === "hentai" && !isAdultCatalog(manga)) return false;
-      if (kind === "manga" && isAdultCatalog(manga)) return false;
+      if (kind === "hentai" && (!isAdultCatalog(manga) || isNovelSeries(manga))) return false;
+      if (kind === "manga" && (isAdultCatalog(manga) || isNovelSeries(manga))) return false;
+      if (kind === "novel" && !isNovelSeries(manga)) return false;
       if (kind === "genre" && activeGenre !== "all" &&
         !genresOf(manga).some((genre) => genre.toLowerCase() === activeGenre)) return false;
       return titleOf(manga).toLowerCase().includes(query.trim().toLowerCase());
@@ -436,7 +442,7 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
 
   function changeSort(value: SortOrder) {
     setSort(value);
-    const key = kind === "hentai" ? "hentaiSortMode" : kind === "genre" ? "genreListSort" : "mangaListSortMode";
+    const key = kind === "hentai" ? "hentaiSortMode" : kind === "genre" ? "genreListSort" : kind === "novel" ? "novelListSort" : "mangaListSortMode";
     localStorage.setItem(key, value);
   }
 
