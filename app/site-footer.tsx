@@ -95,6 +95,7 @@ export default function SiteFooter({
           <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/terms">Terms</a>
           <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/about">About</a>
           <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="mailto:mikorokuscan@gmail.com">Contact</a>
+          <a className="text-[13px] text-[#ff5757] no-underline transition-colors duration-200 hover:text-[#4744ff]" style={{ color: "var(--mk-footer-link, #ff5757)" }} href="/feed.xml" rel="alternate" type="application/rss+xml">RSS Feed</a>
         </nav>
 
         <div className="flex flex-col items-center text-center">
