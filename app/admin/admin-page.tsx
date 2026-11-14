@@ -34,6 +34,7 @@ import styles from "./admin.module.css";
 import AdvertisementSettings from "./advertisement-settings";
 import OgCoverTool from "./og-cover-tool";
 import { CoverImage } from "../lib/cover-image";
+import { MarkdownContent } from "../lib/markdown-content";
 import RichTextEditor from "./rich-text-editor";
 import MangaMetadataEditor from "./manga-metadata-editor";
 import {
@@ -3303,7 +3304,7 @@ export default function AdminPage() {
                           </button>
                         </div>
                       </div>
-                      <p className={styles.announcementAdminContent}>{announcement.content}</p>
+                      <MarkdownContent value={announcement.content} />
                     </article>
                   ))}
                 </div>
