@@ -82,7 +82,6 @@ const chapterModeClasses = {
   chapters: ["!grid", "!w-full", "!grid-cols-1", "!gap-1"],
 } as const;
 
-const listUpBadgeClasses = ["!relative", "!static", "!ml-1.5", "!inline-block", "!animate-pulse", "!align-middle"];
 const chapterLoadPromises = new Map<string, Promise<void>>();
 const bloggerFeedPromises = new Map<string, Promise<ListBloggerEntry[]>>();
 const BLOGGER_CHAPTER_SOURCES = {
@@ -608,7 +607,6 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
   const forceFirestore = Boolean(card.closest("#firebaseNovel"));
   ensureListChapterSources(card, slug, title, forceFirestore);
   const chapters = getLatestChapters(slug, fallbackChapter, forceFirestore);
-  const upBadge = card.querySelector<HTMLElement>(".up-badge");
   let list = existing;
   if (!list) {
     list = document.createElement("div");
@@ -629,19 +627,6 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
       item.querySelector(".global-card-update-date")?.textContent === formatUpdateDate(updateTimeFor(slug, chapters[index])),
     )
   ) {
-    if (upBadge && currentItems[0]) {
-      const chapterInfo = currentItems[0].querySelector<HTMLElement>(".global-card-chapter-info")
-        || currentItems[0].querySelector<HTMLElement>(".global-card-chapter-label")?.parentElement;
-      if (chapterInfo && upBadge.parentElement !== chapterInfo) {
-        listUpBadgeClasses.forEach((className) => upBadge.classList.add(className));
-        const label = chapterInfo.querySelector(".global-card-chapter-label");
-        if (label && label.nextSibling !== upBadge) {
-          label.insertAdjacentElement("afterend", upBadge);
-        } else if (!label) {
-          chapterInfo.append(upBadge);
-        }
-      }
-    }
     return;
   }
 
@@ -671,10 +656,6 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
     label.className = `global-card-chapter-label truncate${isChapterRead(title, chapter) ? " opacity-50" : ""}`;
     label.textContent = `Chapter ${chapter}`;
     chapterInfo.append(label);
-    if (chapters[0] === chapter && upBadge) {
-      listUpBadgeClasses.forEach((className) => upBadge.classList.add(className));
-      chapterInfo.append(upBadge);
-    }
     item.append(chapterInfo);
     const chapterUpdateDate = formatUpdateDate(updateTimeFor(slug, chapter));
     if (chapterUpdateDate) {
@@ -746,8 +727,11 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       }
   
       badgesRow.style.display = "flex";
-      badgesRow.style.flexWrap = "nowrap";
+      badgesRow.style.flexWrap = "wrap";
       badgesRow.style.alignItems = "center";
+      badgesRow.style.width = "100%";
+      badgesRow.style.minWidth = "0";
+      badgesRow.style.boxSizing = "border-box";
       badgesRow.style.gap = "3px";
       badgesRow.style.margin = "0 0 4px 0";
       badgesRow.style.padding = "0";
@@ -757,32 +741,25 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       const typeBadge = cover.querySelector<HTMLElement>(".type-badge");
       const commissionBadge = cover.querySelector<HTMLElement>(".commission-badge");
       const chBadge = cover.querySelector<HTMLElement>(".ch-badge");
-      const listBadges = [statusBadge, typeBadge, commissionBadge].filter(
+      const sourceBadges = [statusBadge, typeBadge, commissionBadge].filter(
         (badge): badge is HTMLElement => Boolean(badge),
       );
+      badgesRow.replaceChildren(...sourceBadges.map((badge) => {
+        const clone = badge.cloneNode(true) as HTMLElement;
+        clone.removeAttribute("id");
+        clone.style.removeProperty("display");
+        clone.style.position = "static";
+        clone.style.left = "auto";
+        clone.style.top = "auto";
+        clone.style.bottom = "auto";
+        clone.style.zIndex = "1";
+        return clone;
+      }));
+      sourceBadges.forEach((badge) => {
+        badge.style.display = "none";
+      });
       if (chBadge) chBadge.style.display = "none";
-
-      if (statusBadge) {
-        statusBadge.style.position = "static";
-        statusBadge.style.left = "auto";
-        statusBadge.style.top = "auto";
-        statusBadge.style.zIndex = "1";
-        badgesRow.append(statusBadge);
-      }
-      if (typeBadge) {
-        typeBadge.style.position = "static";
-        typeBadge.style.left = "auto";
-        typeBadge.style.bottom = "auto";
-        typeBadge.style.zIndex = "1";
-        badgesRow.append(typeBadge);
-      }
-      if (commissionBadge) {
-        commissionBadge.style.position = "static";
-        commissionBadge.style.left = "auto";
-        commissionBadge.style.bottom = "auto";
-        commissionBadge.style.zIndex = "1";
-        badgesRow.append(commissionBadge);
-      }
+      const listBadges = [...badgesRow.querySelectorAll<HTMLElement>(".status-badge, .type-badge, .commission-badge")];
       listBadges.forEach((badge) => {
         badge.style.width = "auto";
         badge.style.minWidth = "0";
@@ -800,19 +777,18 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         badge.style.borderRadius = "4px";
       });
 
-      if (overlay.parentElement !== details) {
-        details.append(overlay);
+      let listTitle = details.querySelector<HTMLElement>(".global-card-list-title");
+      if (!listTitle) {
+        listTitle = document.createElement("div");
+        listTitle.className = "global-card-list-title";
       }
-      details.insertBefore(badgesRow, details.firstChild);
-      if (overlay.previousElementSibling !== badgesRow) {
-        details.insertBefore(overlay, badgesRow.nextSibling);
-      }
+      const sourceTitle = overlay.querySelector<HTMLElement>(".title, .catalog-card-title");
+      listTitle.textContent = sourceTitle?.textContent?.trim() || "";
+      overlay.style.display = "none";
 
-      if (cover.parentElement !== card) card.insertBefore(cover, card.firstChild);
+      if (details.firstElementChild !== badgesRow) details.insertBefore(badgesRow, details.firstChild);
+      if (badgesRow.nextElementSibling !== listTitle) details.insertBefore(listTitle, badgesRow.nextSibling);
       if (details.parentElement !== card) card.append(details);
-      else if (details.previousElementSibling !== cover) {
-        card.insertBefore(cover, details);
-      }
 
       card.style.display = "flex";
       card.style.flexDirection = "row";
@@ -858,21 +834,13 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       // badges ABOVE title
       badgesRow.style.order = "0";
       badgesRow.style.display = "flex";
-      badgesRow.style.flexWrap = "nowrap";
+      badgesRow.style.flexWrap = "wrap";
+      badgesRow.style.width = "100%";
+      badgesRow.style.minWidth = "0";
+      badgesRow.style.boxSizing = "border-box";
       badgesRow.style.gap = "3px";
       badgesRow.style.margin = "0";
       badgesRow.style.padding = "0";
-
-      overlay.style.position = "static";
-      overlay.style.order = "1";
-      overlay.style.width = "100%";
-      overlay.style.background = "none";
-      overlay.style.padding = "0";
-      overlay.style.margin = "0";
-      overlay.style.textAlign = "left";
-      overlay.style.boxShadow = "none";
-      overlay.style.textShadow = "none";
-      overlay.style.filter = "none";
 
       const badgeColorMap: Record<string, string> = {
         ongoing: "#4ade80",
@@ -916,36 +884,23 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         b.style.boxShadow = "none";
       });
 
-      const title = overlay.querySelector<HTMLElement>(".title, .catalog-card-title");
-      if (title) {
-        title.style.position = "relative";
-        title.style.inset = "auto";
-        title.style.margin = "0";
-        title.style.minHeight = "0";
-        title.style.maxHeight = "none";
-        title.style.width = "100%";
-        title.style.overflow = "hidden";
-        title.style.textAlign = "left";
-        title.style.fontSize = isMobile ? "12px" : "13px";
-        title.style.fontWeight = "600";
-        title.style.lineHeight = "1.3";
-        title.style.borderBottom = "none";
-        title.style.paddingBottom = "0";
-        title.style.color = "#f1f5f9";
-        title.style.display = "block";
-        title.style.webkitLineClamp = "1";
-        title.style.webkitBoxOrient = "vertical";
-        title.style.whiteSpace = "nowrap";
-        title.style.textOverflow = "ellipsis";
-        title.style.textShadow = "none";
-        title.style.boxShadow = "none";
-        title.style.filter = "none";
-      }
-
       updateListChapterLinks(card, details, true);
 
       badgesRow.style.order = "0";
-      overlay.style.order = "1";
+      listTitle.style.position = "relative";
+      listTitle.style.order = "1";
+      listTitle.style.width = "100%";
+      listTitle.style.background = "none";
+      listTitle.style.padding = "0";
+      listTitle.style.margin = "0";
+      listTitle.style.textAlign = "left";
+      listTitle.style.fontSize = isMobile ? "12px" : "13px";
+      listTitle.style.fontWeight = "600";
+      listTitle.style.lineHeight = "1.3";
+      listTitle.style.color = "#f1f5f9";
+      listTitle.style.overflow = "hidden";
+      listTitle.style.textOverflow = "ellipsis";
+      listTitle.style.whiteSpace = "nowrap";
       const chapterList = details.querySelector<HTMLElement>(".global-card-chapters");
       if (chapterList) {
         chapterList.style.order = "2";
@@ -961,10 +916,8 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         });
       }
 
-      details.insertBefore(badgesRow, details.firstChild);
-      if (overlay.parentElement === details) {
-        details.insertBefore(overlay, badgesRow.nextSibling);
-      }
+      if (details.firstElementChild !== badgesRow) details.insertBefore(badgesRow, details.firstChild);
+      if (badgesRow.nextElementSibling !== listTitle) details.insertBefore(listTitle, badgesRow.nextSibling);
       return;
     }
 
@@ -975,29 +928,14 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
     if (title) clearListInlineStyles(title);
 
     if (details) {
-      clearListInlineStyles(details);
-      const upBadge = details.querySelector<HTMLElement>(".up-badge");
-      if (upBadge) {
-        listUpBadgeClasses.forEach((className) => upBadge.classList.remove(className));
-        cover.append(upBadge);
-      }
-      details.querySelectorAll<HTMLElement>(".status-badge, .type-badge").forEach((badge) => {
-        badge.style.position = "";
-        badge.style.left = "";
-        badge.style.top = "";
-        badge.style.bottom = "";
-        badge.style.zIndex = "";
-        badge.style.fontSize = "";
-        badge.style.padding = "";
-        badge.style.borderRadius = "";
-        cover.append(badge);
+      [".status-badge", ".type-badge", ".commission-badge", ".ch-badge"].forEach((selector) => {
+        cover.querySelectorAll<HTMLElement>(selector).forEach((badge) => {
+          badge.style.removeProperty("display");
+        });
       });
-      const chBadge = cover.querySelector<HTMLElement>(".ch-badge");
-      if (chBadge) chBadge.style.display = "";
-      if (overlay.parentElement === details) cover.append(overlay);
+      clearListInlineStyles(details);
       details.remove();
     }
-    if (details) updateListChapterLinks(card, details, false);
   });
 }
 
