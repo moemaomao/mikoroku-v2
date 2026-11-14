@@ -10,7 +10,7 @@
   min-height: calc(100vh - 57px);
   margin: auto;
   padding-bottom: 20px;
-  background: var(--mk-bookmark-container, #fff);
+  background: transparent;
 }
 
 .reading-history-header {

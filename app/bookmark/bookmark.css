@@ -30,7 +30,7 @@ html.dark .bookmark-route {
   max-width: 900px;
   min-height: calc(100vh - 51px);
   margin: auto;
-  background: var(--bookmark-container);
+  background: transparent;
   transition: background 0.3s;
 }
 
@@ -262,4 +262,9 @@ html.dark .bookmark-route .bookmark-notice.logged-in {
   .bookmark-route .bookmark-title {
     font-size: 12px;
   }
+}
+
+html.dark body .bookmark-route .bookmark-container,
+html.light body .bookmark-route .bookmark-container {
+  background-color: transparent !important;
 }

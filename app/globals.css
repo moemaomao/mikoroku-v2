@@ -306,7 +306,7 @@ html.light .commission-page {
 
 html.light .commission-card,
 html.light [data-route-card="settings"] {
-  background-color: #ffffff;
+  background-color: transparent;
 }
 
 html.light [data-route-card="settings-inset"] {
@@ -320,7 +320,7 @@ html.light [data-route-card="settings-option"] {
 
 html.light main.route-page-background [data-route-card="settings"] {
   border-color: rgba(15, 23, 42, .1) !important;
-  background-color: #ffffff !important;
+  background-color: transparent !important;
   color: #1e293b !important;
 }
 
@@ -359,7 +359,7 @@ html.light main.route-page-background [data-route-card="settings-option"] button
 }
 
 html.light .legal-page-card {
-  background-color: #ffffff;
+  background-color: transparent;
 }
 
 html.light #mainFooter .site-footer-card {
@@ -524,8 +524,12 @@ body.light #mainFooter p {
 
 main.route-page-background [data-route-card="settings"] {
   border-color: rgba(255, 255, 255, .35) !important;
-  background-color: color-mix(in srgb, var(--mikoroku-accent-surface, #760c12) 96%, transparent) !important;
+  background-color: transparent !important;
   color: var(--mikoroku-accent-foreground, #ffffff) !important;
+}
+
+html.dark main.route-page-background [data-route-card="settings"] {
+  background-color: transparent !important;
 }
 
 main.route-page-background [data-route-card="settings"] * {

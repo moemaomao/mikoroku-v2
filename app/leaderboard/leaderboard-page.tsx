@@ -492,7 +492,7 @@ export default function LeaderboardPage() {
               ))}
             </section>
 
-            <section aria-labelledby="leaderboard-list-title" className="rounded-2xl border border-slate-200/80 bg-white/60 p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.03] sm:p-5">
+            <section aria-labelledby="leaderboard-list-title" className="rounded-2xl border border-slate-200/80 bg-transparent p-4 shadow-sm dark:border-white/10 sm:p-5">
               <div className="border-b border-slate-200/80 px-5 py-4 dark:border-white/10">
                 <h2 id="leaderboard-list-title" className="m-0 text-lg font-bold">Comment Leaderboard</h2>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Diurutkan dari jumlah komentar terbanyak.</p>

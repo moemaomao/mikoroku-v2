@@ -94,11 +94,11 @@ export default function AnnouncementsPage() {
       </header>
 
       {loading ? (
-        <p className="rounded-xl border border-[rgb(35_40_55/13%)] bg-white p-5 text-center leading-[1.6] text-[#555b69] shadow-[0_5px_18px_rgb(25_31_46/7%)] dark:border-[rgb(255_255_255/12%)] dark:bg-[rgb(22_24_34/92%)] dark:text-[#d7d9df] dark:shadow-none">
+        <p className="rounded-xl border border-[rgb(35_40_55/13%)] bg-transparent p-5 text-center leading-[1.6] text-[#555b69] shadow-[0_5px_18px_rgb(25_31_46/7%)] dark:border-[rgb(255_255_255/12%)] dark:bg-transparent dark:text-[#d7d9df] dark:shadow-none">
           Loading announcements...
         </p>
       ) : error ? (
-        <div className="rounded-xl border border-[rgb(35_40_55/13%)] bg-white p-5 text-center leading-[1.6] text-[#555b69] shadow-[0_5px_18px_rgb(25_31_46/7%)] dark:border-[rgb(255_255_255/12%)] dark:bg-[rgb(22_24_34/92%)] dark:text-[#d7d9df] dark:shadow-none">
+        <div className="rounded-xl border border-[rgb(35_40_55/13%)] bg-transparent p-5 text-center leading-[1.6] text-[#555b69] shadow-[0_5px_18px_rgb(25_31_46/7%)] dark:border-[rgb(255_255_255/12%)] dark:bg-transparent dark:text-[#d7d9df] dark:shadow-none">
           <p>{error}</p>
           <button
             className="mt-3.5 cursor-pointer rounded-[7px] border-0 bg-[#9e1b24] px-3.5 py-[9px] text-white"
@@ -109,14 +109,14 @@ export default function AnnouncementsPage() {
           </button>
         </div>
       ) : announcements.length === 0 ? (
-        <p className="rounded-xl border border-[rgb(35_40_55/13%)] bg-white p-5 text-center leading-[1.6] text-[#555b69] shadow-[0_5px_18px_rgb(25_31_46/7%)] dark:border-[rgb(255_255_255/12%)] dark:bg-[rgb(22_24_34/92%)] dark:text-[#d7d9df] dark:shadow-none">
+        <p className="rounded-xl border border-[rgb(35_40_55/13%)] bg-transparent p-5 text-center leading-[1.6] text-[#555b69] shadow-[0_5px_18px_rgb(25_31_46/7%)] dark:border-[rgb(255_255_255/12%)] dark:bg-transparent dark:text-[#d7d9df] dark:shadow-none">
           There are no announcements right now.
         </p>
       ) : (
         <section className="grid gap-4" aria-label="Published announcements">
           {announcements.map((announcement) => (
             <article
-              className="rounded-xl border border-[rgb(35_40_55/13%)] bg-white p-5 shadow-[0_5px_18px_rgb(25_31_46/7%)] max-[560px]:p-4 dark:border-[rgb(255_255_255/12%)] dark:bg-[rgb(22_24_34/92%)] dark:shadow-none"
+              className="rounded-xl border border-[rgb(35_40_55/13%)] bg-transparent p-5 shadow-[0_5px_18px_rgb(25_31_46/7%)] max-[560px]:p-4 dark:border-[rgb(255_255_255/12%)] dark:bg-transparent dark:shadow-none"
               key={announcement.id}
             >
               <div className="flex items-baseline justify-between gap-4 max-[560px]:items-start max-[560px]:flex-col max-[560px]:gap-[7px]">

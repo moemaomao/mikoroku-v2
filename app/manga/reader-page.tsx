@@ -26,7 +26,7 @@ type ReaderMode = "long-strip" | "single" | "double";
 type ReadingDirection = "ltr" | "rtl";
 type NovelPattern = "vine-scroll" | "lotus-vines" | "kawung-blossom" | "fantasy-flora" | "megamendung-rose" | "garden-flowers";
 type NovelPatternColor = "white" | "rose" | "purple" | "gold" | "cyan";
-type NovelBackgroundColor = "dark" | "warm" | "purple";
+type NovelBackgroundColor = "transparent" | "dark" | "warm" | "purple";
 type ChapterRecord = {
   id?: string;
   num?: string | number;
@@ -122,6 +122,7 @@ const novelPatternLightColors: Record<NovelPatternColor, string> = {
   cyan: "#0e7490",
 };
 const novelBackgroundColors: Array<{ id: NovelBackgroundColor; label: string; darkValue: string; lightValue: string }> = [
+  { id: "transparent", label: "Transparent", darkValue: "transparent", lightValue: "transparent" },
   { id: "dark", label: "Neutral", darkValue: "rgba(22, 22, 26, 0.78)", lightValue: "rgba(255, 255, 255, 0.78)" },
   { id: "warm", label: "Warm", darkValue: "rgba(28, 25, 23, 0.78)", lightValue: "rgba(250, 246, 240, 0.78)" },
   { id: "purple", label: "Lavender", darkValue: "rgba(24, 20, 30, 0.78)", lightValue: "rgba(248, 245, 255, 0.78)" },
@@ -145,7 +146,7 @@ function roseMarkup(x: number, y: number, color: string, opacity: number, scale 
 function getNovelPatternArtwork(pattern: NovelPattern, color: string, opacity: number): string {
   switch (pattern) {
     case "vine-scroll":
-      return `<path fill="${color}" fill-opacity="${opacity}" stroke="none" d="M73.23,40.41a14.88,14.88,0,0,0-5.42-1.25,11.34,11.34,0,0,0-21.09-2.45,7.57,7.57,0,0,0-6,.51A11.23,11.23,0,0,0,34.77,46a7.25,7.25,0,0,0-6.51,2.77A4.94,4.94,0,0,1,22,49.94a1.16,1.16,0,0,0-1.07-.1,1.18,1.18,0,0,0-.69.83,8.35,8.35,0,0,0,.8,5.78A12.61,12.61,0,0,0,34,63a9.85,9.85,0,0,0,4.62,5.3,9.74,9.74,0,0,0,4.6,1.15,9.89,9.89,0,0,0,7.43-3.34,7.6,7.6,0,0,0,5.6,2.14A11.29,11.29,0,0,0,66,61.82a11.41,11.41,0,0,0,13-6.46h0A11.38,11.38,0,0,0,73.23,40.41Zm3.69,14a9,9,0,0,1-11.18,4.89h0l-.24-.09a5.5,5.5,0,0,1-3.63-5.08,5.31,5.31,0,0,1,2.26-4.3,1.16,1.16,0,0,0,.4-1.44h0a1.16,1.16,0,0,0-1.69-.5,7.59,7.59,0,0,0,1,13.09,9,9,0,0,1-7.66,4.93,5.35,5.35,0,0,1-4.6-2.33,1.15,1.15,0,0,0-1-.52,1.19,1.19,0,0,0-1,.54,7.52,7.52,0,0,1-13.37-6.73,4.56,4.56,0,0,1,5.17-3,4.42,4.42,0,0,1,2.69,1.88,1.17,1.17,0,0,0,1.4.49h0a1.15,1.15,0,0,0,.61-1.66A6.68,6.68,0,0,0,34.56,55a9.86,9.86,0,0,0-1.09,5.74,10.31,10.31,0,0,1-10.42-5.36,6.1,6.1,0,0,1-.72-2.72A7.37,7.37,0,0,0,30,50.29a4.94,4.94,0,0,1,5.52-1.76,1.12,1.12,0,0,0,1-.19,1.14,1.14,0,0,0,.46-1,8.91,8.91,0,0,1,4.75-8.12,5.27,5.27,0,0,1,4.11-.37c0,.15-.1.29-.14.44a7.78,7.78,0,0,0,.42,5,7.59,7.59,0,0,0,5.62,4.41,7.16,7.16,0,0,0,1.38.13,7.64,7.64,0,0,0,7.13-5,1.17,1.17,0,0,0-2.2-.77,5.19,5.19,0,0,1-1.94,2.48,5.29,5.29,0,0,1-7.61-1.72,6.67,6.67,0,0,1-.33-4.72c.05-.16.11-.32.17-.48h0a9,9,0,0,1,17.3,1.84,1.21,1.21,0,0,0,1.18,1,12.7,12.7,0,0,1,5.42,1.06A9,9,0,0,1,76.92,54.43Z"/>`;
+      return `<path fill="none" stroke="${color}" stroke-opacity="${opacity}" stroke-width="0.55" d="M73.23,40.41a14.88,14.88,0,0,0-5.42-1.25,11.34,11.34,0,0,0-21.09-2.45,7.57,7.57,0,0,0-6,.51A11.23,11.23,0,0,0,34.77,46a7.25,7.25,0,0,0-6.51,2.77A4.94,4.94,0,0,1,22,49.94a1.16,1.16,0,0,0-1.07-.1,1.18,1.18,0,0,0-.69.83,8.35,8.35,0,0,0,.8,5.78A12.61,12.61,0,0,0,34,63a9.85,9.85,0,0,0,4.62,5.3,9.74,9.74,0,0,0,4.6,1.15,9.89,9.89,0,0,0,7.43-3.34,7.6,7.6,0,0,0,5.6,2.14A11.29,11.29,0,0,0,66,61.82a11.41,11.41,0,0,0,13-6.46h0A11.38,11.38,0,0,0,73.23,40.41Zm3.69,14a9,9,0,0,1-11.18,4.89h0l-.24-.09a5.5,5.5,0,0,1-3.63-5.08,5.31,5.31,0,0,1,2.26-4.3,1.16,1.16,0,0,0,.4-1.44h0a1.16,1.16,0,0,0-1.69-.5,7.59,7.59,0,0,0,1,13.09,9,9,0,0,1-7.66,4.93,5.35,5.35,0,0,1-4.6-2.33,1.15,1.15,0,0,0-1-.52,1.19,1.19,0,0,0-1,.54,7.52,7.52,0,0,1-13.37-6.73,4.56,4.56,0,0,1,5.17-3,4.42,4.42,0,0,1,2.69,1.88,1.17,1.17,0,0,0,1.4.49h0a1.15,1.15,0,0,0,.61-1.66A6.68,6.68,0,0,0,34.56,55a9.86,9.86,0,0,0-1.09,5.74,10.31,10.31,0,0,1-10.42-5.36,6.1,6.1,0,0,1-.72-2.72A7.37,7.37,0,0,0,30,50.29a4.94,4.94,0,0,1,5.52-1.76,1.12,1.12,0,0,0,1-.19,1.14,1.14,0,0,0,.46-1,8.91,8.91,0,0,1,4.75-8.12,5.27,5.27,0,0,1,4.11-.37c0,.15-.1.29-.14.44a7.78,7.78,0,0,0,.42,5,7.59,7.59,0,0,0,5.62,4.41,7.16,7.16,0,0,0,1.38.13,7.64,7.64,0,0,0,7.13-5,1.17,1.17,0,0,0-2.2-.77,5.19,5.19,0,0,1-1.94,2.48,5.29,5.29,0,0,1-7.61-1.72,6.67,6.67,0,0,1-.33-4.72c.05-.16.11-.32.17-.48h0a9,9,0,0,1,17.3,1.84,1.21,1.21,0,0,0,1.18,1,12.7,12.7,0,0,1,5.42,1.06A9,9,0,0,1,76.92,54.43Z"/>`;
     case "lotus-vines":
       return `<path d="M-15 110C35 65 85 155 135 95S210 115 255 85M95-15C65 45 145 95 105 160S130 225 115 255M15 215C65 185 115 225 175 180S225 190 250 175" stroke-width="1.3"/>${leafMarkup(42, 93, color, opacity, 12, 1.1)}${leafMarkup(162, 78, color, opacity, 185, 1.1)}${leafMarkup(108, 135, color, opacity, 75, 1.1)}${flowerMarkup(68, 56, 1.05, color, opacity, 4)}${flowerMarkup(182, 168, 0.82, color, opacity, 4)}<path d="M46 178C38 166 40 156 46 150 52 156 54 166 46 178Z" fill="${color}" fill-opacity="${opacity * 0.3}"/>`;
     case "kawung-blossom":
@@ -183,7 +184,7 @@ function getNovelBackgroundColor(color: NovelBackgroundColor, isDarkMode: boolea
   const selectedBackground = novelBackgroundColors.find((option) => option.id === color);
   return selectedBackground
     ? isDarkMode ? selectedBackground.darkValue : selectedBackground.lightValue
-    : isDarkMode ? "rgba(22, 22, 26, 0.78)" : "rgba(255, 255, 255, 0.78)";
+    : "transparent";
 }
 
 function imageList(input: unknown, allowAnyUrl = false): string[] {
@@ -1192,7 +1193,7 @@ export default function ReaderPage({
   const [novelPatternColor, setNovelPatternColor] = useState<NovelPatternColor>("white");
   const [novelPatternOpacity, setNovelPatternOpacity] = useState(15);
   const [novelPatternSize, setNovelPatternSize] = useState(500);
-  const [novelBackgroundColor, setNovelBackgroundColor] = useState<NovelBackgroundColor>("dark");
+  const [novelBackgroundColor, setNovelBackgroundColor] = useState<NovelBackgroundColor>("transparent");
   const [isDarkMode, setIsDarkMode] = useState(true);
   useEffect(() => {
     const root = document.documentElement;
@@ -2489,7 +2490,7 @@ export default function ReaderPage({
             )}
           </section>
         ) : (
-          <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={data.chapter}>
+          <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-transparent p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-transparent ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={data.chapter}>
               {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
               {data.images.map((image, index) => {
                 const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
@@ -2766,7 +2767,7 @@ export default function ReaderPage({
             </div>
             <div className="mt-2.5 rounded-lg border border-black/10 p-2 dark:border-white/10">
               <h3 className="mb-1.5 text-[10px] font-bold">Text box background</h3>
-              <div className="grid grid-cols-3 gap-1" role="group" aria-label="Text box background">
+              <div className="grid grid-cols-2 gap-1" role="group" aria-label="Text box background">
                 {novelBackgroundColors.map((option) => (
                   <button
                     className={`reader-setting-option flex min-h-8 items-center justify-center gap-1 rounded-md border px-1 text-[9px] font-semibold transition ${novelBackgroundColor === option.id ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 hover:border-[var(--mikoroku-accent)]/50 dark:border-white/10"}`}
@@ -2841,7 +2842,7 @@ export default function ReaderPage({
           })}
         </section>
       ) : (
-        <article key={nextData.chapter} className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-white p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-[#191a20] ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={nextData.chapter}>
+        <article key={nextData.chapter} className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-transparent p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-transparent ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={nextData.chapter}>
           <h2 className="mb-6 text-center text-xl font-bold">{nextData.chapterTitle}</h2>
           {nextData.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
           {nextData.images.map((image, index) => {

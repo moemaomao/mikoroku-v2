@@ -187,7 +187,7 @@
   gap: 4px;
   padding: 10px;
   border-radius: var(--us-radius);
-  background: var(--us-surface);
+  background: transparent;
   border: 1px solid var(--us-border);
   box-shadow: var(--us-shadow);
   backdrop-filter: blur(14px);
@@ -244,7 +244,7 @@
   flex-direction: column;
   min-width: 0;
   border-radius: var(--us-radius);
-  background: var(--us-surface);
+  background: transparent;
   border: 1px solid var(--us-border);
   box-shadow: var(--us-shadow);
   backdrop-filter: blur(14px);
