@@ -284,9 +284,10 @@ function resolveCover(value: unknown): string {
 function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): Manga {
   const rawTitle = asString(value.title, fallbackSlug);
   const slug = asString(value.slug, normalizedSlug(rawTitle) || fallbackSlug);
-  const info = value.info && typeof value.info === "object"
-    ? value.info as Record<string, unknown>
-    : {};
+  const info = {
+    ...(value.info && typeof value.info === "object" ? value.info as Record<string, unknown> : {}),
+    ...(value.metadata && typeof value.metadata === "object" ? value.metadata as Record<string, unknown> : {}),
+  };
   const cover = resolveCover(value.img || value.cover || value.image || value.thumbnail || value.thumb);
   const genres = value.genres ?? info.genres;
 
@@ -300,7 +301,7 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     coverNumbers: value.coverNumbers && typeof value.coverNumbers === "object"
       ? Object.fromEntries(Object.entries(value.coverNumbers).map(([url, number]) => [url, asString(number)]))
       : {},
-    desc: asString(value.desc || value.description || value.synopsis || value.sinopsis),
+    desc: asString(value.desc || value.description || value.synopsis || value.sinopsis || info.desc || info.description || info.synopsis || info.sinopsis),
     genres: Array.isArray(genres) ? genres.map((genre) => asString(genre)) : asStringList(genres),
     rating: (value.rating ?? info.rating) as number | string | null | undefined,
     status: asString(value.status || info.status, "UNKNOWN"),

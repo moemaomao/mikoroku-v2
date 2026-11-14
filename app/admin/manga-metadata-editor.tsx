@@ -143,6 +143,10 @@ export default function MangaMetadataEditor({
           <textarea rows={2} value={draft.genres} onChange={(event) => onChange("genres", event.target.value)} />
         </label>
         <label className={`${styles.field} ${styles.fullWidth}`}>
+          <span>Demographic (comma-separated)</span>
+          <input value={draft.demographic} onChange={(event) => onChange("demographic", event.target.value)} />
+        </label>
+        <label className={`${styles.field} ${styles.fullWidth}`}>
           <span>Female Tags</span>
           <textarea rows={2} value={draft.femaleTags} onChange={(event) => onChange("femaleTags", event.target.value)} />
         </label>

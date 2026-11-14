@@ -265,14 +265,31 @@ function normalizeCover(value?: string): string {
   return /^https?:\/\//i.test(value) ? value : "";
 }
 
+function nestedCatalogMetadata(manga: Manga): Record<string, unknown> {
+  const info = manga.info && typeof manga.info === "object" && !Array.isArray(manga.info)
+    ? manga.info as Record<string, unknown>
+    : {};
+  const metadata = manga.metadata && typeof manga.metadata === "object" && !Array.isArray(manga.metadata)
+    ? manga.metadata as Record<string, unknown>
+    : {};
+  return { ...info, ...metadata };
+}
+
 function mangaTags(manga: Manga): string[] {
+  const metadata = nestedCatalogMetadata(manga);
   const values = [
     ...(Array.isArray(manga.genres) ? manga.genres : []),
     ...(Array.isArray(manga.tags) ? manga.tags : []),
     ...(Array.isArray(manga.labels) ? manga.labels : []),
     ...(Array.isArray(manga.category) ? manga.category : []),
     ...(Array.isArray(manga.genre) ? manga.genre : manga.genre ? [manga.genre] : []),
+    ...(Array.isArray(metadata.genres) ? metadata.genres : []),
+    ...(Array.isArray(metadata.tags) ? metadata.tags : []),
+    ...(Array.isArray(metadata.labels) ? metadata.labels : []),
+    ...(Array.isArray(metadata.category) ? metadata.category : []),
+    ...(Array.isArray(metadata.genre) ? metadata.genre : metadata.genre ? [metadata.genre] : []),
     manga.type || "",
+    metadata.type || "",
   ];
   return values.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean);
 }
@@ -287,12 +304,18 @@ function isAdultCatalog(manga: Manga): boolean {
 }
 
 function genresOf(manga: Manga): string[] {
+  const metadata = nestedCatalogMetadata(manga);
   const candidates = [
     ...(Array.isArray(manga.genres) ? manga.genres : []),
     ...(Array.isArray(manga.genre) ? manga.genre : manga.genre ? [manga.genre] : []),
     ...(Array.isArray(manga.tags) ? manga.tags : []),
     ...(Array.isArray(manga.labels) ? manga.labels : []),
     ...(Array.isArray(manga.category) ? manga.category : []),
+    ...(Array.isArray(metadata.genres) ? metadata.genres : []),
+    ...(Array.isArray(metadata.genre) ? metadata.genre : metadata.genre ? [metadata.genre] : []),
+    ...(Array.isArray(metadata.tags) ? metadata.tags : []),
+    ...(Array.isArray(metadata.labels) ? metadata.labels : []),
+    ...(Array.isArray(metadata.category) ? metadata.category : []),
   ];
   const excluded = new Set(["ongoing", "completed", "hiatus", "dropped", "canceled", "manga", "manhwa", "manhua", "novel", "cg", "doujinshi", "up"]);
   return [...new Set(candidates.map((value) => String(value).trim()).filter((value) =>
