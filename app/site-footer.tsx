@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
@@ -16,6 +16,12 @@ export default function SiteFooter({
   backgroundColor?: string;
   removeTopGap?: boolean;
 }) {
+  const [year, setYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    setYear(new Date().getFullYear());
+  }, []);
+
   useEffect(() => {
     const histatsWrapper = document.getElementById("histats-wrapper");
     if (histatsWrapper) {
@@ -118,7 +124,7 @@ export default function SiteFooter({
           </div>
 
           <p className="mb-2 text-center max-[768px]:mb-[10px]">
-            © {new Date().getFullYear()} <strong className="text-[#d66767]">Mikoroku.</strong> All Rights Reserved.
+            © {year ?? ""} <strong className="text-[#d66767]">Mikoroku.</strong> All Rights Reserved.
           </p>
 
           <div className="flex items-center justify-center gap-3">
