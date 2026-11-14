@@ -72,6 +72,14 @@ function normalizeSlug(value: string): string {
     .replace(/\s+/g, "-").replace(/-+/g, "-");
 }
 
+function displayTitle(item: Recommendation): string {
+  if (item.title.trim().toLowerCase() !== item.slug.trim().toLowerCase()) return item.title;
+  return item.title
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
 function resolveCover(value: unknown): string {
   const cover = asString(value).trim().replace(/\.$/, "");
   if (!cover || cover === "-") return "";
@@ -134,7 +142,7 @@ function normalizeRecommendation(
 
   return {
     title,
-    slug: asString(item.slug, normalizeSlug(title)),
+    slug: asString(item.slug).trim() || normalizeSlug(title),
     img: cover,
     cover,
     desc: asString(item.desc || item.description || item.synopsis || item.sinopsis),
@@ -381,8 +389,7 @@ export default function RecommendationSidebar({
           const data = document.data();
           upsert(normalizeRecommendation({
             ...data,
-            title: data.title || document.id,
-            slug: data.slug || normalizeSlug(asString(data.title, document.id)) || document.id,
+            slug: data.slug || normalizeSlug(asString(data.title || data.name, document.id)) || document.id,
           }, "firestore"));
         });
         publish();
@@ -551,6 +558,7 @@ export default function RecommendationSidebar({
                     loading="lazy"
                     alt=""
                     nsfw={item.nsfw}
+                    showNsfwBadge={false}
                     onError={(event) => {
                       event.currentTarget.src = NO_COVER;
                     }}
@@ -558,7 +566,7 @@ export default function RecommendationSidebar({
                   />
                 </span>
                 <span className="relative z-10 line-clamp-2 min-w-0 flex-1 overflow-hidden pr-1 text-left text-[12px] font-semibold leading-[1.35] text-zinc-900 drop-shadow-sm dark:text-white">
-                  {item.title}
+                  {displayTitle(item)}
                 </span>
               </a>
               );

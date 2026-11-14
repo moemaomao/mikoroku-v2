@@ -11,7 +11,7 @@ import { chapterNumberFromRecord } from "../../lib/chapter-number";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
-import { useNsfwVisibility } from "../lib/nsfw";
+import { isNsfwMangaRecord, useNsfwVisibility } from "../lib/nsfw";
 import {
   SERIES_COVER_PREFERENCE_STORAGE_KEY,
   SERIES_COVER_PREFERENCE_UPDATED_AT_KEY,
@@ -684,7 +684,8 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
       githubManga?.nsfw === true ||
       firestoreManga?.nsfw === true ||
       cachedManga?.nsfw === true ||
-      currentManga?.nsfw === true;
+      currentManga?.nsfw === true ||
+      isNsfwMangaRecord(manga);
   }
   if (!signal.aborted && !manga?.covers?.length) {
     try {

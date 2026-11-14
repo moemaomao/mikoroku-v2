@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { CoverImage } from "../lib/cover-image";
+import { isNsfwMangaRecord } from "../lib/nsfw";
 import { isNovelSeries } from "../../lib/reader-kind";
 import "./catalog.css";
 
@@ -546,10 +547,11 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
                 const titleValue = titleOf(manga);
                 const slug = manga.slug || slugify(titleValue);
                 const cover = normalizeCover(manga.img || manga.cover);
+                const isNsfw = kind === "genre" && isNsfwMangaRecord(manga);
                 return (
                   <a className="catalog-card" href={`/series/${encodeURIComponent(slug)}`} key={`${slug}:${titleValue}`}>
                     <span className="catalog-cover">
-                      {cover ? <CoverImage src={cover} alt="" nsfw={manga.nsfw === true} onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">No cover</span>}
+                      {cover ? <CoverImage src={cover} alt="" nsfw={isNsfw} onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }} /> : <span className="catalog-no-cover">No cover</span>}
                     </span>
                     <span className="catalog-card-title">{titleValue}</span>
                   </a>

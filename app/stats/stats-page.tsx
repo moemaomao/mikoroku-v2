@@ -561,7 +561,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
         ) : (
           <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All reading medals earned!</p>
         )}
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
           {readingMedals.map((medal) => {
             const unlocked = totalChaptersRead >= medal.chapters;
             const medalTileStyle: CSSProperties & { "--stats-medal-color": string } = {
@@ -583,7 +583,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
                     setCurrent(medal);
                   }
                 }}
-                className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition ${
+                className={`flex aspect-[4/5] min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center transition sm:aspect-auto sm:flex-row sm:justify-start sm:gap-3 sm:p-3 sm:text-left ${
                   unlocked
                     ? "stats-gradient-card cursor-pointer border-black/10 shadow-md hover:brightness-105 hover:shadow-lg active:scale-[0.98] dark:border-white/15"
                     : "border-black/10 bg-slate-100/80 dark:border-white/10 dark:bg-black/20"
@@ -595,7 +595,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
                 <img
                   src={medalImageMap[medal.symbol]}
                   alt=""
-                  className={`size-12 shrink-0 object-contain ${unlocked ? "" : "grayscale opacity-40"}`}
+                  className={`size-16 shrink-0 object-contain sm:size-14 ${unlocked ? "" : "grayscale opacity-40"}`}
                   draggable={false}
                 />
                 <div className="min-w-0">
@@ -605,7 +605,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
                   <p className={`mt-0.5 text-[10px] ${unlocked ? "text-slate-800/80" : "text-slate-600 dark:text-zinc-400"}`}>
                     {medal.chapters.toLocaleString()} chapters
                   </p>
-                  <p className={`mt-1 text-[10px] font-semibold ${unlocked ? "text-slate-900/90" : "text-slate-500 dark:text-zinc-500"}`}>
+                  <p className={`mt-1 line-clamp-2 text-[10px] font-semibold ${unlocked ? "text-slate-900/90" : "text-slate-500 dark:text-zinc-500"}`}>
                     {unlocked ? "Unlocked · view" : medal.description}
                   </p>
                 </div>
@@ -643,7 +643,7 @@ function DonutCard({
     : "conic-gradient(color-mix(in srgb, currentColor 14%, transparent) 0 100%)";
 
   return (
-    <article className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-5">
+    <article className="rounded-3xl border border-black/10 bg-gradient-to-br from-red-500/10 via-transparent to-violet-500/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:from-red-500/15 dark:via-transparent dark:to-violet-500/15 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-5">
       <h2 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h2>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-6 sm:justify-between sm:gap-3">
         <div
@@ -1310,7 +1310,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       </main>
       {isOwner && statsSettingsOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md sm:p-5"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-2 backdrop-blur-md sm:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setStatsSettingsOpen(false);
           }}
@@ -1321,14 +1321,14 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="stats-settings-title"
-            className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-black/10 bg-white shadow-2xl outline-none dark:border-white/15 dark:bg-[#15151d]"
+            className="flex max-h-[70dvh] w-[86vw] max-w-[22rem] flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-2xl outline-none dark:border-white/15 dark:bg-[#15151d] sm:max-h-[85vh] sm:w-full sm:max-w-md sm:rounded-2xl"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-4 dark:border-white/10 sm:px-6">
+            <div className="flex items-start justify-between gap-2 border-b border-black/10 px-3 py-2.5 dark:border-white/10 sm:gap-3 sm:px-4 sm:py-3">
               <div>
-                <h2 id="stats-settings-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                <h2 id="stats-settings-title" className="text-sm font-bold text-slate-900 dark:text-white sm:text-base">
                   Stats Settings
                 </h2>
-                <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                <p className="mt-1 text-[10px] text-slate-500 dark:text-zinc-400 sm:text-[11px]">
                   Manage your banner and choose which stats visitors can see.
                 </p>
               </div>
@@ -1336,18 +1336,18 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                 type="button"
                 onClick={() => setStatsSettingsOpen(false)}
                 aria-label="Close stats settings"
-                className="grid size-9 shrink-0 place-items-center rounded-xl border border-black/10 text-slate-600 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5"
+                className="grid size-7 shrink-0 place-items-center rounded-md border border-black/10 text-slate-600 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-white/5 sm:size-8 sm:rounded-lg"
               >
-                <span aria-hidden="true" className="text-xl leading-none">×</span>
+                <span aria-hidden="true" className="text-base leading-none sm:text-lg">×</span>
               </button>
             </div>
 
-            <div className="overflow-y-auto px-5 py-5 sm:px-6">
-              <section className="rounded-2xl border border-black/10 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.035]">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
+              <section className="rounded-lg border border-black/10 bg-slate-50 p-2.5 dark:border-white/10 dark:bg-white/[0.035] sm:rounded-xl sm:p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-2.5">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Profile banner</h3>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+                    <h3 className="text-[11px] font-bold text-slate-900 dark:text-white sm:text-xs">Profile banner</h3>
+                    <p className="mt-1 text-[10px] text-slate-500 dark:text-zinc-400 sm:text-[11px]">
                       {profileBanner ? "A banner is currently set." : "No banner has been added."}
                     </p>
                   </div>
@@ -1355,10 +1355,10 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                     type="button"
                     onClick={() => bannerInputRef.current?.click()}
                     disabled={bannerUploading}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--mikoroku-accent)] px-4 py-2.5 text-xs font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70"
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--mikoroku-accent)] px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70 sm:gap-1.5 sm:rounded-lg sm:px-3 sm:py-2 sm:text-[11px]"
                   >
                     {bannerUploading && (
-                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-4 animate-spin">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-3 animate-spin sm:size-3.5">
                         <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3" />
                         <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
                       </svg>
@@ -1373,29 +1373,29 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                 )}
               </section>
 
-              <section className="mt-5">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Public stats visibility</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-zinc-400">
+              <section className="mt-3 sm:mt-4">
+                <h3 className="text-[11px] font-bold text-slate-900 dark:text-white sm:text-xs">Public stats visibility</h3>
+                <p className="mt-1 text-[10px] leading-[1.35] text-slate-500 dark:text-zinc-400 sm:text-[11px] sm:leading-4">
                   Select sections to hide from everyone. Your profile header and banner remain visible.
                 </p>
-                <div className="mt-3 space-y-2">
+                <div className="mt-2 space-y-1 sm:mt-2.5 sm:space-y-1.5">
                   {statsSectionSettings.map((section) => {
                     const hidden = hiddenStatsDraft.includes(section.id);
                     return (
                       <label
                         key={section.id}
-                        className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-3 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.05]"
+                        className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.025] dark:hover:bg-white/[0.05] sm:gap-3 sm:rounded-xl sm:px-3 sm:py-2"
                       >
                         <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-slate-800 dark:text-zinc-100">
+                          <span className="block text-[11px] font-semibold text-slate-800 dark:text-zinc-100 sm:text-xs">
                             {section.label}
                           </span>
-                          <span className="mt-0.5 block text-xs leading-5 text-slate-500 dark:text-zinc-400">
+                          <span className="mt-0.5 block text-[10px] leading-[1.3] text-slate-500 dark:text-zinc-400 sm:text-[11px] sm:leading-4">
                             {section.description}
                           </span>
                         </span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-400">
+                        <span className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                          <span className="text-[8px] font-semibold text-slate-500 dark:text-zinc-400 sm:text-[9px]">
                             {hidden ? "Hidden" : "Visible"}
                           </span>
                           <input
@@ -1408,7 +1408,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                                 : current.filter((id) => id !== section.id));
                             }}
                             aria-label={`Hide ${section.label} from public stats`}
-                            className="size-4 accent-[var(--mikoroku-accent)]"
+                            className="size-3 accent-[var(--mikoroku-accent)] sm:size-3.5"
                           />
                         </span>
                       </label>
@@ -1418,17 +1418,17 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
               </section>
 
               {statsSettingsError && (
-                <p role="alert" className="mt-4 rounded-lg bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-950/70 dark:text-red-100">
+                <p role="alert" className="mt-3 rounded-lg bg-red-100 px-3 py-2 text-[10px] text-red-800 dark:bg-red-950/70 dark:text-red-100 sm:text-[11px]">
                   {statsSettingsError}
                 </p>
               )}
             </div>
 
-            <div className="flex justify-end gap-2 border-t border-black/10 px-5 py-4 dark:border-white/10 sm:px-6">
+            <div className="flex justify-end gap-2 border-t border-black/10 px-3 py-2.5 dark:border-white/10 sm:px-4 sm:py-3">
               <button
                 type="button"
                 onClick={() => setStatsSettingsOpen(false)}
-                className="rounded-xl border border-black/10 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5"
+                className="rounded-md border border-black/10 px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-black/5 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/5 sm:rounded-lg sm:px-3 sm:py-2 sm:text-[11px]"
               >
                 Cancel
               </button>
@@ -1436,7 +1436,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                 type="button"
                 onClick={() => void saveStatsSettings()}
                 disabled={statsSettingsSaving}
-                className="rounded-xl bg-[var(--mikoroku-accent)] px-4 py-2.5 text-xs font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70"
+                className="rounded-md bg-[var(--mikoroku-accent)] px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70 sm:rounded-lg sm:px-3 sm:py-2 sm:text-[11px]"
               >
                 {statsSettingsSaving ? "Saving..." : "Save settings"}
               </button>

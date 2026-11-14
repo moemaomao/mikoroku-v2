@@ -248,7 +248,7 @@ function CatalogCard({
           }}
         />
         {commissionEnabled && <div className={commissionCoverGradientClass} />}
-        <div className={cardOverlayClass}>
+        <div className={cardOverlayClass} style={commissionEnabled ? { paddingBottom: "3rem" } : undefined}>
           <div className={cardTitleClass}>{record.title}</div>
         </div>
       </div>

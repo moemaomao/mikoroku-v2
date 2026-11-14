@@ -67,3 +67,28 @@ export function isNsfwManga(slug?: string, title?: string): boolean {
     (byTitle as Record<string, unknown>).nsfw === true,
   );
 }
+
+export function isNsfwMangaRecord(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const nested = [record.info, record.metadata].filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item),
+  );
+  if (record.nsfw === true || nested.some((item) => item.nsfw === true)) return true;
+
+  const sources = [record, ...nested];
+  const tags = sources.flatMap((source) =>
+    ["genres", "genre", "tags", "labels", "category", "type"].flatMap((key) => {
+      const item = source[key];
+      if (Array.isArray(item)) return item;
+      return item === undefined || item === null ? [] : [item];
+    }),
+  );
+  return tags.some((tag) => {
+    const normalized = String(tag).trim().toLowerCase().replace(/[_-]+/g, " ");
+    return normalized === "cg" ||
+      normalized.includes("cg collection") ||
+      ["hentai", "doujin", "smut", "adult"].some((term) => normalized.includes(term));
+  });
+}
