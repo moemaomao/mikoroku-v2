@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { normalizeProfileLink } from "../lib/profile-link";
-import "./settings.css";
+import styles from "./settings.module.css";
+
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
 
 type Settings = {
   displayName: string;
@@ -209,15 +214,15 @@ const shapes = [
   ["zigzag", "Zigzag"], ["grid", "Tech Grid"],
 ];
 const settingsSections = [
-  ["profile", "Profile"],
-  ["performance", "Performance"],
-  ["custom-badges", "Custom Badges"],
-  ["game-roles", "Game Player Roles"],
-  ["avatar-frame", "Avatar Frame"],
-  ["font-style", "Font Style"],
-  ["border-effect", "Border Effect"],
-  ["border-shape", "Border Shape"],
-  ["comment-background", "Comment Background"],
+  ["profile", "Profile", "👤"],
+  ["performance", "Performance", "⚡"],
+  ["custom-badges", "Custom Badges", "🏅"],
+  ["game-roles", "Game Roles", "🎮"],
+  ["avatar-frame", "Avatar Frame", "🖼️"],
+  ["font-style", "Font Style", "🔤"],
+  ["border-effect", "Border Effect", "✨"],
+  ["border-shape", "Border Shape", "⬡"],
+  ["comment-background", "Comment BG", "🎨"],
 ] as const;
 type SettingsSection = (typeof settingsSections)[number][0];
 
@@ -262,7 +267,6 @@ export default function SettingsPage() {
     const applyUser = async (user: Account & { photoURL?: string | null }) => {
       setAccount(user);
 
-      // Optimistic UI from local cache so the page is usable immediately
       try {
         const cached = localStorage.getItem("userSettingsPreview");
         if (cached) {
@@ -485,213 +489,504 @@ export default function SettingsPage() {
   return (
     <>
       <SiteChrome showFooter={false} />
-      <main className="settings-page route-page-background">
-        <section className="settings-panel">
-          <header className="settings-header"><h1>⚙️ User Settings</h1><p>Customize your profile and comment appearance.</p></header>
-          {status === "loading" && <p className="settings-state" role="status">Checking your account...</p>}
-          {status === "guest" && <p className="settings-state" role="status">Log in using the Account button to manage your settings.</p>}
-          {status === "error" && <p role="alert">{message}</p>}
+      <main className={cx(styles['settings-page'], 'route-page-background')}>
+        <div className={styles['settings-shell']}>
+          <header className={styles['settings-hero']}>
+            <div className={styles['settings-hero-content']}>
+              <div className={styles['settings-hero-badge']}>Settings</div>
+              <h1>User Settings</h1>
+              <p>Customize your profile, badges, and comment appearance.</p>
+            </div>
+            {status === "ready" && (
+              <div className={styles['settings-level-pill']}>
+                <span className={styles['settings-level-label']}>Level</span>
+                <span className={styles['settings-level-value']}>{userLevel}</span>
+              </div>
+            )}
+          </header>
+
+          {status === "loading" && (
+            <div className={styles['settings-state-card']}>
+              <div className={styles['settings-spinner']} />
+              <p>Checking your account...</p>
+            </div>
+          )}
+          {status === "guest" && (
+            <div className={styles['settings-state-card']}>
+              <p>Log in using the Account button to manage your settings.</p>
+            </div>
+          )}
+          {status === "error" && (
+            <div className={cx(styles['settings-state-card'], styles['settings-state-error'])} role="alert">
+              <p>{message}</p>
+            </div>
+          )}
+
           {status === "ready" && (
-            <form onSubmit={saveSettings}>
-              <div className="settings-form-layout">
-                <nav className="settings-navigation" aria-label="Settings sections">
-                  {settingsSections.map(([id, label]) => (
-                    <button type="button" key={id}
-                      className={`settings-navigation-option${activeSection === id ? " active" : ""}`}
-                      aria-current={activeSection === id ? "page" : undefined}
-                      onClick={() => {
-                        setActiveSection(id);
-                        settingsContentRef.current?.scrollTo({ top: 0 });
-                      }}>{label}</button>
-                  ))}
+            <form onSubmit={saveSettings} className={styles['settings-form']}>
+              <div className={styles['settings-layout']}>
+                <nav className={styles['settings-nav']} aria-label="Settings sections">
+                  <div className={styles['settings-nav-inner']}>
+                    {settingsSections.map(([id, label, icon]) => (
+                      <button
+                        type="button"
+                        key={id}
+                        className={cx(styles['settings-nav-item'], activeSection === id && styles['is-active'])}
+                        aria-current={activeSection === id ? "page" : undefined}
+                        onClick={() => {
+                          setActiveSection(id);
+                          settingsContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                      >
+                        <span className={styles['settings-nav-icon']}>{icon}</span>
+                        <span className={styles['settings-nav-label']}>{label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </nav>
-                <div className="settings-content" ref={settingsContentRef}>
-              <section className="settings-section" hidden={activeSection !== "profile"}>
-                <h2>Profile</h2>
-                <div className="settings-profile-grid">
-                  <div className="settings-profile-field">
-                    <h3>Avatar</h3>
-                    <div className="settings-avatar-row">
-                      <span className="settings-avatar-wrap">
-                        <img className="settings-avatar-preview" src={settings.avatar || anonymousAvatar} alt="Avatar preview" />
-                        {settings.customAvatarFrame && <img className="settings-avatar-frame" src={settings.customAvatarFrame} alt="" />}
-                      </span>
-                      <label className="settings-upload-label">Upload Avatar<input type="file" accept="image/*" onChange={(event) => void selectAvatar(event.target.files?.[0])} /></label>
-                    </div>
-                    {avatarError && <p className="settings-error" role="alert">{avatarError}</p>}
+
+                <div className={styles['settings-main']}>
+                  <div className={styles['settings-content']} ref={settingsContentRef}>
+                    {/* PROFILE */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "profile"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Profile</h2>
+                        <p>Your public identity across comments and lists.</p>
+                      </div>
+
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-avatar-block']}>
+                          <div className={styles['settings-avatar-preview-wrap']}>
+                            <img
+                              className={styles['settings-avatar-img']}
+                              src={settings.avatar || anonymousAvatar}
+                              alt="Avatar preview"
+                            />
+                            {settings.customAvatarFrame && (
+                              <img
+                                className={styles['settings-avatar-frame-overlay']}
+                                src={settings.customAvatarFrame}
+                                alt=""
+                              />
+                            )}
+                          </div>
+                          <div className={styles['settings-avatar-actions']}>
+                            <label className={cx(styles['settings-btn'], styles['settings-btn-secondary'])}>
+                              <span>Upload Avatar</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => void selectAvatar(e.target.files?.[0])}
+                              />
+                            </label>
+                            <p className={styles['settings-hint-sm']}>Max 512 KB · JPG/PNG/WebP</p>
+                            {avatarError && (
+                              <p className={styles['settings-error-text']} role="alert">{avatarError}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className={styles['settings-fields-grid']}>
+                          <div className={styles['settings-field']}>
+                            <label htmlFor="settings-display-name">Display Name</label>
+                            <input
+                              id="settings-display-name"
+                              type="text"
+                              value={settings.displayName}
+                              maxLength={50}
+                              onChange={(e) => update("displayName", e.target.value)}
+                              placeholder="Name shown in comments..."
+                            />
+                          </div>
+
+                          <div className={styles['settings-field']}>
+                            <label htmlFor="settings-username">
+                              Username <span className={styles['settings-muted']}>(@handle)</span>
+                            </label>
+                            <input
+                              id="settings-username"
+                              type="text"
+                              value={settings.username}
+                              maxLength={30}
+                              onChange={(e) => update("username", e.target.value)}
+                              placeholder="username"
+                            />
+                          </div>
+
+                          <div className={cx(styles['settings-field'], styles['settings-field-full'])}>
+                            <label htmlFor="settings-bio-link">
+                              Bio Link <span className={styles['settings-muted']}>(optional)</span>
+                            </label>
+                            <input
+                              id="settings-bio-link"
+                              type="text"
+                              inputMode="url"
+                              value={settings.bioLink}
+                              maxLength={2048}
+                              onChange={(e) => update("bioLink", e.target.value)}
+                              placeholder="https://example.com"
+                            />
+                            <p className={styles['settings-hint-sm']}>
+                              Domains without a scheme automatically use HTTPS.
+                            </p>
+                          </div>
+
+                          <div className={cx(styles['settings-field'], styles['settings-field-full'])}>
+                            <label htmlFor="settings-bio">
+                              Bio <span className={styles['settings-muted']}>(max 160)</span>
+                            </label>
+                            <textarea
+                              id="settings-bio"
+                              value={settings.bio}
+                              maxLength={160}
+                              onChange={(e) => update("bio", e.target.value)}
+                              placeholder="Describe yourself..."
+                              rows={3}
+                            />
+                            <div className={styles['settings-char-count']}>
+                              {settings.bio.length}/160
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* PERFORMANCE */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "performance"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Performance</h2>
+                        <p>Reduce motion for faster comment loading.</p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <label className={styles['settings-toggle-row']}>
+                          <div className={styles['settings-toggle-info']}>
+                            <strong>Disable All Animations</strong>
+                            <span>Comments load faster and feel lighter.</span>
+                          </div>
+                          <div className={styles['settings-toggle']}>
+                            <input
+                              type="checkbox"
+                              checked={settings.disableAnimations}
+                              onChange={(e) => update("disableAnimations", e.target.checked)}
+                            />
+                            <span className={styles['settings-toggle-track']} />
+                          </div>
+                        </label>
+                      </div>
+                    </section>
+
+                    {/* CUSTOM BADGES */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "custom-badges"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Custom Badges</h2>
+                        <p>
+                          {badgeLimit > 1
+                            ? "LV 110+ — select up to 2 badges."
+                            : "Choose 1 badge. Reach LV 110 for a second slot."}
+                        </p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-badge-grid']}>
+                          {(allBadgesExpanded ? badges : badges.slice(0, 20)).map(([id, name]) => {
+                            const selected = id
+                              ? settings.customBadges.includes(id)
+                              : settings.customBadges.length === 0;
+                            return (
+                              <button
+                                type="button"
+                                key={id || "none"}
+                                className={cx(styles['settings-badge-chip'], `badge-${id || 'none'}`, selected && styles['is-selected'])}
+                                aria-pressed={selected}
+                                onClick={() => toggleBadge(id)}
+                              >
+                                {name}
+                              </button>
+                            );
+                          })}
+                          {settings.customBadges
+                            .filter((selected) => !badges.some(([id]) => id === selected))
+                            .map((selected) => (
+                              <button
+                                type="button"
+                                key={selected}
+                                className={cx(styles['settings-badge-chip'], styles['is-selected'])}
+                                aria-pressed={true}
+                                onClick={() => toggleBadge(selected)}
+                              >
+                                {selected}
+                              </button>
+                            ))}
+                        </div>
+                        <button
+                          type="button"
+                          className={cx(styles['settings-btn'], styles['settings-btn-ghost'], styles['settings-expand-btn'])}
+                          onClick={() => setAllBadgesExpanded((v) => !v)}
+                        >
+                          {allBadgesExpanded ? "Show fewer badges" : "Show all badges"}
+                        </button>
+                      </div>
+                    </section>
+
+                    {/* GAME ROLES */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "game-roles"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Game Player Roles</h2>
+                        <p>Multiple selections allowed.</p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-role-grid']}>
+                          {roles.map(([id, name]) => (
+                            <label key={id} className={styles['settings-role-item']}>
+                              <input
+                                type="checkbox"
+                                checked={settings.gameRoles.includes(id)}
+                                onChange={() => toggleRole(id)}
+                              />
+                              <span>{name}</span>
+                            </label>
+                          ))}
+                          {extraRoles.map((role) => (
+                            <label key={role} className={styles['settings-role-item']}>
+                              <input
+                                type="checkbox"
+                                checked
+                                onChange={() => toggleRole(role)}
+                              />
+                              <span>{role}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* AVATAR FRAME */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "avatar-frame"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Avatar Frame</h2>
+                        <p>Pick a decorative frame for your avatar.</p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-frame-grid']}>
+                          <button
+                            type="button"
+                            className={cx(styles['settings-frame-item'], (!settings.customAvatarFrame ? styles['is-selected'] : undefined))}
+                            onClick={() => update("customAvatarFrame", "")}
+                          >
+                            <span className={styles['settings-frame-none']}>None</span>
+                          </button>
+                          {Array.from({ length: 30 }, (_, index) => {
+                            const url = `/assets/hakoroku/avatar-frames/${index + 1}.png`;
+                            return (
+                              <button
+                                type="button"
+                                key={url}
+                                title={`Frame ${index + 1}`}
+                                className={cx(styles['settings-frame-item'], (settings.customAvatarFrame === url ? styles['is-selected'] : undefined))}
+                                onClick={() => update("customAvatarFrame", url)}
+                              >
+                                <img src={url} alt="" loading="lazy" />
+                                <span>#{index + 1}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* FONT STYLE */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "font-style"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Font Style</h2>
+                        <p>Choose how your comments look.</p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-choice-grid']}>
+                          {fonts.map(([id, name, preview]) => (
+                            <button
+                              type="button"
+                              key={id || "default"}
+                              className={cx(styles['settings-choice-item'], settings.customFontStyle === (id ? `font-${id}` : "") && styles['is-selected'])}
+                              onClick={() => update("customFontStyle", id ? `font-${id}` : "")}
+                            >
+                              <small>{name}</small>
+                              <span className={id ? `font-${id}` : undefined}>{preview}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* BORDER EFFECT */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "border-effect"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Visual Border Effect</h2>
+                        <p>Animated borders for your comments.</p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-choice-grid']}>
+                          {borders.map(([id, name]) => {
+                            const selected = settings.customBorder === (id ? `border-${id}` : "");
+                            return (
+                              <button
+                                type="button"
+                                key={id || "default"}
+                                className={cx(styles['settings-choice-item'], styles['settings-border-preview'], id && `border-${id}`, selected && styles['is-selected'])}
+                                aria-pressed={selected}
+                                onClick={() => update("customBorder", id ? `border-${id}` : "")}
+                              >
+                                {name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* BORDER SHAPE */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "border-shape"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>Border Shape</h2>
+                        <p>Shape the outline of your comments.</p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={styles['settings-choice-grid']}>
+                          {shapes.map(([id, name]) => (
+                            <button
+                              type="button"
+                              key={id || "default"}
+                              className={cx(styles['settings-choice-item'], styles['settings-shape-preview'], id && `shape-${id}`, settings.customShape === (id ? `shape-${id}` : "") && styles['is-selected'])}
+                              onClick={() => update("customShape", id ? `shape-${id}` : "")}
+                            >
+                              {name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* COMMENT BACKGROUND */}
+                    <section className={styles['settings-section']} hidden={activeSection !== "comment-background"}>
+                      <div className={styles['settings-section-header']}>
+                        <h2>
+                          Comment Background{" "}
+                          <span className={styles['settings-premium-tag']}>Lv 110+</span>
+                        </h2>
+                        <p>
+                          {userLevel < 110
+                            ? `Locked — reach level 110. Current level: ${userLevel}.`
+                            : "Choose a background for your comments."}
+                        </p>
+                      </div>
+                      <div className={styles['settings-card']}>
+                        <div className={cx(styles['settings-bg-grid'], (userLevel < 110 ? styles['is-locked'] : undefined))}>
+                          <button
+                            type="button"
+                            className={cx(styles['settings-bg-item'], styles['settings-bg-default'], (!settings.customCommentBg ? styles['is-selected'] : undefined))}
+                            disabled={userLevel < 110}
+                            onClick={() => update("customCommentBg", "")}
+                          >
+                            <span>Default</span>
+                          </button>
+                          {Array.from({ length: 8 }, (_, index) => {
+                            const url = `/assets/hakoroku/backgrounds/${index + 1}.jpg`;
+                            return (
+                              <button
+                                type="button"
+                                key={url}
+                                className={cx(styles['settings-bg-item'], (settings.customCommentBg === url ? styles['is-selected'] : undefined))}
+                                disabled={userLevel < 110}
+                                style={{ backgroundImage: `url("${url}")` }}
+                                onClick={() => update("customCommentBg", url)}
+                              >
+                                <span>BG {index + 1}</span>
+                              </button>
+                            );
+                          })}
+                          {userLevel >= 120 && (
+                            <label
+                              className={cx(styles['settings-bg-item'], styles['settings-bg-upload'], (settings.customCommentBg && !settings.customCommentBg.startsWith("/assets/hakoroku/backgrounds/") ? styles['is-selected'] : undefined), (customBgUploading ? styles['is-uploading'] : undefined))}
+                              style={
+                                settings.customCommentBg &&
+                                !settings.customCommentBg.startsWith("/assets/hakoroku/backgrounds/")
+                                  ? { backgroundImage: `url("${settings.customCommentBg}")` }
+                                  : undefined
+                              }
+                            >
+                              <input
+                                type="file"
+                                accept="image/*"
+                                disabled={customBgUploading}
+                                onChange={(e) =>
+                                  void uploadCustomCommentBg(e.currentTarget.files?.[0], e.currentTarget)
+                                }
+                              />
+                              <span>{customBgUploading ? "Uploading…" : "Upload Custom"}</span>
+                            </label>
+                          )}
+                        </div>
+
+                        {userLevel >= 120 ? (
+                          <p className={styles['settings-hint-sm']}>
+                            Level 120+ · Images are resized ≤1600px and compressed to WebP.
+                          </p>
+                        ) : (
+                          <p className={styles['settings-hint-sm']}>
+                            Custom uploads unlock at level 120. Current level: {userLevel}.
+                          </p>
+                        )}
+
+                        {customBgError && (
+                          <p className={styles['settings-error-text']} role="alert">{customBgError}</p>
+                        )}
+
+                        {settings.customCommentBg && userLevel >= 110 && (
+                          <div className={styles['settings-bg-preview']}>
+                            <img src={settings.customCommentBg} alt="Selected background preview" />
+                            <button
+                              type="button"
+                              className={cx(styles['settings-btn'], styles['settings-btn-danger'])}
+                              disabled={userLevel < 110 || customBgUploading}
+                              onClick={() => update("customCommentBg", "")}
+                            >
+                              Reset Background
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </section>
                   </div>
 
-                  <div className="settings-profile-field">
-                    <label htmlFor="settings-display-name">Display Name</label>
-                    <input id="settings-display-name" type="text" value={settings.displayName} maxLength={50}
-                      onChange={(event) => update("displayName", event.target.value)} placeholder="Name shown in comments..." />
-                  </div>
-
-                  <div className="settings-profile-field">
-                    <label htmlFor="settings-username">Username <span className="settings-muted">(@handle)</span></label>
-                    <input id="settings-username" type="text" value={settings.username} maxLength={30}
-                      onChange={(event) => update("username", event.target.value)} placeholder="username" />
-                  </div>
-
-                  <div className="settings-profile-field">
-                    <label htmlFor="settings-bio-link">Bio Link <span className="settings-muted">(optional)</span></label>
-                    <input id="settings-bio-link" type="text" inputMode="url" value={settings.bioLink} maxLength={2048}
-                      onChange={(event) => update("bioLink", event.target.value)} placeholder="https://example.com" />
-                    <p className="settings-hint">Add a website or social profile link. Domains without a scheme use HTTPS.</p>
-                  </div>
-
-                  <div className="settings-profile-field settings-profile-bio">
-                    <label htmlFor="settings-bio">Bio <span className="settings-muted">(max 160 characters)</span></label>
-                    <textarea id="settings-bio" value={settings.bio} maxLength={160}
-                      onChange={(event) => update("bio", event.target.value)} placeholder="Describe yourself..." />
-                  </div>
-                </div>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "performance"}>
-                <h2>Performance</h2>
-                <label className="settings-performance">
-                  <input type="checkbox" checked={settings.disableAnimations} onChange={(event) => update("disableAnimations", event.target.checked)} />
-                  <span><strong>Disable All Animations</strong><small>Makes comments load faster.</small></span>
-                </label>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "custom-badges"}>
-                <h2>Custom Badges</h2>
-                <div className="settings-badge-grid">
-                  {(allBadgesExpanded ? badges : badges.slice(0, 16)).map(([id, name]) => {
-                    const selected = id ? settings.customBadges.includes(id) : settings.customBadges.length === 0;
-                    return <button type="button" key={id || "none"}
-                      className={`settings-badge-option badge-${id || "none"}${selected ? " selected" : ""}`}
-                      aria-pressed={selected} onClick={() => toggleBadge(id)}>{name}</button>;
-                  })}
-                  {settings.customBadges.filter((selected) => !badges.some(([id]) => id === selected)).map((selected) => (
-                    <button type="button" key={selected} className="settings-badge-option selected" aria-pressed={true}
-                      onClick={() => toggleBadge(selected)}>{selected}</button>
-                  ))}
-                </div>
-                <p className="settings-hint">
-                  {badgeLimit > 1
-                    ? "LV 110+: choose up to 2 badges."
-                    : "Choose 1 badge. Reach LV 110 to unlock a second badge."}
-                </p>
-                <button type="button" className="settings-expand" onClick={() => setAllBadgesExpanded((expanded) => !expanded)}>
-                  {allBadgesExpanded ? "↑ Show Fewer Badges" : "↓ Expand All Badges"}
-                </button>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "game-roles"}>
-                <h2>Game Player Roles</h2>
-                <p className="settings-hint">Multiple selections allowed.</p>
-                <div className="settings-role-grid">
-                  {roles.map(([id, name]) => <label key={id}><input type="checkbox" checked={settings.gameRoles.includes(id)} onChange={() => toggleRole(id)} />{name}</label>)}
-                  {extraRoles.map((role) => <label key={role}><input type="checkbox" checked onChange={() => toggleRole(role)} />{role}</label>)}
-                </div>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "avatar-frame"}>
-                <h2>Avatar Frame</h2>
-                <div className="settings-frame-grid">
-                  <button type="button" className={`settings-frame-option${settings.customAvatarFrame ? "" : " selected"}`} onClick={() => update("customAvatarFrame", "")}>None</button>
-                  {Array.from({ length: 30 }, (_, index) => {
-                    const url = `/assets/hakoroku/avatar-frames/${index + 1}.png`;
-                    return <button type="button" key={url} title={`Frame ${index + 1}`}
-                      className={`settings-frame-option${settings.customAvatarFrame === url ? " selected" : ""}`}
-                      onClick={() => update("customAvatarFrame", url)}>
-                      <img src={url} alt="" loading="lazy" /><span>Frame {index + 1}</span>
-                    </button>;
-                  })}
-                </div>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "font-style"}>
-                <h2>Font Style</h2>
-                <div className="settings-choice-grid">
-                  {fonts.map(([id, name, preview]) => <button type="button" key={id || "default"}
-                    className={`settings-font-option${settings.customFontStyle === (id ? `font-${id}` : "") ? " selected" : ""}`}
-                    onClick={() => update("customFontStyle", id ? `font-${id}` : "")}>
-                    <small>{name}</small><span className={id ? `font-${id}` : ""}>{preview}</span>
-                  </button>)}
-                </div>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "border-effect"}>
-                <h2>Visual Border Effect</h2>
-                <div className="settings-choice-grid">
-                  {borders.map(([id, name]) => {
-                    const selected = settings.customBorder === (id ? `border-${id}` : "");
-                    return <button type="button" key={id || "default"}
-                      className={`settings-border-option ${id ? `border-${id}` : ""}${selected ? " selected" : ""}`}
-                      aria-pressed={selected} onClick={() => update("customBorder", id ? `border-${id}` : "")}>{name}</button>;
-                  })}
-                </div>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "border-shape"}>
-                <h2>Border Shape</h2>
-                <div className="settings-shape-grid">
-                  {shapes.map(([id, name]) => <button type="button" key={id || "default"}
-                    className={`settings-shape-option ${id ? `shape-${id}` : ""}${settings.customShape === (id ? `shape-${id}` : "") ? " selected" : ""}`}
-                    onClick={() => update("customShape", id ? `shape-${id}` : "")}>{name}</button>)}
-                </div>
-              </section>
-
-              <section className="settings-section" hidden={activeSection !== "comment-background"}>
-                <h2>Comment Background <span className="settings-premium">(Lv 110+)</span></h2>
-                {userLevel < 110 && <p className="settings-hint" role="status">
-                  Locked: reach level 110 to use Comment Background. Your current level is {userLevel}.
-                </p>}
-                <div className={`settings-background-grid${userLevel < 110 ? " is-locked" : ""}`}>
-                  <button type="button" className={`settings-background-option settings-background-default${settings.customCommentBg ? "" : " selected"}`}
-                    disabled={userLevel < 110}
-                    onClick={() => update("customCommentBg", "")}><span>Default</span></button>
-                  {Array.from({ length: 8 }, (_, index) => {
-                    const url = `/assets/hakoroku/backgrounds/${index + 1}.jpg`;
-                    return <button type="button" key={url} className={`settings-background-option${settings.customCommentBg === url ? " selected" : ""}`}
-                      disabled={userLevel < 110}
-                      style={{ backgroundImage: `url("${url}")` }} onClick={() => update("customCommentBg", url)}>
-                      <span>Background {index + 1}</span>
-                    </button>;
-                  })}
-                  {userLevel >= 120 && <label
-                    className={`settings-background-option settings-background-upload-option${settings.customCommentBg && !settings.customCommentBg.startsWith("/assets/hakoroku/backgrounds/") ? " selected" : ""}${customBgUploading ? " is-uploading" : ""}`}
-                    style={settings.customCommentBg && !settings.customCommentBg.startsWith("/assets/hakoroku/backgrounds/")
-                      ? { backgroundImage: `url("${settings.customCommentBg}")` }
-                      : undefined}>
-                    <input type="file" accept="image/*" disabled={customBgUploading}
-                      onChange={(event) => void uploadCustomCommentBg(event.currentTarget.files?.[0], event.currentTarget)} />
-                    <span>{customBgUploading ? "Uploading..." : "Upload Custom BG"}</span>
-                  </label>}
-                </div>
-                {userLevel >= 120 ? <p className="settings-hint">
-                  Level 120+ only. Images are resized to at most 1600 px and compressed to WebP before uploading to ImgBB.
-                </p> : <p className="settings-hint">
-                  Custom background uploads unlock at level 120. Your current level is {userLevel}.
-                </p>}
-                {customBgError && <p className="settings-error" role="alert">{customBgError}</p>}
-                {settings.customCommentBg && userLevel >= 110 && <div className="settings-background-preview">
-                  <img src={settings.customCommentBg} alt="Selected comment background preview" />
-                  <button type="button" disabled={userLevel < 110 || customBgUploading}
-                    onClick={() => update("customCommentBg", "")}>🗑 Reset Background</button>
-                </div>}
-              </section>
-                  <div className="settings-actions">
-                    <button className="settings-save" type="submit" disabled={saving || customBgUploading}>
-                      {saving ? "Saving..." : customBgUploading ? "Uploading Background..." : "Save Settings"}
+                  <div className={styles['settings-footer-actions']}>
+                    <button
+                      className={cx(styles['settings-btn'], styles['settings-btn-primary'])}
+                      type="submit"
+                      disabled={saving || customBgUploading}
+                    >
+                      {saving
+                        ? "Saving…"
+                        : customBgUploading
+                          ? "Uploading Background…"
+                          : "Save Settings"}
                     </button>
                   </div>
                 </div>
               </div>
             </form>
           )}
-        </section>
-        {message && status === "ready" && <div
-          className={`settings-notification settings-notification-${messageType}`}
-          role={messageType === "error" ? "alert" : "status"}
-          aria-live={messageType === "error" ? "assertive" : "polite"}>
-          <span>{message}</span>
-          <button type="button" aria-label="Dismiss notification" onClick={() => setMessage("")}>×</button>
-        </div>}
+        </div>
+
+        {message && status === "ready" && (
+          <div
+            className={cx(styles['settings-toast'], styles[`settings-toast-${messageType}`])}
+            role={messageType === "error" ? "alert" : "status"}
+            aria-live={messageType === "error" ? "assertive" : "polite"}
+          >
+            <span>{message}</span>
+            <button type="button" aria-label="Dismiss" onClick={() => setMessage("")}>
+              ×
+            </button>
+          </div>
+        )}
       </main>
       <SiteChrome showChrome={false} />
     </>

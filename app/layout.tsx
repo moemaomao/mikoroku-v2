@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import "./settings/settings.css";
 import { AdvertisementManager } from "./advertisement-manager";
 
 export const metadata: Metadata = {
