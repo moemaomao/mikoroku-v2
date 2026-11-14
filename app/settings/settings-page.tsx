@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getApps, initializeApp } from "firebase/app";
+import {
+  collection,
+  getDocs,
+  getFirestore,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
 import SiteChrome from "../site-chrome";
 import { normalizeProfileLink } from "../lib/profile-link";
 import styles from "./settings.module.css";
@@ -25,6 +36,7 @@ type Settings = {
   customCommentBg: string;
   gameRoles: string[];
   disableAnimations: boolean;
+  disableTopCommentFireflies: boolean;
 };
 
 type Account = { uid: string; displayName?: string | null; photoURL?: string | null };
@@ -98,6 +110,47 @@ function getCommentLevel(commentCount: unknown) {
     ? Math.max(0, commentCount)
     : 0;
   return Math.floor(count / 5) + 1;
+}
+
+const commentFirebaseConfig = {
+  apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
+  authDomain: "widget-comment.firebaseapp.com",
+  projectId: "widget-comment",
+  storageBucket: "widget-comment.firebasestorage.app",
+  messagingSenderId: "249700505242",
+  appId: "1:249700505242:web:dab240af09caf30ad7f123",
+};
+
+function getCommentFirestore() {
+  const app = getApps().find((candidate) => candidate.name === "mikoroku-leaderboard") ??
+    initializeApp(commentFirebaseConfig, "mikoroku-leaderboard");
+  return getFirestore(app);
+}
+
+async function isTopCommenter(uid: string): Promise<boolean> {
+  const firestore = getCommentFirestore();
+  let visibleRank = 0;
+  let lastDocument: QueryDocumentSnapshot | undefined;
+
+  while (true) {
+    const leaderboardQuery = query(
+      collection(firestore, "userStats"),
+      orderBy("commentCount", "desc"),
+      ...(lastDocument ? [startAfter(lastDocument)] : []),
+      limit(100),
+    );
+    const snapshot = await getDocs(leaderboardQuery);
+    for (const userDocument of snapshot.docs) {
+      if (userDocument.data().leaderboardHidden === true) continue;
+      visibleRank += 1;
+      if (userDocument.id === uid) return visibleRank <= 6;
+      if (visibleRank >= 6) return false;
+    }
+
+    if (snapshot.empty) return false;
+    lastDocument = snapshot.docs.at(-1);
+    if (!lastDocument) return false;
+  }
 }
 
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
@@ -241,12 +294,14 @@ const initialSettings: Settings = {
   customCommentBg: "",
   gameRoles: [],
   disableAnimations: false,
+  disableTopCommentFireflies: false,
 };
 
 export default function SettingsPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [status, setStatus] = useState<"loading" | "guest" | "ready" | "error">("loading");
+  const [topCommenterAccess, setTopCommenterAccess] = useState<"checking" | "allowed" | "denied" | "error">("checking");
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"info" | "success" | "error">("info");
   const [saving, setSaving] = useState(false);
@@ -266,6 +321,7 @@ export default function SettingsPage() {
 
     const applyUser = async (user: Account & { photoURL?: string | null }) => {
       setAccount(user);
+      setTopCommenterAccess("checking");
 
       try {
         const cached = localStorage.getItem("userSettingsPreview");
@@ -282,6 +338,8 @@ export default function SettingsPage() {
             gameRoles: Array.isArray(parsed.gameRoles) ? parsed.gameRoles.map(String) : [],
             disableAnimations: parsed.disableAnimations === true ||
               localStorage.getItem("commentWidget_disableAnimations") === "true",
+            disableTopCommentFireflies: parsed.disableTopCommentFireflies === true ||
+              localStorage.getItem("commentWidget_disableTopCommentFireflies") === "true",
           });
           setStatus("ready");
         }
@@ -310,11 +368,25 @@ export default function SettingsPage() {
           gameRoles: Array.isArray(data.gameRoles) ? data.gameRoles.map(String) : [],
           disableAnimations: data.disableAnimations === true ||
             localStorage.getItem("commentWidget_disableAnimations") === "true",
+          disableTopCommentFireflies: data.disableTopCommentFireflies === true ||
+            localStorage.getItem("commentWidget_disableTopCommentFireflies") === "true",
         });
         setStatus("ready");
+
+        try {
+          const isEligible = await isTopCommenter(user.uid);
+          if (active) setTopCommenterAccess(isEligible ? "allowed" : "denied");
+        } catch (error) {
+          console.error("Top commenter eligibility failed to load.", error);
+          if (active) {
+            setTopCommenterAccess("error");
+            showNotification("Top commenter status could not be verified. This setting stays locked.", "error");
+          }
+        }
       } catch (error) {
         console.error("User settings failed to load.", error);
         if (active) {
+          setTopCommenterAccess("error");
           setStatus((prev) => {
             if (prev === "ready") return prev;
             setMessageType("error");
@@ -335,6 +407,7 @@ export default function SettingsPage() {
         if (!active) return;
         if (!user) {
           setAccount(null);
+          setTopCommenterAccess("denied");
           setStatus("guest");
           return;
         }
@@ -470,6 +543,10 @@ export default function SettingsPage() {
     try {
       await window.firebase.firestore().collection("userStats").doc(account.uid).set(next, { merge: true });
       localStorage.setItem("commentWidget_disableAnimations", next.disableAnimations ? "true" : "false");
+      localStorage.setItem(
+        "commentWidget_disableTopCommentFireflies",
+        next.disableTopCommentFireflies ? "true" : "false",
+      );
       localStorage.setItem("userSettingsPreview", JSON.stringify(next));
       window.userStatsCache = window.userStatsCache || {};
       window.userStatsCache[account.uid] = next;
@@ -668,6 +745,32 @@ export default function SettingsPage() {
                               type="checkbox"
                               checked={settings.disableAnimations}
                               onChange={(e) => update("disableAnimations", e.target.checked)}
+                            />
+                            <span className={styles['settings-toggle-track']} />
+                          </div>
+                        </label>
+                        <label className={cx(
+                          styles['settings-toggle-row'],
+                          topCommenterAccess !== "allowed" && styles['settings-toggle-row-locked'],
+                        )}>
+                          <div className={styles['settings-toggle-info']}>
+                            <strong>Disable Top Commenter Fireflies</strong>
+                            <span>
+                              {topCommenterAccess === "allowed"
+                                ? "Hide the rank-colored particles on Top 6 commenters' comments."
+                                : topCommenterAccess === "checking"
+                                  ? "Checking Top 6 commenter eligibility..."
+                                  : topCommenterAccess === "error"
+                                    ? "Top commenter status could not be verified; this setting is locked."
+                                    : "Only users in the Top 6 commenters can change this setting."}
+                            </span>
+                          </div>
+                          <div className={styles['settings-toggle']}>
+                            <input
+                              type="checkbox"
+                              checked={settings.disableTopCommentFireflies}
+                              disabled={topCommenterAccess !== "allowed"}
+                              onChange={(e) => update("disableTopCommentFireflies", e.target.checked)}
                             />
                             <span className={styles['settings-toggle-track']} />
                           </div>

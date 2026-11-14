@@ -2149,6 +2149,103 @@ html.no-animations .comment.transcendent,
   background: rgba(34, 197, 94, .16);
 }
 
+.comment.top-commenter-rank-1 {
+  --comment-firefly-color: 139 92 246;
+}
+
+.comment.top-commenter-rank-2 {
+  --comment-firefly-color: 244 63 94;
+}
+
+.comment.top-commenter-rank-3 {
+  --comment-firefly-color: 249 115 22;
+}
+
+.comment.top-commenter-rank-4 {
+  --comment-firefly-color: 234 179 8;
+}
+
+.comment.top-commenter-rank-5 {
+  --comment-firefly-color: 59 130 246;
+}
+
+.comment.top-commenter-rank-6 {
+  --comment-firefly-color: 34 197 94;
+}
+
+.comment-fireflies {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.comment.top-commenter > .comment-fireflies {
+  position: absolute;
+  z-index: 2;
+}
+
+html.disable-top-comment-fireflies .comment-fireflies,
+html.no-animations .comment-fireflies,
+#comment-widget.no-animations .comment-fireflies {
+  display: none !important;
+}
+
+.comment-firefly {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, rgb(var(--comment-firefly-color) / 100%) 42%, rgb(var(--comment-firefly-color) / 55%) 64%, transparent 100%);
+  box-shadow: 0 0 8px 2px rgb(var(--comment-firefly-color) / 95%), 0 0 20px 7px rgb(var(--comment-firefly-color) / 65%);
+  opacity: 0;
+  animation: comment-firefly-drift ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+.comment.top-commenter > :not(.comment-fireflies) {
+  position: relative;
+  z-index: 3;
+}
+
+@keyframes comment-firefly-drift {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(.7);
+  }
+
+  12% {
+    opacity: .8;
+  }
+
+  30% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 1;
+    transform: translate3d(var(--firefly-x), var(--firefly-y), 0) scale(1.45);
+  }
+
+  72% {
+    opacity: .85;
+    transform: translate3d(var(--firefly-return-x), var(--firefly-return-y), 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--firefly-x), var(--firefly-return-y), 0) scale(.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comment-firefly {
+    animation: none;
+    opacity: .65;
+  }
+}
+
 /* ================= USER CUSTOM BADGE ================= */
 .user-custom-badge {
   font-size: 0.65em;
@@ -3699,6 +3796,18 @@ html.no-animations .comment.transcendent,
   animation: chaos 0.5s infinite;
 }
 
+.comment.is-replying.border-shake,
+.comment.is-replying.border-glitch-lite,
+.comment.is-replying.border-flicker,
+.comment.is-replying.border-float,
+.comment.is-replying.border-pulse,
+.comment.is-replying.border-spectrum,
+.comment.is-replying.border-breath,
+.comment.is-replying.border-drift,
+.comment.is-replying.border-chaos {
+  animation: none !important;
+}
+
 /* PINNED COMMENT */
 .comment[data-pinned="true"],
 .comment.pinned {
@@ -3807,4 +3916,23 @@ html.no-animations .comment.transcendent,
 /* Load-more UI only: hide extra top-level comments (data already rendered) */
 #comments-list.collapsed-view > .comment.overflow-hidden {
   display: none !important;
+}
+
+/* Keep comment badges aligned and consistent across ranks and custom styles. */
+.comment .badge,
+.comment .user-custom-badge,
+.comment .top-comment-rank-badge {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: var(--mikoroku-badge-height, 24px) !important;
+  min-height: var(--mikoroku-badge-height, 24px) !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  padding: 0 var(--mikoroku-badge-padding-x, 8px) !important;
+  border-radius: var(--mikoroku-badge-radius, 6px) !important;
+  font-size: var(--mikoroku-badge-font-size, 11px) !important;
+  line-height: 1 !important;
+  white-space: nowrap;
 }

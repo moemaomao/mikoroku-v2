@@ -17,7 +17,7 @@
 
   export let pageId = "home";
 
-  const legacyRuntimeSrc = "/widgets/comment-runtime.js";
+  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=reply-border-motion-1";
   const featureStyleHrefs = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
@@ -98,7 +98,7 @@
   }
 
   onMount(() => {
-    loadCommentStyles("/widgets/comment-widget.css?v=avatar-frame-fit-2");
+    loadCommentStyles("/widgets/comment-widget.css?v=reply-border-motion-1");
     window.loadCommentFeatureStyles = loadFeatureStyles;
     const idle = "requestIdleCallback" in window
       ? window.requestIdleCallback(() => loadFeatureStyles("effects"), { timeout: 2500 })

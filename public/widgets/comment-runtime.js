@@ -165,7 +165,13 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
       });
 
       const visibleIds = new Set();
-      topLevel.slice(0, LIMIT).forEach(c => visibleIds.add(c.id));
+      const pinnedTopLevel = topLevel.filter(c => c.pinned === true);
+      const regularTopLevel = topLevel.filter(c => c.pinned !== true);
+      const visibleTopLevel = [
+        ...pinnedTopLevel,
+        ...regularTopLevel.slice(0, Math.max(0, LIMIT - pinnedTopLevel.length))
+      ];
+      visibleTopLevel.forEach(c => visibleIds.add(c.id));
 
       let grew = true;
       while (grew) {
@@ -182,6 +188,15 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
       }
 
       return comments.filter(c => visibleIds.has(c.id));
+    }
+
+    function getCommentTimestampMillis(value) {
+      if (typeof value === 'number') return value;
+      if (value && typeof value.toMillis === 'function') return value.toMillis();
+      if (value && typeof value.seconds === 'number') return value.seconds * 1000;
+      if (value instanceof Date) return value.getTime();
+      if (typeof value === 'string') return new Date(value).getTime() || 0;
+      return 0;
     }
     const DEBUG_SELF_NOTIFICATION = true;
     const ANONYMOUS_AVATAR = 'https://mikoroku.top/assets/icons/favicon.ico';
@@ -2173,6 +2188,7 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
   if (comment.id) {
     div.dataset.commentId = comment.id;
     div.dataset.pinned = comment.pinned ? "true" : "false";
+    div.dataset.pinnedAt = String(getCommentTimestampMillis(comment.pinnedAt));
   }
 
   const timestamp = comment.date
@@ -2689,6 +2705,7 @@ function renderComments(comments) {
       
       oldEl.dataset.commentId = comment.id;
       oldEl.dataset.pinned = comment.pinned ? "true" : "false";
+      oldEl.dataset.pinnedAt = String(getCommentTimestampMillis(comment.pinnedAt));
       // Update data
       const timestamp = comment.date ? 
         (comment.date.toDate ? comment.date.toDate().getTime() : new Date(comment.date).getTime()) : 0;
@@ -3524,7 +3541,9 @@ function resetAllReplyAuthorFields() {
       
       if (replyContainer) {
         document.querySelectorAll('.reply-form-container').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.comment.is-replying').forEach(el => el.classList.remove('is-replying'));
         replyContainer.style.display = 'block';
+        replyContainer.closest('.comment')?.classList.add('is-replying');
 
         const replyAuthorInput = replyContainer.querySelector('.reply-author');
         if (replyAuthorInput) {
@@ -3634,7 +3653,9 @@ if (fileInput) {
           form.reset();
           textarea.dataset.pastedImage = '';
           previewContainer.style.display = 'none';
-          form.closest('.reply-form-container').style.display = 'none';
+          const replyContainer = form.closest('.reply-form-container');
+          replyContainer.style.display = 'none';
+          replyContainer.closest('.comment')?.classList.remove('is-replying');
         } finally {
           form.dataset.submitting = "false";
         }
@@ -3662,7 +3683,9 @@ if (fileInput) {
     };
 
     form.querySelector('.cancel-reply').onclick = () => {
-      form.closest('.reply-form-container').style.display = 'none';
+      const replyContainer = form.closest('.reply-form-container');
+      replyContainer.style.display = 'none';
+      replyContainer.closest('.comment')?.classList.remove('is-replying');
       previewContainer.style.display = 'none';
       textarea.dataset.pastedImage = '';
     };
@@ -4301,13 +4324,6 @@ async function addUserPoints(uid, amount) {
     }
 
     console.log(`💰 Points updated: ${uid} ${amount > 0 ? '+' : ''}${amount}`);
-
-    setTimeout(() => {
-      const list = document.getElementById('comments-list');
-      if (list) {
-        startRealtimeListener();
-      }
-    }, 800);
 
   } catch (e) {
     console.error("addUserPoints failed:", e);
@@ -5876,10 +5892,68 @@ function applyTopCommentRankBadge(commentElement, rank) {
   let rankBadge = commentElement.querySelector('.top-comment-rank-badge');
   if (!Number.isInteger(rank) || rank < 1 || rank > 6) {
     rankBadge?.remove();
+    commentElement.classList.remove(
+      'top-commenter',
+      'top-commenter-rank-1',
+      'top-commenter-rank-2',
+      'top-commenter-rank-3',
+      'top-commenter-rank-4',
+      'top-commenter-rank-5',
+      'top-commenter-rank-6'
+    );
+    commentElement.querySelector('.comment-fireflies')?.remove();
     return;
   }
   const authorName = commentElement.querySelector('.author-name');
   if (!authorName) return;
+
+  commentElement.classList.add('top-commenter');
+  commentElement.classList.remove(
+    'top-commenter-rank-1',
+    'top-commenter-rank-2',
+    'top-commenter-rank-3',
+    'top-commenter-rank-4',
+    'top-commenter-rank-5',
+    'top-commenter-rank-6'
+  );
+  commentElement.classList.add(`top-commenter-rank-${rank}`);
+
+  let fireflyLayer = commentElement.querySelector('.comment-fireflies');
+  const firefliesDisabled =
+    localStorage.getItem('commentWidget_disableTopCommentFireflies') === 'true' ||
+    localStorage.getItem('commentWidget_disableAnimations') === 'true';
+  document.documentElement.classList.toggle('disable-top-comment-fireflies', firefliesDisabled);
+
+  if (firefliesDisabled) {
+    fireflyLayer?.remove();
+  } else if (!fireflyLayer) {
+    fireflyLayer = document.createElement('div');
+    fireflyLayer.className = 'comment-fireflies';
+    fireflyLayer.setAttribute('aria-hidden', 'true');
+
+    for (let index = 0; index < 26; index += 1) {
+      const firefly = document.createElement('span');
+      const edge = Math.floor(Math.random() * 4);
+      const position = 5 + Math.random() * 90;
+      const x = 12 + Math.random() * 34;
+      const y = 12 + Math.random() * 34;
+
+      firefly.className = 'comment-firefly';
+      firefly.style.left = edge === 1 ? '96%' : edge === 3 ? '4%' : `${position}%`;
+      firefly.style.top = edge === 0 ? '4%' : edge === 2 ? '96%' : `${position}%`;
+      firefly.style.width = `${5 + Math.random() * 6}px`;
+      firefly.style.height = firefly.style.width;
+      firefly.style.animationDelay = `${Math.random() * -5}s`;
+      firefly.style.animationDuration = `${2.5 + Math.random() * 3}s`;
+      firefly.style.setProperty('--firefly-x', `${Math.random() > 0.5 ? x : -x}px`);
+      firefly.style.setProperty('--firefly-y', `${Math.random() > 0.5 ? y : -y}px`);
+      firefly.style.setProperty('--firefly-return-x', `${Math.random() > 0.5 ? x : -x}px`);
+      firefly.style.setProperty('--firefly-return-y', `${Math.random() > 0.5 ? y : -y}px`);
+      fireflyLayer.append(firefly);
+    }
+
+    commentElement.prepend(fireflyLayer);
+  }
 
   if (!rankBadge) rankBadge = document.createElement('span');
   rankBadge.className = `top-comment-rank-badge rank-${rank}`;

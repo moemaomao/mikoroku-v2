@@ -1093,17 +1093,17 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                   {username ? `@${username.replace(/^@/, "")}` : `Reader ID ${uid}`}
                 </p>
                 <div className="mt-2 grid max-w-[360px] grid-cols-2 gap-1.5 text-[10px] sm:mt-3 sm:flex sm:max-w-none sm:flex-wrap sm:gap-2 sm:text-xs">
-                  <span className="rounded-lg border border-violet-200 bg-violet-100/90 px-2 py-1.5 font-semibold text-violet-800 dark:border-violet-300/20 dark:bg-violet-500/15 dark:text-violet-200 sm:rounded-full sm:px-3 sm:py-1">
+                  <span className="profile-stat-badge border border-violet-200 bg-violet-100/90 font-semibold text-violet-800 dark:border-violet-300/20 dark:bg-violet-500/15 dark:text-violet-200">
                     Level {level}
                   </span>
-                  <span className="rounded-lg border border-amber-200 bg-amber-100/90 px-2 py-1.5 font-semibold text-amber-800 dark:border-amber-300/20 dark:bg-amber-500/15 dark:text-amber-200 sm:rounded-full sm:px-3 sm:py-1">
+                  <span className="profile-stat-badge border border-amber-200 bg-amber-100/90 font-semibold text-amber-800 dark:border-amber-300/20 dark:bg-amber-500/15 dark:text-amber-200">
                     {points.toLocaleString()} pts
                   </span>
-                  <span className="rounded-lg border border-sky-200 bg-sky-100/90 px-2 py-1.5 font-semibold text-sky-800 dark:border-sky-300/20 dark:bg-sky-500/15 dark:text-sky-200 sm:rounded-full sm:px-3 sm:py-1">
+                  <span className="profile-stat-badge border border-sky-200 bg-sky-100/90 font-semibold text-sky-800 dark:border-sky-300/20 dark:bg-sky-500/15 dark:text-sky-200">
                     {commentCount.toLocaleString()} comments
                   </span>
                   {typeof profile.reputation === "number" && (
-                    <span className={`rounded-lg border px-2 py-1.5 font-semibold sm:rounded-full sm:px-3 sm:py-1 ${reputationBadgeTone}`}>
+                    <span className={`profile-stat-badge border font-semibold ${reputationBadgeTone}`}>
                       {reputation.toLocaleString()} reputation
                     </span>
                   )}
