@@ -1131,13 +1131,32 @@ export default function AdminPage() {
     setActiveSection("editor");
   }
 
-  function openEditor(item: MangaRecord) {
-    setEditing(item);
-    setDraft(toDraft(item));
-    setSelectedManga(item);
-    setDetailTab("info");
+  async function openEditor(item: MangaRecord) {
+    setBusy(true);
     setMessage("");
-    setActiveSection("manga-detail");
+    try {
+      const { firestore } = getAdminFirebase();
+      const snapshot = await getDoc(doc(firestore, "manga", item.slug));
+      const savedManga = snapshot.exists()
+        ? mergeGithubMetadata([item], [fromFirestore(item.slug, snapshot.data())])[0] || item
+        : item;
+
+      setManga((current) => {
+        const next = current.map((entry) => entry.slug === savedManga.slug ? savedManga : entry);
+        writeAdminMangaCache(next);
+        return next;
+      });
+      setEditing(savedManga);
+      setDraft(toDraft(savedManga));
+      setSelectedManga(savedManga);
+      setDetailTab("info");
+      setActiveSection("manga-detail");
+    } catch (error) {
+      console.error("Failed to load saved manga metadata.", error);
+      setMessage(`Failed to load saved metadata: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function updateDraft<K extends keyof MangaDraft>(key: K, value: MangaDraft[K]) {
