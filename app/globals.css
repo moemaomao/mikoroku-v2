@@ -63,6 +63,7 @@
   background: linear-gradient(45deg, #7c3aed, #ec4899);
   color: #fff;
   font-weight: 600;
+  border-radius: 3px !important;
 }
 
 html.light {

@@ -6,6 +6,7 @@ import {
   deleteReadingHistoryEntry,
   upsertReadingHistoryEntry,
 } from "../lib/reading-history";
+import settingsStyles from "./settings/settings.module.css";
 import { normalizeProfileLink } from "./lib/profile-link";
 
 type DataRecord = Record<string, unknown>;
@@ -794,7 +795,7 @@ function initializeUserModals(): () => void {
         if (!badgeLabel) return;
         const badge = createElement(
           "span",
-          `user-custom-badge settings-badge-option profile-custom-badge badge-${customBadge}`,
+          `user-custom-badge settings-badge-option profile-custom-badge ${settingsStyles["settings-badge-chip"]} badge-${customBadge}`,
           badgeLabel,
         );
         badgeContainer.appendChild(badge);
