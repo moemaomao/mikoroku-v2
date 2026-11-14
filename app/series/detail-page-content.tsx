@@ -1786,7 +1786,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       window.clearInterval(safety);
     };
 
-  }, [hasMoreChapters, chapterState, filteredSortedChapters.length]);
+  }, [hasMoreChapters, chapterState, filteredSortedChapters.length, chapterWindow]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
     setCoverPreferenceError("");
@@ -2574,11 +2574,24 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                   );
                 })}
                 {chapterState === "ready" && hasMoreChapters && (
-                  <div
-                    ref={chapterSentinelRef}
-                    className="col-span-full h-px w-full"
-                    aria-hidden="true"
-                  />
+                  <>
+                    <div
+                      ref={chapterSentinelRef}
+                      className="col-span-full h-px w-full"
+                      aria-hidden="true"
+                    />
+                    <div className="col-span-full flex w-full justify-center py-4">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[rgba(128,128,128,0.35)] px-4 py-2 text-sm font-semibold text-current transition-colors hover:bg-[rgba(128,128,128,0.12)]"
+                        onClick={() => setChapterWindow((current) =>
+                          Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
+                        )}
+                      >
+                        Load more chapters
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             </section>
