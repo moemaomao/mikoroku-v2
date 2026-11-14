@@ -345,11 +345,11 @@ export default function ModerationPage() {
   const [emojiPagePreview, setEmojiPagePreview] = useState<EmojiImportPreview | null>(null);
   const [importDataType, setImportDataType] = useState<"comments" | "emoji-import">("comments");
   const [importMode, setImportMode] = useState<ImportMode>("page");
-  const [legacyUrl, setLegacyUrl] = useState("https://mikoroku.com/reader?slug=isekai-koushoku-musou-roku-chapter-01");
+  const [legacyUrl, setLegacyUrl] = useState("https://m6.mikoroku.workers.dev/reader?slug=isekai-koushoku-musou-roku-chapter-01");
   const [newUrl, setNewUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
   const [sourceIdOverride, setSourceIdOverride] = useState("");
   const [targetIdOverride, setTargetIdOverride] = useState("");
-  const [emojiLegacyUrl, setEmojiLegacyUrl] = useState("https://mikoroku.com/reader?slug=isekai-koushoku-musou-roku-chapter-01");
+  const [emojiLegacyUrl, setEmojiLegacyUrl] = useState("https://m6.mikoroku.workers.dev/reader?slug=isekai-koushoku-musou-roku-chapter-01");
   const [emojiNewUrl, setEmojiNewUrl] = useState("https://mikoroku.top/manga/isekai-koushoku-musou-roku/1");
   const [emojiSourceIdOverride, setEmojiSourceIdOverride] = useState("");
   const [emojiTargetIdOverride, setEmojiTargetIdOverride] = useState("");
