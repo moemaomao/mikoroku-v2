@@ -123,6 +123,17 @@ const readingMedals: Array<{
   },
 ];
 
+const medalImageMap: Record<MedalSymbol, string> = {
+  spark: "/assets/medals/1.webp",
+  book: "/assets/medals/2.webp",
+  flame: "/assets/medals/3.webp",
+  crown: "/assets/medals/4.webp",
+  laurel: "/assets/medals/6.webp",
+  comet: "/assets/medals/7.webp",
+  gem: "/assets/medals/8.webp",
+  infinity: "/assets/medals/8.webp",
+};
+
 const statsSectionSettings = [
   {
     id: "stat-cards",
@@ -354,52 +365,6 @@ function StatsCard({
   );
 }
 
-function MedalLogo({ symbol, color, locked = false }: {
-  symbol: MedalSymbol;
-  color: string;
-  locked?: boolean;
-}) {
-  return (
-    <svg
-      viewBox="0 0 48 64"
-      aria-hidden="true"
-      className={`size-12 transition ${locked ? "grayscale opacity-40" : "drop-shadow-sm"}`}
-    >
-      <path d="m15 38-3 21 12-7 12 7-3-21" fill={color} opacity=".78" />
-      <circle cx="24" cy="24" r="20" fill={color} />
-      <circle cx="24" cy="24" r="16" fill="none" stroke="white" strokeOpacity=".65" strokeWidth="1.5" />
-      {symbol === "spark" && (
-        <path d="m24 12 3.2 7.1 7.8.8-5.8 5.2 1.6 7.6-6.8-3.9-6.8 3.9 1.6-7.6-5.8-5.2 7.8-.8L24 12Z" fill="white" />
-      )}
-      {symbol === "book" && (
-        <path d="M13 16.5c4.2-.8 7.9.2 11 2.4v15c-3.1-2.2-6.8-3.2-11-2.4v-15Zm22 0c-4.2-.8-7.9.2-11 2.4v15c3.1-2.2 6.8-3.2 11-2.4v-15Z" fill="white" stroke={color} strokeLinejoin="round" strokeWidth="1.4" />
-      )}
-      {symbol === "flame" && (
-        <path d="M25 11c2.2 7-3.5 8.5-.8 13.2 1.1 1.9 3.1 2.5 4.5 1 .8-.9 1.1-2.1.7-3.5 4.6 3.1 7.1 7.4 5.2 12.2a11.2 11.2 0 0 1-21.1-1.6c-1.3-5.6 2.5-10.4 6.9-14.2-.3 4.6.4 6.2 2.1 6.1 2.1-.1 2.4-3.5 2.5-13.2Z" fill="white" />
-      )}
-      {symbol === "crown" && (
-        <path d="m12 18 7 5 5-10 5 10 7-5-2.7 16H14.7L12 18Zm3 19h18v2H15v-2Z" fill="white" stroke={color} strokeLinejoin="round" strokeWidth="1.2" />
-      )}
-      {symbol === "laurel" && (
-        <g fill="none" stroke="white" strokeLinecap="round" strokeWidth="2">
-          <path d="M17 33c-5-5-5-12-2-17 5 3 7 7 6 12m10 5c5-5 5-12 2-17-5 3-7 7-6 12M18 29l-4-1m6-4-3-3m11 8 4-1m-6-4 3-3M20 35c2 2 6 2 8 0" />
-        </g>
-      )}
-      {symbol === "comet" && (
-        <path d="m28 12 2.3 7.7L38 22l-7.7 2.3L28 32l-2.3-7.7L18 22l7.7-2.3L28 12Zm-10 14 1.5 4.5L24 32l-4.5 1.5L18 38l-1.5-4.5L12 32l4.5-1.5L18 26Zm17-14 1.1 3.4L39 16.5l-3.9 1.1L34 21l-1.1-3.4-3.4-1.1 3.4-1.1L34 12Z" fill="white" />
-      )}
-      {symbol === "gem" && (
-        <path d="m15 17 5-4h8l5 4-9 19-9-19Zm0 0h18m-13-4 4 23m8-23-4 23m-9-19 9 19 9-19" fill="none" stroke="white" strokeLinejoin="round" strokeWidth="1.8" />
-      )}
-      {symbol === "infinity" && (
-        <path
-          d="M12 24c0-4 3.2-7 7-7 2.6 0 4.6 1.3 6 3.2C26.4 18.3 28.4 17 31 17c3.8 0 7 3 7 7s-3.2 7-7 7c-2.6 0-4.6-1.3-6-3.2C23.6 29.7 21.6 31 19 31c-3.8 0-7-3-7-7Zm7-4.5c-2.4 0-4.2 1.9-4.2 4.5s1.8 4.5 4.2 4.5c1.6 0 2.9-.8 3.9-2.3l.6-.9.6.9c1 1.5 2.3 2.3 3.9 2.3 2.4 0 4.2-1.9 4.2-4.5s-1.8-4.5-4.2-4.5c-1.6 0-2.9.8-3.9 2.3l-.6.9-.6-.9c-1-1.5-2.3-2.3-3.9-2.3Z"
-          fill="white"
-        />
-      )}
-    </svg>
-  );
-}
 function MedalUnlockModal({
   medal,
   onClose,
@@ -409,18 +374,6 @@ function MedalUnlockModal({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [entered, setEntered] = useState(false);
-
-  const medalImageMap: Record<string, string> = {
-    spark: "/assets/medals/1.webp",
-    book: "/assets/medals/2.webp",
-    flame: "/assets/medals/3.webp",
-    crown: "/assets/medals/4.webp",
-    laurel: "/assets/medals/6.webp",
-    comet: "/assets/medals/7.webp",
-    gem: "/assets/medals/8.webp",
-    infinity: "/assets/medals/8.webp",
-  };
-
   const medalImage = medalImageMap[medal.symbol] ?? "/assets/medals/1.webp";
 
   useEffect(() => {
@@ -444,7 +397,6 @@ function MedalUnlockModal({
       aria-labelledby="medal-unlock-title"
       style={{ ["--stats-medal-color" as string]: medal.color }}
     >
-      {/* Backdrop hitam solid — tidak bergantung CSS class */}
       <div
         className="absolute inset-0 transition-opacity duration-300"
         style={{
@@ -612,7 +564,12 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
                 aria-label={`${medal.name}, ${medal.chapters} chapters, ${unlocked ? "unlocked, click to view celebration" : "locked"}`}
                 title={unlocked ? "Click to view celebration" : undefined}
               >
-                <MedalLogo symbol={medal.symbol} color={medal.color} locked={!unlocked} />
+                <img
+                  src={medalImageMap[medal.symbol]}
+                  alt=""
+                  className={`size-12 shrink-0 object-contain ${unlocked ? "" : "grayscale opacity-40"}`}
+                  draggable={false}
+                />
                 <div className="min-w-0">
                   <p className={`truncate text-xs font-bold ${unlocked ? "text-slate-900 drop-shadow-sm" : "text-slate-900 dark:text-white"}`}>
                     {medal.name}
