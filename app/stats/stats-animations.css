@@ -1,172 +1,76 @@
-/* Reading Stats – medal modal: emblem-style patterns (no gradient animation) */
-
-.stats-gradient-card {
-  position: relative;
-  isolation: isolate;
-  background-size: auto;
+@keyframes medal-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) translateY(24px);
+    filter: blur(8px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06) translateY(-4px);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
 }
 
-.stats-gradient-card::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  border-radius: inherit;
-  background-image: radial-gradient(
-    ellipse at 0% 0%,
-    color-mix(
-      in srgb,
-      var(--stats-medal-color, var(--mikoroku-accent, #9d1018)) 14%,
-      transparent
-    ),
-    transparent 72%
-  );
-  content: "";
-  pointer-events: none;
+@keyframes medal-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 12px color-mix(in srgb, var(--stats-medal-color) 40%, transparent))
+      drop-shadow(0 0 28px color-mix(in srgb, var(--stats-medal-color) 20%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 22px color-mix(in srgb, var(--stats-medal-color) 70%, transparent))
+      drop-shadow(0 0 48px color-mix(in srgb, var(--stats-medal-color) 35%, transparent));
+  }
 }
 
-/* Emblem pattern layer for modal / cards */
-.stats-gradient-card::after {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  border-radius: inherit;
-  content: "";
-  pointer-events: none;
-  opacity: 0.22;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 72% auto;
+@keyframes medal-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* ---------- EMBLEM PATTERNS (modal focus) ---------- */
-
-/* First Spark – star burst / rays */
-.stats-gradient-card[data-medal="spark"]::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.2' opacity='0.9'%3E%3Ccircle cx='60' cy='60' r='18'/%3E%3Ccircle cx='60' cy='60' r='28'/%3E%3Cpath d='M60 8 L60 28 M60 92 L60 112 M8 60 L28 60 M92 60 L112 60 M22 22 L36 36 M84 84 L98 98 M98 22 L84 36 M22 98 L36 84'/%3E%3Cpath d='M60 42 L64 54 L76 54 L66 62 L70 74 L60 66 L50 74 L54 62 L44 54 L56 54 Z' fill='%23ffffff' stroke='none' opacity='0.5'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 68% auto;
+@keyframes medal-btn-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-/* Page Scout – open book emblem */
-.stats-gradient-card[data-medal="book"]::after {
-  opacity: 0.26;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.4' opacity='0.9'%3E%3Cpath d='M20 30 Q60 18 100 30 L100 90 Q60 78 20 90 Z'/%3E%3Cpath d='M60 22 L60 84'/%3E%3Cpath d='M32 42 H50 M32 52 H48 M32 62 H46' opacity='0.7'/%3E%3Cpath d='M70 40 H88 M70 50 H86 M70 60 H84' opacity='0.7'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 70% auto;
+.medal-img-enter {
+  animation:
+    medal-pop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both,
+    medal-glow 2.4s ease-in-out 0.7s infinite;
 }
 
-/* Story Seeker – flame crest */
-.stats-gradient-card[data-medal="flame"]::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.3' opacity='0.9'%3E%3Cpath d='M60 18 C72 38 88 48 88 68 C88 88 76 98 60 98 C44 98 32 88 32 68 C32 48 48 38 60 18 Z'/%3E%3Cpath d='M60 42 C66 52 74 58 74 70 C74 80 68 86 60 86 C52 86 46 80 46 70 C46 58 54 52 60 42 Z' opacity='0.7'/%3E%3Ccircle cx='60' cy='70' r='6' fill='%23ffffff' stroke='none' opacity='0.45'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 58% auto;
+.medal-text-enter {
+  animation: medal-fade-up 0.5s ease-out both;
 }
 
-/* Chapter Champion – crown emblem */
-.stats-gradient-card[data-medal="crown"]::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.4' opacity='0.9'%3E%3Cpath d='M24 78 L30 42 L48 58 L60 32 L72 58 L90 42 L96 78 Z'/%3E%3Cpath d='M24 78 H96'/%3E%3Ccircle cx='30' cy='42' r='4' fill='%23ffffff' stroke='none' opacity='0.5'/%3E%3Ccircle cx='60' cy='32' r='4' fill='%23ffffff' stroke='none' opacity='0.5'/%3E%3Ccircle cx='90' cy='42' r='4' fill='%23ffffff' stroke='none' opacity='0.5'/%3E%3Cpath d='M36 68 H84' opacity='0.5'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 72% auto;
-}
-
-/* Lore Keeper – laurel wreath */
-.stats-gradient-card[data-medal="laurel"]::after {
-  opacity: 0.26;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.3' opacity='0.9'%3E%3Cpath d='M42 88 C28 72 26 48 40 30'/%3E%3Cpath d='M78 88 C92 72 94 48 80 30'/%3E%3Cpath d='M38 36 Q32 42 36 48 M36 52 Q30 58 34 64 M34 68 Q28 74 32 80'/%3E%3Cpath d='M82 36 Q88 42 84 48 M84 52 Q90 58 86 64 M86 68 Q92 74 88 80'/%3E%3Cpath d='M50 92 H70'/%3E%3Ccircle cx='60' cy='58' r='10' opacity='0.5'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 68% auto;
-}
-
-/* Story Sage – comet / shooting star emblem */
-.stats-gradient-card[data-medal="comet"]::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.3' opacity='0.9'%3E%3Cpath d='M78 28 L52 72'/%3E%3Cpath d='M78 28 L88 48 M78 28 L68 48' opacity='0.7'/%3E%3Ccircle cx='48' cy='78' r='12'/%3E%3Cpath d='M48 66 L50 74 L58 74 L52 80 L54 88 L48 83 L42 88 L44 80 L38 74 L46 74 Z' fill='%23ffffff' stroke='none' opacity='0.45'/%3E%3Ccircle cx='30' cy='40' r='2' fill='%23ffffff' stroke='none' opacity='0.6'/%3E%3Ccircle cx='92' cy='70' r='1.5' fill='%23ffffff' stroke='none' opacity='0.5'/%3E%3Ccircle cx='24' cy='88' r='1.5' fill='%23ffffff' stroke='none' opacity='0.45'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 70% auto;
-}
-
-/* Eternal Reader – gem / crystal emblem */
-.stats-gradient-card[data-medal="gem"]::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.4' opacity='0.9'%3E%3Cpath d='M60 18 L96 48 L60 102 L24 48 Z'/%3E%3Cpath d='M24 48 H96'/%3E%3Cpath d='M42 48 L60 18 L78 48'/%3E%3Cpath d='M42 48 L60 102 L78 48' opacity='0.6'/%3E%3Cpath d='M60 18 L60 102' opacity='0.4'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 58% auto;
-}
-
-/* Infinity Archive – infinity loop emblem */
-.stats-gradient-card[data-medal="infinity"]::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2' opacity='0.9'%3E%3Cpath d='M30 60 C30 42 48 42 60 60 C72 78 90 78 90 60 C90 42 72 42 60 60 C48 78 30 78 30 60 Z'/%3E%3Ccircle cx='60' cy='60' r='36' stroke-width='1' opacity='0.35'/%3E%3Ccircle cx='60' cy='60' r='48' stroke-width='0.8' opacity='0.2'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 72% auto;
-}
-
-.stats-gradient-card > :not(.absolute):not(.relative):not(.fixed):not(.sticky) {
-  position: relative;
-  z-index: 1;
-}
-
-.stats-gradient-card > .absolute,
-.stats-gradient-card > .relative,
-.stats-gradient-card > .fixed,
-.stats-gradient-card > .sticky {
-  z-index: 1;
-}
-
-html.dark .stats-gradient-card::after {
-  opacity: 0.18;
-}
-
-/* Modal base gradient (static, no animation) */
-.stats-medal-modal {
-  background-image:
-    radial-gradient(
-      ellipse at 50% 0%,
-      color-mix(in srgb, var(--stats-medal-color) 22%, transparent),
-      transparent 60%
-    ),
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--stats-medal-color) 12%, #ffffff),
-      #ffffff 52%,
-      color-mix(in srgb, var(--stats-medal-color) 10%, #f1f5f9)
-    );
-}
-
-html.dark .stats-medal-modal {
-  background-image:
-    radial-gradient(
-      ellipse at 50% 0%,
-      color-mix(in srgb, var(--stats-medal-color) 28%, transparent),
-      transparent 62%
-    ),
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--stats-medal-color) 30%, #20171b),
-      color-mix(in srgb, var(--stats-medal-color) 22%, #1b171b) 54%,
-      color-mix(in srgb, var(--stats-medal-color) 27%, #1e171b)
-    );
-}
-
-.stats-medal-backdrop {
-  background:
-    radial-gradient(
-      ellipse at 50% 45%,
-      color-mix(in srgb, var(--stats-medal-color) 16%, transparent),
-      transparent 64%
-    ),
-    rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(12px);
-}
-
-html.dark .stats-medal-backdrop {
-  background:
-    radial-gradient(
-      ellipse at 50% 45%,
-      color-mix(in srgb, var(--stats-medal-color) 18%, transparent),
-      transparent 64%
-    ),
-    rgba(0, 0, 0, 0.76);
+.medal-btn-enter {
+  animation: medal-btn-in 0.45s ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stats-medal-backdrop,
-  .stats-medal-modal {
-    transition: none;
+  .medal-img-enter,
+  .medal-text-enter,
+  .medal-btn-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }

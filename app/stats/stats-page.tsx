@@ -409,9 +409,19 @@ function MedalUnlockModal({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [entered, setEntered] = useState(false);
-  const medalThemeStyle: CSSProperties & { "--stats-medal-color": string } = {
-    "--stats-medal-color": medal.color,
+
+  const medalImageMap: Record<string, string> = {
+    spark: "/assets/medals/1.webp",
+    book: "/assets/medals/2.webp",
+    flame: "/assets/medals/3.webp",
+    crown: "/assets/medals/4.webp",
+    laurel: "/assets/medals/6.webp",
+    comet: "/assets/medals/7.webp",
+    gem: "/assets/medals/8.webp",
+    infinity: "/assets/medals/8.webp",
   };
+
+  const medalImage = medalImageMap[medal.symbol] ?? "/assets/medals/1.webp";
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -419,7 +429,6 @@ function MedalUnlockModal({
     };
     window.addEventListener("keydown", onKey);
     dialogRef.current?.focus();
-    // entrance animation
     const t = window.setTimeout(() => setEntered(true), 20);
     return () => {
       window.removeEventListener("keydown", onKey);
@@ -433,10 +442,17 @@ function MedalUnlockModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="medal-unlock-title"
+      style={{ ["--stats-medal-color" as string]: medal.color }}
     >
+      {/* Backdrop hitam solid — tidak bergantung CSS class */}
       <div
-        className="stats-medal-backdrop absolute inset-0 transition-opacity duration-300"
-        style={{ ...medalThemeStyle, opacity: entered ? 1 : 0 }}
+        className="absolute inset-0 transition-opacity duration-300"
+        style={{
+          background: "rgba(0, 0, 0, 0.82)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          opacity: entered ? 1 : 0,
+        }}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -444,70 +460,59 @@ function MedalUnlockModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="stats-gradient-card stats-medal-modal relative z-10 w-full max-w-sm overflow-hidden rounded-3xl border border-black/10 shadow-2xl outline-none transition-opacity duration-300 dark:border-white/15"
-        style={{
-          ...medalThemeStyle,
-          boxShadow: `0 0 0 1px ${medal.color}44, 0 0 80px ${medal.color}33, 0 25px 50px -12px rgba(0,0,0,.35)`,
-          opacity: entered ? 1 : 0,
-        }}
+        className="relative z-10 w-full max-w-sm outline-none"
+        style={{ opacity: entered ? 1 : 0 }}
       >
-        <div
-          className="relative aspect-[5/4] w-full overflow-hidden"
-          style={medalThemeStyle}
-        >
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div
-              className="stats-gradient-card relative rounded-full p-2"
-              style={{
-                ...medalThemeStyle,
-                background: `linear-gradient(145deg, ${medal.color}aa, ${medal.color}44)`,
-                boxShadow: `0 0 40px ${medal.color}88, 0 8px 24px rgba(0,0,0,.35)`,
-              }}
-            >
-                <div className="rounded-full bg-white/90 p-2 dark:bg-[#12121a]/90">
-                  <MedalLogo symbol={medal.symbol} color={medal.color} />
-                </div>
-            </div>
-          </div>
-
+        <div className="relative mx-auto w-[min(100%,280px)]">
+          <img
+            src={medalImage}
+            alt={medal.name}
+            className={`h-auto w-full object-contain ${entered ? "medal-img-enter" : "opacity-0"}`}
+            draggable={false}
+          />
         </div>
 
-        {/* Content */}
-        <div className="relative px-6 pb-6 pt-1 text-center">
+        <div className="mt-4 px-2 text-center">
           <p
-            className="text-[11px] font-bold uppercase tracking-[0.22em]"
-            style={{ color: medal.color }}
+            className={`text-[11px] font-bold uppercase tracking-[0.22em] ${entered ? "medal-text-enter" : "opacity-0"}`}
+            style={{ color: medal.color, animationDelay: "0.35s" }}
           >
             Medal Unlocked
           </p>
           <h2
             id="medal-unlock-title"
-            className="mt-2 text-2xl font-bold text-slate-900 dark:text-white"
-            style={{ textShadow: `0 0 28px ${medal.color}66` }}
+            className={`mt-2 text-2xl font-bold text-white ${entered ? "medal-text-enter" : "opacity-0"}`}
+            style={{ textShadow: `0 0 28px ${medal.color}66`, animationDelay: "0.45s" }}
           >
             {medal.name}
           </h2>
-          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-zinc-400">
+          <p
+            className={`mt-1 text-xs font-medium text-zinc-400 ${entered ? "medal-text-enter" : "opacity-0"}`}
+            style={{ animationDelay: "0.55s" }}
+          >
             {medal.chapters.toLocaleString()} chapters
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-zinc-300">
+          <p
+            className={`mt-3 text-sm leading-relaxed text-zinc-300 ${entered ? "medal-text-enter" : "opacity-0"}`}
+            style={{ animationDelay: "0.65s" }}
+          >
             {medal.unlockMessage}
           </p>
 
           <button
             type="button"
             onClick={onClose}
-            className="mt-6 w-full rounded-xl px-4 py-3 text-sm font-bold text-white transition hover:brightness-110 active:scale-[0.98]"
+            className={`mt-6 w-full max-w-xs rounded-xl px-4 py-3 text-sm font-bold text-white transition hover:brightness-110 active:scale-[0.98] ${entered ? "medal-btn-enter" : "opacity-0"}`}
             style={{
               background: `linear-gradient(135deg, ${medal.color}, ${medal.color}cc)`,
               boxShadow: `0 8px 24px ${medal.color}44`,
+              animationDelay: "0.8s",
             }}
           >
             Nice!
           </button>
         </div>
       </div>
-
     </div>
   );
 }
