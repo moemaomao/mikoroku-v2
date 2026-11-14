@@ -90,6 +90,7 @@ const BLOGGER_CHAPTER_SOURCES = {
 } as const;
 const LIST_CHAPTER_LIMIT = 1;
 let appearanceObserver: MutationObserver | null = null;
+let themeObserver: MutationObserver | null = null;
 let appear9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8 = false;
 let chapterCardObserver: IntersectionObserver | null = null;
 let currentAppearance = defaultGlobalAppearance;
@@ -607,6 +608,39 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
   const forceFirestore = Boolean(card.closest("#firebaseNovel"));
   ensureListChapterSources(card, slug, title, forceFirestore);
   const chapters = getLatestChapters(slug, fallbackChapter, forceFirestore);
+  const syncUpBadge = (chapterInfo: HTMLElement) => {
+    const source = card.querySelector<HTMLElement>(".up-badge");
+    const existingBadge = chapterInfo.querySelector<HTMLElement>(".global-card-up-badge");
+    if (!source) {
+      existingBadge?.remove();
+      return;
+    }
+
+    source.style.display = "none";
+    if (existingBadge) {
+      existingBadge.classList.add("animate-pulse");
+      existingBadge.textContent = source.textContent || "UP";
+      return;
+    }
+
+    const badge = source.cloneNode(true) as HTMLElement;
+    badge.className = "global-card-up-badge animate-pulse";
+    badge.removeAttribute("id");
+    badge.setAttribute("aria-hidden", "true");
+    badge.style.position = "static";
+    badge.style.display = "inline-flex";
+    badge.style.alignItems = "center";
+    badge.style.flex = "0 0 auto";
+    badge.style.marginLeft = "5px";
+    badge.style.padding = "2px 6px";
+    badge.style.borderRadius = "4px";
+    badge.style.backgroundColor = "#dc2626";
+    badge.style.color = "#fff";
+    badge.style.fontSize = "8px";
+    badge.style.fontWeight = "700";
+    badge.style.lineHeight = "1";
+    chapterInfo.append(badge);
+  };
   let list = existing;
   if (!list) {
     list = document.createElement("div");
@@ -619,6 +653,10 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
     }
     item.querySelector<HTMLElement>(".global-card-chapter-label")
       ?.classList.toggle("opacity-50", isChapterRead(title, chapters[index] || ""));
+    if (index === 0) {
+      const chapterInfo = item.querySelector<HTMLElement>(".global-card-chapter-info");
+      if (chapterInfo) syncUpBadge(chapterInfo);
+    }
   });
   if (
     currentItems.length === chapters.length &&
@@ -656,6 +694,7 @@ function updateListChapterLinks(card: HTMLElement, details: HTMLElement, isList:
     label.className = `global-card-chapter-label truncate${isChapterRead(title, chapter) ? " opacity-50" : ""}`;
     label.textContent = `Chapter ${chapter}`;
     chapterInfo.append(label);
+    if (chapters[0] === chapter) syncUpBadge(chapterInfo);
     item.append(chapterInfo);
     const chapterUpdateDate = formatUpdateDate(updateTimeFor(slug, chapter));
     if (chapterUpdateDate) {
@@ -741,7 +780,8 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       const typeBadge = cover.querySelector<HTMLElement>(".type-badge");
       const commissionBadge = cover.querySelector<HTMLElement>(".commission-badge");
       const chBadge = cover.querySelector<HTMLElement>(".ch-badge");
-      const sourceBadges = [statusBadge, typeBadge, commissionBadge].filter(
+      const upBadge = cover.querySelector<HTMLElement>(".up-badge");
+      const sourceBadges = [statusBadge, typeBadge].filter(
         (badge): badge is HTMLElement => Boolean(badge),
       );
       badgesRow.replaceChildren(...sourceBadges.map((badge) => {
@@ -759,6 +799,17 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         badge.style.display = "none";
       });
       if (chBadge) chBadge.style.display = "none";
+      if (upBadge) upBadge.style.display = "none";
+      if (commissionBadge) {
+        commissionBadge.style.removeProperty("display");
+        commissionBadge.style.position = "absolute";
+        commissionBadge.style.left = "0";
+        commissionBadge.style.bottom = "0";
+        commissionBadge.style.width = "100%";
+        commissionBadge.style.zIndex = "20";
+        commissionBadge.style.borderBottomLeftRadius = cover.style.borderRadius;
+        commissionBadge.style.borderBottomRightRadius = cover.style.borderRadius;
+      }
       const listBadges = [...badgesRow.querySelectorAll<HTMLElement>(".status-badge, .type-badge, .commission-badge")];
       listBadges.forEach((badge) => {
         badge.style.width = "auto";
@@ -897,7 +948,7 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
       listTitle.style.fontSize = isMobile ? "12px" : "13px";
       listTitle.style.fontWeight = "600";
       listTitle.style.lineHeight = "1.3";
-      listTitle.style.color = "#f1f5f9";
+      listTitle.style.color = document.documentElement.classList.contains("dark") ? "#f1f5f9" : "#1e293b";
       listTitle.style.overflow = "hidden";
       listTitle.style.textOverflow = "ellipsis";
       listTitle.style.whiteSpace = "nowrap";
@@ -928,10 +979,21 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
     if (title) clearListInlineStyles(title);
 
     if (details) {
-      [".status-badge", ".type-badge", ".commission-badge", ".ch-badge"].forEach((selector) => {
+      [".status-badge", ".type-badge", ".commission-badge", ".ch-badge", ".up-badge"].forEach((selector) => {
         cover.querySelectorAll<HTMLElement>(selector).forEach((badge) => {
           badge.style.removeProperty("display");
         });
+      });
+      cover.querySelectorAll<HTMLElement>(".commission-badge").forEach((badge) => {
+        [
+          "position",
+          "left",
+          "bottom",
+          "width",
+          "z-index",
+          "border-bottom-left-radius",
+          "border-bottom-right-radius",
+        ].forEach((property) => badge.style.removeProperty(property));
       });
       clearListInlineStyles(details);
       details.remove();
@@ -1188,6 +1250,15 @@ export function applyGlobalAppearance(settings: GlobalAppearanceSettings): void 
   };
 
   updateTargets(document);
+  if (!themeObserver) {
+    themeObserver = new MutationObserver(() => {
+      if (currentAppearance.cardDisplay !== "list") return;
+      const color = document.documentElement.classList.contains("dark") ? "#f1f5f9" : "#1e293b";
+      document.querySelectorAll<HTMLElement>(".global-card-list-title")
+        .forEach((title) => { title.style.color = color; });
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  }
   if (!appearanceObserver && document.body) {
     appearanceObserver = new MutationObserver((mutations) => {
       mutations.forEach(({ addedNodes }) => {
