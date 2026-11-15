@@ -306,10 +306,10 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
 
 async function loadFirestoreMetadata(): Promise<Record<string, FirestoreMeta>> {
   try {
-    const records = await loadFirestoreMangaCatalog();
+    const snapshot = await loadFirestoreMangaCatalog();
     const metadata: Record<string, FirestoreMeta> = {};
-    records.forEach((record) => {
-      const item = metadataFromData(record.slug, record);
+    snapshot.forEach((document) => {
+      const item = metadataFromData(document.id, document.data());
       metadata[item.slug] = item;
       if (item.githubSlug) metadata[item.githubSlug] = item;
     });

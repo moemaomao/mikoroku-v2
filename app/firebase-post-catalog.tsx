@@ -144,11 +144,13 @@ function cacheRecords(records: Record<string, MangaRecord>) {
 }
 
 async function fetchRecords(): Promise<Record<string, MangaRecord>> {
-  const documents = await loadFirestoreMangaCatalog();
+  const snapshot = await loadFirestoreMangaCatalog();
+
   const records: Record<string, MangaRecord> = {};
-  documents.forEach((data) => {
+  snapshot.forEach((document) => {
+    const data = document.data() as MangaRecord;
     if (data.isDraft === true) return;
-    records[data.slug] = { ...data, slug: data.slug } as MangaRecord;
+    records[document.id] = { ...data, slug: document.id };
   });
   return records;
 }
@@ -283,7 +285,7 @@ export default function FirebasePostCatalog() {
     }
     const controller = new AbortController();
     void refresh(controller.signal);
-    const interval = window.setInterval(() => void refresh(), 6 * 60 * 60 * 1000);
+    const interval = window.setInterval(() => void refresh(), 10 * 60 * 1000);
     return () => {
       controller.abort();
       window.clearInterval(interval);

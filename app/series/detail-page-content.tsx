@@ -20,10 +20,7 @@ import RecommendationSidebar from "./recommendation-sidebar";
 import ReaderServerNotice from "./reader-server-notice";
 import SiteFooter from "../site-footer";
 import GlobalAuth from "../global-auth";
-import {
-  initializeFirebaseClient,
-  loadFirestoreMangaDetail,
-} from "../lib/firebase-client";
+import { initializeFirebaseClient } from "../lib/firebase-client";
 import {
   compactChapterCache,
   mergeSharedChapterCache,
@@ -626,9 +623,11 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
       );
       return result ? normalizeManga(result, slug) : null;
     }),
-    loadFirestoreMangaDetail(slug, signal).then((record) =>
-      record ? normalizeManga(record, slug) : null,
-    ),
+    fetch(`${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}`, { signal }).then(async (response) => {
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(`Firestore merespons HTTP ${response.status}.`);
+      return normalizeManga(decodeFirestoreDocument(await response.json()), slug);
+    }),
   ]);
 
   const githubManga = responses[0].status === "fulfilled" ? responses[0].value : null;
@@ -688,6 +687,25 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
       currentManga?.nsfw === true ||
       isNsfwMangaRecord(manga);
   }
+  if (!signal.aborted && !manga?.covers?.length) {
+    try {
+      const sdkManga = await loadFirebaseDocument(slug, signal);
+      if (sdkManga) {
+        manga = {
+          ...(manga || sdkManga),
+          covers: sdkManga.covers?.length ? sdkManga.covers : manga?.covers,
+          coverNumbers: Object.keys(sdkManga.coverNumbers || {}).length
+            ? sdkManga.coverNumbers
+            : manga?.coverNumbers,
+          coverUpdatedAt: sdkManga.coverUpdatedAt || manga?.coverUpdatedAt,
+        };
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        console.warn(`Firestore SDK tidak dapat mengambil volume cover ${slug}.`, error);
+      }
+    }
+  }
   for (const [index, result] of responses.entries()) {
     if (result.status === "rejected" && !signal.aborted) {
       console.warn(
@@ -701,7 +719,31 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     await cacheMangaDetail(slug, manga);
     return manga;
   }
+
+  let firestore: Manga | null = null;
+  try {
+    firestore = await loadFirebaseDocument(slug, signal);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    console.warn("Firestore SDK tidak dapat mengambil detail manga.", error);
+  }
+  if (firestore) {
+    await cacheMangaDetail(slug, firestore);
+    return firestore;
+  }
+
   return cachedManga;
+}
+
+async function loadFirebaseDocument(slug: string, signal: AbortSignal): Promise<Manga | null> {
+  if ((!window.firestore || !window.fs?.doc || !window.fs.getDoc) && !signal.aborted) {
+    initializeFirebaseClient();
+  }
+  if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) return null;
+
+  const reference = window.fs.doc(window.firestore, "manga", slug);
+  const snapshot = await window.fs.getDoc(reference);
+  return snapshot.exists() ? normalizeManga(snapshot.data(), slug) : null;
 }
 
 async function loadBloggerChapterSource(
@@ -838,8 +880,13 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
   });
   if (collectionChapters.length) return collectionChapters;
 
-  const mangaData = await loadFirestoreMangaDetail(slug, signal);
-  if (!mangaData) return [];
+  if (!window.fs.doc || !window.fs.getDoc) {
+    throw new Error("API dokumen Firebase Firestore tidak tersedia.");
+  }
+  const mangaReference = window.fs.doc(window.firestore, "manga", slug);
+  const mangaSnapshot = await window.fs.getDoc(mangaReference);
+  if (!mangaSnapshot.exists()) return [];
+  const mangaData = mangaSnapshot.data();
   const chapterMap: Record<string, unknown> = {};
   for (const field of [mangaData.chapters, mangaData.chapter]) {
     if (field && typeof field === "object" && !Array.isArray(field)) {

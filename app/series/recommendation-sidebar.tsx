@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { CoverImage } from "../lib/cover-image";
-import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import { useNsfwVisibility } from "../lib/nsfw";
 
 type CurrentManga = {
@@ -369,12 +368,28 @@ export default function RecommendationSidebar({
 
     const loadFirestore = async () => {
       try {
-        const records = await loadFirestoreMangaCatalog();
+        const deadline = Date.now() + 8000;
+        while (
+          active &&
+          !controller.signal.aborted &&
+          Date.now() < deadline &&
+          (!window.firestore || !window.fs?.collection || !window.fs.getDocs)
+        ) {
+          await new Promise((resolve) => window.setTimeout(resolve, 100));
+        }
         if (!active || controller.signal.aborted) return;
-        records.forEach((data) => {
+        if (!window.firestore || !window.fs?.collection || !window.fs.getDocs) {
+          return;
+        }
+        const collection = window.fs.collection(window.firestore, "manga");
+        const snapshot = await window.fs.getDocs(collection);
+        if (!active || controller.signal.aborted) return;
+        if (snapshot.empty) return;
+        snapshot.forEach((document: { id: string; data: () => Record<string, unknown> }) => {
+          const data = document.data();
           upsert(normalizeRecommendation({
             ...data,
-            slug: data.slug || normalizeSlug(asString(data.title || data.name)) || "",
+            slug: data.slug || normalizeSlug(asString(data.title || data.name, document.id)) || document.id,
           }, "firestore"));
         });
         publish();
