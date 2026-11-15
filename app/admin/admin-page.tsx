@@ -37,6 +37,7 @@ import { CoverImage } from "../lib/cover-image";
 import { MarkdownContent } from "../lib/markdown-content";
 import RichTextEditor from "./rich-text-editor";
 import MangaMetadataEditor from "./manga-metadata-editor";
+import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 import {
   DEFAULT_READER_SERVER_NOTICE,
   normalizeReaderServerNoticeConfig,
@@ -54,9 +55,8 @@ const firebaseConfig = {
 };
 
 const ADMIN_APP_NAME = "mikoroku-admin";
-const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache_v3";
+const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache_v4";
 const ADMIN_MANGA_CACHE_DURATION = 2 * 60 * 60 * 1000;
-const GITHUB_JSON = "/catalog/manga.json";
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
 
 type AdminFirebase = { auth: Auth; firestore: Firestore };
@@ -754,7 +754,7 @@ async function syncSeoToKv(payload: {
 }
 
 
-function mapGithubRecord(raw: Record<string, unknown>): MangaRecord | null {
+function mapMetadataRecord(raw: Record<string, unknown>): MangaRecord | null {
   const info = recordMetadata(raw);
   const title = firstText(raw.title, raw.name, info.title, info.name);
   const slug = firstText(raw.slug, info.slug) || slugify(title);
@@ -791,14 +791,14 @@ function mapGithubRecord(raw: Record<string, unknown>): MangaRecord | null {
     commissionEnabled: raw.commissionEnabled === true || info.commissionEnabled === true,
     nsfw: raw.nsfw === true || info.nsfw === true,
     isDraft: raw.isDraft === true || info.isDraft === true,
-    source: "github",
-    origin: "github",
-    githubSlug: slug,
+    source: firstText(raw.source, info.source) || "metadata",
+    origin: firstText(raw.origin, info.origin) || "metadata",
+    githubSlug: firstText(raw.githubSlug, info.githubSlug) || slug,
   };
 }
 
-function mergeGithubMetadata(
-  githubManga: MangaRecord[],
+function mergeMetadataRecords(
+  metadataManga: MangaRecord[],
   firestoreManga: MangaRecord[],
 ): MangaRecord[] {
   const merged = new Map(firestoreManga.map((manga) => [manga.slug, manga]));
@@ -807,7 +807,7 @@ function mergeGithubMetadata(
       ? incoming
       : existing;
 
-  for (const remote of githubManga) {
+  for (const remote of metadataManga) {
     const current = merged.get(remote.slug);
     if (!current) {
       merged.set(remote.slug, remote);
@@ -843,7 +843,7 @@ function mergeGithubMetadata(
   return [...merged.values()].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-function toGithubFirestoreData(manga: MangaRecord): Record<string, unknown> {
+function toMetadataFirestoreData(manga: MangaRecord): Record<string, unknown> {
   const updatedAt = manga.updatedAt || 0;
   const metadata = {
     altTitle: manga.altTitle,
@@ -876,7 +876,7 @@ function toGithubFirestoreData(manga: MangaRecord): Record<string, unknown> {
     ...metadata,
     metadata,
     managedByAdmin: false,
-    origin: "github",
+    origin: manga.origin || "metadata",
     source: "hybrid",
     githubSlug: manga.githubSlug || manga.slug,
     updatedAt,
@@ -884,9 +884,9 @@ function toGithubFirestoreData(manga: MangaRecord): Record<string, unknown> {
   };
 }
 
-async function syncGithubCatalogToFirestore(
+async function syncMetadataCatalogToFirestore(
   firestore: Firestore,
-  githubManga: MangaRecord[],
+  metadataManga: MangaRecord[],
   currentSummary: MangaRecord[],
 ): Promise<{ added: MangaRecord[]; summaryUpdated: boolean; summaryWarning: string }> {
   const snapshot = await getDocs(collection(firestore, "manga"));
@@ -901,22 +901,22 @@ async function syncGithubCatalogToFirestore(
     existing.set(mangaDoc.id, fromFirestore(mangaDoc.id, data));
   }
 
-  const missing = githubManga.filter(
+  const missing = metadataManga.filter(
     (item) => !existing.has(item.slug) && !tombstones.has(item.slug),
   );
   const added: MangaRecord[] = [];
   for (let start = 0; start < missing.length; start += 450) {
     const batch = writeBatch(firestore);
     for (const item of missing.slice(start, start + 450)) {
-      const data = toGithubFirestoreData(item);
+      const data = toMetadataFirestoreData(item);
       batch.set(doc(firestore, "manga", item.slug), data);
       added.push(fromFirestore(item.slug, data));
     }
     await batch.commit();
   }
 
-  const allManga = mergeGithubMetadata(
-    githubManga.filter((item) => !tombstones.has(item.slug)),
+  const allManga = mergeMetadataRecords(
+    metadataManga.filter((item) => !tombstones.has(item.slug)),
     [...existing.values(), ...added],
   );
   const entries = allManga
@@ -1079,25 +1079,16 @@ export default function AdminPage() {
     setCatalogFromCache(hasFreshCache);
     setLoadError("");
     setWarning("");
-    setSyncStatus("Checking manga.json sync...");
+    setSyncStatus("Checking metadata.json sync...");
     try {
       const { firestore } = getAdminFirebase();
-      const [summaryResult, githubResult] = await Promise.allSettled([
+      const [summaryResult, metadataResult] = await Promise.allSettled([
         getDoc(doc(firestore, "meta", "mangaSummary")),
-        fetch(GITHUB_JSON, { cache: force ? "no-cache" : "default" }).then(async (response) => {
-          if (!response.ok) throw new Error(`GitHub mengembalikan ${response.status}.`);
-          const remoteData: unknown = await response.json();
-          if (!Array.isArray(remoteData)) {
-            throw new Error("The GitHub manga data has an invalid format.");
-          }
-          return remoteData
-            .filter(
-              (entry): entry is Record<string, unknown> =>
-                typeof entry === "object" && entry !== null,
-            )
-            .map(mapGithubRecord)
-            .filter((entry): entry is MangaRecord => entry !== null);
-        }),
+        fetchMangaMetadataPayload({ force }).then(({ manga }) =>
+          manga
+            .map(mapMetadataRecord)
+            .filter((entry): entry is MangaRecord => entry !== null),
+        ),
       ]);
 
       const firestoreManga: MangaRecord[] = [];
@@ -1118,18 +1109,18 @@ export default function AdminPage() {
         summaryWarning = "The Firestore summary is empty or invalid.";
       }
 
-      const githubManga = githubResult.status === "fulfilled" ? githubResult.value : [];
-      if (githubResult.status === "rejected") {
-        console.warn("Failed to load the GitHub manga catalog.", githubResult.reason);
+      const metadataManga = metadataResult.status === "fulfilled" ? metadataResult.value : [];
+      if (metadataResult.status === "rejected") {
+        console.warn("Failed to load the manga metadata catalog.", metadataResult.reason);
       }
       let syncedManga: MangaRecord[] = [];
       let syncWarning = "";
-      if (githubManga.length) {
-        setSyncStatus("Syncing manga.json to Firestore...");
+      if (metadataManga.length) {
+        setSyncStatus("Syncing metadata.json to Firestore...");
         try {
-          const syncResult = await syncGithubCatalogToFirestore(
+          const syncResult = await syncMetadataCatalogToFirestore(
             firestore,
-            githubManga,
+            metadataManga,
             firestoreManga,
           );
           syncedManga = syncResult.added;
@@ -1139,44 +1130,44 @@ export default function AdminPage() {
               ? `Synced ${syncedManga.length} new manga to Firestore.`
               : syncResult.summaryUpdated
                 ? "Firestore manga summary was synchronized."
-                : "manga.json is already synced to Firestore.",
+                : "metadata.json is already synced to Firestore.",
           );
           if (syncResult.summaryUpdated) summaryWarning = "";
         } catch (error) {
-          console.error("Automatic manga.json sync failed.", error);
-          setSyncStatus(`Automatic manga.json sync failed: ${getErrorMessage(error)}`);
+          console.error("Automatic metadata.json sync failed.", error);
+          setSyncStatus(`Automatic metadata.json sync failed: ${getErrorMessage(error)}`);
         }
       } else {
-        setSyncStatus("Automatic manga.json sync skipped because the catalog could not be loaded.");
+        setSyncStatus("Automatic metadata.json sync skipped because the catalog could not be loaded.");
       }
-      if (!githubManga.length && !firestoreManga.length) {
+      if (!metadataManga.length && !firestoreManga.length) {
         if (cached?.items.length) {
           setManga(cached.items);
           setCatalogFromCache(true);
           setWarning(
-            `Could not load the latest catalog. Showing the local cache. ${summaryWarning} ${githubResult.status === "rejected" ? getErrorMessage(githubResult.reason) : ""}`.trim(),
+            `Could not load the latest catalog. Showing the local cache. ${summaryWarning} ${metadataResult.status === "rejected" ? getErrorMessage(metadataResult.reason) : ""}`.trim(),
           );
           return;
         }
         throw new Error(
           summaryWarning ||
-            (githubResult.status === "rejected"
-              ? getErrorMessage(githubResult.reason)
+            (metadataResult.status === "rejected"
+              ? getErrorMessage(metadataResult.reason)
               : "No catalog data is available."),
         );
       }
 
-      const loadedManga = mergeGithubMetadata(githubManga, [...firestoreManga, ...syncedManga]);
+      const loadedManga = mergeMetadataRecords(metadataManga, [...firestoreManga, ...syncedManga]);
       setManga(loadedManga);
       setCatalogFromCache(false);
       writeAdminMangaCache(loadedManga);
-      const githubWarning = githubResult.status === "rejected"
-        ? `GitHub data unavailable: ${getErrorMessage(githubResult.reason)}.`
+      const metadataWarning = metadataResult.status === "rejected"
+        ? `Manga metadata unavailable: ${getErrorMessage(metadataResult.reason)}.`
         : "";
-      setWarning([summaryWarning, githubWarning, syncWarning].filter(Boolean).join(" "));
+      setWarning([summaryWarning, metadataWarning, syncWarning].filter(Boolean).join(" "));
     } catch (error) {
       console.error("Failed to load the admin manga list.", error);
-      setSyncStatus(`Automatic manga.json sync could not run: ${getErrorMessage(error)}`);
+      setSyncStatus(`Automatic metadata.json sync could not run: ${getErrorMessage(error)}`);
       if (cached?.items.length) {
         setManga(cached.items);
         setCatalogFromCache(true);
@@ -1313,7 +1304,7 @@ export default function AdminPage() {
       const { firestore } = getAdminFirebase();
       const snapshot = await getDocFromServer(doc(firestore, "manga", item.slug));
       const savedManga = snapshot.exists()
-        ? mergeGithubMetadata([item], [fromFirestore(item.slug, snapshot.data())])[0] || item
+        ? mergeMetadataRecords([item], [fromFirestore(item.slug, snapshot.data())])[0] || item
         : item;
 
       setManga((current) => {
@@ -1475,7 +1466,7 @@ export default function AdminPage() {
       const savedManga = fromFirestore(slug, savedData);
 
       setManga((current) => {
-        const next = mergeGithubMetadata(
+        const next = mergeMetadataRecords(
           current
             .filter((item) => item.slug !== editing?.slug && item.slug !== slug)
             .filter((item) => item.source !== "github" || item.slug !== slug),
@@ -2610,7 +2601,7 @@ export default function AdminPage() {
           }
         : null;
       const currentManga = mangaWithUnsetDefaults
-        ? mergeGithubMetadata(
+        ? mergeMetadataRecords(
             catalogManga ? [catalogManga] : [],
             [mangaWithUnsetDefaults],
           )[0]

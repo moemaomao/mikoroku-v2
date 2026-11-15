@@ -25,6 +25,7 @@ import {
   initializeFirebaseClient,
   loadFirestoreMangaCatalog,
 } from "../lib/firebase-client";
+import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 import {
   compactChapterCache,
   mergeSharedChapterCache,
@@ -155,7 +156,6 @@ declare global {
   }
 }
 
-const GITHUB_DATA_URL = "/catalog/manga.json";
 const FIRESTORE_BASE =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
 
@@ -618,9 +618,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   const cachedManga = await getCachedManga(slug);
 
   const responses = await Promise.allSettled([
-    fetch(GITHUB_DATA_URL, { signal }).then(async (response) => {
-      if (!response.ok) throw new Error(`Dataset manga merespons HTTP ${response.status}.`);
-      const items = await response.json() as Record<string, unknown>[];
+    fetchMangaMetadataPayload({ signal }).then(({ manga: items }) => {
       const result = items.find((item) =>
         asString(item.slug) === slug ||
         normalizedSlug(asString(item.title)) === slug ||
@@ -631,7 +629,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     loadFirestoreMangaCatalog(),
   ]);
 
-  const githubManga = responses[0].status === "fulfilled" ? responses[0].value : null;
+  const staticManga = responses[0].status === "fulfilled" ? responses[0].value : null;
   const metadataRecords = responses[1].status === "fulfilled" ? responses[1].value : [];
   const metadataRecord = metadataRecords.find((record) => record.slug === slug);
   const metadataManga = metadataRecord
@@ -642,9 +640,9 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
   const effectiveSource = firestoreDeltaFound
     ? "Firestore catalog delta (metadata.json baseline)"
     : metadataManga
-      ? "metadata.json backup"
-      : githubManga
-        ? "manga.json"
+      ? "metadata.json"
+      : staticManga
+        ? "metadata.json"
         : cachedManga || currentManga
           ? "browser detail cache"
           : "none";
@@ -658,38 +656,38 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
           : "no newer change for this manga"
     }`,
     "Firestore per-manga metadata read: skipped; using the static baseline and catalog delta",
-    `manga.json: ${githubManga ? "found" : "not found"}`,
+    `metadata.json static record: ${staticManga ? "found" : "not found"}`,
     `Effective source: ${effectiveSource}`,
   ];
-  let manga = githubManga && metadataManga
+  let manga = staticManga && metadataManga
     ? {
-        ...githubManga,
-        desc: preferMetadata(metadataManga.desc, githubManga.desc),
-        genres: preferMetadata(metadataManga.genres, githubManga.genres),
-        rating: preferMetadata(metadataManga.rating, githubManga.rating),
-        status: preferMetadata(metadataManga.status, githubManga.status),
-        type: metadataManga.type === "Manga" ? githubManga.type : metadataManga.type,
-        altTitle: preferMetadata(metadataManga.altTitle, githubManga.altTitle),
-        author: preferMetadata(metadataManga.author, githubManga.author),
-        artist: preferMetadata(metadataManga.artist, githubManga.artist),
-        publication: preferMetadata(metadataManga.publication, githubManga.publication),
-        serialization: preferMetadata(metadataManga.serialization, githubManga.serialization),
-        demographic: preferMetadata(metadataManga.demographic, githubManga.demographic),
-        series: preferMetadata(metadataManga.series, githubManga.series),
-        characters: preferMetadata(metadataManga.characters, githubManga.characters),
-        circle: preferMetadata(metadataManga.circle, githubManga.circle),
-        group: preferMetadata(metadataManga.group, githubManga.group),
-        femaleTags: preferMetadata(metadataManga.femaleTags, githubManga.femaleTags),
-        maleTags: preferMetadata(metadataManga.maleTags, githubManga.maleTags),
+        ...staticManga,
+        desc: preferMetadata(metadataManga.desc, staticManga.desc),
+        genres: preferMetadata(metadataManga.genres, staticManga.genres),
+        rating: preferMetadata(metadataManga.rating, staticManga.rating),
+        status: preferMetadata(metadataManga.status, staticManga.status),
+        type: metadataManga.type === "Manga" ? staticManga.type : metadataManga.type,
+        altTitle: preferMetadata(metadataManga.altTitle, staticManga.altTitle),
+        author: preferMetadata(metadataManga.author, staticManga.author),
+        artist: preferMetadata(metadataManga.artist, staticManga.artist),
+        publication: preferMetadata(metadataManga.publication, staticManga.publication),
+        serialization: preferMetadata(metadataManga.serialization, staticManga.serialization),
+        demographic: preferMetadata(metadataManga.demographic, staticManga.demographic),
+        series: preferMetadata(metadataManga.series, staticManga.series),
+        characters: preferMetadata(metadataManga.characters, staticManga.characters),
+        circle: preferMetadata(metadataManga.circle, staticManga.circle),
+        group: preferMetadata(metadataManga.group, staticManga.group),
+        femaleTags: preferMetadata(metadataManga.femaleTags, staticManga.femaleTags),
+        maleTags: preferMetadata(metadataManga.maleTags, staticManga.maleTags),
         covers: metadataManga.covers?.length
           ? metadataManga.covers
           : cachedManga?.covers?.length
             ? cachedManga.covers
-            : githubManga.covers,
+            : staticManga.covers,
         coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
           ? metadataManga.coverNumbers
-          : cachedManga?.coverNumbers || githubManga.coverNumbers,
-        coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || githubManga.coverUpdatedAt,
+          : cachedManga?.coverNumbers || staticManga.coverNumbers,
+        coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || staticManga.coverUpdatedAt,
       }
     : metadataManga
       ? {
@@ -700,18 +698,18 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
             : cachedManga?.coverNumbers,
           coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
         }
-      : githubManga
+      : staticManga
         ? {
-            ...githubManga,
-            covers: githubManga.covers?.length ? githubManga.covers : cachedManga?.covers,
-            coverNumbers: githubManga.coverNumbers || cachedManga?.coverNumbers,
-            coverUpdatedAt: githubManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
+            ...staticManga,
+            covers: staticManga.covers?.length ? staticManga.covers : cachedManga?.covers,
+            coverNumbers: staticManga.coverNumbers || cachedManga?.coverNumbers,
+            coverUpdatedAt: staticManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
           }
         : cachedManga || currentManga;
   if (manga) manga.debugSourceInfo = debugSourceInfo;
   if (manga) {
     manga.nsfw =
-      githubManga?.nsfw === true ||
+      staticManga?.nsfw === true ||
       metadataManga?.nsfw === true ||
       cachedManga?.nsfw === true ||
       currentManga?.nsfw === true ||
@@ -721,7 +719,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     if (result.status === "rejected" && !signal.aborted) {
       console.warn(
         [
-          "Dataset manga GitHub gagal dimuat.",
+          "Manga metadata failed to load.",
           "Katalog metadata Firestore gagal dimuat.",
         ][index],
         result.reason,

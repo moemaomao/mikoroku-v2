@@ -9,6 +9,7 @@ import UserModals from "../user-modals";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
 import { isNsfwManga } from "../lib/nsfw";
+import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 
 type Bookmark = {
   title: string;
@@ -140,8 +141,6 @@ const firebaseConfig = {
   messagingSenderId: "249700505242",
   appId: "1:249700505242:web:dab240af09caf30ad7f123",
 };
-
-const githubDatasetUrl = "/catalog/manga.json";
 
 function normalizeTitle(title: string): string {
   return title.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
@@ -314,20 +313,13 @@ export default function BookmarkPage() {
     coverLookupAttempted.current = true;
     const controller = new AbortController();
 
-    fetch(githubDatasetUrl, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Dataset manga merespons HTTP ${response.status}.`);
-        return response.json() as Promise<Array<{
-          title?: string;
-          slug?: string;
-          img?: string;
-          cover?: string;
-        }>>;
-      })
-      .then((items) => {
+    fetchMangaMetadataPayload({ signal: controller.signal })
+      .then(({ manga: items }) => {
         const index = new Map<string, (typeof items)[number]>();
         for (const item of items) {
-          if (item.title) index.set(normalizeTitle(item.title), item);
+          if (typeof item.title === "string" && item.title.trim()) {
+            index.set(normalizeTitle(item.title), item);
+          }
         }
         setBookmarks((current) => {
           const next = current.map((bookmark) => {
@@ -335,8 +327,10 @@ export default function BookmarkPage() {
             const match = index.get(normalizeTitle(bookmark.title));
             return match ? {
               ...bookmark,
-              img: match.img || match.cover || "",
-              slug: match.slug || bookmark.slug,
+              img: typeof match.img === "string"
+                ? match.img
+                : typeof match.cover === "string" ? match.cover : "",
+              slug: typeof match.slug === "string" && match.slug ? match.slug : bookmark.slug,
             } : bookmark;
           });
           localStorage.setItem("mangaBookmarks", JSON.stringify(next));
@@ -345,7 +339,7 @@ export default function BookmarkPage() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("Cover bookmark tidak dapat diperkaya dari dataset manga.", error);
+        console.warn("Cover bookmark tidak dapat diperkaya dari metadata manga.", error);
       });
 
     return () => controller.abort();

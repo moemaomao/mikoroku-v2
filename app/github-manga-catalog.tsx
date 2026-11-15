@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
+import { splitHomepageMangaSections } from "./lib/homepage-manga-sections";
 import {
   cardClass,
   cardCoverClass,
@@ -88,7 +89,8 @@ declare global {
   }
 }
 
-const MANGA_DATA_URL = "/catalog/manga.json";
+const MANGA_CACHE_KEY = "mangaMetadataCache_v2";
+const MANGA_LIGHT_CACHE_KEY = "mangaMetadataLightCache_v2";
 const STALE_OK_DURATION = 24 * 60 * 60 * 1000;
 const HERO_CACHE_DURATION = 30 * 60 * 1000;
 const PAGE_SIZE = 24;
@@ -171,9 +173,9 @@ function safeSet(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    localStorage.removeItem("mangaGithubCache");
+    localStorage.removeItem(MANGA_CACHE_KEY);
     localStorage.removeItem("mangaFsMetaCache");
-    localStorage.removeItem("mangaGithubLightCache");
+    localStorage.removeItem(MANGA_LIGHT_CACHE_KEY);
   }
 }
 
@@ -207,12 +209,12 @@ function readCachedItems(): MangaItem[] {
     rememberItems(shared.list as MangaItem[]);
     return homeCatalogMemory.items;
   }
-  const light = safeGet<{ time?: number; fullList?: MangaItem[] }>("mangaGithubLightCache", {});
+  const light = safeGet<{ time?: number; fullList?: MangaItem[] }>(MANGA_LIGHT_CACHE_KEY, {});
   if (Array.isArray(light.fullList) && light.fullList.length) {
     rememberItems(light.fullList);
     return homeCatalogMemory.items;
   }
-  const full = safeGet<{ data?: MangaItem[] }>("mangaGithubCache", {});
+  const full = safeGet<{ data?: MangaItem[] }>(MANGA_CACHE_KEY, {});
   if (Array.isArray(full.data) && full.data.length) {
     rememberItems(full.data);
     return homeCatalogMemory.items;
@@ -260,14 +262,20 @@ function sharedListLoader(force = false): Promise<MangaItem[]> {
   if (shared.loaded && !force && shared.list) return Promise.resolve(shared.list);
   if (shared.promise && !force) return shared.promise;
 
-  shared.promise = fetch(`${MANGA_DATA_URL}${force ? `?t=${Date.now()}` : ""}`)
-    .then((response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json() as Promise<unknown>;
-    })
-    .then((value) => {
-      if (!Array.isArray(value)) throw new Error("Manga dataset response must be an array.");
-      shared.list = value as MangaItem[];
+  const promise = loadFirestoreMangaCatalog({ force })
+    .then((records) => {
+      shared.list = records
+        .filter((item): item is typeof item & { title: string } =>
+          item.isDraft !== true &&
+          typeof item.title === "string" &&
+          item.title.trim().length > 0,
+        )
+        .map((item) => ({
+          ...item,
+          img: typeof item.cover === "string"
+            ? item.cover
+            : typeof item.img === "string" ? item.img : "",
+        }));
       shared.loaded = true;
       return shared.list;
     })
@@ -276,7 +284,8 @@ function sharedListLoader(force = false): Promise<MangaItem[]> {
       shared.promise = null;
       throw error;
     });
-  return shared.promise;
+  shared.promise = promise;
+  return promise;
 }
 
 function metadataFromData(slug: string, data: Record<string, unknown>): FirestoreMeta {
@@ -498,7 +507,7 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
       origin: meta?.origin || "",
     };
   });
-  safeSet("mangaGithubLightCache", { time: Date.now(), list: lightList, fullList: items });
+  safeSet(MANGA_LIGHT_CACHE_KEY, { time: Date.now(), list: lightList, fullList: items });
 }
 
 function MangaCard({
@@ -658,7 +667,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
     if (!document.getElementById("githubManga")) return;
     setError(false);
 
-    const light = safeGet<{ time?: number; fullList?: MangaItem[] }>("mangaGithubLightCache", {});
+    const light = safeGet<{ time?: number; fullList?: MangaItem[] }>(MANGA_LIGHT_CACHE_KEY, {});
     const age = Date.now() - (light.time || 0);
     let renderedCache = false;
     const bootstrap = readCachedItems();
@@ -694,7 +703,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
       const [list, freshMetadata] = await Promise.all([
         (async () => {
           const fresh = await (window.loadSharedMangaList || sharedListLoader)(force);
-          safeSet("mangaGithubCache", { time: Date.now(), data: fresh });
+          safeSet(MANGA_CACHE_KEY, { time: Date.now(), data: fresh });
           return fresh;
         })(),
         metadataPromise,
@@ -813,7 +822,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
       }
       return best;
     };
-    return items.slice().sort((left, right) => {
+    return splitHomepageMangaSections(items).latest.sort((left, right) => {
       const diff = timeOf(right) - timeOf(left);
       if (diff !== 0) return diff;
       return normalize(left.title).localeCompare(normalize(right.title));

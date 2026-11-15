@@ -34,6 +34,10 @@ const HISTORY_LIMIT = 50;
 const LOCAL_CACHE_KEYS = new Set([
   "manga_cache_v1",
   "manga_cache_v5",
+  "manga_metadata_cache_v2",
+  "mangaMetadataCache_v2",
+  "mangaMetadataLightCache_v2",
+  "adminMangaCatalogCache_v4",
   "mangaGithubCache",
   "mangaFsMetaCache",
   "mangaGithubLightCache",

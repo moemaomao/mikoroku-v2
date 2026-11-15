@@ -19,6 +19,7 @@ import {
   writeCachedReaderData,
 } from "../lib/reader-data-cache";
 import { initializeFirebaseClient } from "../lib/firebase-client";
+import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
 type ReaderKind = "manga" | "novel";
@@ -76,7 +77,6 @@ function getReaderStatsInput(data: ReaderData, slug: string, progress: number): 
   };
 }
 
-const mangaDatasetUrl = "/catalog/manga.json";
 const bloggerChapterSources = [
   { source: "blogger", domain: "https://www.mikodrive.my.id" },
   { source: "blogger2", domain: "https://www.yomidays.my.id" },
@@ -653,9 +653,7 @@ async function loadMangaMetadataFromDataset(
   slug: string,
   signal: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
-  const response = await fetch(mangaDatasetUrl, { signal });
-  if (!response.ok) throw new Error(`Manga dataset returned HTTP ${response.status}.`);
-  const entries = await response.json() as Array<Record<string, unknown>>;
+  const { manga: entries } = await fetchMangaMetadataPayload({ signal });
   return entries.find((entry) =>
     String(entry.slug || "") === slug ||
     normalizedSearchKey(String(entry.title || "")) === normalizedSearchKey(slug),

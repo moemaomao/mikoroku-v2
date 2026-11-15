@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import { latestChapterFromRecord } from "../lib/latest-chapter";
 import { imageProxyUrl } from "../lib/image-proxy";
+import {
+  getHomepageMangaSection,
+  getHomepageMangaType,
+  splitHomepageMangaSections,
+} from "./lib/homepage-manga-sections";
 import { CoverImage } from "./lib/cover-image";
 import {
   cardClass,
@@ -62,24 +67,11 @@ function value(record: MangaRecord, key: string, fallback: unknown = ""): unknow
 }
 
 function seriesType(record: MangaRecord): string {
-  const rawType = String(value(record, "type") || "")
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .trim();
-  if (rawType && rawType !== "manga") return rawType;
-  const genres = value(record, "genres", []);
-  const genreList = Array.isArray(genres)
-    ? genres.map((genre) => String(genre).toLowerCase())
-    : [];
-  return (
-    ["doujinshi", "cg", "manhwa", "manhua", "novel"].find((type) =>
-      genreList.includes(type),
-    ) || "manga"
-  );
+  return getHomepageMangaType(record);
 }
 
 function isNovel(record: MangaRecord): boolean {
-  return seriesType(record).includes("novel");
+  return getHomepageMangaSection(record) === "novel";
 }
 
 function readCache(): { data: Record<string, MangaRecord>; expired: boolean } | null {
@@ -240,18 +232,11 @@ export default function FirebasePostCatalog() {
   const [loadError, setLoadError] = useState("");
 
   const applyRecords = useCallback((list: MangaRecord[]) => {
-    const cleaned = list
-      .filter((record) => Boolean(record.title));
-
-    setRecords(cleaned);
-
-    const mangaOnly = cleaned.filter(
-      (record) =>
-        !isNovel(record) &&
-        String(record.origin || "").toLowerCase() !== "github" &&
-        String(record.source || "").toLowerCase() !== "github",
+    const sections = splitHomepageMangaSections(
+      list.filter((record) => typeof record.title === "string" && record.title.trim()),
     );
-    setRandomManga(mangaOnly.sort((left, right) =>
+    setRecords([...sections.latest, ...sections.random, ...sections.novel]);
+    setRandomManga(sections.random.sort((left, right) =>
       updatedAtMillis(right) - updatedAtMillis(left) ||
       left.slug.localeCompare(right.slug),
     ));

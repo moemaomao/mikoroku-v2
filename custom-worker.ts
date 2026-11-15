@@ -46,10 +46,10 @@ const BLOGGER_CHAPTERS_TTL = 20 * 60;
 const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const MANGA_CATALOG_CACHE_KEY = "catalog:github:all-manga:v1";
+const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v2";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
-const MANGA_CATALOG_URL = "/catalog/manga.json";
+const MANGA_CATALOG_URL = "/catalog/metadata.json";
 const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
 const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_DETAIL_CACHE_CONTROL =
@@ -283,13 +283,21 @@ async function fetchAndCacheMangaCatalog(
     },
   });
   if (!upstream.ok) {
-    throw new Error(`Manga catalog upstream returned HTTP ${upstream.status}.`);
+    throw new Error(`Manga metadata upstream returned HTTP ${upstream.status}.`);
   }
 
-  const data: unknown = await upstream.json();
-  if (!Array.isArray(data)) {
-    throw new Error("Manga catalog upstream response must be an array.");
+  const payload: unknown = await upstream.json();
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    !Array.isArray((payload as { manga?: unknown }).manga)
+  ) {
+    throw new Error("Manga metadata upstream response has an invalid format.");
   }
+  const data = (payload as { manga: unknown[] }).manga.filter(
+    (item) => item !== null && typeof item === "object" && !Array.isArray(item),
+  );
 
   if (kv) {
     try {

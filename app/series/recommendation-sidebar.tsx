@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { CoverImage } from "../lib/cover-image";
+import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 import { useNsfwVisibility } from "../lib/nsfw";
 
 type CurrentManga = {
@@ -43,8 +44,7 @@ type Recommendation = {
   info: Record<string, unknown>;
 };
 
-const GITHUB_DATA_URL = "/catalog/manga.json";
-const CACHE_KEY = "mk_rec_sidebar_gh_fs_v3";
+const CACHE_KEY = "mk_rec_sidebar_metadata_fs_v4";
 const VISIBILITY_KEY = "mk_rec_sidebar_hidden";
 const CACHE_TTL = 25 * 60 * 1000;
 const NO_COVER =
@@ -343,21 +343,15 @@ export default function RecommendationSidebar({
       }, 3500);
     }
 
-    const loadGithub = async () => {
+    const loadMetadata = async () => {
       try {
         if (controller.signal.aborted || !active) return;
-        const response = await fetch(`${GITHUB_DATA_URL}?t=${Date.now()}`, {
+        const { manga: data } = await fetchMangaMetadataPayload({
           signal: controller.signal,
-          cache: "no-store",
         });
-        if (!response.ok) throw new Error(`Dataset manga merespons HTTP ${response.status}.`);
-        const data: unknown = await response.json();
         if (!active || controller.signal.aborted) return;
-        if (!Array.isArray(data)) throw new Error("Dataset rekomendasi bukan berupa array.");
         data.forEach((value) => {
-          if (value && typeof value === "object") {
-            upsert(normalizeRecommendation(value as Record<string, unknown>, "github"));
-          }
+          upsert(normalizeRecommendation(value, "metadata"));
         });
         publish();
       } catch (error) {
@@ -404,7 +398,7 @@ export default function RecommendationSidebar({
       console.warn(`${source} rekomendasi manga gagal dimuat.`, error);
     };
 
-    void Promise.allSettled([loadGithub(), loadFirestore()]).then((results) => {
+    void Promise.allSettled([loadMetadata(), loadFirestore()]).then((results) => {
       results.forEach((result, index) => {
         if (result.status === "rejected") {
           if (isAbortError(result.reason) || !active) return;

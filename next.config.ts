@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
         source: "/widgets/emoji-reaction.js",
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
       },
+      {
+        source: "/catalog/metadata.json",
+        headers: [{ key: "Cache-Control", value: "public, max-age=300, s-maxage=600, stale-while-revalidate=3600" }],
+      },
     ];
   },
   async redirects() {

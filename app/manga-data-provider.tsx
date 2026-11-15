@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
+import { fetchMangaMetadataPayload } from "./lib/manga-metadata";
 
 type MangaMetadata = Record<string, unknown> & {
   slug: string;
@@ -17,9 +18,8 @@ declare global {
   }
 }
 
-const MANGA_CACHE_KEY = "manga_cache_v1";
+const MANGA_CACHE_KEY = "manga_metadata_cache_v2";
 const MANGA_CACHE_TIME = 15 * 60 * 1000;
-const MANGA_JSON_URL = "/catalog/manga.json";
 let initialization: Promise<void> | undefined;
 
 function normalizeTitle(title: string): string {
@@ -66,7 +66,7 @@ function applyMangaList(list: Record<string, unknown>[]) {
   }
 }
 
-async function loadGithubData() {
+async function loadMetadataData() {
   let cached: { time?: number; data?: Record<string, unknown>[] } | undefined;
   try {
     const saved = localStorage.getItem(MANGA_CACHE_KEY);
@@ -80,13 +80,10 @@ async function loadGithubData() {
     return;
   }
 
-  const response = await fetch(MANGA_JSON_URL);
-  if (!response.ok) throw new Error(`Manga dataset returned HTTP ${response.status}.`);
-  const items: unknown = await response.json();
-  if (!Array.isArray(items)) throw new Error("Manga dataset response must be an array.");
-  applyMangaList(items as Record<string, unknown>[]);
+  const { manga } = await fetchMangaMetadataPayload();
+  applyMangaList(manga);
   try {
-    localStorage.setItem(MANGA_CACHE_KEY, JSON.stringify({ time: Date.now(), data: items }));
+    localStorage.setItem(MANGA_CACHE_KEY, JSON.stringify({ time: Date.now(), data: manga }));
   } catch (error) {
     console.warn("Manga dataset cache could not be saved.", error);
   }
@@ -119,9 +116,9 @@ async function initializeMangaData() {
   window.__mangaDataLoaded = true;
 
   try {
-    await loadGithubData();
+    await loadMetadataData();
   } catch (error) {
-    console.error("GitHub manga dataset failed to load.", error);
+    console.error("Manga metadata failed to load.", error);
   }
 
   try {

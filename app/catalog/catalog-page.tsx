@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { CoverImage } from "../lib/cover-image";
 import { getCachedFirestoreMangaCatalog, loadFirestoreMangaCatalog } from "../lib/firebase-client";
@@ -41,30 +41,9 @@ type Manga = {
 export type CatalogKind = "manga" | "hentai" | "genre" | "novel";
 type SortOrder = "latest" | "az" | "za";
 type DateValue = string | number | { toMillis?: () => number; seconds?: number };
-type MangaDataWindow = Window & { mangaData?: Record<string, Manga> };
-
-const HOMEPAGE_LIGHT_CACHE = "mangaGithubLightCache";
-const HOMEPAGE_FULL_CACHE = "mangaGithubCache";
-
-type SharedMangaCache = {
-  list: Manga[] | null;
-  promise: Promise<Manga[]> | null;
-  loaded: boolean;
-};
-
-type CatalogWindow = Window & {
-  mangaData?: Record<string, Manga>;
-  githubMangaList?: Manga[];
-  __mangaShared?: SharedMangaCache;
-  loadSharedMangaList?: (refresh?: boolean) => Promise<Manga[]>;
-};
 
 function titleOf(manga: Manga): string {
   return manga.title || manga.name || "Untitled";
-}
-
-function normalizedKey(value: string): string {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function coerceTime(value: unknown): number {
@@ -129,82 +108,9 @@ function sortByLatest(list: Manga[]): Manga[] {
   });
 }
 
-function mergeCatalogData(primary: Manga[], additions: Manga[]): Manga[] {
-  const merged = new Map<string, Manga>();
-  for (const manga of primary) {
-    const key = normalizedKey(titleOf(manga));
-    if (key) merged.set(key, manga);
-  }
-  for (const manga of additions) {
-    const key = normalizedKey(titleOf(manga));
-    if (!key) continue;
-    const existing = merged.get(key);
-    if (!existing) {
-      merged.set(key, manga);
-      continue;
-    }
-    const existingTime = updateTime(existing);
-    const incomingTime = updateTime(manga);
-    const newer = incomingTime >= existingTime ? manga : existing;
-    const older = newer === manga ? existing : manga;
-    merged.set(key, {
-      ...older,
-      ...newer,
-      title: newer.title || newer.name || older.title || older.name,
-      name: newer.name || older.name,
-      slug: newer.slug || older.slug,
-      img: newer.cover || newer.img || older.cover || older.img,
-      cover: newer.cover || newer.img || older.cover || older.img,
-      updatedAt: incomingTime >= existingTime ? (manga.updatedAt ?? existing.updatedAt) : (existing.updatedAt ?? manga.updatedAt),
-      latestUpdate: incomingTime >= existingTime ? (manga.latestUpdate ?? existing.latestUpdate) : (existing.latestUpdate ?? manga.latestUpdate),
-      lastUpdate: (manga as Manga).lastUpdate ?? (existing as Manga).lastUpdate,
-      firestore: Boolean(existing.firestore || manga.firestore),
-      managedByAdmin: Boolean(existing.managedByAdmin || manga.managedByAdmin),
-      source: manga.source || existing.source,
-      origin: manga.origin || existing.origin,
-      nsfw: manga.firestore
-        ? manga.nsfw
-        : existing.firestore
-          ? existing.nsfw
-          : newer.nsfw ?? older.nsfw,
-      genres: (Array.isArray(newer.genres) && newer.genres.length ? newer.genres : older.genres) || newer.genres || older.genres,
-    });
-  }
-  return [...merged.values()];
-}
-
 function readInstantCatalog(): Manga[] {
   if (typeof window === "undefined") return [];
-  const w = window as CatalogWindow;
-  let homepageList: Manga[] = [];
-
-  if (w.__mangaShared?.list?.length) homepageList = asMangaList(w.__mangaShared.list);
-  else if (w.githubMangaList?.length) homepageList = asMangaList(w.githubMangaList);
-  else {
-    try {
-      const light = JSON.parse(localStorage.getItem(HOMEPAGE_LIGHT_CACHE) || "null") as {
-        fullList?: unknown;
-        list?: unknown;
-      } | null;
-      homepageList = asMangaList(light?.fullList || light?.list);
-    } catch { /* ignore invalid cached data */ }
-
-    if (!homepageList.length) {
-      try {
-        const full = JSON.parse(localStorage.getItem(HOMEPAGE_FULL_CACHE) || "null") as {
-          data?: unknown;
-        } | null;
-        homepageList = asMangaList(full?.data);
-      } catch { /* ignore invalid cached data */ }
-    }
-
-    if (!homepageList.length && w.mangaData && typeof w.mangaData === "object") {
-      homepageList = Object.values(w.mangaData).filter((manga) => manga && !manga.isDraft);
-    }
-  }
-
-  const metadataList = asMangaList(getCachedFirestoreMangaCatalog());
-  return sortByLatest(mergeCatalogData(homepageList, metadataList));
+  return sortByLatest(asMangaList(getCachedFirestoreMangaCatalog()));
 }
 
 function slugify(value: string): string {
@@ -286,10 +192,8 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortOrder>("latest");
   const [activeGenre, setActiveGenre] = useState("all");
-  const firestoreManga = useRef<Manga[]>([]);
 
   useEffect(() => {
-    firestoreManga.current = [];
     try {
       const saved = localStorage.getItem(kind === "hentai" ? "hentaiSortMode" : kind === "genre" ? "genreListSort" : kind === "novel" ? "novelListSort" : "mangaListSortMode");
       if (saved === "latest" || saved === "az" || saved === "za") setSort(saved);
@@ -309,37 +213,12 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
 
     let active = true;
 
-    const applyFresh = (homepageData: Manga[], metadata: Manga[]) => {
-      const merged = sortByLatest(
-        mergeCatalogData(mergeCatalogData(asMangaList(homepageData), metadata), firestoreManga.current),
-      );
-      setAllManga(merged);
-      setLoading(false);
-      setError("");
-    };
-
-    const w = window as CatalogWindow;
-    const sharedPromise =
-      typeof w.loadSharedMangaList === "function"
-        ? w.loadSharedMangaList(false).catch(() => null)
-        : w.__mangaShared?.promise?.catch(() => null);
-    const homepagePromise = (sharedPromise || Promise.resolve(null)).then(async (sharedList) => {
-      if (sharedList && sharedList.length) return asMangaList(sharedList);
-      const response = await fetch("/catalog/manga.json");
-      if (!response.ok) throw new Error(`Homepage manga dataset returned HTTP ${response.status}.`);
-      const data: unknown = await response.json();
-      if (!Array.isArray(data)) throw new Error("Invalid homepage manga dataset format.");
-      return asMangaList(data);
-    });
-    const metadataPromise = loadFirestoreMangaCatalog().catch((metadataError: unknown) => {
-      console.warn("Catalog metadata could not be loaded; using the homepage manga dataset.", metadataError);
-      return [];
-    });
-
-    void Promise.all([homepagePromise, metadataPromise])
-      .then(([homepageData, metadata]) => {
+    void loadFirestoreMangaCatalog()
+      .then((data) => {
         if (!active) return;
-        applyFresh(homepageData, metadata);
+        setAllManga(sortByLatest(asMangaList(data)));
+        setLoading(false);
+        setError("");
       })
       .catch((fetchError: unknown) => {
         if (!active) return;
@@ -354,33 +233,6 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
 
     return () => {
       active = false;
-    };
-  }, [kind]);
-
-  useEffect(() => {
-    if (kind !== "manga" && kind !== "hentai" && kind !== "novel") return;
-    let mounted = true;
-    const addFirestoreManga = () => {
-      const mangaData = (window as MangaDataWindow).mangaData;
-      if (!mangaData) return;
-      const firestoreItems = Object.values(mangaData).filter((manga) =>
-        manga && !manga.isDraft &&
-        (manga.firestore === true || manga.source === "firestore"),
-      );
-      if (!firestoreItems.length) return;
-
-      firestoreManga.current = mergeCatalogData(firestoreManga.current, firestoreItems);
-      if (mounted) {
-        setAllManga((current) => mergeCatalogData(current, firestoreManga.current));
-      }
-    };
-
-    window.addEventListener("mangaDataReady", addFirestoreManga);
-    const fallbackTimer = window.setTimeout(addFirestoreManga, 2000);
-    return () => {
-      mounted = false;
-      window.removeEventListener("mangaDataReady", addFirestoreManga);
-      window.clearTimeout(fallbackTimer);
     };
   }, [kind]);
 

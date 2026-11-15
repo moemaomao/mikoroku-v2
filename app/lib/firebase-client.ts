@@ -28,6 +28,7 @@ import {
 } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
 import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
+import { fetchMangaMetadataPayload, type MangaMetadataPayload } from "./manga-metadata";
 import { firebaseConfig } from "../../lib/firebase-config";
 
 const FIREBASE_APP_NAME = "mikoroku-catalog";
@@ -37,17 +38,12 @@ export type FirestoreMangaMetadata = Record<string, unknown> & {
   slug: string;
   __catalogDebugSources?: string[];
 };
-type MangaMetadataPayload = {
-  exportedAtMs: number;
-  manga: Record<string, unknown>[];
-};
 type CachedMangaMetadata = {
   exportedAtMs: number;
   cursor: number;
   records: FirestoreMangaMetadata[];
   tombstones: Record<string, number>;
 };
-const MANGA_METADATA_URL = "/catalog/metadata.json";
 const MANGA_METADATA_CACHE_KEY = "mikoroku_firestore_metadata_v1";
 const MANGA_METADATA_MEMORY_TTL = 5 * 60 * 1000;
 const MANGA_METADATA_CURSOR_OVERLAP = 60 * 1000;
@@ -158,22 +154,8 @@ function metadataChangeTime(record: FirestoreMangaMetadata): number {
   }, 0);
 }
 
-async function loadStaticMangaMetadata(): Promise<MangaMetadataPayload> {
-  const response = await fetch(MANGA_METADATA_URL, { cache: "no-cache" });
-  if (!response.ok) {
-    throw new Error(`Manga metadata backup returned HTTP ${response.status}.`);
-  }
-  const payload: unknown = await response.json();
-  if (
-    !isRecord(payload) ||
-    typeof payload.exportedAtMs !== "number" ||
-    !Number.isFinite(payload.exportedAtMs) ||
-    !Array.isArray(payload.manga)
-  ) {
-    throw new Error("Manga metadata backup has an invalid format.");
-  }
-  const manga = payload.manga.filter(isRecord);
-  return { exportedAtMs: payload.exportedAtMs, manga };
+async function loadStaticMangaMetadata(force = false): Promise<MangaMetadataPayload> {
+  return fetchMangaMetadataPayload({ force });
 }
 
 function readCachedMangaMetadata(): CachedMangaMetadata | null {
@@ -216,8 +198,11 @@ export function getCachedFirestoreMangaCatalog(): FirestoreMangaMetadata[] {
   return readCachedMangaMetadata()?.records ?? [];
 }
 
-export function loadFirestoreMangaCatalog(): Promise<FirestoreMangaMetadata[]> {
+export function loadFirestoreMangaCatalog(
+  { force = false }: { force?: boolean } = {},
+): Promise<FirestoreMangaMetadata[]> {
   if (
+    !force &&
     mangaCatalogData &&
     Date.now() - mangaCatalogLoadedAt < MANGA_METADATA_MEMORY_TTL
   ) {
@@ -225,7 +210,7 @@ export function loadFirestoreMangaCatalog(): Promise<FirestoreMangaMetadata[]> {
   }
   if (!mangaCatalogPromise) {
     const request = (async () => {
-      const backup = await loadStaticMangaMetadata();
+      const backup = await loadStaticMangaMetadata(force);
       const bySlug = new Map<string, FirestoreMangaMetadata>();
       const tombstones: Record<string, number> = {};
       for (const value of backup.manga) {

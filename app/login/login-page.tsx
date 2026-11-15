@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 import styles from "./login.module.css";
 
 type CompatAuth = {
@@ -122,20 +123,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const url = `/catalog/manga.json?t=${Date.now()}`;
 
-    void fetch(url, { signal: controller.signal, cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Manga catalog returned HTTP ${response.status}.`);
-        const items: unknown = await response.json();
-        if (!Array.isArray(items)) throw new Error("Manga catalog response must be an array.");
-
+    void fetchMangaMetadataPayload({ signal: controller.signal })
+      .then(({ manga: items }) => {
         const seen = new Set<string>();
         const allCovers: LoginCover[] = [];
 
         for (const item of items) {
-          if (typeof item !== "object" || item === null) continue;
-          const record = item as Record<string, unknown>;
+          const record = item;
 
           const title = typeof record.title === "string" ? record.title.trim() : "";
           const rawCover =
