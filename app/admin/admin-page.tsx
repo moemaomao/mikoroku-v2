@@ -829,7 +829,11 @@ function mapMetadataRecord(raw: Record<string, unknown>): MangaRecord | null {
     chapterCount: firstNumber(raw.chapterCount, info.chapterCount),
     updatedAt: getTimestamp(raw.updatedAt) || getTimestamp(info.updatedAt) || getTimestamp(info.latestUpdate) || getTimestamp(info.date),
     commissionEnabled: raw.commissionEnabled === true || info.commissionEnabled === true,
-    nsfw: raw.nsfw === true || info.nsfw === true,
+    nsfw: typeof info.nsfw === "boolean"
+      ? info.nsfw
+      : typeof raw.nsfw === "boolean"
+        ? raw.nsfw
+        : undefined,
     isDraft: raw.isDraft === true || info.isDraft === true,
     source: firstText(raw.source, info.source) || "metadata",
     origin: firstText(raw.origin, info.origin) || "metadata",

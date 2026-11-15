@@ -612,6 +612,17 @@ export default function SettingsPage() {
                         aria-current={activeSection === id ? "page" : undefined}
                         onClick={() => {
                           setActiveSection(id);
+                          if (window.matchMedia("(max-width: 860px)").matches) {
+                            window.requestAnimationFrame(() => {
+                              settingsContentRef.current?.scrollIntoView({
+                                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                                  ? "auto"
+                                  : "smooth",
+                                block: "start",
+                              });
+                            });
+                            return;
+                          }
                           settingsContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
                         }}
                       >

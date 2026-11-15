@@ -56,26 +56,26 @@ export function useNsfwVisibility(): [boolean, (visible: boolean) => void] {
 export function isNsfwManga(slug?: string, title?: string): boolean {
   if (typeof window === "undefined" || !window.mangaData) return false;
   const bySlug = slug ? window.mangaData[slug] : undefined;
-  if (bySlug && typeof bySlug === "object" && (bySlug as Record<string, unknown>).nsfw === true) {
-    return true;
+  if (bySlug && typeof bySlug === "object") {
+    const nsfw = (bySlug as Record<string, unknown>).nsfw;
+    if (typeof nsfw === "boolean") return nsfw;
   }
   const titleKey = title?.toLowerCase().replace(/[^a-z0-9]/g, "");
   const byTitle = titleKey ? window.mangaData[titleKey] : undefined;
-  return Boolean(
-    byTitle &&
-    typeof byTitle === "object" &&
-    (byTitle as Record<string, unknown>).nsfw === true,
-  );
+  if (!byTitle || typeof byTitle !== "object") return false;
+  return (byTitle as Record<string, unknown>).nsfw === true;
 }
 
 export function isNsfwMangaRecord(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  const nested = [record.info, record.metadata].filter(
+  const nested = [record.metadata, record.info].filter(
     (item): item is Record<string, unknown> =>
       Boolean(item) && typeof item === "object" && !Array.isArray(item),
   );
-  if (record.nsfw === true || nested.some((item) => item.nsfw === true)) return true;
+  if (typeof record.nsfw === "boolean") return record.nsfw;
+  const explicitNestedValue = nested.find((item) => typeof item.nsfw === "boolean")?.nsfw;
+  if (typeof explicitNestedValue === "boolean") return explicitNestedValue;
 
   const sources = [record, ...nested];
   const tags = sources.flatMap((source) =>

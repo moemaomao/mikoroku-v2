@@ -306,7 +306,11 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     img: cover,
     cover,
     covers: asStringList(info.covers ?? value.covers).map(resolveCover).filter(Boolean),
-    nsfw: typeof info.nsfw === "boolean" ? info.nsfw : value.nsfw === true,
+    nsfw: typeof info.nsfw === "boolean"
+      ? info.nsfw
+      : typeof value.nsfw === "boolean"
+        ? value.nsfw
+        : undefined,
     coverNumbers: coverNumbers && typeof coverNumbers === "object" && !Array.isArray(coverNumbers)
       ? Object.fromEntries(Object.entries(coverNumbers).map(([url, number]) => [url, asString(number)]))
       : {},
@@ -732,11 +736,10 @@ async function loadManga(
         : cachedManga || currentManga;
   if (manga) manga.debugSourceInfo = debugSourceInfo;
   if (manga) {
-    manga.nsfw =
-      catalogManga?.nsfw === true ||
-      metadataManga?.nsfw === true ||
-      cachedManga?.nsfw === true ||
-      currentManga?.nsfw === true ||
+    manga.nsfw = metadataManga?.nsfw ??
+      catalogManga?.nsfw ??
+      cachedManga?.nsfw ??
+      currentManga?.nsfw ??
       isNsfwMangaRecord(manga);
   }
   for (const [index, result] of responses.entries()) {

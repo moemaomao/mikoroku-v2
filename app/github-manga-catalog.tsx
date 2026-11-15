@@ -62,7 +62,7 @@ type FirestoreMeta = {
   status: string;
   type: string;
   commissionEnabled: boolean;
-  nsfw: boolean;
+  nsfw?: boolean;
   cover: string;
   coverUpdatedAt: number;
   rating: unknown;
@@ -306,7 +306,7 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
     status: String(data.status || ""),
     type: String(data.type || ""),
     commissionEnabled: data.commissionEnabled === true,
-    nsfw: data.nsfw === true,
+    nsfw: typeof data.nsfw === "boolean" ? data.nsfw : undefined,
     cover: String(data.cover || ""),
     coverUpdatedAt: toMilliseconds(data.coverUpdatedAt),
     rating: data.rating,
@@ -391,7 +391,7 @@ function mangaForMetadata(item: MangaItem, metadata?: FirestoreMeta): Record<str
     status: String(metadata?.status || item.status || "").toLowerCase(),
     type: String(metadata?.type || item.type || "manga").toLowerCase(),
     commissionEnabled: metadata?.commissionEnabled === true,
-    nsfw: metadata?.nsfw === true || item.nsfw === true,
+    nsfw: metadata?.nsfw ?? item.nsfw,
     altTitle: item.altTitle || "",
     author: item.author || "-",
     artist: item.artist || "-",
@@ -493,7 +493,7 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
       status: item.status || meta?.status || "",
       type: item.type || meta?.type || "manga",
       commissionEnabled: meta?.commissionEnabled === true,
-      nsfw: meta?.nsfw === true || item.nsfw === true,
+      nsfw: meta?.nsfw ?? item.nsfw,
       rating: item.rating ?? meta?.rating ?? null,
       desc: item.desc || "",
       genres: Array.isArray(item.genres) ? item.genres : [],

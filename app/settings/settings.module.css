@@ -1259,6 +1259,7 @@
     max-height: none;
     overflow: visible;
     padding: 18px;
+    scroll-margin-top: 80px;
   }
 
   .settings-footer-actions {
@@ -1269,6 +1270,19 @@
 @media (max-width: 640px) {
   .settings-page {
     padding: 20px 12px 36px;
+  }
+
+  .settings-nav-inner {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-nav-item {
+    min-width: 0;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 10px 6px;
+    font-size: 0.8rem;
   }
 
   .settings-hero {
@@ -1286,8 +1300,43 @@
   }
 
   .settings-avatar-block {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+  }
+
+  .settings-avatar-preview-wrap,
+  .settings-avatar-img {
+    width: 64px;
+    height: 64px;
+  }
+
+  .settings-avatar-img {
+    border-width: 2px;
+  }
+
+  .settings-avatar-frame-overlay {
+    inset: -10px;
+    width: 84px;
+    height: 84px;
+  }
+
+  .settings-avatar-actions {
+    flex: 1;
+    min-width: 0;
     align-items: flex-start;
+    gap: 4px;
+  }
+
+  .settings-avatar-actions .settings-btn {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .settings-avatar-actions .settings-hint-sm {
+    font-size: 0.7rem;
   }
 
   .settings-badge-grid,
