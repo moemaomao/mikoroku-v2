@@ -129,14 +129,18 @@ npm run dev
 
 The active manga metadata catalog is stored in the
 `meta/mangaMetadataCatalog` Firestore document and can be edited in the Admin
-panel. The browser loads this full catalog, then requests only manga documents
-whose `updatedAt` or `metadataUpdatedAt` is newer than the catalog export.
-If the Firestore catalog document is not available, the browser falls back to
-`public/catalog/metadata.json` so the site remains usable and the Admin can
-initialize the Firestore catalog. If the incremental query fails, the full
-catalog and locally cached changes remain available.
-Series detail metadata uses the same catalog and change query; it does not
-fetch the parent manga document separately.
+panel. The Cloudflare Worker serves `/api/catalog/metadata` from shared KV,
+including manga changes newer than the catalog export. Visitors load this
+shared payload instead of querying Firestore; the Worker refreshes it on Admin
+saves and revalidates stale entries in the background. The legacy
+`/api/catalog/manga` endpoint remains available for the OG cover tool.
+
+If the Worker endpoint is unavailable (for example during local development),
+the browser falls back to the Firestore catalog and then
+`public/catalog/metadata.json`. Series detail metadata uses the same catalog
+and does not fetch the parent manga document separately. The authenticated
+cache-refresh endpoint verifies Firebase ID tokens and allows only the Admin
+email addresses configured by the Worker.
 
 Admins can use the "Debug sumber manga" button on a series page to inspect
 which Firestore metadata sources were found and which one supplied the primary

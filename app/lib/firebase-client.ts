@@ -235,7 +235,9 @@ export function loadFirestoreMangaCatalog(
         if (record) {
           bySlug.set(record.slug, {
             ...record,
-            __catalogDebugSources: ["Catalog baseline"],
+            __catalogDebugSources: record.__catalogDebugSources?.length
+              ? record.__catalogDebugSources
+              : ["Catalog baseline"],
           });
         }
       }
@@ -247,7 +249,7 @@ export function loadFirestoreMangaCatalog(
         for (const record of cached.records) {
           const sources = new Set(record.__catalogDebugSources || []);
           sources.delete("metadata.json");
-          sources.add("Catalog baseline");
+          if (!catalog.firestoreDeltasIncluded) sources.add("Catalog baseline");
           bySlug.set(record.slug, {
             ...bySlug.get(record.slug),
             ...record,
@@ -261,65 +263,67 @@ export function loadFirestoreMangaCatalog(
         if (!record || metadataChangeTime(record) <= deletedAt) bySlug.delete(slug);
       }
 
-      try {
-        const { firestore } = initializeFirebaseClient();
-        const mangaCollection = collection(firestore, "manga");
-        const snapshots = await Promise.all([
-          getDocsFromServer(query(mangaCollection, where("updatedAt", ">", cursor))),
-          getDocsFromServer(query(mangaCollection, where("metadataUpdatedAt", ">", cursor))),
-        ]);
-        const changedDocuments = new Map(
-          snapshots.flatMap((snapshot) =>
-            snapshot.docs.map((document) => [document.id, document] as const),
-          ),
-        );
-        changedDocuments.forEach((document) => {
-          const documentData = document.data();
-          if (
-            documentData.isCatalogTombstone === true &&
-            typeof documentData.deletedSlug === "string"
-          ) {
-            const deletedAt = metadataChangeTime({
-              ...documentData,
-              slug: documentData.deletedSlug,
-            });
-            tombstones[documentData.deletedSlug] = Math.max(
-              tombstones[documentData.deletedSlug] || 0,
-              deletedAt,
-            );
-            const existing = bySlug.get(documentData.deletedSlug);
-            if (!existing || metadataChangeTime(existing) <= deletedAt) {
-              bySlug.delete(documentData.deletedSlug);
-            }
-            return;
-          }
-          const record = normalizeMangaMetadata(documentData, document.id);
-          if (record) {
-            const deletedAt = tombstones[record.slug] || 0;
-            if (metadataChangeTime(record) > deletedAt) {
-              tombstones[record.slug] = 0;
-              const sources = new Set(
-                bySlug.get(record.slug)?.__catalogDebugSources || [],
-              );
-              sources.add("Firestore delta");
-              bySlug.set(record.slug, {
-                ...bySlug.get(record.slug),
-                ...record,
-                firestore: true,
-                __catalogDebugSources: [...sources],
+      if (catalog.firestoreDeltasIncluded !== true) {
+        try {
+          const { firestore } = initializeFirebaseClient();
+          const mangaCollection = collection(firestore, "manga");
+          const snapshots = await Promise.all([
+            getDocsFromServer(query(mangaCollection, where("updatedAt", ">", cursor))),
+            getDocsFromServer(query(mangaCollection, where("metadataUpdatedAt", ">", cursor))),
+          ]);
+          const changedDocuments = new Map(
+            snapshots.flatMap((snapshot) =>
+              snapshot.docs.map((document) => [document.id, document] as const),
+            ),
+          );
+          changedDocuments.forEach((document) => {
+            const documentData = document.data();
+            if (
+              documentData.isCatalogTombstone === true &&
+              typeof documentData.deletedSlug === "string"
+            ) {
+              const deletedAt = metadataChangeTime({
+                ...documentData,
+                slug: documentData.deletedSlug,
               });
+              tombstones[documentData.deletedSlug] = Math.max(
+                tombstones[documentData.deletedSlug] || 0,
+                deletedAt,
+              );
+              const existing = bySlug.get(documentData.deletedSlug);
+              if (!existing || metadataChangeTime(existing) <= deletedAt) {
+                bySlug.delete(documentData.deletedSlug);
+              }
+              return;
             }
-          }
-        });
-        cursor = Math.max(
-          cursor,
-          Date.now() - MANGA_METADATA_CURSOR_OVERLAP,
-        );
-      } catch (error) {
-        console.warn(
-          "Firestore metadata changes could not be loaded; using the Firestore catalog and cached changes.",
-          error,
-        );
+            const record = normalizeMangaMetadata(documentData, document.id);
+            if (record) {
+              const deletedAt = tombstones[record.slug] || 0;
+              if (metadataChangeTime(record) > deletedAt) {
+                tombstones[record.slug] = 0;
+                const sources = new Set(
+                  bySlug.get(record.slug)?.__catalogDebugSources || [],
+                );
+                sources.add("Firestore delta");
+                bySlug.set(record.slug, {
+                  ...bySlug.get(record.slug),
+                  ...record,
+                  firestore: true,
+                  __catalogDebugSources: [...sources],
+                });
+              }
+            }
+          });
+          cursor = Math.max(
+            cursor,
+            Date.now() - MANGA_METADATA_CURSOR_OVERLAP,
+          );
+        } catch (error) {
+          console.warn(
+            "Firestore metadata changes could not be loaded; using the Firestore catalog and cached changes.",
+            error,
+          );
+        }
       }
 
       const records = [...bySlug.values()];

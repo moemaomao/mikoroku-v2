@@ -12,6 +12,7 @@ type FetchMangaMetadataOptions = {
 };
 
 const MANGA_METADATA_URL = "/catalog/metadata.json";
+const SHARED_MANGA_METADATA_URL = "/api/catalog/metadata";
 export const MANGA_METADATA_SOURCE_PATH = ["meta", "mangaMetadataCatalog"] as const;
 const FIRESTORE_METADATA_MEMORY_TTL = 60 * 1000;
 
@@ -104,11 +105,44 @@ export async function fetchMangaMetadataPayload({
   if (signal?.aborted) {
     throw new DOMException("The operation was aborted.", "AbortError");
   }
-  const firestorePayload = await fetchFirestoreMetadataPayload(force);
+
+  let useFirestoreFallback = false;
+  try {
+    const response = await fetch(SHARED_MANGA_METADATA_URL, {
+      signal,
+      cache: force ? "no-store" : "default",
+    });
+    if (response.ok) {
+      const payload: unknown = await response.json();
+      return parseMangaMetadataPayload(payload);
+    }
+    if (
+      process.env.NODE_ENV !== "production" &&
+      (response.status === 404 || response.status === 405)
+    ) {
+      useFirestoreFallback = true;
+    } else {
+      console.warn(
+        `Shared manga metadata cache returned HTTP ${response.status}; using the static backup.`,
+      );
+    }
+  } catch (error) {
+    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+      throw error;
+    }
+    console.warn("Shared manga metadata cache is unavailable; using the static backup.", error);
+  }
   if (signal?.aborted) {
     throw new DOMException("The operation was aborted.", "AbortError");
   }
-  if (firestorePayload) return firestorePayload;
+
+  if (useFirestoreFallback) {
+    const firestorePayload = await fetchFirestoreMetadataPayload(force);
+    if (signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
+    if (firestorePayload) return firestorePayload;
+  }
 
   const url = force ? `${MANGA_METADATA_URL}?t=${Date.now()}` : MANGA_METADATA_URL;
   const response = await fetch(url, {

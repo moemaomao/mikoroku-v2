@@ -247,6 +247,36 @@ function getAdminFirebase(): AdminFirebase {
   return { auth: getAuth(app), firestore: getFirestore(app) };
 }
 
+async function refreshSharedMangaCatalogCache(): Promise<void> {
+  const user = getAdminFirebase().auth.currentUser;
+  if (!user) throw new Error("Sign in as an admin before refreshing the shared catalog cache.");
+  const response = await fetch("/api/admin/refresh-manga-catalog-cache", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+  });
+  if (response.status === 404 && process.env.NODE_ENV !== "production") return;
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body: unknown = await response.json();
+      if (body && typeof body === "object" && "error" in body) {
+        detail = ` ${String(body.error)}`;
+      }
+    } catch (error) {
+      console.warn("Shared catalog cache refresh returned an unreadable error response.", error);
+    }
+    throw new Error(`Shared catalog cache refresh returned HTTP ${response.status}.${detail}`);
+  }
+}
+
+function scheduleSharedMangaCatalogCacheRefresh(): void {
+  void refreshSharedMangaCatalogCache()
+    .catch((error: unknown) => {
+      console.error("The shared manga catalog cache could not be refreshed.", error);
+    })
+    .finally(notifyMangaMetadataUpdated);
+}
+
 function text(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
@@ -1165,7 +1195,7 @@ export default function AdminPage() {
           mangaCount: catalog.length,
           updatedAt: now,
         });
-        notifyMangaMetadataUpdated();
+        scheduleSharedMangaCatalogCacheRefresh();
         initializedCatalog = true;
         setMetadataJsonText(content);
         metadataJsonOriginalRef.current = content;
@@ -1376,6 +1406,15 @@ export default function AdminPage() {
         );
       }
       await batch.commit();
+      let sharedCacheWarning = "";
+      if (catalogNeedsUpdate) {
+        try {
+          await refreshSharedMangaCatalogCache();
+        } catch (error) {
+          console.error("Catalog was saved, but the shared cache refresh failed.", error);
+          sharedCacheWarning = ` Shared cache refresh failed: ${getErrorMessage(error)}`;
+        }
+      }
       notifyMangaMetadataUpdated();
 
       const savedRecords = records.map((record) =>
@@ -1387,8 +1426,8 @@ export default function AdminPage() {
       }
       setMetadataJsonStatus(
         catalogNeedsUpdate
-          ? `Saved the ${savedRecords.length}-manga catalog; updated ${changedRecords.length} manga records in Firestore.`
-          : "Catalog unchanged; refreshed the manga summary in Firestore.",
+          ? `Saved the ${savedRecords.length}-manga catalog; updated ${changedRecords.length} manga records in Firestore.${sharedCacheWarning}`
+          : `Catalog unchanged; refreshed the manga summary in Firestore.${sharedCacheWarning}`,
       );
       setManga(dedupeMangaByTitle(savedRecords));
       writeAdminMangaCache(savedRecords);
@@ -1656,7 +1695,7 @@ export default function AdminPage() {
         doc(firestore, "manga", `__catalog_deleted__${encodeURIComponent(slug)}`),
       );
       await saveBatch.commit();
-      notifyMangaMetadataUpdated();
+      scheduleSharedMangaCatalogCacheRefresh();
       writeCompleted = true;
 
       const savedSnapshot = await getDocFromServer(mangaRef);
@@ -1767,7 +1806,7 @@ export default function AdminPage() {
         } : {}),
       };
       await setDoc(doc(firestore, "manga", editing.slug), timestampData, { merge: true });
-      notifyMangaMetadataUpdated();
+      scheduleSharedMangaCatalogCacheRefresh();
 
       const updatedManga = fromFirestore(editing.slug, {
         ...editing,
@@ -1840,7 +1879,7 @@ export default function AdminPage() {
         },
       );
       await deleteBatch.commit();
-      notifyMangaMetadataUpdated();
+      scheduleSharedMangaCatalogCacheRefresh();
       setManga((current) => {
         const next = current.filter((entry) => entry.slug !== item.slug);
         writeAdminMangaCache(next);
@@ -2258,7 +2297,7 @@ export default function AdminPage() {
       },
       { merge: true },
     );
-    notifyMangaMetadataUpdated();
+    scheduleSharedMangaCatalogCacheRefresh();
 
     const updatedManga = {
       ...selectedManga,
@@ -2677,7 +2716,7 @@ export default function AdminPage() {
         },
         { merge: true },
       );
-      notifyMangaMetadataUpdated();
+      scheduleSharedMangaCatalogCacheRefresh();
       const nextManga = {
         ...selectedManga,
         chapterCount: remaining.length,
@@ -2940,7 +2979,7 @@ export default function AdminPage() {
         },
         { merge: true },
       );
-      notifyMangaMetadataUpdated();
+      scheduleSharedMangaCatalogCacheRefresh();
       if (currentManga) {
         nextManga = {
           ...currentManga,

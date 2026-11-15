@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { default as handler } from "./.open-next/worker.js";
+import { firebaseConfig } from "./lib/firebase-config";
 
 interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
@@ -46,7 +47,7 @@ const BLOGGER_CHAPTERS_TTL = 20 * 60;
 const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v3";
+const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v4";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_CATALOG_URL = "/catalog/metadata.json";
@@ -258,11 +259,11 @@ function bloggerChaptersCacheKey(source: string, title: string): string {
   return `blogger:chapters:${source}:${normalized}`;
 }
 
-function catalogResponse(data: unknown[], cacheStatus: string): Response {
+function catalogResponse(data: unknown, cacheStatus: string): Response {
   return new Response(JSON.stringify(data), {
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "public, max-age=60, s-maxage=600, stale-while-revalidate=60",
+      "cache-control": "no-store",
       "x-cache": cacheStatus,
       "x-content-type-options": "nosniff",
     },
@@ -272,8 +273,8 @@ function catalogResponse(data: unknown[], cacheStatus: string): Response {
 async function fetchAndCacheMangaCatalog(
   env: CloudflareEnv,
   requestUrl: string,
-  kv?: KVNamespace,
-): Promise<unknown[]> {
+  kv: KVNamespace,
+): Promise<Record<string, unknown>> {
   const token = await createFirebaseAccessToken(env);
   const upstream = await fetchUpstream(
     `${FIRESTORE_DOCUMENTS_URL}/meta/mangaMetadataCatalog`,
@@ -311,26 +312,113 @@ async function fetchAndCacheMangaCatalog(
     !payload ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
-    !Array.isArray((payload as { manga?: unknown }).manga)
+    !Array.isArray((payload as { manga?: unknown }).manga) ||
+    typeof (payload as { exportedAtMs?: unknown }).exportedAtMs !== "number"
   ) {
     throw new Error("Firestore manga metadata catalog has an invalid format.");
   }
-  const data = (payload as { manga: unknown[] }).manga.filter(
-    (item) => item !== null && typeof item === "object" && !Array.isArray(item),
-  );
-
-  if (kv) {
-    try {
-      await kv.put(
-        MANGA_CATALOG_CACHE_KEY,
-        JSON.stringify({ cachedAt: Date.now(), data }),
-        { expirationTtl: MANGA_CATALOG_CACHE_TTL },
-      );
-    } catch (error) {
-      console.warn("[worker manga-catalog] KV put failed", error);
+  const source = payload as Record<string, unknown> & {
+    exportedAtMs: number;
+    manga: unknown[];
+  };
+  const records = new Map<string, Record<string, unknown>>();
+  for (const item of source.manga) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = normalizeMangaCatalogRecord(item as Record<string, unknown>);
+    if (record) {
+      records.set(record.slug, record);
     }
   }
+
+  const changes = await fetchFirestoreMangaChanges(token, source.exportedAtMs);
+  const tombstones = new Map<string, number>();
+  for (const change of changes) {
+    const record = change.record;
+    if (record.isCatalogTombstone === true && typeof record.deletedSlug === "string") {
+      const deletedAt = mangaMetadataChangeTime(record);
+      tombstones.set(record.deletedSlug, Math.max(tombstones.get(record.deletedSlug) || 0, deletedAt));
+      const existing = records.get(record.deletedSlug);
+      if (!existing || mangaMetadataChangeTime(existing) <= deletedAt) {
+        records.delete(record.deletedSlug);
+      }
+      continue;
+    }
+
+    const normalizedRecord = normalizeMangaCatalogRecord(record, change.id);
+    if (!normalizedRecord) continue;
+    const slug = normalizedRecord.slug;
+    const deletedAt = tombstones.get(slug) || 0;
+    if (mangaMetadataChangeTime(normalizedRecord) <= deletedAt) continue;
+
+    const previous = records.get(slug);
+    const sources = new Set(
+      Array.isArray(previous?.__catalogDebugSources)
+        ? previous.__catalogDebugSources as string[]
+        : ["Catalog baseline"],
+    );
+    sources.add("Firestore delta");
+    records.set(slug, {
+      ...previous,
+      ...normalizedRecord,
+      firestore: true,
+      __catalogDebugSources: [...sources],
+    });
+  }
+
+  const cachedAt = Date.now();
+  const data: Record<string, unknown> = {
+    ...source,
+    sourceExportedAtMs: source.exportedAtMs,
+    exportedAtMs: cachedAt,
+    firestoreDeltasIncluded: true,
+    manga: [...records.values()],
+  };
+
+  try {
+    await kv.put(
+      MANGA_CATALOG_CACHE_KEY,
+      JSON.stringify({ cachedAt, data }),
+      { expirationTtl: MANGA_CATALOG_CACHE_TTL },
+    );
+  } catch (error) {
+    console.error("[worker manga-catalog] KV put failed", error);
+    throw new Error("Shared manga catalog cache could not be written.");
+  }
   return data;
+}
+
+function normalizeMangaCatalogRecord(
+  value: Record<string, unknown>,
+  fallbackSlug?: string,
+): Record<string, unknown> | null {
+  const nestedMetadata = value.metadata &&
+    typeof value.metadata === "object" &&
+    !Array.isArray(value.metadata)
+    ? value.metadata as Record<string, unknown>
+    : {};
+  const record = { ...nestedMetadata, ...value };
+  const slug = typeof record.slug === "string" && record.slug
+    ? record.slug
+    : fallbackSlug || (typeof record.id === "string" ? record.id : "");
+  return slug ? { ...record, slug } : null;
+}
+
+function mangaMetadataChangeTime(record: Record<string, unknown>): number {
+  const values = [record.metadataUpdatedAt, record.updatedAt, record.deletedAt];
+  return values.reduce((latest, value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(latest, value);
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value) || Date.parse(value);
+      return Number.isFinite(parsed) ? Math.max(latest, parsed) : latest;
+    }
+    if (value && typeof value === "object" && "seconds" in value) {
+      const seconds = Number((value as { seconds?: unknown }).seconds);
+      return Number.isFinite(seconds) ? Math.max(latest, seconds * 1000) : latest;
+    }
+    return latest;
+  }, 0);
 }
 
 async function handleMangaCatalogProxy(
@@ -339,7 +427,9 @@ async function handleMangaCatalogProxy(
   ctx: ExecutionContext,
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  if (url.pathname !== "/api/catalog/manga") return null;
+  if (url.pathname !== "/api/catalog/manga" && url.pathname !== "/api/catalog/metadata") {
+    return null;
+  }
   if (request.method !== "GET") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -348,21 +438,37 @@ async function handleMangaCatalogProxy(
   }
 
   const kv = getCacheKv(env);
-  const forceRefresh = url.searchParams.get("refresh") === "1";
-  let cached: { cachedAt?: number; data?: unknown } | null = null;
-  if (kv) {
-    try {
-      cached = await kv.get(MANGA_CATALOG_CACHE_KEY, "json");
-      if (!Array.isArray(cached?.data)) cached = null;
-    } catch (error) {
-      console.warn("[worker manga-catalog] KV get failed", error);
-    }
+  if (!kv) {
+    return new Response(JSON.stringify({ error: "Shared catalog cache is not configured." }), {
+      status: 503,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
+  }
+  let cached: { cachedAt?: number; data?: Record<string, unknown> } | null = null;
+  try {
+    cached = await kv.get(MANGA_CATALOG_CACHE_KEY, "json");
+    if (!Array.isArray(cached?.data?.manga)) cached = null;
+  } catch (error) {
+    console.warn("[worker manga-catalog] KV get failed", error);
+    return new Response(JSON.stringify({ error: "Shared catalog cache is temporarily unavailable." }), {
+      status: 503,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
   }
 
-  if (cached && !forceRefresh) {
+  if (cached) {
     const age = Date.now() - Number(cached.cachedAt || 0);
     if (age <= MANGA_CATALOG_FRESH_TTL) {
-      return catalogResponse(cached.data as unknown[], "HIT");
+      const responseBody = url.pathname === "/api/catalog/manga"
+        ? cached.data.manga
+        : cached.data;
+      return catalogResponse(responseBody, "HIT");
     }
 
     ctx.waitUntil(
@@ -370,15 +476,24 @@ async function handleMangaCatalogProxy(
         console.error("[worker manga-catalog] background refresh failed", error);
       }),
     );
-    return catalogResponse(cached.data as unknown[], "STALE");
+    const responseBody = url.pathname === "/api/catalog/manga"
+      ? cached.data.manga
+      : cached.data;
+    return catalogResponse(responseBody, "STALE");
   }
 
   try {
     const data = await fetchAndCacheMangaCatalog(env, request.url, kv);
-    return catalogResponse(data, forceRefresh ? "BYPASS" : "MISS");
+    const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
+    return catalogResponse(responseBody, "MISS");
   } catch (error) {
     console.error("[worker manga-catalog] upstream fetch failed", error);
-    if (cached) return catalogResponse(cached.data as unknown[], "STALE");
+    if (cached) {
+      const responseBody = url.pathname === "/api/catalog/manga"
+        ? cached.data.manga
+        : cached.data;
+      return catalogResponse(responseBody, "STALE");
+    }
     return new Response(
       JSON.stringify({ error: "Manga catalog is temporarily unavailable." }),
       {
@@ -386,6 +501,81 @@ async function handleMangaCatalogProxy(
         headers: { "content-type": "application/json; charset=utf-8" },
       },
     );
+  }
+}
+
+async function handleMangaCatalogCacheRefresh(
+  request: Request,
+  env: CloudflareEnv,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/admin/refresh-manga-catalog-cache") return null;
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "content-type": "application/json; charset=utf-8", Allow: "POST" },
+    });
+  }
+
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token) {
+    return new Response(JSON.stringify({ error: "Admin authentication is required." }), {
+      status: 401,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  try {
+    const identityResponse = await fetchUpstream(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: token }),
+      },
+    );
+    if (!identityResponse.ok) {
+      return new Response(JSON.stringify({ error: "Admin authentication could not be verified." }), {
+        status: 401,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    const identity = await identityResponse.json() as {
+      users?: Array<{ email?: unknown }>;
+    };
+    const email = identity.users?.[0]?.email;
+    if (
+      typeof email !== "string" ||
+      !["mikorokuscan@gmail.com", "moemaomao@gmail.com"].includes(email.toLowerCase())
+    ) {
+      return new Response(JSON.stringify({ error: "This account cannot refresh the manga catalog." }), {
+        status: 403,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    const kv = getCacheKv(env);
+    if (!kv) {
+      return new Response(JSON.stringify({ error: "Shared catalog cache is not configured." }), {
+        status: 503,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    const payload = await fetchAndCacheMangaCatalog(env, request.url, kv);
+    return new Response(JSON.stringify({ ok: true, mangaCount: payload.manga.length }), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    console.error("[worker manga-catalog] authenticated cache refresh failed", error);
+    return new Response(JSON.stringify({ error: "Shared catalog cache could not be refreshed." }), {
+      status: 502,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
   }
 }
 
@@ -515,6 +705,67 @@ function decodeFirestoreRestValue(value: FirestoreRestValue): unknown {
   if ("bytesValue" in value) return value.bytesValue;
   if ("geoPointValue" in value) return value.geoPointValue;
   return undefined;
+}
+
+async function fetchFirestoreMangaChanges(
+  token: string,
+  cursor: number,
+): Promise<Array<{ id: string; record: Record<string, unknown> }>> {
+  const queryField = async (fieldPath: string) => {
+    const response = await fetchUpstream(`${FIRESTORE_DOCUMENTS_URL}:runQuery`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: "manga" }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath },
+              op: "GREATER_THAN",
+              value: { doubleValue: cursor },
+            },
+          },
+        },
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Firestore manga ${fieldPath} delta query returned HTTP ${response.status}.`);
+    }
+
+    const rows = await response.json() as Array<{
+      document?: {
+        name?: string;
+        fields?: Record<string, FirestoreRestValue>;
+      };
+    }>;
+    return rows.flatMap(({ document }) => {
+      if (!document?.name) return [];
+      const encodedId = document.name.split("/").pop() || "";
+      let id = encodedId;
+      try {
+        id = decodeURIComponent(encodedId);
+      } catch {
+        // Keep the original document ID if it is not URI-encoded.
+      }
+      const record = Object.fromEntries(
+        Object.entries(document.fields || {}).map(([key, value]) => [
+          key,
+          decodeFirestoreRestValue(value),
+        ]),
+      );
+      return id ? [{ id, record }] : [];
+    });
+  };
+
+  const results = await Promise.all([
+    queryField("updatedAt"),
+    queryField("metadataUpdatedAt"),
+  ]);
+  return results.flat();
 }
 
 async function fetchMangaDetailFromFirestore(
@@ -985,6 +1236,8 @@ export default {
       }
     }
 
+    const catalogRefresh = await handleMangaCatalogCacheRefresh(request, env);
+    if (catalogRefresh) return catalogRefresh;
     const catalog = await handleMangaCatalogProxy(request, env, ctx);
     if (catalog) return catalog;
     const mangaDetail = await handleMangaDetailProxy(request, env, ctx);
