@@ -254,11 +254,53 @@ function novelText(value: unknown): string {
   if (typeof value !== "string") return "";
   const parsed = new DOMParser().parseFromString(value, "text/html");
   parsed.querySelectorAll("script,style,iframe,object,embed").forEach((element) => element.remove());
+  parsed.querySelectorAll("img").forEach((element) => {
+    const srcset = element.getAttribute("data-srcset") || element.getAttribute("srcset");
+    const srcsetUrl = srcset?.split(",").at(-1)?.trim().split(/\s+/)[0];
+    const url = element.getAttribute("data-lazy-src") ||
+      element.getAttribute("data-src") ||
+      element.getAttribute("data-original") ||
+      srcsetUrl ||
+      element.getAttribute("src");
+    if (url) element.replaceWith(parsed.createTextNode(`\n\n${url}\n\n`));
+    else element.remove();
+  });
   parsed.querySelectorAll("br").forEach((element) => element.replaceWith("\n"));
   parsed.querySelectorAll("p,div,li,h1,h2,h3").forEach((element) => {
     element.append("\n\n");
   });
   return parsed.body.textContent?.replace(/\n{3,}/g, "\n\n").trim() || value.trim();
+}
+
+type NovelContentPart =
+  | { type: "text"; value: string }
+  | { type: "image"; value: string };
+
+function novelContentParts(text: string, images: string[]): NovelContentPart[] {
+  const imageUrls = new Set(images);
+  const parts: NovelContentPart[] = [];
+
+  for (const paragraph of text.split(/\n{2,}/)) {
+    const urlPattern = /https?:\/\/[^\s"'<>]+/gi;
+    let cursor = 0;
+
+    for (const match of paragraph.matchAll(urlPattern)) {
+      const rawUrl = match[0];
+      const url = rawUrl.replace(/[),;}\].!?]+$/, "");
+      if (!imageUrls.has(url)) continue;
+
+      const start = match.index ?? 0;
+      if (start > cursor) parts.push({ type: "text", value: paragraph.slice(cursor, start) });
+      parts.push({ type: "image", value: url });
+      cursor = start + url.length;
+    }
+
+    if (cursor < paragraph.length) {
+      parts.push({ type: "text", value: paragraph.slice(cursor) });
+    }
+  }
+
+  return parts;
 }
 
 function chapterValue(value: string | number): number {
@@ -1140,6 +1182,73 @@ async function loadReaderData(
     source: typeof chapterData.source === "string" ? chapterData.source : undefined,
     nsfw: manga?.nsfw === true || isNsfwManga(slug, title),
   };
+}
+
+function NovelContent({
+  text,
+  images,
+  chapterTitle,
+  dataSaver,
+  imageQuality,
+  mangaNsfw,
+  showNsfw,
+  concealReaderPages,
+}: {
+  text: string;
+  images: string[];
+  chapterTitle: string;
+  dataSaver: boolean;
+  imageQuality: number;
+  mangaNsfw: boolean;
+  showNsfw: boolean;
+  concealReaderPages: boolean;
+}) {
+  const parts = novelContentParts(text, images);
+  const inlineImages = new Set(
+    parts.filter((part) => part.type === "image").map((part) => part.value),
+  );
+  let illustrationIndex = 0;
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.type === "text") {
+          return <p className="mb-[1.2em] last:mb-0" key={`text-${index}`}>{part.value}</p>;
+        }
+
+        const imageIndex = illustrationIndex++;
+        const src = readerPageImageUrl(part.value, dataSaver, imageQuality, mangaNsfw, showNsfw);
+        return (
+          <ReaderImage
+            className="mx-auto block h-auto max-w-full"
+            wrapperClassName="mx-auto my-4 w-full"
+            key={`${src}:${index}`}
+            src={src}
+            alt={`${chapterTitle}, illustration ${imageIndex + 1}`}
+            loading={imageIndex < 3 ? "eager" : "lazy"}
+            fetchPriority={imageIndex < 3 ? "high" : "auto"}
+            concealNsfw={concealReaderPages}
+          />
+        );
+      })}
+      {images.filter((image) => !inlineImages.has(image)).map((image) => {
+        const imageIndex = illustrationIndex++;
+        const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
+        return (
+          <ReaderImage
+            className="mx-auto block h-auto max-w-full"
+            wrapperClassName="mx-auto my-4 w-full"
+            key={`${src}:trailing`}
+            src={src}
+            alt={`${chapterTitle}, illustration ${imageIndex + 1}`}
+            loading={imageIndex < 3 ? "eager" : "lazy"}
+            fetchPriority={imageIndex < 3 ? "high" : "auto"}
+            concealNsfw={concealReaderPages}
+          />
+        );
+      })}
+    </>
+  );
 }
 
 export default function ReaderPage({
@@ -2489,22 +2598,16 @@ export default function ReaderPage({
           </section>
         ) : (
           <article className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-transparent p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-transparent ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={data.chapter}>
-              {data.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
-              {data.images.map((image, index) => {
-                const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
-                return (
-                  <ReaderImage
-                    className="mx-auto block h-auto max-w-full"
-                    wrapperClassName="mx-auto my-4 w-full"
-                    key={`${src}:${index}`}
-                    src={src}
-                    alt={`Illustration ${index + 1}`}
-                    loading={index < 3 ? "eager" : "lazy"}
-                    fetchPriority={index < 3 ? "high" : "auto"}
-                    concealNsfw={concealReaderPages}
-                  />
-                );
-              })}
+              <NovelContent
+                text={data.text}
+                images={data.images}
+                chapterTitle={data.chapterTitle}
+                dataSaver={dataSaver}
+                imageQuality={imageQuality}
+                mangaNsfw={mangaNsfw}
+                showNsfw={showNsfw}
+                concealReaderPages={concealReaderPages}
+              />
             </article>
         )}
 
@@ -2842,20 +2945,16 @@ export default function ReaderPage({
       ) : (
         <article key={nextData.chapter} className={`reader-novel-text mx-auto my-6 min-h-[70vh] w-[calc(100%-24px)] rounded-2xl border border-black/10 bg-transparent p-6 shadow-lg sm:w-[min(calc(100%-32px),1040px)] sm:p-12 dark:border-white/10 dark:bg-transparent ${columnWidth === "narrow" ? "max-w-[620px]" : columnWidth === "medium" ? "max-w-[800px]" : "max-w-[1040px]"}`} style={{ fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.85, whiteSpace: "pre-wrap", ...novelPatternStyle }} data-reader-chapter={nextData.chapter}>
           <h2 className="mb-6 text-center text-xl font-bold">{nextData.chapterTitle}</h2>
-          {nextData.text.split(/\n{2,}/).map((paragraph, index) => <p className="mb-[1.2em] last:mb-0" key={index}>{paragraph}</p>)}
-          {nextData.images.map((image, index) => {
-            const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
-            return <ReaderImage
-              className="mx-auto block h-auto max-w-full"
-              wrapperClassName="mx-auto my-4 w-full"
-              key={`${src}:${index}`}
-              src={src}
-              alt={`${nextData.chapterTitle}, illustration ${index + 1}`}
-              loading={index < 3 ? "eager" : "lazy"}
-              fetchPriority={index === 0 ? "high" : "auto"}
-              concealNsfw={concealReaderPages}
-            />;
-          })}
+          <NovelContent
+            text={nextData.text}
+            images={nextData.images}
+            chapterTitle={nextData.chapterTitle}
+            dataSaver={dataSaver}
+            imageQuality={imageQuality}
+            mangaNsfw={mangaNsfw}
+            showNsfw={showNsfw}
+            concealReaderPages={concealReaderPages}
+          />
         </article>
       ))}
       {infiniteRead && data && (data.kind === "novel" || mode === "long-strip") && <div

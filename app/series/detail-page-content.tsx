@@ -435,7 +435,7 @@ function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source
 
 const SERIES_DETAIL_CACHE_DB = "mikoroku-series-detail-cache";
 const SERIES_DETAIL_CACHE_STORE = "details";
-const SERIES_DETAIL_CACHE_TTL = 15 * 60 * 1000;
+const seriesDetailMemoryCache = new Map<string, Manga>();
 
 type SeriesDetailCacheEntry = {
   slug: string;
@@ -466,7 +466,7 @@ async function readIndexedDbManga(slug: string): Promise<Manga | null> {
     let manga: Manga | null = null;
     request.onsuccess = () => {
       const entry = request.result as SeriesDetailCacheEntry | undefined;
-      if (entry?.data && Date.now() - entry.time < SERIES_DETAIL_CACHE_TTL) {
+      if (entry?.data) {
         manga = normalizeManga(entry.data, slug);
       }
     };
@@ -518,7 +518,7 @@ function getLegacyCachedManga(slug: string): Manga | null {
     const cached = localStorage.getItem(`detail_${slug}`);
     if (!cached) return null;
     const parsed = JSON.parse(cached) as { time?: number; data?: Record<string, unknown> };
-    if (parsed.data && Date.now() - (parsed.time || 0) < SERIES_DETAIL_CACHE_TTL) {
+    if (parsed.data) {
       return normalizeManga(parsed.data, slug);
     }
   } catch (error) {
@@ -546,15 +546,22 @@ function getCurrentMangaForSlug(slug: string): Manga | null {
 }
 
 async function getCachedManga(slug: string): Promise<Manga | null> {
+  const memoryCached = seriesDetailMemoryCache.get(slug);
+  if (memoryCached) return memoryCached;
+
   try {
     const cached = await readIndexedDbManga(slug);
-    if (cached) return cached;
+    if (cached) {
+      seriesDetailMemoryCache.set(slug, cached);
+      return cached;
+    }
   } catch (error) {
     console.warn(`IndexedDB detail manga gagal dibaca untuk ${slug}.`, error);
   }
 
   const legacyCached = getLegacyCachedManga(slug);
   if (!legacyCached) return null;
+  seriesDetailMemoryCache.set(slug, legacyCached);
   try {
     await writeIndexedDbManga(slug, legacyCached);
     localStorage.removeItem(`detail_${slug}`);
@@ -601,6 +608,7 @@ function cacheLegacyMangaDetail(slug: string, manga: Manga): void {
 }
 
 async function cacheMangaDetail(slug: string, manga: Manga): Promise<void> {
+  seriesDetailMemoryCache.set(slug, manga);
   try {
     await writeIndexedDbManga(slug, manga);
   } catch (error) {
@@ -620,9 +628,18 @@ async function loadManga(
   slug: string,
   signal: AbortSignal,
   force = false,
+  onAvailableManga?: (manga: Manga) => void,
 ): Promise<Manga | null> {
   const currentManga = getCurrentMangaForSlug(slug);
+  const memoryCached = seriesDetailMemoryCache.get(slug);
+  const firstAvailable = memoryCached || currentManga;
+  if (!force && firstAvailable) onAvailableManga?.(firstAvailable);
+
   const cachedManga = await getCachedManga(slug);
+  const immediatelyAvailable = cachedManga || currentManga;
+  if (!force && immediatelyAvailable && immediatelyAvailable !== firstAvailable) {
+    onAvailableManga?.(immediatelyAvailable);
+  }
 
   const responses = await Promise.allSettled([
     fetchMangaMetadataPayload({ signal, force }).then(({ manga: items }) => {
@@ -735,11 +752,12 @@ async function loadManga(
   }
 
   if (manga) {
+    if (!force) onAvailableManga?.(manga);
     await cacheMangaDetail(slug, manga);
     return manga;
   }
 
-  return cachedManga;
+  return immediatelyAvailable;
 }
 
 async function loadBloggerChapterSource(
@@ -1442,11 +1460,17 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       controller.abort();
       controller = new AbortController();
       const currentRequestId = ++requestId;
+      let hasDisplayedManga = false;
       if (!force) {
         setManga(null);
         setState("loading");
       }
-      loadManga(slug, controller.signal, force).then((result) => {
+      loadManga(slug, controller.signal, force, (availableManga) => {
+        if (controller.signal.aborted || currentRequestId !== requestId) return;
+        hasDisplayedManga = true;
+        setManga(availableManga);
+        setState("ready");
+      }).then((result) => {
         if (controller.signal.aborted || currentRequestId !== requestId) return;
         if (!result) {
           setState("not-found");
@@ -1457,7 +1481,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       }).catch((error: unknown) => {
         if (controller.signal.aborted || currentRequestId !== requestId) return;
         console.error("Detail manga gagal dimuat.", error);
-        if (!force) setState("error");
+        if (!force && !hasDisplayedManga) setState("error");
       });
     };
     const handleMetadataUpdated = () => loadCurrentManga(true);
