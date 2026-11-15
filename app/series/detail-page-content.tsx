@@ -2102,7 +2102,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     aria-controls="manga-source-debug"
                     onClick={() => setShowSourceDebug((visible) => !visible)}
                   >
-                    {showSourceDebug ? "Tutup debug sumber" : "Debug sumber manga"}
+                    {showSourceDebug ? "Close debug" : "Debug source"}
                   </button>
                 )}
                 {isAdminUser && showSourceDebug && (
