@@ -323,11 +323,12 @@ function toDraft(manga?: MangaRecord): MangaDraft {
 function fromFirestore(slug: string, data: Record<string, unknown>): MangaRecord {
   const mangaData = { ...data };
   const info = recordMetadata(data);
+  const title = firstText(data.title, info.title, data.name, info.name);
   delete mangaData.chapters;
   return {
     ...mangaData,
     slug,
-    title: firstText(info.title, data.title) || slug,
+    title: title.toLowerCase() === slug.toLowerCase() ? "" : title,
     altTitle: firstText(info.altTitle, info.alternative, data.altTitle, data.alternative),
     cover: firstText(info.cover, info.img, data.cover, data.img),
     covers: firstList(info.covers, data.covers),
@@ -647,7 +648,7 @@ function readAdminMangaCache(): { items: MangaRecord[]; time: number } | null {
       const slug = text(item.slug);
       return slug ? [fromFirestore(slug, item as Record<string, unknown>)] : [];
     });
-    return { items, time: cached.time };
+    return { items: dedupeMangaByTitle(items), time: cached.time };
   } catch (error) {
     console.warn("Admin catalog cache is invalid and will be ignored.", error);
     return null;
@@ -658,7 +659,7 @@ function writeAdminMangaCache(items: MangaRecord[]): void {
   try {
     window.localStorage.setItem(
       ADMIN_MANGA_CACHE_KEY,
-      JSON.stringify({ time: Date.now(), items }),
+      JSON.stringify({ time: Date.now(), items: dedupeMangaByTitle(items) }),
     );
   } catch (error) {
     console.warn("Unable to save the admin catalog cache.", error);
@@ -762,7 +763,7 @@ function mapMetadataRecord(raw: Record<string, unknown>): MangaRecord | null {
   return {
     ...raw,
     slug,
-    title: title || slug,
+    title: title.toLowerCase() === slug.toLowerCase() ? "" : title,
     altTitle: firstText(raw.altTitle, raw.alternative, raw.alt_title, info.altTitle, info.alternative, info.alt_title),
     cover: firstText(raw.cover, raw.img, info.cover, info.img),
     covers: firstList(raw.covers, info.covers),
@@ -795,6 +796,33 @@ function mapMetadataRecord(raw: Record<string, unknown>): MangaRecord | null {
     origin: firstText(raw.origin, info.origin) || "metadata",
     githubSlug: firstText(raw.githubSlug, info.githubSlug) || slug,
   };
+}
+
+function mangaTitleKey(title: string): string {
+  return title.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function preferDuplicateManga(current: MangaRecord, candidate: MangaRecord): MangaRecord {
+  if (current.managedByAdmin !== candidate.managedByAdmin) {
+    return candidate.managedByAdmin ? candidate : current;
+  }
+  if (current.updatedAt !== candidate.updatedAt) {
+    return candidate.updatedAt > current.updatedAt ? candidate : current;
+  }
+  const sourceRank = (source: string) =>
+    source === "firestore" ? 2 : source === "hybrid" ? 1 : 0;
+  return sourceRank(candidate.source) > sourceRank(current.source) ? candidate : current;
+}
+
+function dedupeMangaByTitle(items: MangaRecord[]): MangaRecord[] {
+  const unique = new Map<string, MangaRecord>();
+  for (const item of items) {
+    const key = mangaTitleKey(item.title);
+    if (!key) continue;
+    const current = unique.get(key);
+    unique.set(key, current ? preferDuplicateManga(current, item) : item);
+  }
+  return [...unique.values()];
 }
 
 function mergeMetadataRecords(
@@ -840,7 +868,8 @@ function mergeMetadataRecords(
       source: "hybrid",
     });
   }
-  return [...merged.values()].sort((left, right) => right.updatedAt - left.updatedAt);
+  return dedupeMangaByTitle([...merged.values()])
+    .sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
 function toMetadataFirestoreData(manga: MangaRecord): Record<string, unknown> {
@@ -1252,9 +1281,10 @@ export default function AdminPage() {
   }, [activeSection, user]);
 
   const filteredManga = useMemo(() => {
+    const titledManga = manga.filter((item) => item.title.trim().length > 0);
     const normalized = queryText.trim().toLowerCase();
-    if (!normalized) return manga;
-    return manga.filter(
+    if (!normalized) return titledManga;
+    return titledManga.filter(
       (item) =>
         item.title.toLowerCase().includes(normalized) ||
         item.slug.toLowerCase().includes(normalized) ||
@@ -3042,7 +3072,7 @@ export default function AdminPage() {
                         {item.isDraft && <span className={styles.mangaDraftBadge}>DRAFT</span>}
                       </button>
                       <div className={styles.mangaCardBody}>
-                        <button className={styles.mangaCardTitle} title={item.title} onClick={() => void openMangaChapters(item)}>{item.title || item.slug}</button>
+                        <button className={styles.mangaCardTitle} title={item.title} onClick={() => void openMangaChapters(item)}>{item.title}</button>
                         <span className={styles.mangaStatus} data-status={slugify(item.status)}>{item.isDraft ? "DRAFT" : item.status.toUpperCase()}</span>
                         <small>{item.chapterCount} Chapters</small>
                         <div className={styles.mangaCardActions}>
