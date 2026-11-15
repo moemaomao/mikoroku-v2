@@ -144,13 +144,11 @@ function cacheRecords(records: Record<string, MangaRecord>) {
 }
 
 async function fetchRecords(): Promise<Record<string, MangaRecord>> {
-  const snapshot = await loadFirestoreMangaCatalog();
-
   const records: Record<string, MangaRecord> = {};
-  snapshot.forEach((document) => {
-    const data = document.data() as MangaRecord;
+  const metadata = await loadFirestoreMangaCatalog();
+  metadata.forEach((data) => {
     if (data.isDraft === true) return;
-    records[document.id] = { ...data, slug: document.id };
+    records[data.slug] = { ...data, slug: data.slug } as MangaRecord;
   });
   return records;
 }

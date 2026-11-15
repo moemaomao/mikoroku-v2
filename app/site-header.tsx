@@ -6,6 +6,7 @@ import {
   GLOBAL_APPEARANCE_KEY,
   readGlobalAppearance,
 } from "./lib/global-appearance";
+import { AUTH_USER_CHANGE_EVENT, hasAdminPanelAccess } from "./lib/admin-access";
 import { Icon, SiteSidebar } from "./site-header-parts";
 import { CoverImage } from "./lib/cover-image";
 import { isNsfwManga, useNsfwVisibility } from "./lib/nsfw";
@@ -66,9 +67,7 @@ const DEFAULT_THUMB = "https://mikoroku.com/default-thumb.jpg";
 const DISPLAY_NAME_KEY = "commentWidget_displayName";
 const AVATAR_KEY = "commentWidget_avatar";
 const HEADER_USER_CACHE_KEY = "mikoroku:header-user:v1";
-const HEADER_AUTH_CHANGE_EVENT = "mikoroku:header-auth-changed";
 const SIDEBAR_PREF_KEY = "mk_sidebar_open";
-const ADMIN_PANEL_EMAILS = ["mikorokuscan@gmail.com", "moemaomao@gmail.com"];
 let desktopSidebarPreference: boolean | null = null;
 let cachedHeaderUser: HeaderUser | null | undefined;
 const ANNOUNCEMENT_FIREBASE_CONFIG = {
@@ -119,8 +118,8 @@ function getCurrentUser(): HeaderUser | null {
 }
 
 function subscribeToHeaderUser(callback: () => void): () => void {
-  window.addEventListener(HEADER_AUTH_CHANGE_EVENT, callback);
-  return () => window.removeEventListener(HEADER_AUTH_CHANGE_EVENT, callback);
+  window.addEventListener(AUTH_USER_CHANGE_EVENT, callback);
+  return () => window.removeEventListener(AUTH_USER_CHANGE_EVENT, callback);
 }
 
 function getHeaderUserSnapshot(): HeaderUser | null {
@@ -246,9 +245,7 @@ function HeaderContents() {
   const searchArea = useRef<HTMLDivElement>(null);
   const bookmarkArea = useRef<HTMLDivElement>(null);
   const authArea = useRef<HTMLDivElement>(null);
-  const canAccessAdminPanels = Boolean(
-    user?.email && ADMIN_PANEL_EMAILS.includes(user.email.trim().toLowerCase()),
-  );
+  const canAccessAdminPanels = hasAdminPanelAccess(user);
 
   const closeAuth = useCallback(() => setAuthOpen(false), []);
 
@@ -504,7 +501,7 @@ function HeaderContents() {
       } catch (error) {
         console.warn("Sesi header tidak dapat disimpan.", error);
       }
-      window.dispatchEvent(new Event(HEADER_AUTH_CHANGE_EVENT));
+      window.dispatchEvent(new Event(AUTH_USER_CHANGE_EVENT));
       if (!nextUser) {
         setAvatarOverride(null);
         window.commentDisplayName = null;
@@ -742,7 +739,7 @@ function HeaderContents() {
     const current = getCurrentUser();
     if (window.currentUser !== current) {
       window.currentUser = current;
-      window.dispatchEvent(new Event(HEADER_AUTH_CHANGE_EVENT));
+      window.dispatchEvent(new Event(AUTH_USER_CHANGE_EVENT));
     }
     setAuthOpen((open) => !open);
   };
@@ -790,7 +787,7 @@ function HeaderContents() {
   const handleLogout = () => {
     closeAuth();
     window.currentUser = null;
-    window.dispatchEvent(new Event(HEADER_AUTH_CHANGE_EVENT));
+    window.dispatchEvent(new Event(AUTH_USER_CHANGE_EVENT));
     setAvatarOverride(null);
 
     type CompatAuth = {

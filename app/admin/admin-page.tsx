@@ -1308,6 +1308,7 @@ export default function AdminPage() {
         covers,
         coverNumbers,
         coverUpdatedAt: mainCover !== editing?.cover ? Date.now() : editing?.coverUpdatedAt || 0,
+        metadataUpdatedAt: Date.now(),
         ...metadata,
         metadata,
         isDraft: draft.isDraft,
@@ -1319,7 +1320,12 @@ export default function AdminPage() {
         updatedAt,
         latestUpdate: updatedAt,
       };
-      await setDoc(mangaRef, data, { merge: true });
+      const saveBatch = writeBatch(firestore);
+      saveBatch.set(mangaRef, data, { merge: true });
+      saveBatch.delete(
+        doc(firestore, "manga", `__catalog_deleted__${encodeURIComponent(slug)}`),
+      );
+      await saveBatch.commit();
       writeCompleted = true;
 
       const savedSnapshot = await getDocFromServer(mangaRef);
@@ -1414,6 +1420,7 @@ export default function AdminPage() {
       const timestampData = {
         updatedAt,
         latestUpdate: updatedAt,
+        metadataUpdatedAt: Date.now(),
         managedByAdmin: true,
         ...(isGithub ? {
           title: editing.title,
@@ -1484,7 +1491,23 @@ export default function AdminPage() {
         await batch.commit();
         chapterBatch = await getDocs(query(chaptersRef, limit(450)));
       }
-      await deleteDoc(doc(firestore, "manga", item.slug));
+      const deleteBatch = writeBatch(firestore);
+      const deletedAt = Date.now();
+      deleteBatch.delete(doc(firestore, "manga", item.slug));
+      deleteBatch.set(
+        doc(
+          firestore,
+          "manga",
+          `__catalog_deleted__${encodeURIComponent(item.slug)}`,
+        ),
+        {
+          isCatalogTombstone: true,
+          deletedSlug: item.slug,
+          metadataUpdatedAt: deletedAt,
+          updatedAt: deletedAt,
+        },
+      );
+      await deleteBatch.commit();
       setManga((current) => {
         const next = current.filter((entry) => entry.slug !== item.slug);
         writeAdminMangaCache(next);
@@ -1789,6 +1812,7 @@ export default function AdminPage() {
       let chapterCount = 0;
       for (const mangaDoc of mangaSnapshot.docs) {
         const source = mangaDoc.data();
+        if (source.isCatalogTombstone === true) continue;
         const metadata = Object.fromEntries(
           Object.entries(source).filter(([key]) =>
             key !== "chapters" &&
@@ -1888,6 +1912,7 @@ export default function AdminPage() {
     );
     const { firestore } = getAdminFirebase();
     const mainCover = nextCovers[nextCovers.length - 1] || selectedManga.cover;
+    const metadataUpdatedAt = Date.now();
     await setDoc(
       doc(firestore, "manga", selectedManga.slug),
       {
@@ -1896,7 +1921,8 @@ export default function AdminPage() {
         cover: mainCover,
         covers: nextCovers,
         coverNumbers: nextCoverNumbers,
-        coverUpdatedAt: Date.now(),
+        coverUpdatedAt: metadataUpdatedAt,
+        metadataUpdatedAt,
       },
       { merge: true },
     );
@@ -1906,7 +1932,7 @@ export default function AdminPage() {
       cover: mainCover,
       covers: nextCovers,
       coverNumbers: nextCoverNumbers,
-      coverUpdatedAt: Date.now(),
+      coverUpdatedAt: metadataUpdatedAt,
     };
     setSelectedManga(updatedManga);
     setSavedCoverOrder(nextCovers);
@@ -2314,6 +2340,7 @@ export default function AdminPage() {
           lastChapterUpdated: latestChapter,
           updatedAt: now,
           latestUpdate: now,
+          metadataUpdatedAt: now,
         },
         { merge: true },
       );
@@ -2574,6 +2601,7 @@ export default function AdminPage() {
           lastChapterUpdated: latestChapter,
           updatedAt: now,
           latestUpdate: now,
+          metadataUpdatedAt: now,
           managedByAdmin: true,
         },
         { merge: true },

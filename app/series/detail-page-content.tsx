@@ -3,7 +3,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
-import { addDoc, collection, doc, getDocs, getFirestore, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
@@ -12,6 +12,7 @@ import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
 import { isNsfwMangaRecord, useNsfwVisibility } from "../lib/nsfw";
+import { AUTH_USER_CHANGE_EVENT, hasAdminPanelAccess } from "../lib/admin-access";
 import {
   SERIES_COVER_PREFERENCE_STORAGE_KEY,
   SERIES_COVER_PREFERENCE_UPDATED_AT_KEY,
@@ -20,7 +21,10 @@ import RecommendationSidebar from "./recommendation-sidebar";
 import ReaderServerNotice from "./reader-server-notice";
 import SiteFooter from "../site-footer";
 import GlobalAuth from "../global-auth";
-import { initializeFirebaseClient } from "../lib/firebase-client";
+import {
+  initializeFirebaseClient,
+  loadFirestoreMangaCatalog,
+} from "../lib/firebase-client";
 import {
   compactChapterCache,
   mergeSharedChapterCache,
@@ -62,6 +66,7 @@ type Manga = {
   updatedAt?: string | number;
   latestUpdate?: string | number;
   info?: Record<string, unknown>;
+  debugSourceInfo?: string[];
 };
 
 type Chapter = {
@@ -172,6 +177,14 @@ function asStringList(value: unknown): string[] {
   return asString(value).split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function firestoreDate(value: unknown): string {
+  if (value && typeof value === "object" && "toDate" in value) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return date.toISOString();
+  }
+  return asString(value);
+}
+
 type SynopsisNode = {
   tag: string;
   children: Array<SynopsisNode | string>;
@@ -264,14 +277,6 @@ function decodeFirestoreDocument(document: {
   return Object.fromEntries(
     Object.entries(document.fields || {}).map(([key, value]) => [key, decodeFirestoreValue(value)]),
   );
-}
-
-function firestoreDate(value: unknown): string {
-  if (value && typeof value === "object" && "toDate" in value) {
-    const date = (value as { toDate: () => Date }).toDate();
-    return date.toISOString();
-  }
-  return asString(value);
 }
 
 function resolveCover(value: unknown): string {
@@ -623,53 +628,77 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
       );
       return result ? normalizeManga(result, slug) : null;
     }),
-    fetch(`${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}`, { signal }).then(async (response) => {
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error(`Firestore merespons HTTP ${response.status}.`);
-      return normalizeManga(decodeFirestoreDocument(await response.json()), slug);
-    }),
+    loadFirestoreMangaCatalog(),
   ]);
 
   const githubManga = responses[0].status === "fulfilled" ? responses[0].value : null;
-  const firestoreManga = responses[1].status === "fulfilled" ? responses[1].value : null;
-  let manga = githubManga && firestoreManga
+  const metadataRecords = responses[1].status === "fulfilled" ? responses[1].value : [];
+  const metadataRecord = metadataRecords.find((record) => record.slug === slug);
+  const metadataManga = metadataRecord
+    ? normalizeManga(metadataRecord, slug)
+    : null;
+  const firestoreDeltaFound =
+    metadataRecord?.__catalogDebugSources?.includes("Firestore delta") === true;
+  const effectiveSource = firestoreDeltaFound
+    ? "Firestore catalog delta (metadata.json baseline)"
+    : metadataManga
+      ? "metadata.json backup"
+      : githubManga
+        ? "manga.json"
+        : cachedManga || currentManga
+          ? "browser detail cache"
+          : "none";
+  const debugSourceInfo = [
+    `metadata.json: ${metadataRecord ? "found" : "not found"}`,
+    `Firestore catalog delta: ${
+      responses[1].status === "rejected"
+        ? "request failed"
+        : firestoreDeltaFound
+          ? "changed record found"
+          : "no newer change for this manga"
+    }`,
+    "Firestore per-manga metadata read: skipped; using the static baseline and catalog delta",
+    `manga.json: ${githubManga ? "found" : "not found"}`,
+    `Effective source: ${effectiveSource}`,
+  ];
+  let manga = githubManga && metadataManga
     ? {
         ...githubManga,
-        desc: preferMetadata(firestoreManga.desc, githubManga.desc),
-        genres: preferMetadata(firestoreManga.genres, githubManga.genres),
-        rating: preferMetadata(firestoreManga.rating, githubManga.rating),
-        status: preferMetadata(firestoreManga.status, githubManga.status),
-        type: firestoreManga.type === "Manga" ? githubManga.type : firestoreManga.type,
-        altTitle: preferMetadata(firestoreManga.altTitle, githubManga.altTitle),
-        author: preferMetadata(firestoreManga.author, githubManga.author),
-        artist: preferMetadata(firestoreManga.artist, githubManga.artist),
-        publication: preferMetadata(firestoreManga.publication, githubManga.publication),
-        serialization: preferMetadata(firestoreManga.serialization, githubManga.serialization),
-        demographic: preferMetadata(firestoreManga.demographic, githubManga.demographic),
-        series: preferMetadata(firestoreManga.series, githubManga.series),
-        characters: preferMetadata(firestoreManga.characters, githubManga.characters),
-        circle: preferMetadata(firestoreManga.circle, githubManga.circle),
-        group: preferMetadata(firestoreManga.group, githubManga.group),
-        femaleTags: preferMetadata(firestoreManga.femaleTags, githubManga.femaleTags),
-        maleTags: preferMetadata(firestoreManga.maleTags, githubManga.maleTags),
-        covers: firestoreManga.covers?.length
-          ? firestoreManga.covers
+        desc: preferMetadata(metadataManga.desc, githubManga.desc),
+        genres: preferMetadata(metadataManga.genres, githubManga.genres),
+        rating: preferMetadata(metadataManga.rating, githubManga.rating),
+        status: preferMetadata(metadataManga.status, githubManga.status),
+        type: metadataManga.type === "Manga" ? githubManga.type : metadataManga.type,
+        altTitle: preferMetadata(metadataManga.altTitle, githubManga.altTitle),
+        author: preferMetadata(metadataManga.author, githubManga.author),
+        artist: preferMetadata(metadataManga.artist, githubManga.artist),
+        publication: preferMetadata(metadataManga.publication, githubManga.publication),
+        serialization: preferMetadata(metadataManga.serialization, githubManga.serialization),
+        demographic: preferMetadata(metadataManga.demographic, githubManga.demographic),
+        series: preferMetadata(metadataManga.series, githubManga.series),
+        characters: preferMetadata(metadataManga.characters, githubManga.characters),
+        circle: preferMetadata(metadataManga.circle, githubManga.circle),
+        group: preferMetadata(metadataManga.group, githubManga.group),
+        femaleTags: preferMetadata(metadataManga.femaleTags, githubManga.femaleTags),
+        maleTags: preferMetadata(metadataManga.maleTags, githubManga.maleTags),
+        covers: metadataManga.covers?.length
+          ? metadataManga.covers
           : cachedManga?.covers?.length
             ? cachedManga.covers
             : githubManga.covers,
-        coverNumbers: Object.keys(firestoreManga.coverNumbers || {}).length
-          ? firestoreManga.coverNumbers
+        coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
+          ? metadataManga.coverNumbers
           : cachedManga?.coverNumbers || githubManga.coverNumbers,
-        coverUpdatedAt: firestoreManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || githubManga.coverUpdatedAt,
+        coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || githubManga.coverUpdatedAt,
       }
-    : firestoreManga
+    : metadataManga
       ? {
-          ...firestoreManga,
-          covers: firestoreManga.covers?.length ? firestoreManga.covers : cachedManga?.covers,
-          coverNumbers: Object.keys(firestoreManga.coverNumbers || {}).length
-            ? firestoreManga.coverNumbers
+          ...metadataManga,
+          covers: metadataManga.covers?.length ? metadataManga.covers : cachedManga?.covers,
+          coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
+            ? metadataManga.coverNumbers
             : cachedManga?.coverNumbers,
-          coverUpdatedAt: firestoreManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
+          coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
         }
       : githubManga
         ? {
@@ -679,37 +708,22 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
             coverUpdatedAt: githubManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
           }
         : cachedManga || currentManga;
+  if (manga) manga.debugSourceInfo = debugSourceInfo;
   if (manga) {
     manga.nsfw =
       githubManga?.nsfw === true ||
-      firestoreManga?.nsfw === true ||
+      metadataManga?.nsfw === true ||
       cachedManga?.nsfw === true ||
       currentManga?.nsfw === true ||
       isNsfwMangaRecord(manga);
   }
-  if (!signal.aborted && !manga?.covers?.length) {
-    try {
-      const sdkManga = await loadFirebaseDocument(slug, signal);
-      if (sdkManga) {
-        manga = {
-          ...(manga || sdkManga),
-          covers: sdkManga.covers?.length ? sdkManga.covers : manga?.covers,
-          coverNumbers: Object.keys(sdkManga.coverNumbers || {}).length
-            ? sdkManga.coverNumbers
-            : manga?.coverNumbers,
-          coverUpdatedAt: sdkManga.coverUpdatedAt || manga?.coverUpdatedAt,
-        };
-      }
-    } catch (error) {
-      if (!signal.aborted) {
-        console.warn(`Firestore SDK tidak dapat mengambil volume cover ${slug}.`, error);
-      }
-    }
-  }
   for (const [index, result] of responses.entries()) {
     if (result.status === "rejected" && !signal.aborted) {
       console.warn(
-        index === 0 ? "Dataset manga GitHub gagal dimuat." : "Dokumen detail Firestore gagal dimuat.",
+        [
+          "Dataset manga GitHub gagal dimuat.",
+          "Katalog metadata Firestore gagal dimuat.",
+        ][index],
         result.reason,
       );
     }
@@ -720,30 +734,7 @@ async function loadManga(slug: string, signal: AbortSignal): Promise<Manga | nul
     return manga;
   }
 
-  let firestore: Manga | null = null;
-  try {
-    firestore = await loadFirebaseDocument(slug, signal);
-  } catch (error) {
-    if (signal.aborted) throw error;
-    console.warn("Firestore SDK tidak dapat mengambil detail manga.", error);
-  }
-  if (firestore) {
-    await cacheMangaDetail(slug, firestore);
-    return firestore;
-  }
-
   return cachedManga;
-}
-
-async function loadFirebaseDocument(slug: string, signal: AbortSignal): Promise<Manga | null> {
-  if ((!window.firestore || !window.fs?.doc || !window.fs.getDoc) && !signal.aborted) {
-    initializeFirebaseClient();
-  }
-  if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) return null;
-
-  const reference = window.fs.doc(window.firestore, "manga", slug);
-  const snapshot = await window.fs.getDoc(reference);
-  return snapshot.exists() ? normalizeManga(snapshot.data(), slug) : null;
 }
 
 async function loadBloggerChapterSource(
@@ -1159,6 +1150,8 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 
 export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
+  const [showSourceDebug, setShowSourceDebug] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [showNsfw] = useNsfwVisibility();
   const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
   const [coverPreviewOpen, setCoverPreviewOpen] = useState(false);
@@ -1208,11 +1201,24 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
   const [chapterError, setChapterError] = useState("");
   const [source, setSource] = useState<ChapterSource>("blogger");
-  const [firestoreLatestUpdate, setFirestoreLatestUpdate] = useState("");
   const [chapterRetry, setChapterRetry] = useState(0);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("text-grid");
   const [detailTab, setDetailTab] = useState<"chapters" | "synopsis" | "covers" | "discussion">("chapters");
+
+  useEffect(() => {
+    const updateAdminAccess = () => {
+      const currentUser = (
+        window as Window & { currentUser?: { email?: string | null } | null }
+      ).currentUser;
+      const hasAccess = hasAdminPanelAccess(currentUser);
+      setIsAdminUser(hasAccess);
+      if (!hasAccess) setShowSourceDebug(false);
+    };
+    updateAdminAccess();
+    window.addEventListener(AUTH_USER_CHANGE_EVENT, updateAdminAccess);
+    return () => window.removeEventListener(AUTH_USER_CHANGE_EVENT, updateAdminAccess);
+  }, []);
   const [hideDetailCoverBackground, setHideDetailCoverBackground] = useState(false);
   const [chapterSearch, setChapterSearch] = useState("");
   const [chapterWindow, setChapterWindow] = useState(CHAPTER_UI_BATCH);
@@ -1442,45 +1448,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       setState("error");
     });
     return () => controller.abort();
-  }, [slug]);
-
-  useEffect(() => {
-    if (!slug) return;
-    setFirestoreLatestUpdate("");
-    try {
-      const { firestore } = initializeFirebaseClient();
-      return onSnapshot(
-        doc(firestore, "manga", slug),
-        (snapshot) => {
-          if (!snapshot.exists()) return;
-          const data = snapshot.data();
-          const firestoreCovers = asStringList(data.covers).map(resolveCover).filter(Boolean);
-          const hasFirestoreCovers = Array.isArray(data.covers);
-          const coverNumbers = data.coverNumbers && typeof data.coverNumbers === "object"
-            ? Object.fromEntries(Object.entries(data.coverNumbers).map(([url, number]) => [url, asString(number)]))
-            : {};
-          setManga((current) => {
-            if (current?.slug !== slug) return current;
-            return {
-              ...current,
-              ...(hasFirestoreCovers ? { covers: firestoreCovers } : {}),
-              coverNumbers,
-              ...(typeof data.cover === "string" && data.cover
-                ? { cover: resolveCover(data.cover), img: resolveCover(data.cover) }
-                : {}),
-            };
-          });
-          const latest = data.latestUpdate || data.updatedAt;
-          setFirestoreLatestUpdate(latest ? firestoreDate(latest) : "");
-        },
-        (error) => {
-          console.warn(`Firestore detail updates failed to load for ${slug}.`, error);
-        },
-      );
-    } catch (error) {
-      console.warn(`Firestore detail updates could not start for ${slug}.`, error);
-      return undefined;
-    }
   }, [slug]);
 
   useEffect(() => {
@@ -1828,7 +1795,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     return timestamps.length ? Math.max(...timestamps) : undefined;
   }, [chapters]);
   const latestUpdate = latestChapterDate ?? (
-    manga?.latestUpdate || manga?.updatedAt || firestoreLatestUpdate
+    manga?.latestUpdate || manga?.updatedAt
   );
   const chapterCount = chapters.length ? `${chapters.length} Chapters` : "Unknown";
 
@@ -2127,6 +2094,31 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 <h1 className="title">{manga.title}</h1>
                 <div className="title-divider" />
                 {manga.altTitle && <div className="alt-title">{manga.altTitle}</div>}
+                {isAdminUser && (
+                  <button
+                    type="button"
+                    className="my-2 rounded border border-amber-400/50 px-2 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/10 dark:text-amber-200"
+                    aria-expanded={showSourceDebug}
+                    aria-controls="manga-source-debug"
+                    onClick={() => setShowSourceDebug((visible) => !visible)}
+                  >
+                    {showSourceDebug ? "Tutup debug sumber" : "Debug sumber manga"}
+                  </button>
+                )}
+                {isAdminUser && showSourceDebug && (
+                  <div
+                    id="manga-source-debug"
+                    className="my-2 rounded border border-amber-400/50 bg-black/70 p-2 text-xs text-amber-100"
+                    data-testid="manga-source-debug"
+                  >
+                    <strong>Metadata source debug</strong>
+                    <ul className="mt-1 list-inside list-disc">
+                      {(manga.debugSourceInfo || ["Source details unavailable."]).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div
                   id="series-metadata"
                   className="overflow-hidden transition-[max-height,mask-image] duration-500 ease-in-out motion-reduce:transition-none"

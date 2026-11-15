@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { initializeFirebaseClient } from "./lib/firebase-client";
+import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 
 type MangaMetadata = Record<string, unknown> & {
   slug: string;
@@ -94,15 +93,13 @@ async function loadGithubData() {
 }
 
 async function loadFirestoreData(): Promise<void> {
-  const { firestore } = initializeFirebaseClient();
-  const snapshot = await getDocs(collection(firestore, "manga"));
+  const records = await loadFirestoreMangaCatalog();
   const data = window.mangaData || (window.mangaData = {});
-  snapshot.forEach((document) => {
-    const record = document.data();
+  records.forEach((record) => {
     if (record.isDraft === true || typeof record.title !== "string") return;
     const manga: MangaMetadata = {
       ...record,
-      slug: document.id,
+      slug: record.slug,
       img: String(record.cover || record.img || ""),
       cover: String(record.cover || record.img || ""),
       title: record.title,
@@ -111,7 +108,7 @@ async function loadFirestoreData(): Promise<void> {
     const key = normalizeTitle(manga.title);
     if (!key) return;
     data[key] = manga;
-    data[document.id] = manga;
+    data[record.slug] = manga;
   });
 }
 
