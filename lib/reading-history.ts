@@ -399,7 +399,6 @@ function mergeReadingStats(
 ): Record<string, unknown> {
   const readingStats = asRecord(existingValue);
   const progress = { ...asRecord(readingStats.progress) };
-  const activity = { ...asRecord(readingStats.activity) };
 
   const latestBySlug = new Map<string, ReadingHistoryEntry>();
   entries.forEach((entry) => {
@@ -420,36 +419,10 @@ function mergeReadingStats(
     progress[key] = item.value;
   });
 
-  const activityStart = new Date();
-  activityStart.setUTCHours(0, 0, 0, 0);
-  activityStart.setUTCDate(activityStart.getUTCDate() - 6);
-  const activityEnd = new Date(activityStart);
-  activityEnd.setUTCDate(activityEnd.getUTCDate() + 7);
-  const activityByDate = new Map<string, number>();
-  entries.forEach((entry) => {
-    if (!entry.time || entry.time < activityStart.getTime() || entry.time >= activityEnd.getTime()) return;
-    const date = new Date(entry.time).toISOString().slice(0, 10);
-    activityByDate.set(date, (activityByDate.get(date) || 0) + 1);
-  });
-  activityByDate.forEach((chapters, date) => {
-    const existingDay = asRecord(activity[date]);
-    activity[date] = {
-      ...existingDay,
-      chapters: Math.max(numberValue(existingDay.chapters), chapters),
-    };
-  });
-
-  const activityTotal = Object.values(activity).reduce<number>(
-    (total, day) => total + numberValue(asRecord(day).chapters),
-    0,
-  );
-  const totalChaptersRead = Math.max(
-    numberValue(readingStats.totalChaptersRead),
-    activityTotal,
-    entries.length,
-  );
-
-  return { ...readingStats, progress, activity, totalChaptersRead };
+  const preservedStats = { ...readingStats };
+  delete preservedStats.activity;
+  delete preservedStats.totalChaptersRead;
+  return { ...preservedStats, progress };
 }
 
 function emitSyncError(error: unknown): void {

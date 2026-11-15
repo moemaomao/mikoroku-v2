@@ -123,7 +123,7 @@ export async function getUnlockedMedals(): Promise<number[]> {
       const store = tx.objectStore(STORE_MEDALS);
       const record = (await idbRequest(store.get("unlocked"))) as MedalCacheRecord | undefined;
       if (record && Array.isArray(record.chapters)) {
-        return record.chapters.filter((n) => typeof n === "number");
+        return record.chapters.filter((n) => typeof n === "number" && Number.isFinite(n));
       }
     } finally {
       db.close();
@@ -135,7 +135,7 @@ export async function getUnlockedMedals(): Promise<number[]> {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const chapters = Array.isArray(parsed)
-      ? parsed.filter((n): n is number => typeof n === "number")
+      ? parsed.filter((n): n is number => typeof n === "number" && Number.isFinite(n))
       : [];
     if (chapters.length) {
       await setUnlockedMedals(chapters);

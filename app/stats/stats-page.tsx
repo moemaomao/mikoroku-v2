@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import "./stats-animations.css";
 import {
   loadPublicReadingStats,
+  preserveLifetimeChapterCount,
   type CommentHistoryItem,
   type PublicReadingStats,
   type ReadingProgressItem,
@@ -197,6 +198,27 @@ function stringValue(value: unknown): string {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function getLocalReadMarksCount(): number {
+  let count = 0;
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith("read_")) continue;
+      try {
+        const marks: unknown = JSON.parse(localStorage.getItem(key) || "[]");
+        if (Array.isArray(marks)) {
+          count += new Set(marks.map((mark) => String(mark).trim()).filter(Boolean)).size;
+        }
+      } catch (error) {
+        console.warn(`Local read marks for "${key}" are invalid and were ignored.`, error);
+      }
+    }
+  } catch (error) {
+    console.warn("Local read marks could not be counted.", error);
+  }
+  return count;
 }
 
 function formatCustomBadgeLabel(id: string): string {
@@ -497,32 +519,60 @@ function MedalUnlockModal({
   );
 }
 
-function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
-  const unlockedCount = readingMedals.filter((medal) => totalChaptersRead >= medal.chapters).length;
-  const nextMedal = readingMedals.find((medal) => totalChaptersRead < medal.chapters);
+function ReadingMedals({
+  totalChaptersRead,
+  isOwner,
+}: {
+  totalChaptersRead: number;
+  isOwner: boolean;
+}) {
+  const [persistedUnlocks, setPersistedUnlocks] = useState<number[]>([]);
+  const earnedTotal = Math.max(totalChaptersRead, ...(isOwner ? persistedUnlocks : []));
+  const unlockedCount = readingMedals.filter((medal) => earnedTotal >= medal.chapters).length;
+  const nextMedal = readingMedals.find((medal) => earnedTotal < medal.chapters);
   const previousMilestone = nextMedal
     ? readingMedals[readingMedals.indexOf(nextMedal) - 1]?.chapters || 0
     : 0;
   const progressToNext = nextMedal
-    ? Math.max(0, Math.min(100, ((totalChaptersRead - previousMilestone) / (nextMedal.chapters - previousMilestone)) * 100))
+    ? Math.max(0, Math.min(100, ((earnedTotal - previousMilestone) / (nextMedal.chapters - previousMilestone)) * 100))
     : 100;
 
   const [queue, setQueue] = useState<Array<(typeof readingMedals)[number]>>([]);
   const [current, setCurrent] = useState<(typeof readingMedals)[number] | null>(null);
 
   useEffect(() => {
-    if (totalChaptersRead <= 0) return;
+    if (!isOwner) {
+      setPersistedUnlocks([]);
+      return;
+    }
+    let cancelled = false;
+    void getUnlockedMedals().then((unlocked) => {
+      if (!cancelled) setPersistedUnlocks(unlocked);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner]);
+
+  useEffect(() => {
+    if (!isOwner || totalChaptersRead <= 0) return;
     let cancelled = false;
     void (async () => {
       const newly = await detectNewMedalUnlocks(totalChaptersRead);
-      if (cancelled || newly.length === 0) return;
-      const sorted = [...newly].sort((a, b) => b.chapters - a.chapters);
-      setQueue((prev) => [...prev, ...sorted]);
+      const unlocked = await getUnlockedMedals();
+      if (cancelled) return;
+      setPersistedUnlocks((currentUnlocks) => [
+        ...new Set([...currentUnlocks, ...unlocked]),
+      ]);
+      if (newly.length > 0) {
+        const sorted = [...newly].sort((a, b) => b.chapters - a.chapters);
+        setQueue((prev) => [...prev, ...sorted]);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [totalChaptersRead]);
+  }, [isOwner, totalChaptersRead]);
 
   useEffect(() => {
     if (current || queue.length === 0) return;
@@ -538,7 +588,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reading Medals</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-              {totalChaptersRead.toLocaleString()} chapters read across manga and novels
+              {earnedTotal.toLocaleString()} chapters read across manga and novels
             </p>
           </div>
           <span className="text-xs font-semibold text-slate-600 dark:text-zinc-400">
@@ -549,7 +599,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
           <div className="mt-4">
             <div className="mb-1.5 flex justify-between gap-3 text-xs text-slate-600 dark:text-zinc-400">
               <span>Next: {nextMedal.name}</span>
-              <span>{Math.max(0, nextMedal.chapters - totalChaptersRead).toLocaleString()} to go</span>
+              <span>{Math.max(0, nextMedal.chapters - earnedTotal).toLocaleString()} to go</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
               <div
@@ -563,7 +613,7 @@ function ReadingMedals({ totalChaptersRead }: { totalChaptersRead: number }) {
         )}
         <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
           {readingMedals.map((medal) => {
-            const unlocked = totalChaptersRead >= medal.chapters;
+            const unlocked = earnedTotal >= medal.chapters;
             const medalTileStyle: CSSProperties & { "--stats-medal-color": string } = {
               "--stats-medal-color": medal.color,
               background: medal.gradient,
@@ -810,6 +860,10 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [statsSettingsError, setStatsSettingsError] = useState("");
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const statsSettingsDialogRef = useRef<HTMLDivElement>(null);
+  const lifetimeChapterHighWaterRef = useRef({ uid, total: 0 });
+  if (lifetimeChapterHighWaterRef.current.uid !== uid) {
+    lifetimeChapterHighWaterRef.current = { uid, total: 0 };
+  }
 
   useEffect(() => {
     let active = true;
@@ -820,12 +874,33 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
     const applyFresh = async () => {
       try {
-        const result = await loadPublicReadingStats(uid);
+        const [result, cached, unlockedMedals] = await Promise.all([
+          loadPublicReadingStats(uid),
+          getCachedReadingStats(uid),
+          getUnlockedMedals(),
+        ]);
         if (!active) return;
+        const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
+        const totalChaptersRead = Math.max(
+          result.totalChaptersRead,
+          cached?.data.totalChaptersRead || 0,
+          localReadMarks,
+          lifetimeChapterHighWaterRef.current.total,
+          ...(isOwner ? unlockedMedals.filter(Number.isFinite) : []),
+        );
+        const preservedResult = { ...result, totalChaptersRead };
+        lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
+        if (isOwner && totalChaptersRead > result.totalChaptersRead) {
+          try {
+            await preserveLifetimeChapterCount(uid, totalChaptersRead);
+          } catch (recoveryError) {
+            console.warn("The lifetime chapter count could not be restored to Firestore.", recoveryError);
+          }
+        }
         freshStatsLoaded = true;
-        setStats(result);
+        setStats(preservedResult);
         setError("");
-        void setCachedReadingStats(uid, result);
+        void setCachedReadingStats(uid, preservedResult);
       } catch (loadError: unknown) {
         console.error("Public reading stats could not be loaded.", loadError);
         if (!active) return;
@@ -845,8 +920,13 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       const cached = await getCachedReadingStats(uid);
       if (!active) return;
       if (cached?.data) {
+        const totalChaptersRead = Math.max(
+          cached.data.totalChaptersRead,
+          lifetimeChapterHighWaterRef.current.total,
+        );
+        lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
         if (!freshStatsLoaded) {
-          setStats(cached.data);
+          setStats({ ...cached.data, totalChaptersRead });
           setError("");
         }
       } else if (!freshStatsLoaded) {
@@ -863,7 +943,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       active = false;
       window.removeEventListener("mikoroku:reading-stats-updated", onStatsUpdated);
     };
-  }, [retry, uid]);
+  }, [isOwner, retry, uid]);
 
   useEffect(() => {
     let active = true;
@@ -1186,7 +1266,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
               )}
 
               {!hiddenStatsSections.includes("medals") && (
-                <ReadingMedals totalChaptersRead={stats.totalChaptersRead} />
+                <ReadingMedals totalChaptersRead={stats.totalChaptersRead} isOwner={isOwner} />
               )}
 
               {!hiddenStatsSections.includes("reading-charts") && (

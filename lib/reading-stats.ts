@@ -36,9 +36,21 @@ type StatsCollection = {
   limit: (count: number) => StatsQuery;
 };
 
+type StatsTransaction = {
+  get: (reference: StatsDocumentReference) => Promise<StatsDocumentSnapshot>;
+  set: (
+    reference: StatsDocumentReference,
+    data: Record<string, unknown>,
+    options?: { merge?: boolean },
+  ) => StatsTransaction;
+};
+
 type StatsFirestore = {
   collection: (name: string) => StatsCollection;
   collectionGroup?: (name: string) => StatsQuery;
+  runTransaction?: <T>(
+    updateFunction: (transaction: StatsTransaction) => Promise<T>,
+  ) => Promise<T>;
 };
 
 type StatsFirebase = {
@@ -228,6 +240,37 @@ export async function saveReaderStats(
 
   if (recordChapterActivity) window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
   return true;
+}
+
+export async function preserveLifetimeChapterCount(uid: string, minimum: number): Promise<boolean> {
+  if (!Number.isFinite(minimum) || minimum < 0) {
+    throw new Error("A valid lifetime chapter count is required.");
+  }
+  const firebase = getStatsWindow().firebase;
+  const user = getStatsWindow().currentUser || firebase?.auth?.().currentUser;
+  if (!firebase || user?.uid !== uid) return false;
+
+  const firestore = await waitForFirestore();
+  if (!firestore.runTransaction) {
+    throw new Error("Firestore transactions are unavailable.");
+  }
+  const reference = firestore.collection("userStats").doc(uid);
+  return firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const activeUser = getStatsWindow().currentUser || firebase.auth?.().currentUser;
+    if (activeUser?.uid !== uid) {
+      throw new Error("The signed-in account changed during chapter count recovery.");
+    }
+    const profile = snapshot.exists ? snapshot.data() || {} : {};
+    const readingStats = asRecord(profile.readingStats);
+    if (numberValue(readingStats.totalChaptersRead) >= minimum) return false;
+    transaction.set(
+      reference,
+      { readingStats: { totalChaptersRead: minimum } },
+      { merge: true },
+    );
+    return true;
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
