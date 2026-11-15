@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import SiteChrome from "../site-chrome";
 import { CoverImage } from "../lib/cover-image";
+import { getCachedFirestoreMangaCatalog, loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import { isNsfwMangaRecord } from "../lib/nsfw";
 import { isNovelSeries } from "../../lib/reader-kind";
 import "./catalog.css";
@@ -42,11 +43,8 @@ type SortOrder = "latest" | "az" | "za";
 type DateValue = string | number | { toMillis?: () => number; seconds?: number };
 type MangaDataWindow = Window & { mangaData?: Record<string, Manga> };
 
-const datasetUrl = "/catalog/manga.json";
-const cacheKey = "mikoroku_catalog_v1";
 const HOMEPAGE_LIGHT_CACHE = "mangaGithubLightCache";
 const HOMEPAGE_FULL_CACHE = "mangaGithubCache";
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 type SharedMangaCache = {
   list: Manga[] | null;
@@ -118,47 +116,9 @@ function asMangaList(value: unknown): Manga[] {
     (item): item is Manga =>
       Boolean(item) &&
       typeof item === "object" &&
+      !(item as Manga).isDraft &&
       (typeof (item as Manga).title === "string" || typeof (item as Manga).name === "string"),
   );
-}
-
-function readFsMetaMap(): Record<string, { updatedAt?: number; latestUpdate?: number; cover?: string; slug?: string; title?: string }> {
-  try {
-    const raw = JSON.parse(localStorage.getItem("mangaFsMetaCache") || "null") as {
-      data?: Record<string, { updatedAt?: number; latestUpdate?: number; cover?: string; slug?: string; title?: string }>;
-    } | null;
-    return raw?.data && typeof raw.data === "object" ? raw.data : {};
-  } catch {
-    return {};
-  }
-}
-
-function enrichWithFsMeta(list: Manga[]): Manga[] {
-  const meta = readFsMetaMap();
-  if (!Object.keys(meta).length) return list;
-
-  const byTitle = new Map<string, (typeof meta)[string]>();
-  for (const entry of Object.values(meta)) {
-    if (entry?.title) byTitle.set(normalizedKey(entry.title), entry);
-  }
-
-  return list.map((manga) => {
-    const slug = manga.slug || "";
-    const hit = (slug && meta[slug]) || byTitle.get(normalizedKey(titleOf(manga))) || null;
-    if (!hit) return manga;
-    const updatedAt = coerceTime(hit.updatedAt) || coerceTime(hit.latestUpdate) || coerceTime(manga.updatedAt);
-    const latestUpdate = coerceTime(hit.latestUpdate) || updatedAt || coerceTime(manga.latestUpdate);
-    return {
-      ...manga,
-      slug: hit.slug || manga.slug,
-      cover: hit.cover || manga.cover || manga.img,
-      img: hit.cover || manga.img || manga.cover,
-      updatedAt: updatedAt || manga.updatedAt,
-      latestUpdate: latestUpdate || manga.latestUpdate,
-      firestore: true,
-      source: manga.source || "hybrid",
-    };
-  });
 }
 
 function sortByLatest(list: Manga[]): Manga[] {
@@ -216,44 +176,35 @@ function mergeCatalogData(primary: Manga[], additions: Manga[]): Manga[] {
 function readInstantCatalog(): Manga[] {
   if (typeof window === "undefined") return [];
   const w = window as CatalogWindow;
-  let list: Manga[] = [];
+  let homepageList: Manga[] = [];
 
-  if (w.__mangaShared?.list?.length) list = asMangaList(w.__mangaShared.list);
-  else if (w.githubMangaList?.length) list = asMangaList(w.githubMangaList);
+  if (w.__mangaShared?.list?.length) homepageList = asMangaList(w.__mangaShared.list);
+  else if (w.githubMangaList?.length) homepageList = asMangaList(w.githubMangaList);
   else {
     try {
       const light = JSON.parse(localStorage.getItem(HOMEPAGE_LIGHT_CACHE) || "null") as {
         fullList?: unknown;
         list?: unknown;
       } | null;
-      list = asMangaList(light?.fullList || light?.list);
-    } catch { /* ignore */ }
+      homepageList = asMangaList(light?.fullList || light?.list);
+    } catch { /* ignore invalid cached data */ }
 
-    if (!list.length) {
+    if (!homepageList.length) {
       try {
         const full = JSON.parse(localStorage.getItem(HOMEPAGE_FULL_CACHE) || "null") as {
           data?: unknown;
         } | null;
-        list = asMangaList(full?.data);
-      } catch { /* ignore */ }
+        homepageList = asMangaList(full?.data);
+      } catch { /* ignore invalid cached data */ }
     }
 
-    if (!list.length) {
-      try {
-        const cache = JSON.parse(localStorage.getItem(cacheKey) || "null") as {
-          data?: unknown;
-        } | null;
-        list = asMangaList(cache?.data);
-      } catch { /* ignore */ }
-    }
-
-    if (!list.length && w.mangaData && typeof w.mangaData === "object") {
-      list = Object.values(w.mangaData).filter((m) => m && !m.isDraft) as Manga[];
+    if (!homepageList.length && w.mangaData && typeof w.mangaData === "object") {
+      homepageList = Object.values(w.mangaData).filter((manga) => manga && !manga.isDraft);
     }
   }
 
-  if (!list.length) return [];
-  return sortByLatest(enrichWithFsMeta(list));
+  const metadataList = asMangaList(getCachedFirestoreMangaCatalog());
+  return sortByLatest(mergeCatalogData(homepageList, metadataList));
 }
 
 function slugify(value: string): string {
@@ -356,57 +307,54 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
       setLoading(false);
     }
 
-    const controller = new AbortController();
-    const w = window as CatalogWindow;
+    let active = true;
 
-    const applyFresh = (data: Manga[]) => {
-      const enriched = enrichWithFsMeta(asMangaList(data));
+    const applyFresh = (homepageData: Manga[], metadata: Manga[]) => {
       const merged = sortByLatest(
-        mergeCatalogData(mergeCatalogData(enriched, firestoreManga.current), instant),
+        mergeCatalogData(mergeCatalogData(asMangaList(homepageData), metadata), firestoreManga.current),
       );
       setAllManga(merged);
       setLoading(false);
       setError("");
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data: merged }));
-      } catch (cacheError) {
-        console.warn("Catalog dataset could not be saved to cache.", cacheError);
-      }
     };
 
+    const w = window as CatalogWindow;
     const sharedPromise =
       typeof w.loadSharedMangaList === "function"
         ? w.loadSharedMangaList(false).catch(() => null)
         : w.__mangaShared?.promise?.catch(() => null);
-
-    const networkPromise = (sharedPromise || Promise.resolve(null)).then(async (sharedList) => {
-      if (sharedList && Array.isArray(sharedList) && sharedList.length) {
-        return asMangaList(sharedList);
-      }
-      const response = await fetch(datasetUrl, { signal: controller.signal });
-      if (!response.ok) throw new Error(`Manga dataset returned HTTP ${response.status}.`);
-      const data = (await response.json()) as unknown;
-      if (!Array.isArray(data)) throw new Error("Invalid manga dataset format.");
-      return data as Manga[];
+    const homepagePromise = (sharedPromise || Promise.resolve(null)).then(async (sharedList) => {
+      if (sharedList && sharedList.length) return asMangaList(sharedList);
+      const response = await fetch("/catalog/manga.json");
+      if (!response.ok) throw new Error(`Homepage manga dataset returned HTTP ${response.status}.`);
+      const data: unknown = await response.json();
+      if (!Array.isArray(data)) throw new Error("Invalid homepage manga dataset format.");
+      return asMangaList(data);
+    });
+    const metadataPromise = loadFirestoreMangaCatalog().catch((metadataError: unknown) => {
+      console.warn("Catalog metadata could not be loaded; using the homepage manga dataset.", metadataError);
+      return [];
     });
 
-    networkPromise
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        applyFresh(data);
+    void Promise.all([homepagePromise, metadataPromise])
+      .then(([homepageData, metadata]) => {
+        if (!active) return;
+        applyFresh(homepageData, metadata);
       })
       .catch((fetchError: unknown) => {
-        if (controller.signal.aborted) return;
-        console.error("Catalog dataset failed to load.", fetchError);
+        if (!active) return;
+        console.error("Catalog metadata failed to load.", fetchError);
         setLoading(false);
         if (!hadInstant) {
-          setError(fetchError instanceof Error ? fetchError.message : "Failed to load manga dataset.");
+          setError(fetchError instanceof Error ? fetchError.message : "Failed to load manga metadata.");
         } else {
-          setError(fetchError instanceof Error ? fetchError.message : "Failed to refresh catalog.");
+          setError(fetchError instanceof Error ? fetchError.message : "Failed to refresh catalog metadata.");
         }
       });
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [kind]);
 
   useEffect(() => {
@@ -547,7 +495,10 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
                 const titleValue = titleOf(manga);
                 const slug = manga.slug || slugify(titleValue);
                 const cover = normalizeCover(manga.img || manga.cover);
-                const isNsfw = kind === "genre" && isNsfwMangaRecord(manga);
+                const isNsfw =
+                   kind === "hentai" ||
+                   manga.nsfw === true ||
+                   isNsfwMangaRecord(manga);
                 return (
                   <a className="catalog-card" href={`/series/${encodeURIComponent(slug)}`} key={`${slug}:${titleValue}`}>
                     <span className="catalog-cover">

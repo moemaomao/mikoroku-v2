@@ -210,6 +210,12 @@ function readCachedMangaMetadata(): CachedMangaMetadata | null {
   }
 }
 
+export function getCachedFirestoreMangaCatalog(): FirestoreMangaMetadata[] {
+  if (mangaCatalogData) return mangaCatalogData;
+  if (typeof window === "undefined") return [];
+  return readCachedMangaMetadata()?.records ?? [];
+}
+
 export function loadFirestoreMangaCatalog(): Promise<FirestoreMangaMetadata[]> {
   if (
     mangaCatalogData &&
