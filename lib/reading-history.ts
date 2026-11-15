@@ -141,7 +141,12 @@ function normalizeHistoryUrl(value: unknown): string {
     const url = new URL(rawUrl, window.location.origin);
     const hostname = url.hostname.toLowerCase();
     const currentHostname = window.location.hostname.toLowerCase();
-    const knownSite = hostname === "mikoroku.top" || hostname === "www.mikoroku.top";
+    const knownSite = [
+      "mikoroku.com",
+      "www.mikoroku.com",
+      "mikoroku.top",
+      "www.mikoroku.top",
+    ].includes(hostname);
     if (
       (url.protocol !== "http:" && url.protocol !== "https:") ||
       (!knownSite && hostname !== currentHostname)

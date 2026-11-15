@@ -29,6 +29,10 @@ type StatsDocumentReference = {
   collection: (name: string) => StatsCollection;
   get: () => Promise<StatsDocumentSnapshot>;
   set: (data: Record<string, unknown>, options?: { merge?: boolean }) => Promise<void>;
+  onSnapshot?: (
+    onNext: (snapshot: StatsDocumentSnapshot) => void,
+    onError?: (error: unknown) => void,
+  ) => () => void;
 };
 
 type StatsCollection = {
@@ -117,6 +121,8 @@ export type PublicReadingStats = {
   commentHistory: CommentHistoryItem[];
   commentHistoryError: string;
 };
+
+export type LiveReadingStats = Pick<PublicReadingStats, "profile" | "activity" | "totalChaptersRead">;
 
 function getStatsWindow(): StatsWindow {
   return window as StatsWindow;
@@ -247,8 +253,10 @@ export async function preserveLifetimeChapterCount(uid: string, minimum: number)
     throw new Error("A valid lifetime chapter count is required.");
   }
   const firebase = getStatsWindow().firebase;
-  const user = getStatsWindow().currentUser || firebase?.auth?.().currentUser;
-  if (!firebase || user?.uid !== uid) return false;
+  const user = firebase?.auth?.().currentUser || getStatsWindow().currentUser;
+  if (!firebase || user?.uid !== uid) {
+    throw new Error("Sign in as the profile owner to restore the chapter count.");
+  }
 
   const firestore = await waitForFirestore();
   if (!firestore.runTransaction) {
@@ -257,7 +265,7 @@ export async function preserveLifetimeChapterCount(uid: string, minimum: number)
   const reference = firestore.collection("userStats").doc(uid);
   return firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(reference);
-    const activeUser = getStatsWindow().currentUser || firebase.auth?.().currentUser;
+    const activeUser = firebase.auth?.().currentUser || getStatsWindow().currentUser;
     if (activeUser?.uid !== uid) {
       throw new Error("The signed-in account changed during chapter count recovery.");
     }
@@ -271,6 +279,44 @@ export async function preserveLifetimeChapterCount(uid: string, minimum: number)
     );
     return true;
   });
+}
+
+export async function subscribeToReadingStats(
+  uid: string,
+  onUpdate: (stats: LiveReadingStats) => void,
+  onError: (error: unknown) => void,
+): Promise<() => void> {
+  const firestore = await waitForFirestore();
+  const reference = firestore.collection("userStats").doc(uid);
+  if (!reference.onSnapshot) {
+    throw new Error("Firestore live updates are unavailable.");
+  }
+
+  return reference.onSnapshot((snapshot) => {
+    const profile = snapshot.exists ? snapshot.data() || {} : {};
+    const readingStats = asRecord(profile.readingStats);
+    const activityByDate = asRecord(readingStats.activity);
+    const activity = getLastSevenUtcDates().map((date) => ({
+      date,
+      chapters: numberValue(asRecord(activityByDate[date]).chapters),
+    }));
+    const activityTotal = Object.values(activityByDate).reduce<number>(
+      (total, day) => total + numberValue(asRecord(day).chapters),
+      0,
+    );
+    const historyTotal = Array.isArray(profile.readingHistory)
+      ? profile.readingHistory.length
+      : 0;
+    onUpdate({
+      profile,
+      activity,
+      totalChaptersRead: Math.max(
+        numberValue(readingStats.totalChaptersRead),
+        activityTotal,
+        historyTotal,
+      ),
+    });
+  }, onError);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

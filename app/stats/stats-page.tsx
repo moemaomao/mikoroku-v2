@@ -5,6 +5,7 @@ import "./stats-animations.css";
 import {
   loadPublicReadingStats,
   preserveLifetimeChapterCount,
+  subscribeToReadingStats,
   type CommentHistoryItem,
   type PublicReadingStats,
   type ReadingProgressItem,
@@ -944,6 +945,51 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       window.removeEventListener("mikoroku:reading-stats-updated", onStatsUpdated);
     };
   }, [isOwner, retry, uid]);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+    void subscribeToReadingStats(
+      uid,
+      (liveStats) => {
+        if (!active) return;
+        const totalChaptersRead = Math.max(
+          liveStats.totalChaptersRead,
+          lifetimeChapterHighWaterRef.current.total,
+        );
+        lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
+        setStats((current) => {
+          if (!current) return current;
+          const updated = {
+            ...current,
+            profile: liveStats.profile,
+            activity: liveStats.activity,
+            totalChaptersRead,
+          };
+          return updated;
+        });
+        if (totalChaptersRead > liveStats.totalChaptersRead) {
+          void preserveLifetimeChapterCount(uid, totalChaptersRead).catch((error: unknown) => {
+            console.warn("The synced lifetime chapter count could not be restored to Firestore.", error);
+          });
+        }
+      },
+      (error) => {
+        console.error("Live reading stats updates could not be received.", error);
+      },
+    ).then((stop) => {
+      if (active) unsubscribe = stop;
+      else stop();
+    }).catch((error: unknown) => {
+      console.error("Live reading stats subscription could not be started.", error);
+    });
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [isOwner, uid]);
 
   useEffect(() => {
     let active = true;
