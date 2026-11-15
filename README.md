@@ -190,12 +190,25 @@ without inflating the custom-element loader.
    npx wrangler login
    ```
 
-2. Preview locally (OpenNext + Workers):
+2. Set the Firebase service-account credentials as Worker secrets (use a
+   service account with Firestore read access; paste each value when prompted):
+   ```bash
+   npx wrangler secret put FIREBASE_CLIENT_EMAIL
+   npx wrangler secret put FIREBASE_PRIVATE_KEY
+   ```
+   Do not add these credentials to `wrangler.jsonc` or commit them. The manga
+   detail proxy at `/api/manga/{slug}` uses these secrets to read Firestore and
+   caches decoded manga documents in `MIKOROKU_V2_CACHE` (fresh for 10 minutes,
+   retained for up to 7 days). Stale values are returned while a background
+   refresh runs. Add the same secrets to the local Worker environment when
+   testing this endpoint with Wrangler.
+
+3. Preview locally (OpenNext + Workers):
    ```bash
    npm run preview
    ```
 
-3. Deploy:
+4. Deploy:
    ```bash
    npm run deploy
    ```

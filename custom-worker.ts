@@ -32,6 +32,8 @@ interface CloudflareEnv {
   MIKOROKU_V2_CACHE?: KVNamespace;
   MIKOROKU_CACHE?: KVNamespace;
   NEXT_INC_CACHE_KV?: KVNamespace;
+  FIREBASE_CLIENT_EMAIL?: string;
+  FIREBASE_PRIVATE_KEY?: string;
   [key: string]: unknown;
 }
 
@@ -48,6 +50,22 @@ const MANGA_CATALOG_CACHE_KEY = "catalog:github:all-manga:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_CATALOG_URL = "/catalog/manga.json";
+const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
+const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
+const MANGA_DETAIL_CACHE_CONTROL =
+  "public, max-age=60, s-maxage=600, stale-while-revalidate=3600";
+const FIREBASE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const FIRESTORE_DOCUMENTS_URL =
+  "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
+
+type FirebaseAccessToken = {
+  clientEmail: string;
+  token: string;
+  expiresAt: number;
+};
+
+let firebaseAccessToken: FirebaseAccessToken | null = null;
+let firebaseAccessTokenPromise: Promise<string> | null = null;
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -339,6 +357,277 @@ async function handleMangaCatalogProxy(
         status: 502,
         headers: { "content-type": "application/json; charset=utf-8" },
       },
+    );
+  }
+}
+
+function base64UrlEncode(value: string | Uint8Array): string {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+async function createFirebaseAccessToken(env: CloudflareEnv): Promise<string> {
+  const clientEmail = env.FIREBASE_CLIENT_EMAIL?.trim();
+  const privateKey = env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
+  if (!clientEmail || !privateKey) {
+    throw new Error("Firebase service account secrets are not configured.");
+  }
+
+  if (
+    firebaseAccessToken?.clientEmail === clientEmail &&
+    firebaseAccessToken.expiresAt > Date.now() + 60_000
+  ) {
+    return firebaseAccessToken.token;
+  }
+
+  if (firebaseAccessTokenPromise) return firebaseAccessTokenPromise;
+
+  firebaseAccessTokenPromise = (async () => {
+    const pem = privateKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+      .replace(/-----END PRIVATE KEY-----/g, "")
+      .replace(/\s/g, "");
+    const der = Uint8Array.from(atob(pem), (character) => character.charCodeAt(0));
+    const signingKey = await crypto.subtle.importKey(
+      "pkcs8",
+      der,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const assertionHeader = base64UrlEncode(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+    const assertionClaims = base64UrlEncode(
+      JSON.stringify({
+        iss: clientEmail,
+        scope: "https://www.googleapis.com/auth/datastore",
+        aud: FIREBASE_TOKEN_URL,
+        iat: issuedAt,
+        exp: issuedAt + 3600,
+      }),
+    );
+    const unsignedAssertion = `${assertionHeader}.${assertionClaims}`;
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      signingKey,
+      new TextEncoder().encode(unsignedAssertion),
+    );
+    const assertion = `${unsignedAssertion}.${base64UrlEncode(new Uint8Array(signature))}`;
+    const response = await fetchUpstream(FIREBASE_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Firebase OAuth token request returned HTTP ${response.status}.`);
+    }
+
+    const result = await response.json() as {
+      access_token?: unknown;
+      expires_in?: unknown;
+    };
+    if (typeof result.access_token !== "string" || !result.access_token) {
+      throw new Error("Firebase OAuth token response did not contain an access token.");
+    }
+
+    const expiresIn = Number(result.expires_in);
+    firebaseAccessToken = {
+      clientEmail,
+      token: result.access_token,
+      expiresAt: Date.now() + (Number.isFinite(expiresIn) ? expiresIn : 3600) * 1000,
+    };
+    return result.access_token;
+  })();
+
+  try {
+    return await firebaseAccessTokenPromise;
+  } finally {
+    firebaseAccessTokenPromise = null;
+  }
+}
+
+type FirestoreRestValue = {
+  stringValue?: string;
+  integerValue?: string;
+  doubleValue?: number;
+  booleanValue?: boolean;
+  timestampValue?: string;
+  nullValue?: null | string;
+  arrayValue?: { values?: FirestoreRestValue[] };
+  mapValue?: { fields?: Record<string, FirestoreRestValue> };
+  referenceValue?: string;
+  bytesValue?: string;
+  geoPointValue?: { latitude?: number; longitude?: number };
+};
+
+function decodeFirestoreRestValue(value: FirestoreRestValue): unknown {
+  if ("stringValue" in value) return value.stringValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return value.doubleValue;
+  if ("booleanValue" in value) return value.booleanValue;
+  if ("timestampValue" in value) return value.timestampValue;
+  if ("nullValue" in value) return null;
+  if ("arrayValue" in value) {
+    return (value.arrayValue?.values ?? []).map(decodeFirestoreRestValue);
+  }
+  if ("mapValue" in value) {
+    return Object.fromEntries(
+      Object.entries(value.mapValue?.fields ?? {}).map(([key, field]) => [
+        key,
+        decodeFirestoreRestValue(field),
+      ]),
+    );
+  }
+  if ("referenceValue" in value) return value.referenceValue;
+  if ("bytesValue" in value) return value.bytesValue;
+  if ("geoPointValue" in value) return value.geoPointValue;
+  return undefined;
+}
+
+async function fetchMangaDetailFromFirestore(
+  env: CloudflareEnv,
+  slug: string,
+): Promise<Record<string, unknown> | null> {
+  const token = await createFirebaseAccessToken(env);
+  const response = await fetchUpstream(
+    `${FIRESTORE_DOCUMENTS_URL}/manga/${encodeURIComponent(slug)}`,
+    { headers: { Accept: "application/json", Authorization: `Bearer ${token}` } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Firestore manga detail returned HTTP ${response.status}.`);
+  }
+
+  const document = await response.json() as {
+    fields?: Record<string, FirestoreRestValue>;
+  };
+  const fields = document.fields || {};
+  return {
+    ...Object.fromEntries(
+      Object.entries(fields).map(([key, value]) => [
+        key,
+        decodeFirestoreRestValue(value),
+      ]),
+    ),
+    slug,
+  };
+}
+
+function mangaDetailResponse(
+  body: unknown,
+  cacheStatus: "HIT" | "STALE" | "MISS" | "BYPASS",
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": status === 200
+        ? cacheStatus === "STALE"
+          ? "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+          : MANGA_DETAIL_CACHE_CONTROL
+        : "no-store",
+      "x-cache": cacheStatus,
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+async function fetchAndCacheMangaDetail(
+  env: CloudflareEnv,
+  kv: KVNamespace | undefined,
+  slug: string,
+): Promise<Record<string, unknown> | null> {
+  const data = await fetchMangaDetailFromFirestore(env, slug);
+  if (data && kv) {
+    try {
+      await kv.put(
+        `manga:detail:${slug}`,
+        JSON.stringify({ cachedAt: Date.now(), data }),
+        { expirationTtl: MANGA_DETAIL_CACHE_TTL },
+      );
+    } catch (error) {
+      console.warn("[worker manga-detail] KV put failed", error);
+    }
+  }
+  return data;
+}
+
+async function handleMangaDetailProxy(
+  request: Request,
+  env: CloudflareEnv,
+  ctx: ExecutionContext,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  const match = url.pathname.match(/^\/api\/manga\/([^/]+)\/?$/);
+  if (!match) return null;
+  if (request.method !== "GET") {
+    return mangaDetailResponse({ error: "Method not allowed" }, "BYPASS", 405);
+  }
+
+  let slug: string;
+  try {
+    slug = decodeURIComponent(match[1]);
+  } catch {
+    return mangaDetailResponse({ error: "Slug tidak valid." }, "BYPASS", 400);
+  }
+  if (!slug || slug.length > 200 || /[\/\u0000-\u001f]/.test(slug)) {
+    return mangaDetailResponse({ error: "Slug tidak valid." }, "BYPASS", 400);
+  }
+
+  const kv = getCacheKv(env);
+  const cacheKey = `manga:detail:${slug}`;
+  const forceRefresh = url.searchParams.get("refresh") === "1";
+  let cached: { cachedAt?: number; data?: Record<string, unknown> } | null = null;
+  if (kv) {
+    try {
+      const value = await kv.get(cacheKey, "json");
+      if (
+        value &&
+        typeof value === "object" &&
+        typeof value.data === "object" &&
+        value.data !== null &&
+        !Array.isArray(value.data)
+      ) {
+        cached = value as typeof cached;
+      }
+    } catch (error) {
+      console.warn("[worker manga-detail] KV get failed", error);
+    }
+  }
+
+  if (cached && !forceRefresh) {
+    const cachedAt = Number(cached.cachedAt);
+    if (Number.isFinite(cachedAt) && Date.now() - cachedAt <= MANGA_DETAIL_FRESH_TTL) {
+      return mangaDetailResponse(cached.data, "HIT");
+    }
+
+    ctx.waitUntil(
+      fetchAndCacheMangaDetail(env, kv, slug).catch((error: unknown) => {
+        console.error("[worker manga-detail] background refresh failed", error);
+      }),
+    );
+    return mangaDetailResponse(cached.data, "STALE");
+  }
+
+  try {
+    const data = await fetchAndCacheMangaDetail(env, kv, slug);
+    if (!data) {
+      return mangaDetailResponse({ error: "Manga tidak ditemukan." }, forceRefresh ? "BYPASS" : "MISS", 404);
+    }
+    return mangaDetailResponse(data, forceRefresh || !kv ? "BYPASS" : "MISS");
+  } catch (error) {
+    console.error("[worker manga-detail] Firestore fetch failed", error);
+    if (cached) return mangaDetailResponse(cached.data, "STALE");
+    return mangaDetailResponse(
+      { error: "Manga detail is temporarily unavailable." },
+      forceRefresh || !kv ? "BYPASS" : "MISS",
+      502,
     );
   }
 }
@@ -670,6 +959,8 @@ export default {
 
     const catalog = await handleMangaCatalogProxy(request, env, ctx);
     if (catalog) return catalog;
+    const mangaDetail = await handleMangaDetailProxy(request, env, ctx);
+    if (mangaDetail) return mangaDetail;
     const proxied = await handleBloggerChaptersProxy(request, env, ctx);
     if (proxied) return proxied;
     const response = await handler.fetch(request, env, ctx);

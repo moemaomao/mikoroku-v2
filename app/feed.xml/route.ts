@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 
 const FEED_URL = "https://mikoroku.top/feed.xml";
 const FEED_CACHE_KEY = "feed:latest-chapters:v4";
+const FEED_STALE_CACHE_KEY = "feed:latest-chapters:stale:v1";
+const PREVIOUS_FEED_CACHE_KEY = "feed:latest-chapters:v3";
 const FEED_CACHE_TTL = 15 * 60;
+const FEED_STALE_CACHE_TTL = 7 * 24 * 60 * 60;
 const MAX_FEED_ITEMS = 50;
-const MAX_SERIES_QUERY = 200;
 
 type FeedItem = {
   title: string;
@@ -109,7 +111,7 @@ async function buildFeedItems(): Promise<FeedItem[]> {
       structuredQuery: {
         from: [{ collectionId: "manga" }],
         orderBy: [{ field: { fieldPath: "updatedAt" }, direction: "DESCENDING" }],
-        limit: MAX_SERIES_QUERY,
+        limit: MAX_FEED_ITEMS,
       },
     }),
   });
@@ -198,10 +200,12 @@ ${xmlItems}
 </rss>`;
 }
 
-function feedResponse(xml: string, cache: "HIT" | "MISS") {
+function feedResponse(xml: string, cache: "HIT" | "MISS" | "STALE") {
   return new Response(xml, {
     headers: {
-      "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600",
+      "Cache-Control": cache === "STALE"
+        ? "public, max-age=60, s-maxage=60, stale-while-revalidate=300"
+        : "public, max-age=300, s-maxage=900, stale-while-revalidate=3600",
       "Content-Type": "application/rss+xml; charset=utf-8",
       "X-Cache": cache,
       "X-Content-Type-Options": "nosniff",
@@ -220,9 +224,18 @@ export async function GET() {
     } catch (error) {
       console.warn("[feed.xml] Could not cache the generated RSS feed.", error);
     }
+    try {
+      await kvSet(FEED_STALE_CACHE_KEY, xml, FEED_STALE_CACHE_TTL);
+    } catch (error) {
+      console.warn("[feed.xml] Could not save a stale RSS fallback.", error);
+    }
     return feedResponse(xml, "MISS");
   } catch (error) {
     console.error("[feed.xml] Could not load chapters from Firestore.", error);
+    const stale = await kvGet<string>(FEED_STALE_CACHE_KEY, "text") ??
+      await kvGet<string>(PREVIOUS_FEED_CACHE_KEY, "text");
+    if (stale) return feedResponse(stale, "STALE");
+
     return new Response("RSS feed is temporarily unavailable.", {
       status: 502,
       headers: {
