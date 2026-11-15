@@ -11,6 +11,7 @@ type MangaMetadataEditorProps = {
   editing: boolean;
   busy: boolean;
   coverFileInput: RefObject<HTMLInputElement | null>;
+  showCoverUpload?: boolean;
   onChange: (key: keyof MangaDraft, value: string | boolean) => void;
   onUploadCover: () => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -24,6 +25,7 @@ export default function MangaMetadataEditor({
   editing,
   busy,
   coverFileInput,
+  showCoverUpload = true,
   onChange,
   onUploadCover,
   onSubmit,
@@ -56,16 +58,18 @@ export default function MangaMetadataEditor({
           <span>Cover URL</span>
           <input type="url" value={draft.cover} onChange={(event) => onChange("cover", event.target.value)} />
         </label>
-        <div className={`${styles.field} ${styles.fullWidth}`}>
-          <span>Upload Cover</span>
-          <div className={styles.fileUploadRow}>
-            <input ref={coverFileInput} type="file" accept="image/*" />
-            <button type="button" className={styles.secondaryButton} onClick={onUploadCover} disabled={busy}>Upload Cover</button>
+        {showCoverUpload && (
+          <div className={`${styles.field} ${styles.fullWidth}`}>
+            <span>Upload Cover</span>
+            <div className={styles.fileUploadRow}>
+              <input ref={coverFileInput} type="file" accept="image/*" />
+              <button type="button" className={styles.secondaryButton} onClick={onUploadCover} disabled={busy}>Upload Cover</button>
+            </div>
+            {draft.cover && (
+              <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" optimizePreset="coverAdmin" />
+            )}
           </div>
-          {draft.cover && (
-            <CoverImage className={styles.coverPreview} src={draft.cover} alt="Cover preview" loading="eager" optimizePreset="coverAdmin" />
-          )}
-        </div>
+        )}
         <label className={styles.field}>
           <span>Type</span>
           <select value={draft.type} onChange={(event) => onChange("type", event.target.value)}>

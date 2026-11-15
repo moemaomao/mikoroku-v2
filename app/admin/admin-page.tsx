@@ -2030,8 +2030,7 @@ export default function AdminPage() {
     setChapterEditorOpen(true);
   }
 
-  async function uploadCoverFile() {
-    const file = coverFileInput.current?.files?.[0];
+  async function uploadCoverFile(file = coverFileInput.current?.files?.[0]) {
     if (!file) {
       setUploadNotice({ status: "error", message: "Choose a cover image file first." });
       return;
@@ -2042,11 +2041,11 @@ export default function AdminPage() {
       const url = await uploadToImgBB(file);
       setDraft((current) => ({ ...current, cover: url }));
       setUploadNotice({ status: "success", message: "Cover uploaded successfully." });
-      if (coverFileInput.current) coverFileInput.current.value = "";
     } catch (error) {
       console.error("Failed to upload the cover.", error);
       setUploadNotice({ status: "error", message: `Cover upload failed: ${getErrorMessage(error)}` });
     } finally {
+      if (coverFileInput.current) coverFileInput.current.value = "";
       setBusy(false);
     }
   }
@@ -3090,9 +3089,46 @@ export default function AdminPage() {
           {activeSection === "manga-detail" && selectedManga && (
             <section className={styles.panel}>
               <div className={styles.detailHeader}>
-                {selectedManga.cover ? (
-                  <CoverImage src={selectedManga.cover} alt="" loading="eager" optimizePreset="coverAdmin" />
-                ) : <span className={styles.coverPlaceholder}>M</span>}
+                <div className={styles.detailCoverColumn}>
+                  <div className={styles.detailCoverFrame}>
+                    {(detailTab === "info" ? draft.cover : selectedManga.cover) ? (
+                      <CoverImage
+                        src={detailTab === "info" ? draft.cover : selectedManga.cover}
+                        alt=""
+                        loading="eager"
+                        optimizePreset="coverAdmin"
+                      />
+                    ) : <span className={styles.coverPlaceholder}>M</span>}
+                    {detailTab === "info" && (
+                      <>
+                        <button
+                          type="button"
+                          className={styles.coverEditButton}
+                          aria-label="Change cover"
+                          title="Change cover"
+                          onClick={() => coverFileInput.current?.click()}
+                          disabled={busy}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                        <input
+                          ref={coverFileInput}
+                          className={styles.detailCoverFileInput}
+                          type="file"
+                          accept="image/*"
+                          aria-label="Choose a new cover image"
+                          onChange={() => {
+                            const file = coverFileInput.current?.files?.[0];
+                            if (file) void uploadCoverFile(file);
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
                 <div className={styles.detailMeta}>
                   <div className={styles.detailBadges}>
                     <span>{selectedManga.status}</span>
@@ -3140,6 +3176,7 @@ export default function AdminPage() {
                   editing
                   busy={busy}
                   coverFileInput={coverFileInput}
+                  showCoverUpload={false}
                   onChange={updateDraftField}
                   onUploadCover={() => void uploadCoverFile()}
                   onSubmit={handleSaveManga}

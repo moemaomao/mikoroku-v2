@@ -1196,13 +1196,70 @@
   cursor: wait;
 }
 
-.detailHeader > img,
-.detailHeader > .coverPlaceholder {
-  width: 104px;
-  height: 148px;
-  flex: 0 0 104px;
+.detailCoverColumn {
+  display: flex;
+  width: 160px;
+  flex: 0 0 160px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.detailCoverFrame {
+  position: relative;
+  width: 140px;
+  height: 200px;
+  flex: 0 0 200px;
+}
+
+.detailCoverFrame > img,
+.detailCoverFrame > .coverPlaceholder {
+  display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 9px;
   object-fit: cover;
+}
+
+.coverEditButton {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 8px;
+  color: #f5f7ff;
+  background: rgb(17 18 33 / 82%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.coverEditButton:hover:not(:disabled) {
+  border-color: #6b9bff;
+  background: #394b73;
+}
+
+.coverEditButton:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
+.coverEditButton svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.detailCoverFileInput {
+  display: none;
 }
 
 .detailMeta {
@@ -2687,11 +2744,14 @@
     padding: 8px 9px 9px;
   }
 
-  .detailHeader > img,
-  .detailHeader > .coverPlaceholder {
-    width: 72px;
-    height: 102px;
-    flex-basis: 72px;
+  .detailCoverFrame {
+    width: 100px;
+    height: 140px;
+    flex-basis: 140px;
+  }
+
+  .detailCoverColumn {
+    align-self: center;
   }
 
   .detailMeta h2 {
