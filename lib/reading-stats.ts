@@ -27,7 +27,7 @@ type StatsQuery = {
 
 type StatsDocumentReference = {
   collection: (name: string) => StatsCollection;
-  get: () => Promise<StatsDocumentSnapshot>;
+  get: (options?: { source?: "default" | "server" | "cache" }) => Promise<StatsDocumentSnapshot>;
   set: (data: Record<string, unknown>, options?: { merge?: boolean }) => Promise<void>;
   onSnapshot?: (
     onNext: (snapshot: StatsDocumentSnapshot) => void,
@@ -550,7 +550,7 @@ function parseProgressItem(value: unknown): ReadingProgressItem | null {
 export async function loadPublicReadingStats(uid: string): Promise<PublicReadingStats> {
   const firestore = await waitForFirestore();
   const userReference = firestore.collection("userStats").doc(uid);
-  const profileSnapshotPromise = userReference.get();
+  const profileSnapshotPromise = userReference.get({ source: "server" });
   const commentSnapshotPromise = (async () => {
     try {
       if (typeof firestore.collectionGroup !== "function") {
