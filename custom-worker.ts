@@ -54,6 +54,44 @@ const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
 const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_DETAIL_CACHE_CONTROL =
   "public, max-age=60, s-maxage=600, stale-while-revalidate=3600";
+const FIRESTORE_MANGA_CATALOG_CACHE_KEY = "catalog:firestore:manga:v1";
+const FIRESTORE_MANGA_CATALOG_CACHE_TTL = 7 * 24 * 60 * 60;
+const FIRESTORE_MANGA_CATALOG_FRESH_TTL = 6 * 60 * 60 * 1000;
+const FIRESTORE_MANGA_CATALOG_PAGE_SIZE = 500;
+const FIRESTORE_MANGA_CATALOG_FIELDS = [
+  "title",
+  "name",
+  "slug",
+  "cover",
+  "img",
+  "genres",
+  "rating",
+  "status",
+  "type",
+  "altTitle",
+  "author",
+  "artist",
+  "publication",
+  "serialization",
+  "demographic",
+  "circle",
+  "group",
+  "femaleTags",
+  "maleTags",
+  "coverUpdatedAt",
+  "nsfw",
+  "updatedAt",
+  "latestUpdate",
+  "lastChapter",
+  "lastChapterUpdated",
+  "chapterCount",
+  "managedByAdmin",
+  "source",
+  "origin",
+  "githubSlug",
+  "isDraft",
+  "commissionEnabled",
+] as const;
 const FIREBASE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FIRESTORE_DOCUMENTS_URL =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
@@ -66,6 +104,10 @@ type FirebaseAccessToken = {
 
 let firebaseAccessToken: FirebaseAccessToken | null = null;
 let firebaseAccessTokenPromise: Promise<string> | null = null;
+const firestoreMangaCatalogRefreshes = new Map<
+  string,
+  Promise<{ items: Record<string, unknown>[]; nextPageToken: string | null }>
+>();
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -518,6 +560,168 @@ async function fetchMangaDetailFromFirestore(
   };
 }
 
+async function fetchFirestoreMangaCatalog(
+  env: CloudflareEnv,
+  pageToken: string,
+): Promise<{ items: Record<string, unknown>[]; nextPageToken: string | null }> {
+  const token = await createFirebaseAccessToken(env);
+  const endpoint = new URL(`${FIRESTORE_DOCUMENTS_URL}/manga`);
+  endpoint.searchParams.set("pageSize", String(FIRESTORE_MANGA_CATALOG_PAGE_SIZE));
+  if (pageToken) endpoint.searchParams.set("pageToken", pageToken);
+  for (const fieldPath of FIRESTORE_MANGA_CATALOG_FIELDS) {
+    endpoint.searchParams.append("mask.fieldPaths", fieldPath);
+  }
+
+  const response = await fetchUpstream(endpoint.toString(), {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Firestore manga catalog returned HTTP ${response.status}.`);
+  }
+
+  const page = await response.json() as {
+    documents?: Array<{
+      name?: string;
+      fields?: Record<string, FirestoreRestValue>;
+    }>;
+    nextPageToken?: string;
+  };
+  const items = (page.documents || []).flatMap((document) => {
+    const slug = document.name?.slice(document.name.lastIndexOf("/") + 1);
+    if (!slug) return [];
+    const fields = Object.fromEntries(
+      Object.entries(document.fields || {}).map(([key, value]) => [
+        key,
+        decodeFirestoreRestValue(value),
+      ]),
+    );
+    return [{ ...fields, slug }];
+  });
+  return { items, nextPageToken: page.nextPageToken || null };
+}
+
+async function fetchAndCacheFirestoreMangaCatalog(
+  env: CloudflareEnv,
+  kv: KVNamespace | undefined,
+  cacheKey: string,
+  pageToken: string,
+): Promise<{ items: Record<string, unknown>[]; nextPageToken: string | null }> {
+  const existing = firestoreMangaCatalogRefreshes.get(cacheKey);
+  if (existing) return existing;
+  const pending = (async () => {
+    const data = await fetchFirestoreMangaCatalog(env, pageToken);
+    if (kv) {
+      try {
+        await kv.put(
+          cacheKey,
+          JSON.stringify({ cachedAt: Date.now(), data }),
+          { expirationTtl: FIRESTORE_MANGA_CATALOG_CACHE_TTL },
+        );
+      } catch (error) {
+        console.warn("[worker manga-catalog-firestore] KV put failed", error);
+      }
+    }
+    return data;
+  })();
+  firestoreMangaCatalogRefreshes.set(cacheKey, pending);
+  try {
+    return await pending;
+  } finally {
+    if (firestoreMangaCatalogRefreshes.get(cacheKey) === pending) {
+      firestoreMangaCatalogRefreshes.delete(cacheKey);
+    }
+  }
+}
+
+function firestoreMangaCatalogResponse(
+  data: { items: Record<string, unknown>[]; nextPageToken: string | null },
+  cacheStatus: "HIT" | "STALE" | "MISS" | "BYPASS",
+): Response {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": cacheStatus === "STALE"
+        ? "public, max-age=30, s-maxage=60, stale-while-revalidate=300"
+        : "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+      "x-cache": cacheStatus,
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+async function handleFirestoreMangaCatalogProxy(
+  request: Request,
+  env: CloudflareEnv,
+  ctx: ExecutionContext,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/catalog/firestore") return null;
+  if (request.method !== "GET") {
+    return mangaDetailResponse({ error: "Method not allowed" }, "BYPASS", 405);
+  }
+
+  const pageToken = url.searchParams.get("cursor") || "";
+  if (pageToken.length > 300) {
+    return mangaDetailResponse({ error: "Cursor tidak valid." }, "BYPASS", 400);
+  }
+
+  const kv = getCacheKv(env);
+  const cacheKey = `${FIRESTORE_MANGA_CATALOG_CACHE_KEY}:${pageToken || "first"}`;
+  let cached: {
+    cachedAt?: number;
+    data?: { items?: Record<string, unknown>[]; nextPageToken?: string | null };
+  } | null = null;
+  if (kv) {
+    try {
+      const value = await kv.get(cacheKey, "json");
+      if (
+        value &&
+        typeof value === "object" &&
+        Array.isArray(value.data?.items)
+      ) {
+        cached = value as typeof cached;
+      }
+    } catch (error) {
+      console.warn("[worker manga-catalog-firestore] KV get failed", error);
+    }
+  }
+
+  if (cached) {
+    const cachedAt = Number(cached.cachedAt);
+    if (
+      Number.isFinite(cachedAt) &&
+      Date.now() - cachedAt <= FIRESTORE_MANGA_CATALOG_FRESH_TTL
+    ) {
+      return firestoreMangaCatalogResponse(cached.data, "HIT");
+    }
+    ctx.waitUntil(
+      fetchAndCacheFirestoreMangaCatalog(env, kv, cacheKey, pageToken).catch((error: unknown) => {
+        console.error("[worker manga-catalog-firestore] background refresh failed", error);
+      }),
+    );
+    return firestoreMangaCatalogResponse(cached.data, "STALE");
+  }
+
+  try {
+    const data = await fetchAndCacheFirestoreMangaCatalog(env, kv, cacheKey, pageToken);
+    return firestoreMangaCatalogResponse(data, kv ? "MISS" : "BYPASS");
+  } catch (error) {
+    console.error("[worker manga-catalog-firestore] Firestore fetch failed", error);
+    return new Response(
+      JSON.stringify({ error: "Firestore manga catalog is temporarily unavailable." }),
+      {
+        status: 502,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json; charset=utf-8",
+          "x-cache": kv ? "MISS" : "BYPASS",
+          "x-content-type-options": "nosniff",
+        },
+      },
+    );
+  }
+}
+
 function mangaDetailResponse(
   body: unknown,
   cacheStatus: "HIT" | "STALE" | "MISS" | "BYPASS",
@@ -957,6 +1161,8 @@ export default {
       }
     }
 
+    const firestoreCatalog = await handleFirestoreMangaCatalogProxy(request, env, ctx);
+    if (firestoreCatalog) return firestoreCatalog;
     const catalog = await handleMangaCatalogProxy(request, env, ctx);
     if (catalog) return catalog;
     const mangaDetail = await handleMangaDetailProxy(request, env, ctx);

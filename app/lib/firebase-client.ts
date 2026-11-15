@@ -23,16 +23,19 @@ import {
   serverTimestamp,
   terminate,
   where,
-  getDocsFromServer,
 } from "firebase/firestore";
-import type { Firestore, QuerySnapshot, DocumentData } from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
 import { firebaseConfig } from "../../lib/firebase-config";
 
 const FIREBASE_APP_NAME = "mikoroku-catalog";
 type FirebaseClient = { app: FirebaseApp; db: Database; firestore: Firestore };
 let initializedClient: FirebaseClient | undefined;
-let mangaCatalogPromise: Promise<QuerySnapshot<DocumentData>> | undefined;
+type FirestoreMangaCatalogRecord = Record<string, unknown> & { slug: string };
+const MANGA_CATALOG_MEMORY_TTL = 10 * 60 * 1000;
+let mangaCatalogData: FirestoreMangaCatalogRecord[] | undefined;
+let mangaCatalogLoadedAt = 0;
+let mangaCatalogPromise: Promise<FirestoreMangaCatalogRecord[]> | undefined;
 let persistentCacheEnabled = false;
 
 export function initializeFirebaseClient(): FirebaseClient {
@@ -107,18 +110,96 @@ export function initializeFirebaseClient(): FirebaseClient {
   return initializedClient;
 }
 
-export function loadFirestoreMangaCatalog(): Promise<QuerySnapshot<DocumentData>> {
-  const { firestore } = initializeFirebaseClient();
+export function loadFirestoreMangaCatalog(): Promise<FirestoreMangaCatalogRecord[]> {
+  if (mangaCatalogData && Date.now() - mangaCatalogLoadedAt < MANGA_CATALOG_MEMORY_TTL) {
+    return Promise.resolve(mangaCatalogData);
+  }
   if (!mangaCatalogPromise) {
-    const request = getDocsFromServer(collection(firestore, "manga"));
-    const inFlightRequest = request.finally(() => {
-      if (mangaCatalogPromise === inFlightRequest) {
-        mangaCatalogPromise = undefined;
+    const request = (async () => {
+      const records: FirestoreMangaCatalogRecord[] = [];
+      const seenCursors = new Set<string>();
+      let cursor = "";
+      for (let page = 0; page < 40; page += 1) {
+        const path = cursor
+          ? `/api/catalog/firestore?cursor=${encodeURIComponent(cursor)}`
+          : "/api/catalog/firestore";
+        const response = await fetch(path, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error(`Firestore manga catalog returned HTTP ${response.status}.`);
+        }
+        const payload: unknown = await response.json();
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+          throw new Error("Firestore manga catalog response must be an object.");
+        }
+        const pageData = payload as {
+          items?: unknown;
+          nextPageToken?: unknown;
+        };
+        if (!Array.isArray(pageData.items)) {
+          throw new Error("Firestore manga catalog page must contain an items array.");
+        }
+        records.push(
+          ...pageData.items.filter(
+            (record): record is FirestoreMangaCatalogRecord =>
+              typeof record === "object" &&
+              record !== null &&
+              !Array.isArray(record) &&
+              typeof record.slug === "string" &&
+              record.slug.length > 0,
+          ),
+        );
+
+        if (pageData.nextPageToken == null || pageData.nextPageToken === "") {
+          cursor = "";
+          break;
+        }
+        if (typeof pageData.nextPageToken !== "string" || seenCursors.has(pageData.nextPageToken)) {
+          throw new Error("Firestore manga catalog returned an invalid pagination cursor.");
+        }
+        cursor = pageData.nextPageToken;
+        seenCursors.add(cursor);
       }
+      if (cursor) {
+        throw new Error("Firestore manga catalog exceeded the 20,000-document safety limit.");
+      }
+      mangaCatalogData = records;
+      mangaCatalogLoadedAt = Date.now();
+      return records;
+    })().catch((error: unknown) => {
+      if (mangaCatalogData) {
+        console.warn("Firestore manga catalog refresh failed; using its in-memory copy.", error);
+        return mangaCatalogData;
+      }
+      throw error;
     });
-    mangaCatalogPromise = inFlightRequest;
+    mangaCatalogPromise = request;
+    void request.finally(() => {
+      if (mangaCatalogPromise === request) mangaCatalogPromise = undefined;
+    }).catch(() => undefined);
   }
   return mangaCatalogPromise;
+}
+
+export async function loadFirestoreMangaDetail(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown> | null> {
+  const response = await fetch(`/api/manga/${encodeURIComponent(slug)}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Manga detail proxy returned HTTP ${response.status}.`);
+  }
+  const data: unknown = await response.json();
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Manga detail proxy response must be an object.");
+  }
+  return data as Record<string, unknown>;
 }
 
 export async function clearFirestoreOfflineCache(): Promise<void> {

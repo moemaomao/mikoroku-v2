@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { initializeFirebaseClient } from "./lib/firebase-client";
+import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 
 type MangaMetadata = Record<string, unknown> & {
   slug: string;
@@ -94,25 +93,23 @@ async function loadGithubData() {
 }
 
 async function loadFirestoreData(): Promise<void> {
-  const { firestore } = initializeFirebaseClient();
-  const snapshot = await getDocs(collection(firestore, "manga"));
+  const records = await loadFirestoreMangaCatalog();
   const data = window.mangaData || (window.mangaData = {});
-  snapshot.forEach((document) => {
-    const record = document.data();
-    if (record.isDraft === true || typeof record.title !== "string") return;
+  for (const record of records) {
+    if (record.isDraft === true || typeof record.title !== "string") continue;
     const manga: MangaMetadata = {
       ...record,
-      slug: document.id,
+      slug: record.slug,
       img: String(record.cover || record.img || ""),
       cover: String(record.cover || record.img || ""),
       title: record.title,
       firestore: true,
     };
     const key = normalizeTitle(manga.title);
-    if (!key) return;
+    if (!key) continue;
     data[key] = manga;
-    data[document.id] = manga;
-  });
+    data[record.slug] = manga;
+  }
 }
 
 async function initializeMangaData() {
@@ -130,12 +127,7 @@ async function initializeMangaData() {
   try {
     await loadFirestoreData();
   } catch (error) {
-    console.error("Firestore manga dataset failed to load; retrying shortly.", error);
-    window.setTimeout(() => {
-      void loadFirestoreData()
-        .then(() => window.dispatchEvent(new Event("mangaDataReady")))
-        .catch((retryError: unknown) => console.error("Firestore manga dataset retry failed.", retryError));
-    }, 5000);
+    console.error("Firestore manga catalog proxy failed to load.", error);
   }
   window.dispatchEvent(new Event("mangaDataReady"));
 }

@@ -125,6 +125,12 @@ npm install
 npm run dev
 ```
 
+During local development, the Firestore manga catalog and detail API requests
+are proxied to `https://mikoroku.top`, where the Cloudflare Worker handles KV
+caching and Firestore access. Deploy the Worker API changes before testing these
+pages locally. To use another Worker origin, set `MANGA_PROXY_ORIGIN` before
+starting the dev server. Restart `npm run dev` after changing this setting.
+
 Untuk live preview widget komentar, jalankan:
 
 ```bash
@@ -199,9 +205,11 @@ without inflating the custom-element loader.
    Do not add these credentials to `wrangler.jsonc` or commit them. The manga
    detail proxy at `/api/manga/{slug}` uses these secrets to read Firestore and
    caches decoded manga documents in `MIKOROKU_V2_CACHE` (fresh for 10 minutes,
-   retained for up to 7 days). Stale values are returned while a background
-   refresh runs. Add the same secrets to the local Worker environment when
-   testing this endpoint with Wrangler.
+   retained for up to 7 days). Public catalog metadata is served through
+   `/api/catalog/firestore`, using a field-limited Firestore read and a KV cache
+   that stays fresh for 6 hours and retains stale data for up to 7 days. Stale
+   values are returned while a background refresh runs. Add the same secrets to
+   the local Worker environment when testing these endpoints with Wrangler.
 
 3. Preview locally (OpenNext + Workers):
    ```bash

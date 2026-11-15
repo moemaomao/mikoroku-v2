@@ -4,6 +4,22 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 initOpenNextCloudflareForDev({ configPath: "wrangler.jsonc" });
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    if (process.env.NODE_ENV !== "development") return [];
+
+    const mangaProxyOrigin = (process.env.MANGA_PROXY_ORIGIN || "https://mikoroku.top")
+      .replace(/\/+$/, "");
+    return [
+      {
+        source: "/api/catalog/firestore",
+        destination: `${mangaProxyOrigin}/api/catalog/firestore`,
+      },
+      {
+        source: "/api/manga/:slug",
+        destination: `${mangaProxyOrigin}/api/manga/:slug`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

@@ -18,7 +18,11 @@ import {
   readCachedReaderData,
   writeCachedReaderData,
 } from "../lib/reader-data-cache";
-import { initializeFirebaseClient } from "../lib/firebase-client";
+import {
+  initializeFirebaseClient,
+  loadFirestoreMangaCatalog,
+  loadFirestoreMangaDetail,
+} from "../lib/firebase-client";
 import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
 type ReaderKind = "manga" | "novel";
@@ -630,20 +634,15 @@ async function findFirestoreSeriesSlug(
   slug: string,
   signal: AbortSignal,
 ): Promise<string> {
-  await waitForReaderFirestore(signal);
-  if (!window.firestore || !window.fs?.collection || !window.fs.getDocs) {
-    throw new Error("The Firebase Firestore series-list API is unavailable.");
-  }
-
-  const snapshot = await window.fs.getDocs(window.fs.collection(window.firestore, "manga"));
+  const records = await loadFirestoreMangaCatalog();
+  if (signal.aborted) throw new DOMException("Manga catalog request was cancelled.", "AbortError");
   const matches: string[] = [];
-  snapshot.forEach((document) => {
-    const data = document.data();
+  records.forEach((data) => {
     if (
-      differsByAtMostOneCharacter(slug, document.id) ||
+      differsByAtMostOneCharacter(slug, data.slug) ||
       differsByAtMostOneCharacter(slug, String(data.title || ""))
     ) {
-      matches.push(document.id);
+      matches.push(data.slug);
     }
   });
   return matches.length === 1 ? matches[0] : slug;
@@ -755,6 +754,17 @@ async function getBloggerChapterImages(
 }
 
 async function getFirestoreDocument(path: string, signal: AbortSignal): Promise<Record<string, unknown> | null> {
+  const segments = path.split("/");
+  if (segments.length === 2 && segments[0] === "manga") {
+    let slug: string;
+    try {
+      slug = decodeURIComponent(segments[1]);
+    } catch {
+      throw new Error("The Firestore manga slug is invalid.");
+    }
+    return loadFirestoreMangaDetail(slug, signal);
+  }
+
   await waitForReaderFirestore(signal);
   if (!window.firestore || !window.fs?.doc || !window.fs.getDoc) {
     throw new Error("Firebase Firestore SDK is unavailable.");
@@ -793,11 +803,8 @@ async function getReaderChapterDocuments(
     if (!window.fs.doc || !window.fs.getDoc) {
       throw new Error("The Firebase Firestore series-document API is unavailable.");
     }
-    const seriesSnapshot = await window.fs.getDoc(
-      window.fs.doc(window.firestore, "manga", slug),
-    );
-    if (!seriesSnapshot.exists()) return [];
-    const manga = seriesSnapshot.data();
+    const manga = await loadFirestoreMangaDetail(slug, signal);
+    if (!manga) return [];
     const chapterMap: Record<string, unknown> = {};
     for (const field of [manga.chapters, manga.chapter]) {
       if (field && typeof field === "object" && !Array.isArray(field)) {
