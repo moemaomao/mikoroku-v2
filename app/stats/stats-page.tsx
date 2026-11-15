@@ -1205,7 +1205,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                 </button>
               </>
             )}
-            <div className={`relative z-10 flex items-start gap-3 sm:items-center sm:gap-4 ${isOwner ? "pt-9 pr-1 sm:pt-0 sm:pr-24" : ""}`}>
+            <div className={`relative z-10 flex items-start gap-3 sm:gap-4 ${isOwner ? "pr-1 sm:pr-24" : ""}`}>
               <img
                 src={avatar}
                 alt=""
