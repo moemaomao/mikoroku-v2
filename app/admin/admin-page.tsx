@@ -843,6 +843,109 @@ function mergeGithubMetadata(
   return [...merged.values()].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
+function toGithubFirestoreData(manga: MangaRecord): Record<string, unknown> {
+  const updatedAt = manga.updatedAt || 0;
+  const metadata = {
+    altTitle: manga.altTitle,
+    desc: manga.desc,
+    type: manga.type,
+    commissionEnabled: manga.commissionEnabled === true,
+    nsfw: manga.nsfw === true,
+    status: manga.status,
+    author: manga.author,
+    artist: manga.artist,
+    circle: manga.circle,
+    group: manga.group,
+    series: manga.series,
+    serialization: manga.serialization,
+    publication: manga.publication,
+    genres: manga.genres,
+    demographic: manga.demographic,
+    femaleTags: manga.femaleTags,
+    maleTags: manga.maleTags,
+    tags: manga.tags,
+    characters: manga.characters,
+    rating: manga.rating,
+  };
+  return {
+    ...manga,
+    cover: manga.cover,
+    covers: manga.covers || (manga.cover ? [manga.cover] : []),
+    coverNumbers: manga.coverNumbers || {},
+    metadataUpdatedAt: Date.now(),
+    ...metadata,
+    metadata,
+    managedByAdmin: false,
+    origin: "github",
+    source: "hybrid",
+    githubSlug: manga.githubSlug || manga.slug,
+    updatedAt,
+    latestUpdate: updatedAt,
+  };
+}
+
+async function syncGithubCatalogToFirestore(
+  firestore: Firestore,
+  githubManga: MangaRecord[],
+  currentSummary: MangaRecord[],
+): Promise<{ added: MangaRecord[]; summaryUpdated: boolean; summaryWarning: string }> {
+  const snapshot = await getDocs(collection(firestore, "manga"));
+  const existing = new Map<string, MangaRecord>();
+  const tombstones = new Set<string>();
+  for (const mangaDoc of snapshot.docs) {
+    const data = mangaDoc.data();
+    if (data.isCatalogTombstone === true) {
+      if (typeof data.deletedSlug === "string") tombstones.add(data.deletedSlug);
+      continue;
+    }
+    existing.set(mangaDoc.id, fromFirestore(mangaDoc.id, data));
+  }
+
+  const missing = githubManga.filter(
+    (item) => !existing.has(item.slug) && !tombstones.has(item.slug),
+  );
+  const added: MangaRecord[] = [];
+  for (let start = 0; start < missing.length; start += 450) {
+    const batch = writeBatch(firestore);
+    for (const item of missing.slice(start, start + 450)) {
+      const data = toGithubFirestoreData(item);
+      batch.set(doc(firestore, "manga", item.slug), data);
+      added.push(fromFirestore(item.slug, data));
+    }
+    await batch.commit();
+  }
+
+  const allManga = mergeGithubMetadata(
+    githubManga.filter((item) => !tombstones.has(item.slug)),
+    [...existing.values(), ...added],
+  );
+  const entries = allManga
+    .map(toSummaryEntry)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  const currentSummarySlugs = new Set(currentSummary.map((item) => item.slug));
+  const summaryNeedsUpdate =
+    currentSummarySlugs.size !== entries.length ||
+    entries.some((entry) => !currentSummarySlugs.has(entry.slug));
+
+  let summaryUpdated = false;
+  let summaryWarning = "";
+  if (added.length || summaryNeedsUpdate) {
+    try {
+      await setDoc(
+        doc(firestore, "meta", "mangaSummary"),
+        { list: entries, count: entries.length, updatedAt: Date.now() },
+        { merge: true },
+      );
+      summaryUpdated = true;
+    } catch (error) {
+      console.error("Manga JSON was synced, but the Firestore summary could not be updated.", error);
+      summaryWarning = `New manga were synced, but the summary could not be updated: ${getErrorMessage(error)}`;
+    }
+  }
+
+  return { added, summaryUpdated, summaryWarning };
+}
+
 export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -855,6 +958,7 @@ export default function AdminPage() {
   const [loadingManga, setLoadingManga] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [warning, setWarning] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
   const [queryText, setQueryText] = useState("");
   const [activeSection, setActiveSection] = useState<
     "dashboard" | "manga-list" | "editor" | "manga-detail" | "reports" | "announcements" | "genres" | "advertisements" | "settings" | "og-cover"
@@ -961,19 +1065,21 @@ export default function AdminPage() {
   const loadManga = useCallback(async (force = false) => {
     if (loadingMangaRef.current) return;
     const cached = readAdminMangaCache();
-    if (!force && cached && Date.now() - cached.time < ADMIN_MANGA_CACHE_DURATION) {
+    const hasFreshCache =
+      !force && Boolean(cached && Date.now() - cached.time < ADMIN_MANGA_CACHE_DURATION);
+    if (hasFreshCache && cached) {
       setManga(cached.items);
       setCatalogFromCache(true);
       setLoadError("");
       setWarning("");
-      return;
     }
 
     loadingMangaRef.current = true;
-    setLoadingManga(true);
-    setCatalogFromCache(false);
+    if (!hasFreshCache) setLoadingManga(true);
+    setCatalogFromCache(hasFreshCache);
     setLoadError("");
     setWarning("");
+    setSyncStatus("Checking manga.json sync...");
     try {
       const { firestore } = getAdminFirebase();
       const [summaryResult, githubResult] = await Promise.allSettled([
@@ -1016,6 +1122,33 @@ export default function AdminPage() {
       if (githubResult.status === "rejected") {
         console.warn("Failed to load the GitHub manga catalog.", githubResult.reason);
       }
+      let syncedManga: MangaRecord[] = [];
+      let syncWarning = "";
+      if (githubManga.length) {
+        setSyncStatus("Syncing manga.json to Firestore...");
+        try {
+          const syncResult = await syncGithubCatalogToFirestore(
+            firestore,
+            githubManga,
+            firestoreManga,
+          );
+          syncedManga = syncResult.added;
+          syncWarning = syncResult.summaryWarning;
+          setSyncStatus(
+            syncedManga.length
+              ? `Synced ${syncedManga.length} new manga to Firestore.`
+              : syncResult.summaryUpdated
+                ? "Firestore manga summary was synchronized."
+                : "manga.json is already synced to Firestore.",
+          );
+          if (syncResult.summaryUpdated) summaryWarning = "";
+        } catch (error) {
+          console.error("Automatic manga.json sync failed.", error);
+          setSyncStatus(`Automatic manga.json sync failed: ${getErrorMessage(error)}`);
+        }
+      } else {
+        setSyncStatus("Automatic manga.json sync skipped because the catalog could not be loaded.");
+      }
       if (!githubManga.length && !firestoreManga.length) {
         if (cached?.items.length) {
           setManga(cached.items);
@@ -1033,16 +1166,17 @@ export default function AdminPage() {
         );
       }
 
-      const loadedManga = mergeGithubMetadata(githubManga, firestoreManga);
+      const loadedManga = mergeGithubMetadata(githubManga, [...firestoreManga, ...syncedManga]);
       setManga(loadedManga);
       setCatalogFromCache(false);
       writeAdminMangaCache(loadedManga);
       const githubWarning = githubResult.status === "rejected"
         ? `GitHub data unavailable: ${getErrorMessage(githubResult.reason)}.`
         : "";
-      setWarning([summaryWarning, githubWarning].filter(Boolean).join(" "));
+      setWarning([summaryWarning, githubWarning, syncWarning].filter(Boolean).join(" "));
     } catch (error) {
       console.error("Failed to load the admin manga list.", error);
+      setSyncStatus(`Automatic manga.json sync could not run: ${getErrorMessage(error)}`);
       if (cached?.items.length) {
         setManga(cached.items);
         setCatalogFromCache(true);
@@ -1178,12 +1312,6 @@ export default function AdminPage() {
     try {
       const { firestore } = getAdminFirebase();
       const snapshot = await getDocFromServer(doc(firestore, "manga", item.slug));
-      if (
-        !snapshot.exists() &&
-        (item.source === "hybrid" || item.source === "firestore" || item.origin === "firestore" || item.managedByAdmin)
-      ) {
-        throw new Error(`Firestore document not found for "${item.slug}".`);
-      }
       const savedManga = snapshot.exists()
         ? mergeGithubMetadata([item], [fromFirestore(item.slug, snapshot.data())])[0] || item
         : item;
@@ -2866,6 +2994,7 @@ export default function AdminPage() {
         <div className={styles.content}>
           
           {warning && <p className={styles.warning}>{warning}</p>}
+          {syncStatus && <p className={styles.warning}>{syncStatus}</p>}
           {loadError && (
             <div className={styles.errorBanner}>
               <span>{loadError}</span>
