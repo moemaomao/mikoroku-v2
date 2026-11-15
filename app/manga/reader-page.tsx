@@ -18,8 +18,7 @@ import {
   readCachedReaderData,
   writeCachedReaderData,
 } from "../lib/reader-data-cache";
-import { initializeFirebaseClient } from "../lib/firebase-client";
-import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
+import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
 type ReaderKind = "manga" | "novel";
@@ -695,7 +694,8 @@ async function loadMangaMetadataFromDataset(
   slug: string,
   signal: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
-  const { manga: entries } = await fetchMangaMetadataPayload({ signal });
+  const entries = await loadFirestoreMangaCatalog();
+  if (signal.aborted) return null;
   return entries.find((entry) =>
     String(entry.slug || "") === slug ||
     normalizedSearchKey(String(entry.title || "")) === normalizedSearchKey(slug),

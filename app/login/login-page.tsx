@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
+import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import styles from "./login.module.css";
 
 type CompatAuth = {
@@ -124,8 +124,9 @@ export default function LoginPage() {
   useEffect(() => {
     const controller = new AbortController();
 
-    void fetchMangaMetadataPayload({ signal: controller.signal })
-      .then(({ manga: items }) => {
+    void loadFirestoreMangaCatalog()
+      .then((items) => {
+        if (controller.signal.aborted) return;
         const seen = new Set<string>();
         const allCovers: LoginCover[] = [];
 

@@ -28,6 +28,7 @@ import {
 import type { Firestore } from "firebase/firestore";
 import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
 import {
+  MANGA_METADATA_CACHE_UPDATED_EVENT,
   fetchMangaMetadataPayload,
   MANGA_METADATA_UPDATED_EVENT,
   type MangaMetadataPayload,
@@ -70,6 +71,7 @@ function invalidateMangaCatalogCache(): void {
 
 if (typeof window !== "undefined") {
   window.addEventListener(MANGA_METADATA_UPDATED_EVENT, invalidateMangaCatalogCache);
+  window.addEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, invalidateMangaCatalogCache);
 }
 
 export function initializeFirebaseClient(): FirebaseClient {

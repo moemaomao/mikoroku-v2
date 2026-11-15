@@ -4,6 +4,7 @@ export type MangaMetadataPayload = Record<string, unknown> & {
 };
 
 export const MANGA_METADATA_UPDATED_EVENT = "mikoroku:manga-metadata-updated";
+export const MANGA_METADATA_CACHE_UPDATED_EVENT = "mikoroku:manga-metadata-cache-updated";
 export const MANGA_METADATA_UPDATED_STORAGE_KEY = "mikoroku_manga_metadata_updated_at";
 
 type FetchMangaMetadataOptions = {
@@ -15,14 +16,128 @@ const MANGA_METADATA_URL = "/catalog/metadata.json";
 const SHARED_MANGA_METADATA_URL = "/api/catalog/metadata";
 export const MANGA_METADATA_SOURCE_PATH = ["meta", "mangaMetadataCatalog"] as const;
 const FIRESTORE_METADATA_MEMORY_TTL = 60 * 1000;
+const MANGA_METADATA_CACHE_DB = "mikoroku-manga-metadata-cache";
+const MANGA_METADATA_CACHE_STORE = "payloads";
+const MANGA_METADATA_CACHE_KEY = "active";
+const MANGA_METADATA_REVALIDATE_AFTER = 10 * 60 * 1000;
+
+type CachedMangaMetadataPayload = {
+  key: string;
+  cachedAt: number;
+  payload: MangaMetadataPayload;
+};
 
 let firestoreMetadataCache: {
   payload: MangaMetadataPayload;
   loadedAt: number;
 } | null = null;
+let mangaMetadataCache: CachedMangaMetadataPayload | null = null;
+let mangaMetadataDatabase: Promise<IDBDatabase> | null = null;
+let mangaMetadataRefresh: Promise<void> | null = null;
+let mangaMetadataCacheGeneration = 0;
+
+function openMangaMetadataCache(): Promise<IDBDatabase> {
+  if (typeof window === "undefined" || !("indexedDB" in window)) {
+    return Promise.reject(new Error("IndexedDB is unavailable in this browser."));
+  }
+  if (mangaMetadataDatabase) return mangaMetadataDatabase;
+
+  const databasePromise = new Promise<IDBDatabase>((resolve, reject) => {
+    const request = window.indexedDB.open(MANGA_METADATA_CACHE_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(MANGA_METADATA_CACHE_STORE)) {
+        request.result.createObjectStore(MANGA_METADATA_CACHE_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => {
+      request.result.onversionchange = () => {
+        request.result.close();
+        mangaMetadataDatabase = null;
+      };
+      resolve(request.result);
+    };
+    request.onerror = () => reject(request.error ?? new Error("Could not open manga metadata cache."));
+    request.onblocked = () => reject(new Error("Manga metadata cache is blocked by another browser tab."));
+  }).catch((error: unknown) => {
+    mangaMetadataDatabase = null;
+    throw error;
+  });
+  mangaMetadataDatabase = databasePromise;
+  return databasePromise;
+}
+
+async function readMangaMetadataCache(): Promise<CachedMangaMetadataPayload | null> {
+  if (mangaMetadataCache) return mangaMetadataCache;
+  if (typeof window === "undefined" || !("indexedDB" in window)) return null;
+
+  const database = await openMangaMetadataCache();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(MANGA_METADATA_CACHE_STORE, "readonly");
+    const request = transaction.objectStore(MANGA_METADATA_CACHE_STORE).get(MANGA_METADATA_CACHE_KEY);
+    let cached: CachedMangaMetadataPayload | null = null;
+    request.onsuccess = () => {
+      const entry = request.result as CachedMangaMetadataPayload | undefined;
+      if (!entry?.payload || typeof entry.cachedAt !== "number") return;
+      try {
+        cached = {
+          key: MANGA_METADATA_CACHE_KEY,
+          cachedAt: entry.cachedAt,
+          payload: parseMangaMetadataPayload(entry.payload),
+        };
+        mangaMetadataCache = cached;
+      } catch (error) {
+        console.warn("Cached manga metadata is invalid and will be ignored.", error);
+      }
+    };
+    request.onerror = () => transaction.abort();
+    transaction.oncomplete = () => resolve(cached);
+    transaction.onerror = () => reject(transaction.error ?? request.error ?? new Error("Could not read manga metadata cache."));
+    transaction.onabort = () => reject(transaction.error ?? request.error ?? new Error("Reading manga metadata cache was aborted."));
+  });
+}
+
+async function writeMangaMetadataCache(payload: MangaMetadataPayload): Promise<void> {
+  const entry: CachedMangaMetadataPayload = {
+    key: MANGA_METADATA_CACHE_KEY,
+    cachedAt: Date.now(),
+    payload,
+  };
+  mangaMetadataCache = entry;
+  if (typeof window === "undefined" || !("indexedDB" in window)) return;
+
+  const database = await openMangaMetadataCache();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(MANGA_METADATA_CACHE_STORE, "readwrite");
+    transaction.objectStore(MANGA_METADATA_CACHE_STORE).put(entry);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error("Could not save manga metadata cache."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Saving manga metadata cache was aborted."));
+  });
+}
+
+export async function readCachedMangaMetadataPayload(): Promise<MangaMetadataPayload | null> {
+  return (await readMangaMetadataCache())?.payload || null;
+}
+
+export async function clearMangaMetadataCache(): Promise<void> {
+  mangaMetadataCache = null;
+  mangaMetadataCacheGeneration += 1;
+  if (typeof window === "undefined" || !("indexedDB" in window)) return;
+
+  const database = await openMangaMetadataCache();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(MANGA_METADATA_CACHE_STORE, "readwrite");
+    transaction.objectStore(MANGA_METADATA_CACHE_STORE).clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error("Could not clear manga metadata cache."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Clearing manga metadata cache was aborted."));
+  });
+}
 
 export function notifyMangaMetadataUpdated(): void {
   firestoreMetadataCache = null;
+  mangaMetadataCache = null;
+  mangaMetadataCacheGeneration += 1;
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(MANGA_METADATA_UPDATED_STORAGE_KEY, String(Date.now()));
@@ -36,6 +151,8 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
     if (event.key !== MANGA_METADATA_UPDATED_STORAGE_KEY) return;
     firestoreMetadataCache = null;
+    mangaMetadataCache = null;
+    mangaMetadataCacheGeneration += 1;
     window.dispatchEvent(new Event(MANGA_METADATA_UPDATED_EVENT));
   });
 }
@@ -106,36 +223,117 @@ export async function fetchMangaMetadataPayload({
     throw new DOMException("The operation was aborted.", "AbortError");
   }
 
-  let useFirestoreFallback = false;
+  if (!force) {
+    try {
+      const cached = await readMangaMetadataCache();
+      if (signal?.aborted) {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }
+      if (cached) {
+        if (Date.now() - cached.cachedAt >= MANGA_METADATA_REVALIDATE_AFTER) {
+          refreshMangaMetadataInBackground(cached);
+        }
+        return cached.payload;
+      }
+    } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        throw error;
+      }
+      console.warn("IndexedDB manga metadata cache could not be read; loading metadata.json.", error);
+    }
+  }
+
+  const payload = await fetchLatestMangaMetadataPayload({ signal, force });
   try {
-    const response = await fetch(SHARED_MANGA_METADATA_URL, {
-      signal,
-      cache: force ? "no-store" : "default",
-    });
+    await writeMangaMetadataCache(payload);
+  } catch (error) {
+    console.warn("Manga metadata loaded, but its IndexedDB cache could not be saved.", error);
+  }
+  return payload;
+}
+
+function payloadChanged(
+  previous: MangaMetadataPayload,
+  next: MangaMetadataPayload,
+): boolean {
+  return previous.exportedAtMs !== next.exportedAtMs ||
+    JSON.stringify(previous.manga) !== JSON.stringify(next.manga);
+}
+
+function refreshMangaMetadataInBackground(cached: CachedMangaMetadataPayload): void {
+  if (mangaMetadataRefresh) return;
+  const cacheGeneration = mangaMetadataCacheGeneration;
+  const refresh = (async () => {
+    const payload = await fetchLatestMangaMetadataPayload();
+    if (cacheGeneration !== mangaMetadataCacheGeneration) return;
+    const changed = payloadChanged(cached.payload, payload);
+    await writeMangaMetadataCache(payload);
+    if (changed && typeof window !== "undefined") {
+      window.dispatchEvent(new Event(MANGA_METADATA_CACHE_UPDATED_EVENT));
+    }
+  })();
+  mangaMetadataRefresh = refresh;
+  void refresh.catch((error: unknown) => {
+    console.warn("Background manga metadata refresh failed; continuing with the cached catalog.", error);
+  }).finally(() => {
+    if (mangaMetadataRefresh === refresh) mangaMetadataRefresh = null;
+  });
+}
+
+async function fetchLatestMangaMetadataPayload({
+  signal,
+  force = false,
+}: FetchMangaMetadataOptions = {}): Promise<MangaMetadataPayload> {
+  if (signal?.aborted) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  let staticError: unknown;
+  try {
+    const url = force ? `${MANGA_METADATA_URL}?t=${Date.now()}` : MANGA_METADATA_URL;
+    const response = await fetch(url, { signal, cache: force ? "no-store" : "no-cache" });
     if (response.ok) {
       const payload: unknown = await response.json();
       return parseMangaMetadataPayload(payload);
     }
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (response.status === 404 || response.status === 405)
-    ) {
-      useFirestoreFallback = true;
-    } else {
-      console.warn(
-        `Shared manga metadata cache returned HTTP ${response.status}; using the static backup.`,
-      );
-    }
+    throw new Error(`metadata.json returned HTTP ${response.status}.`);
   } catch (error) {
     if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
       throw error;
     }
-    console.warn("Shared manga metadata cache is unavailable; using the static backup.", error);
+    staticError = error;
+    console.warn("Primary manga metadata.json could not be loaded; trying the shared catalog.", error);
   }
   if (signal?.aborted) {
     throw new DOMException("The operation was aborted.", "AbortError");
   }
 
+  let useFirestoreFallback = false;
+  try {
+    const response = await fetch(SHARED_MANGA_METADATA_URL, {
+      signal,
+      cache: force ? "no-store" : "no-cache",
+    });
+    if (response.ok) {
+      const payload: unknown = await response.json();
+      return parseMangaMetadataPayload(payload);
+    }
+    useFirestoreFallback =
+      process.env.NODE_ENV !== "production" &&
+      (response.status === 404 || response.status === 405);
+    if (!useFirestoreFallback) {
+      console.warn(`Shared manga metadata cache returned HTTP ${response.status}.`);
+    }
+  } catch (error) {
+    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+      throw error;
+    }
+    console.warn("Shared manga metadata cache is unavailable.", error);
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
   if (useFirestoreFallback) {
     const firestorePayload = await fetchFirestoreMetadataPayload(force);
     if (signal?.aborted) {
@@ -143,16 +341,8 @@ export async function fetchMangaMetadataPayload({
     }
     if (firestorePayload) return firestorePayload;
   }
-
-  const url = force ? `${MANGA_METADATA_URL}?t=${Date.now()}` : MANGA_METADATA_URL;
-  const response = await fetch(url, {
-    signal,
-    cache: force ? "no-store" : "default",
-  });
-  if (!response.ok) {
-    throw new Error(`Manga metadata returned HTTP ${response.status}.`);
+  if (staticError instanceof Error) {
+    throw new Error(`metadata.json and the shared catalog are unavailable: ${staticError.message}`);
   }
-
-  const payload: unknown = await response.json();
-  return parseMangaMetadataPayload(payload);
+  throw new Error("metadata.json and the shared catalog are unavailable.");
 }

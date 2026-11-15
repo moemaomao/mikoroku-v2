@@ -27,6 +27,7 @@ import {
 } from "../lib/firebase-client";
 import {
   fetchMangaMetadataPayload,
+  MANGA_METADATA_CACHE_UPDATED_EVENT,
   MANGA_METADATA_UPDATED_EVENT,
 } from "../lib/manga-metadata";
 import {
@@ -537,6 +538,14 @@ function getLegacyCachedManga(slug: string): Manga | null {
 }
 
 function getCurrentMangaForSlug(slug: string): Manga | null {
+  const mangaData = typeof window !== "undefined" ? window.mangaData : undefined;
+  for (const [key, value] of Object.entries(mangaData || {})) {
+    if (!value || typeof value !== "object") continue;
+    const record = value as Record<string, unknown>;
+    if (asString(record.slug, key) !== slug && key !== slug) continue;
+    return normalizeManga(record, slug);
+  }
+
   try {
     const current = JSON.parse(localStorage.getItem("currentManga") || "null") as
       | Record<string, unknown>
@@ -1488,10 +1497,13 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       });
     };
     const handleMetadataUpdated = () => loadCurrentManga(true);
+    const handleCachedMetadataUpdated = () => loadCurrentManga(true);
     loadCurrentManga(false);
     window.addEventListener(MANGA_METADATA_UPDATED_EVENT, handleMetadataUpdated);
+    window.addEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, handleCachedMetadataUpdated);
     return () => {
       window.removeEventListener(MANGA_METADATA_UPDATED_EVENT, handleMetadataUpdated);
+      window.removeEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, handleCachedMetadataUpdated);
       controller.abort();
     };
   }, [slug]);

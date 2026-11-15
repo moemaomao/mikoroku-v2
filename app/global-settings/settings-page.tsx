@@ -26,6 +26,7 @@ import {
   type CoverImageConversionSettings,
 } from "../../lib/image-proxy";
 import { clearSharedChapterCache } from "../lib/chapter-cache";
+import { clearMangaMetadataCache } from "../lib/manga-metadata";
 import { writeReadingHistory } from "../../lib/reading-history";
 
 const BOOKMARKS_KEY = "mangaBookmarks";
@@ -41,6 +42,7 @@ const LOCAL_CACHE_KEYS = new Set([
   "mangaGithubCache",
   "mangaFsMetaCache",
   "mangaGithubLightCache",
+  "mikoroku_firestore_metadata_v1",
   "mk_hero_v2",
   "currentManga",
   "currentChapter",
@@ -763,6 +765,7 @@ export default function GlobalSettingsPage() {
     try {
       const removed = clearLocalAppCaches();
       await clearSharedChapterCache();
+      await clearMangaMetadataCache();
       setNotice(`Cleared ${removed} local cache entries.`);
       await refreshStorageReport();
     } catch (error) {

@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import {
   fetchMangaMetadataPayload,
+  MANGA_METADATA_CACHE_UPDATED_EVENT,
   MANGA_METADATA_UPDATED_EVENT,
+  readCachedMangaMetadataPayload,
 } from "./lib/manga-metadata";
 
 type MangaMetadata = Record<string, unknown> & {
@@ -25,6 +27,8 @@ const MANGA_CACHE_KEY = "manga_metadata_cache_v2";
 const MANGA_CACHE_TIME = 15 * 60 * 1000;
 let initialization: Promise<void> | undefined;
 let refreshInProgress = false;
+let refreshQueued = false;
+let refreshQueuedForce = false;
 
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -72,17 +76,31 @@ function applyMangaList(list: Record<string, unknown>[]) {
 
 async function loadMetadataData(force = false) {
   let cached: { time?: number; data?: Record<string, unknown>[] } | undefined;
-  try {
-    const saved = localStorage.getItem(MANGA_CACHE_KEY);
-    if (saved) cached = JSON.parse(saved) as typeof cached;
-  } catch (error) {
-    console.warn("Manga dataset cache is invalid and will be ignored.", error);
-    localStorage.removeItem(MANGA_CACHE_KEY);
+  let cachedPayload: Awaited<ReturnType<typeof readCachedMangaMetadataPayload>> = null;
+  if (!force) {
+    try {
+      cachedPayload = await readCachedMangaMetadataPayload();
+    } catch (error) {
+      console.warn("IndexedDB manga metadata cache could not be read.", error);
+    }
   }
-  const hasFreshCache =
-    Array.isArray(cached?.data) && Date.now() - (cached.time || 0) < MANGA_CACHE_TIME;
-  if (hasFreshCache && Array.isArray(cached?.data)) {
+  if (cachedPayload) {
+    window.mangaData = {};
+    applyMangaList(cachedPayload.manga);
+    window.dispatchEvent(new Event("mangaDataReady"));
+  } else if (!force) {
+    try {
+      const saved = localStorage.getItem(MANGA_CACHE_KEY);
+      if (saved) cached = JSON.parse(saved) as typeof cached;
+    } catch (error) {
+      console.warn("Manga dataset cache is invalid and will be ignored.", error);
+      localStorage.removeItem(MANGA_CACHE_KEY);
+    }
+  }
+  if (!cachedPayload && Array.isArray(cached?.data)) {
+    window.mangaData = {};
     applyMangaList(cached.data);
+    window.dispatchEvent(new Event("mangaDataReady"));
   }
 
   const { manga } = await fetchMangaMetadataPayload({ force });
@@ -115,28 +133,42 @@ async function loadFirestoreData(force = false): Promise<void> {
   });
 }
 
-async function refreshMangaData(): Promise<void> {
-  if (refreshInProgress) return;
+async function refreshMangaData(force = true): Promise<void> {
+  if (refreshInProgress) {
+    refreshQueued = true;
+    refreshQueuedForce ||= force;
+    return;
+  }
   refreshInProgress = true;
   const previousData = window.mangaData || {};
+  let metadataLoaded = false;
   try {
-    localStorage.removeItem(MANGA_CACHE_KEY);
-    window.mangaData = {};
-    await loadMetadataData(true);
+    if (force) {
+      localStorage.removeItem(MANGA_CACHE_KEY);
+      window.mangaData = {};
+    }
+    await loadMetadataData(force);
+    metadataLoaded = true;
   } catch (error) {
     window.mangaData = previousData;
     console.error("Updated manga metadata could not be reloaded.", error);
-    refreshInProgress = false;
-    return;
   }
 
-  try {
-    await loadFirestoreData(true);
-  } catch (error) {
-    console.error("Updated Firestore manga changes could not be reloaded.", error);
+  if (metadataLoaded) {
+    try {
+      await loadFirestoreData(force);
+    } catch (error) {
+      console.error("Updated Firestore manga changes could not be reloaded.", error);
+    }
+    window.dispatchEvent(new Event("mangaDataReady"));
   }
-  window.dispatchEvent(new Event("mangaDataReady"));
   refreshInProgress = false;
+  if (refreshQueued) {
+    const queuedForce = refreshQueuedForce;
+    refreshQueued = false;
+    refreshQueuedForce = false;
+    void refreshMangaData(queuedForce);
+  }
 }
 
 async function initializeMangaData() {
@@ -167,15 +199,20 @@ async function initializeMangaData() {
 export default function MangaDataProvider() {
   useEffect(() => {
     const handleMetadataUpdated = () => {
-      void refreshMangaData();
+      void refreshMangaData(true);
+    };
+    const handleCachedMetadataUpdated = () => {
+      void refreshMangaData(false);
     };
     window.addEventListener(MANGA_METADATA_UPDATED_EVENT, handleMetadataUpdated);
+    window.addEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, handleCachedMetadataUpdated);
     initialization ||= initializeMangaData();
     void initialization.catch((error: unknown) => {
       console.error("Manga data provider failed to initialize.", error);
     });
     return () => {
       window.removeEventListener(MANGA_METADATA_UPDATED_EVENT, handleMetadataUpdated);
+      window.removeEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, handleCachedMetadataUpdated);
     };
   }, []);
 

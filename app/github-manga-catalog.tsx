@@ -222,6 +222,24 @@ function readCachedItems(): MangaItem[] {
   return [];
 }
 
+function readMangaDataList(): MangaItem[] {
+  const mangaBySlug = new Map<string, MangaItem>();
+  for (const value of Object.values(window.mangaData || {})) {
+    if (!value || typeof value !== "object") continue;
+    const manga = value as Record<string, unknown>;
+    if (
+      manga.isDraft === true ||
+      typeof manga.slug !== "string" ||
+      typeof manga.title !== "string" ||
+      !manga.title.trim()
+    ) {
+      continue;
+    }
+    mangaBySlug.set(manga.slug, manga as MangaItem);
+  }
+  return [...mangaBySlug.values()];
+}
+
 function readCachedMetadata(): Record<string, FirestoreMeta> {
   if (Object.keys(homeCatalogMemory.metadata).length) return homeCatalogMemory.metadata;
   if (typeof window === "undefined") return {};
@@ -758,8 +776,22 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
   }, []);
 
   useEffect(() => {
-    const handleMangaDataReady = () =>
-      updateHero(window.githubMangaList || itemsRef.current, window.fsMangaMeta || metadataRef.current);
+    const handleMangaDataReady = () => {
+      const cachedList = readMangaDataList();
+      if (cachedList.length) {
+        listSigRef.current = listSignature(cachedList);
+        rememberItems(cachedList);
+        setItems(cachedList);
+        setLoading(false);
+      }
+
+      const cachedMetadata = window.fsMangaMeta || metadataRef.current;
+      if (cachedMetadata && Object.keys(cachedMetadata).length) {
+        rememberMetadata(cachedMetadata);
+        setMetadata(cachedMetadata);
+      }
+      updateHero(cachedList.length ? cachedList : window.githubMangaList || itemsRef.current, cachedMetadata);
+    };
     let tries = 0;
     let previousCount = -1;
     window.addEventListener("mangaDataReady", handleMangaDataReady);

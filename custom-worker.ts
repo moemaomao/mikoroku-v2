@@ -275,29 +275,42 @@ async function fetchAndCacheMangaCatalog(
   requestUrl: string,
   kv: KVNamespace,
 ): Promise<Record<string, unknown>> {
-  const token = await createFirebaseAccessToken(env);
-  const upstream = await fetchUpstream(
-    `${FIRESTORE_DOCUMENTS_URL}/meta/mangaMetadataCatalog`,
-    {
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
   let payload: unknown;
-  if (upstream.status === 404) {
-    const backup = await fetchUpstream(
+  let token: string | null = null;
+  try {
+    const baseline = await fetchUpstream(
       new URL(MANGA_CATALOG_URL, requestUrl).toString(),
       { headers: { Accept: "application/json" } },
     );
-    if (!backup.ok) {
-      throw new Error(`Manga metadata backup returned HTTP ${backup.status}.`);
+    if (!baseline.ok) {
+      throw new Error(`metadata.json returned HTTP ${baseline.status}.`);
     }
-    payload = await backup.json();
-  } else if (!upstream.ok) {
-    throw new Error(`Firestore manga metadata catalog returned HTTP ${upstream.status}.`);
-  } else {
+    const baselinePayload: unknown = await baseline.json();
+    if (
+      !baselinePayload ||
+      typeof baselinePayload !== "object" ||
+      Array.isArray(baselinePayload) ||
+      !Array.isArray((baselinePayload as { manga?: unknown }).manga) ||
+      typeof (baselinePayload as { exportedAtMs?: unknown }).exportedAtMs !== "number"
+    ) {
+      throw new Error("metadata.json has an invalid format.");
+    }
+    payload = baselinePayload;
+  } catch (error) {
+    console.warn("[worker manga-catalog] metadata.json unavailable; trying Firestore.", error);
+    token = await createFirebaseAccessToken(env);
+    const upstream = await fetchUpstream(
+      `${FIRESTORE_DOCUMENTS_URL}/meta/mangaMetadataCatalog`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!upstream.ok) {
+      throw new Error(`Firestore manga metadata catalog returned HTTP ${upstream.status}.`);
+    }
     const document = await upstream.json() as {
       fields?: Record<string, FirestoreRestValue>;
     };
@@ -321,6 +334,7 @@ async function fetchAndCacheMangaCatalog(
     exportedAtMs: number;
     manga: unknown[];
   };
+  token ||= await createFirebaseAccessToken(env);
   const records = new Map<string, Record<string, unknown>>();
   for (const item of source.manga) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;

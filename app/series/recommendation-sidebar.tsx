@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { CoverImage } from "../lib/cover-image";
-import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
+import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import { useNsfwVisibility } from "../lib/nsfw";
 
 type CurrentManga = {
@@ -346,9 +346,7 @@ export default function RecommendationSidebar({
     const loadMetadata = async () => {
       try {
         if (controller.signal.aborted || !active) return;
-        const { manga: data } = await fetchMangaMetadataPayload({
-          signal: controller.signal,
-        });
+        const data = await loadFirestoreMangaCatalog();
         if (!active || controller.signal.aborted) return;
         data.forEach((value) => {
           upsert(normalizeRecommendation(value, "metadata"));

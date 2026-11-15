@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
 import GlobalAuth from "../global-auth";
-import { initializeFirebaseClient } from "../lib/firebase-client";
+import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import MangaDataProvider from "../manga-data-provider";
 import UserModals from "../user-modals";
 import SiteFooter from "../site-footer";
 import SiteHeader from "../site-header";
 import { isNsfwManga } from "../lib/nsfw";
-import { fetchMangaMetadataPayload } from "../lib/manga-metadata";
 
 type Bookmark = {
   title: string;
@@ -313,8 +312,9 @@ export default function BookmarkPage() {
     coverLookupAttempted.current = true;
     const controller = new AbortController();
 
-    fetchMangaMetadataPayload({ signal: controller.signal })
-      .then(({ manga: items }) => {
+    loadFirestoreMangaCatalog()
+      .then((items) => {
+        if (controller.signal.aborted) return;
         const index = new Map<string, (typeof items)[number]>();
         for (const item of items) {
           if (typeof item.title === "string" && item.title.trim()) {
