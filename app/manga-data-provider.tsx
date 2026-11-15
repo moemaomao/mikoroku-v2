@@ -2,7 +2,10 @@
 
 import { useEffect } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
-import { fetchMangaMetadataPayload } from "./lib/manga-metadata";
+import {
+  fetchMangaMetadataPayload,
+  MANGA_METADATA_UPDATED_EVENT,
+} from "./lib/manga-metadata";
 
 type MangaMetadata = Record<string, unknown> & {
   slug: string;
@@ -21,6 +24,7 @@ declare global {
 const MANGA_CACHE_KEY = "manga_metadata_cache_v2";
 const MANGA_CACHE_TIME = 15 * 60 * 1000;
 let initialization: Promise<void> | undefined;
+let refreshInProgress = false;
 
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -66,7 +70,7 @@ function applyMangaList(list: Record<string, unknown>[]) {
   }
 }
 
-async function loadMetadataData() {
+async function loadMetadataData(force = false) {
   let cached: { time?: number; data?: Record<string, unknown>[] } | undefined;
   try {
     const saved = localStorage.getItem(MANGA_CACHE_KEY);
@@ -75,12 +79,14 @@ async function loadMetadataData() {
     console.warn("Manga dataset cache is invalid and will be ignored.", error);
     localStorage.removeItem(MANGA_CACHE_KEY);
   }
-  if (Array.isArray(cached?.data) && Date.now() - (cached.time || 0) < MANGA_CACHE_TIME) {
+  const hasFreshCache =
+    Array.isArray(cached?.data) && Date.now() - (cached.time || 0) < MANGA_CACHE_TIME;
+  if (hasFreshCache && Array.isArray(cached?.data)) {
     applyMangaList(cached.data);
-    return;
   }
 
-  const { manga } = await fetchMangaMetadataPayload();
+  const { manga } = await fetchMangaMetadataPayload({ force });
+  window.mangaData = {};
   applyMangaList(manga);
   try {
     localStorage.setItem(MANGA_CACHE_KEY, JSON.stringify({ time: Date.now(), data: manga }));
@@ -89,8 +95,8 @@ async function loadMetadataData() {
   }
 }
 
-async function loadFirestoreData(): Promise<void> {
-  const records = await loadFirestoreMangaCatalog();
+async function loadFirestoreData(force = false): Promise<void> {
+  const records = await loadFirestoreMangaCatalog({ force });
   const data = window.mangaData || (window.mangaData = {});
   records.forEach((record) => {
     if (record.isDraft === true || typeof record.title !== "string") return;
@@ -107,6 +113,30 @@ async function loadFirestoreData(): Promise<void> {
     data[key] = manga;
     data[record.slug] = manga;
   });
+}
+
+async function refreshMangaData(): Promise<void> {
+  if (refreshInProgress) return;
+  refreshInProgress = true;
+  const previousData = window.mangaData || {};
+  try {
+    localStorage.removeItem(MANGA_CACHE_KEY);
+    window.mangaData = {};
+    await loadMetadataData(true);
+  } catch (error) {
+    window.mangaData = previousData;
+    console.error("Updated manga metadata could not be reloaded.", error);
+    refreshInProgress = false;
+    return;
+  }
+
+  try {
+    await loadFirestoreData(true);
+  } catch (error) {
+    console.error("Updated Firestore manga changes could not be reloaded.", error);
+  }
+  window.dispatchEvent(new Event("mangaDataReady"));
+  refreshInProgress = false;
 }
 
 async function initializeMangaData() {
@@ -136,10 +166,17 @@ async function initializeMangaData() {
 
 export default function MangaDataProvider() {
   useEffect(() => {
+    const handleMetadataUpdated = () => {
+      void refreshMangaData();
+    };
+    window.addEventListener(MANGA_METADATA_UPDATED_EVENT, handleMetadataUpdated);
     initialization ||= initializeMangaData();
     void initialization.catch((error: unknown) => {
       console.error("Manga data provider failed to initialize.", error);
     });
+    return () => {
+      window.removeEventListener(MANGA_METADATA_UPDATED_EVENT, handleMetadataUpdated);
+    };
   }, []);
 
   return null;

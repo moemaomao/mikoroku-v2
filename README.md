@@ -125,23 +125,22 @@ npm install
 npm run dev
 ```
 
-### Firestore manga metadata backup
+### Firestore manga metadata catalog
 
-Public manga metadata is bootstrapped from `public/catalog/metadata.json`.
-The browser then requests only manga documents whose `updatedAt` or
-`metadataUpdatedAt` is newer than the backup export, instead of reading the
-entire Firestore collection. If that small change query fails, the static
-backup (and any locally cached changes) remains available.
-Series detail metadata also uses this backup and change query; it no longer
-fetches the parent manga document separately.
+The active manga metadata catalog is stored in the
+`meta/mangaMetadataCatalog` Firestore document and can be edited in the Admin
+panel. The browser loads this full catalog, then requests only manga documents
+whose `updatedAt` or `metadataUpdatedAt` is newer than the catalog export.
+If the Firestore catalog document is not available, the browser falls back to
+`public/catalog/metadata.json` so the site remains usable and the Admin can
+initialize the Firestore catalog. If the incremental query fails, the full
+catalog and locally cached changes remain available.
+Series detail metadata uses the same catalog and change query; it does not
+fetch the parent manga document separately.
 
-Manga edits in the admin panel update `metadataUpdatedAt`, so metadata changes,
-new manga, and deletions are reflected by the incremental query. To refresh the
-baseline, create a metadata-only backup in the admin panel, replace
-`public/catalog/metadata.json` with the downloaded JSON, and deploy. The
-backup's `exportedAtMs` is used as the change-query cursor.
 Admins can use the "Debug sumber manga" button on a series page to inspect
-which metadata sources were found and which one supplied the primary record.
+which Firestore metadata sources were found and which one supplied the primary
+record.
 
 Untuk live preview widget komentar, jalankan:
 

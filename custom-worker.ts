@@ -46,7 +46,7 @@ const BLOGGER_CHAPTERS_TTL = 20 * 60;
 const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v2";
+const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v3";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_CATALOG_URL = "/catalog/metadata.json";
@@ -270,30 +270,50 @@ function catalogResponse(data: unknown[], cacheStatus: string): Response {
 }
 
 async function fetchAndCacheMangaCatalog(
+  env: CloudflareEnv,
   requestUrl: string,
   kv?: KVNamespace,
-  forceRefresh = false,
 ): Promise<unknown[]> {
-  const upstreamUrl = new URL(MANGA_CATALOG_URL, requestUrl);
-  if (forceRefresh) upstreamUrl.searchParams.set("t", String(Date.now()));
-  const upstream = await fetchUpstream(upstreamUrl.toString(), {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "mikoroku-catalog-proxy/1.0",
+  const token = await createFirebaseAccessToken(env);
+  const upstream = await fetchUpstream(
+    `${FIRESTORE_DOCUMENTS_URL}/meta/mangaMetadataCatalog`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
-  if (!upstream.ok) {
-    throw new Error(`Manga metadata upstream returned HTTP ${upstream.status}.`);
+  );
+  let payload: unknown;
+  if (upstream.status === 404) {
+    const backup = await fetchUpstream(
+      new URL(MANGA_CATALOG_URL, requestUrl).toString(),
+      { headers: { Accept: "application/json" } },
+    );
+    if (!backup.ok) {
+      throw new Error(`Manga metadata backup returned HTTP ${backup.status}.`);
+    }
+    payload = await backup.json();
+  } else if (!upstream.ok) {
+    throw new Error(`Firestore manga metadata catalog returned HTTP ${upstream.status}.`);
+  } else {
+    const document = await upstream.json() as {
+      fields?: Record<string, FirestoreRestValue>;
+    };
+    const content = document.fields?.content;
+    if (!content || typeof content.stringValue !== "string") {
+      throw new Error("Firestore manga metadata catalog has no JSON content.");
+    }
+    payload = JSON.parse(content.stringValue);
   }
 
-  const payload: unknown = await upstream.json();
   if (
     !payload ||
     typeof payload !== "object" ||
     Array.isArray(payload) ||
     !Array.isArray((payload as { manga?: unknown }).manga)
   ) {
-    throw new Error("Manga metadata upstream response has an invalid format.");
+    throw new Error("Firestore manga metadata catalog has an invalid format.");
   }
   const data = (payload as { manga: unknown[] }).manga.filter(
     (item) => item !== null && typeof item === "object" && !Array.isArray(item),
@@ -346,7 +366,7 @@ async function handleMangaCatalogProxy(
     }
 
     ctx.waitUntil(
-      fetchAndCacheMangaCatalog(request.url, kv).catch((error: unknown) => {
+      fetchAndCacheMangaCatalog(env, request.url, kv).catch((error: unknown) => {
         console.error("[worker manga-catalog] background refresh failed", error);
       }),
     );
@@ -354,7 +374,7 @@ async function handleMangaCatalogProxy(
   }
 
   try {
-    const data = await fetchAndCacheMangaCatalog(request.url, kv, forceRefresh);
+    const data = await fetchAndCacheMangaCatalog(env, request.url, kv);
     return catalogResponse(data, forceRefresh ? "BYPASS" : "MISS");
   } catch (error) {
     console.error("[worker manga-catalog] upstream fetch failed", error);

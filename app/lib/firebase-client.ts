@@ -19,7 +19,6 @@ import {
   orderBy,
   persistentLocalCache,
   persistentMultipleTabManager,
-  or,
   query,
   serverTimestamp,
   terminate,
@@ -28,7 +27,11 @@ import {
 } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
 import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
-import { fetchMangaMetadataPayload, type MangaMetadataPayload } from "./manga-metadata";
+import {
+  fetchMangaMetadataPayload,
+  MANGA_METADATA_UPDATED_EVENT,
+  type MangaMetadataPayload,
+} from "./manga-metadata";
 import { firebaseConfig } from "../../lib/firebase-config";
 
 const FIREBASE_APP_NAME = "mikoroku-catalog";
@@ -50,7 +53,24 @@ const MANGA_METADATA_CURSOR_OVERLAP = 60 * 1000;
 let mangaCatalogData: FirestoreMangaMetadata[] | undefined;
 let mangaCatalogLoadedAt = 0;
 let mangaCatalogPromise: Promise<FirestoreMangaMetadata[]> | undefined;
+let mangaCatalogGeneration = 0;
 let persistentCacheEnabled = false;
+
+function invalidateMangaCatalogCache(): void {
+  mangaCatalogGeneration += 1;
+  mangaCatalogData = undefined;
+  mangaCatalogLoadedAt = 0;
+  mangaCatalogPromise = undefined;
+  try {
+    localStorage.removeItem(MANGA_METADATA_CACHE_KEY);
+  } catch (error) {
+    console.warn("Cached manga metadata could not be invalidated.", error);
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(MANGA_METADATA_UPDATED_EVENT, invalidateMangaCatalogCache);
+}
 
 export function initializeFirebaseClient(): FirebaseClient {
   if (typeof window === "undefined") {
@@ -154,10 +174,6 @@ function metadataChangeTime(record: FirestoreMangaMetadata): number {
   }, 0);
 }
 
-async function loadStaticMangaMetadata(force = false): Promise<MangaMetadataPayload> {
-  return fetchMangaMetadataPayload({ force });
-}
-
 function readCachedMangaMetadata(): CachedMangaMetadata | null {
   try {
     const raw = localStorage.getItem(MANGA_METADATA_CACHE_KEY);
@@ -199,7 +215,7 @@ export function getCachedFirestoreMangaCatalog(): FirestoreMangaMetadata[] {
 }
 
 export function loadFirestoreMangaCatalog(
-  { force = false }: { force?: boolean } = {},
+  { force = false, payload }: { force?: boolean; payload?: MangaMetadataPayload } = {},
 ): Promise<FirestoreMangaMetadata[]> {
   if (
     !force &&
@@ -209,31 +225,33 @@ export function loadFirestoreMangaCatalog(
     return Promise.resolve(mangaCatalogData);
   }
   if (!mangaCatalogPromise) {
+    const requestGeneration = mangaCatalogGeneration;
     const request = (async () => {
-      const backup = await loadStaticMangaMetadata(force);
+      const catalog = payload ?? await fetchMangaMetadataPayload({ force });
       const bySlug = new Map<string, FirestoreMangaMetadata>();
       const tombstones: Record<string, number> = {};
-      for (const value of backup.manga) {
+      for (const value of catalog.manga) {
         const record = normalizeMangaMetadata(value);
         if (record) {
           bySlug.set(record.slug, {
             ...record,
-            __catalogDebugSources: ["metadata.json"],
+            __catalogDebugSources: ["Catalog baseline"],
           });
         }
       }
 
       const cached = readCachedMangaMetadata();
-      let cursor = backup.exportedAtMs;
-      if (cached?.exportedAtMs === backup.exportedAtMs) {
+      let cursor = catalog.exportedAtMs;
+      if (cached?.exportedAtMs === catalog.exportedAtMs) {
         cursor = Math.max(cursor, cached.cursor);
         for (const record of cached.records) {
+          const sources = new Set(record.__catalogDebugSources || []);
+          sources.delete("metadata.json");
+          sources.add("Catalog baseline");
           bySlug.set(record.slug, {
             ...bySlug.get(record.slug),
             ...record,
-            __catalogDebugSources:
-              record.__catalogDebugSources ||
-              bySlug.get(record.slug)?.__catalogDebugSources,
+            __catalogDebugSources: [...sources],
           });
         }
         Object.assign(tombstones, cached.tombstones);
@@ -245,15 +263,17 @@ export function loadFirestoreMangaCatalog(
 
       try {
         const { firestore } = initializeFirebaseClient();
-        const changes = query(
-          collection(firestore, "manga"),
-          or(
-            where("updatedAt", ">", cursor),
-            where("metadataUpdatedAt", ">", cursor),
+        const mangaCollection = collection(firestore, "manga");
+        const snapshots = await Promise.all([
+          getDocsFromServer(query(mangaCollection, where("updatedAt", ">", cursor))),
+          getDocsFromServer(query(mangaCollection, where("metadataUpdatedAt", ">", cursor))),
+        ]);
+        const changedDocuments = new Map(
+          snapshots.flatMap((snapshot) =>
+            snapshot.docs.map((document) => [document.id, document] as const),
           ),
         );
-        const snapshot = await getDocsFromServer(changes);
-        snapshot.forEach((document) => {
+        changedDocuments.forEach((document) => {
           const documentData = document.data();
           if (
             documentData.isCatalogTombstone === true &&
@@ -297,27 +317,29 @@ export function loadFirestoreMangaCatalog(
         );
       } catch (error) {
         console.warn(
-          "Firestore metadata changes could not be loaded; using the static metadata backup.",
+          "Firestore metadata changes could not be loaded; using the Firestore catalog and cached changes.",
           error,
         );
       }
 
       const records = [...bySlug.values()];
-      try {
-        localStorage.setItem(
-          MANGA_METADATA_CACHE_KEY,
-          JSON.stringify({
-            exportedAtMs: backup.exportedAtMs,
-            cursor,
-            records,
-            tombstones,
-          } satisfies CachedMangaMetadata),
-        );
-      } catch (error) {
-        console.warn("Manga metadata cache could not be saved.", error);
+      if (requestGeneration === mangaCatalogGeneration) {
+        try {
+          localStorage.setItem(
+            MANGA_METADATA_CACHE_KEY,
+            JSON.stringify({
+              exportedAtMs: catalog.exportedAtMs,
+              cursor,
+              records,
+              tombstones,
+            } satisfies CachedMangaMetadata),
+          );
+        } catch (error) {
+          console.warn("Manga metadata cache could not be saved.", error);
+        }
+        mangaCatalogData = records;
+        mangaCatalogLoadedAt = Date.now();
       }
-      mangaCatalogData = records;
-      mangaCatalogLoadedAt = Date.now();
       return records;
     })();
     mangaCatalogPromise = request;

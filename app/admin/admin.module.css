@@ -1405,6 +1405,33 @@
   line-height: 1.7;
 }
 
+.metadataJsonTextarea {
+  display: block;
+  width: 100%;
+  min-height: min(68vh, 760px);
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
+  outline: none;
+  color: #e8edfa;
+  background: #1b2032;
+  font: 12px/1.55 Consolas, "Courier New", monospace;
+  tab-size: 2;
+  resize: vertical;
+}
+
+.metadataJsonTextarea:focus {
+  border-color: rgb(107 155 255 / 70%);
+  box-shadow: 0 0 0 3px rgb(107 155 255 / 16%);
+}
+
+.metadataJsonHint {
+  margin: 10px 0 0;
+  color: #98a6c1;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .tableWrap {
   overflow-x: auto;
 }
@@ -2189,10 +2216,15 @@
 .lightMode .field input,
 .lightMode .field select,
 .lightMode .field textarea,
+.lightMode .metadataJsonTextarea,
 .lightMode .searchBox input {
   border-color: rgb(20 29 55 / 14%);
   color: #20283b;
   background: #fff;
+}
+
+.lightMode .metadataJsonHint {
+  color: #68738b;
   box-shadow: 0 1px 2px rgb(20 29 55 / 4%);
 }
 
