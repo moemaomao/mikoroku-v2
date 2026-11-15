@@ -1,5 +1,3 @@
-import { getApps, initializeApp } from "firebase/app";
-import { collection, getDocs, getFirestore, limit, orderBy, query } from "firebase/firestore";
 import { firebaseConfig } from "../../lib/firebase-config";
 import { kvGet, kvSet } from "../../lib/kv-cache";
 import { latestChapterFromRecord } from "../../lib/latest-chapter";
@@ -9,11 +7,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FEED_URL = "https://mikoroku.top/feed.xml";
-const FEED_CACHE_KEY = "feed:latest-chapters:v3";
+const FEED_CACHE_KEY = "feed:latest-chapters:v4";
 const FEED_CACHE_TTL = 15 * 60;
 const MAX_FEED_ITEMS = 50;
 const MAX_SERIES_QUERY = 200;
-const RSS_FIREBASE_APP_NAME = "mikoroku-rss-feed";
 
 type FeedItem = {
   title: string;
@@ -22,6 +19,50 @@ type FeedItem = {
   updatedAt: number;
   categories: string[];
 };
+
+type FirestoreValue = {
+  stringValue?: string;
+  integerValue?: string;
+  doubleValue?: number;
+  booleanValue?: boolean;
+  timestampValue?: string;
+  nullValue?: null | string;
+  arrayValue?: { values?: FirestoreValue[] };
+  mapValue?: { fields?: Record<string, FirestoreValue> };
+  referenceValue?: string;
+  bytesValue?: string;
+  geoPointValue?: { latitude?: number; longitude?: number };
+};
+
+function decodeFirestoreValue(value: FirestoreValue): unknown {
+  if ("stringValue" in value) return value.stringValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return value.doubleValue;
+  if ("booleanValue" in value) return value.booleanValue;
+  if ("timestampValue" in value) return value.timestampValue;
+  if ("nullValue" in value) return null;
+  if ("arrayValue" in value) {
+    return (value.arrayValue?.values ?? []).map(decodeFirestoreValue);
+  }
+  if ("mapValue" in value) {
+    return Object.fromEntries(
+      Object.entries(value.mapValue?.fields ?? {}).map(([key, field]) => [
+        key,
+        decodeFirestoreValue(field),
+      ]),
+    );
+  }
+  if ("referenceValue" in value) return value.referenceValue;
+  if ("bytesValue" in value) return value.bytesValue;
+  if ("geoPointValue" in value) return value.geoPointValue;
+  return undefined;
+}
+
+function decodeFirestoreFields(fields: Record<string, FirestoreValue>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key, decodeFirestoreValue(value)]),
+  );
+}
 
 function xmlEscape(value: string): string {
   return value
@@ -53,19 +94,47 @@ function timestampMillis(value: unknown): number {
 }
 
 async function buildFeedItems(): Promise<FeedItem[]> {
-  const app = getApps().find((candidate) => candidate.name === RSS_FIREBASE_APP_NAME) ??
-    initializeApp(firebaseConfig, RSS_FIREBASE_APP_NAME);
-  const firestore = getFirestore(app);
-  const mangaQuery = query(
-    collection(firestore, "manga"),
-    orderBy("updatedAt", "desc"),
-    limit(MAX_SERIES_QUERY),
+  const endpoint = new URL(
+    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/(default)/documents:runQuery`,
   );
-  const snapshot = await getDocs(mangaQuery);
+  endpoint.searchParams.set("key", firebaseConfig.apiKey);
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "manga" }],
+        orderBy: [{ field: { fieldPath: "updatedAt" }, direction: "DESCENDING" }],
+        limit: MAX_SERIES_QUERY,
+      },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Firestore query returned HTTP ${response.status}.`);
+  }
+
+  const results: unknown = await response.json();
+  if (!Array.isArray(results)) {
+    throw new Error("Firestore query returned an invalid response.");
+  }
+
   const items: FeedItem[] = [];
 
-  snapshot.forEach((document) => {
-    const record = document.data() as Record<string, unknown>;
+  results.forEach((result: unknown) => {
+    if (!result || typeof result !== "object") return;
+    const row = result as {
+      document?: { name?: unknown; fields?: unknown };
+    };
+    const name = row.document?.name;
+    const fields = row.document?.fields;
+    if (typeof name !== "string" || !fields || typeof fields !== "object") return;
+
+    const id = name.slice(name.lastIndexOf("/") + 1);
+    const record = decodeFirestoreFields(fields as Record<string, FirestoreValue>);
     if (record.isDraft === true || typeof record.title !== "string") return;
 
     const chapter = latestChapterFromRecord(record);
@@ -73,7 +142,7 @@ async function buildFeedItems(): Promise<FeedItem[]> {
 
     const updatedAt = timestampMillis(record.updatedAt ?? record.latestUpdate);
     const kind = isNovelSeries(record) ? "novel" : "manga";
-    const link = `https://mikoroku.top/${kind}/${encodeURIComponent(document.id)}/${encodeURIComponent(chapter)}`;
+    const link = `https://mikoroku.top/${kind}/${encodeURIComponent(id)}/${encodeURIComponent(chapter)}`;
     const title = `${record.title} Chapter ${chapter}`;
     const categories = Array.isArray(record.genres)
       ? record.genres.filter((genre): genre is string => typeof genre === "string")
