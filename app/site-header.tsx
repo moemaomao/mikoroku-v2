@@ -1127,10 +1127,6 @@ function HeaderContents() {
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-zinc-500/10 text-zinc-500"><Icon name="settings" className="h-4 w-4" /></span>
                         Settings
                       </a>
-                      <a href="/global-settings" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
-                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]"><Icon name="settings" className="h-4 w-4" /></span>
-                        Global Settings
-                      </a>
                       {canAccessAdminPanels && <a href="/admin/moderation" onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-500"><Icon name="shield" className="h-4 w-4" /></span>Moderation</a>}
                     </div>
                     <div className="border-t border-black/10 p-2 dark:border-white/10">
