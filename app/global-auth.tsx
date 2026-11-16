@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { syncReadingHistoryWithUser } from "../lib/reading-history";
+import { syncLocalReadMarksWithUser } from "../lib/reading-stats";
 
 type AuthProvider = {
   new (): unknown;
@@ -59,9 +60,13 @@ export default function GlobalAuth() {
             void syncReadingHistoryWithUser(user.uid).catch((error: unknown) => {
               console.error("Could not sync reading history for the signed-in user.", error);
             });
+            void syncLocalReadMarksWithUser(user.uid).catch((error: unknown) => {
+              console.error("Could not sync local chapter reads for the signed-in user.", error);
+            });
           }
         });
       }
+      window.dispatchEvent(new Event("firebaseCompatReady"));
       return true;
     };
 

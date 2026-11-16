@@ -1,3 +1,5 @@
+import { loadFollowerCount } from "./user-following";
+
 type StatsUser = {
   uid: string;
   displayName?: string | null;
@@ -118,6 +120,7 @@ export type PublicReadingStats = {
   activity: ReadingActivityDay[];
   totalChaptersRead: number;
   bookmarksCount: number | null;
+  followersCount: number | null;
   commentHistory: CommentHistoryItem[];
   commentHistoryError: string;
 };
@@ -181,6 +184,27 @@ export function getLastSevenUtcDates(now = new Date()): string[] {
     date.setUTCDate(date.getUTCDate() - (6 - index));
     return utcDateKey(date);
   });
+}
+
+export function getLocalReadMarksCount(): number {
+  let count = 0;
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith("read_")) continue;
+      try {
+        const marks: unknown = JSON.parse(localStorage.getItem(key) || "[]");
+        if (Array.isArray(marks)) {
+          count += new Set(marks.map((mark) => String(mark).trim()).filter(Boolean)).size;
+        }
+      } catch (error) {
+        console.warn(`Local read marks for "${key}" are invalid and were ignored.`, error);
+      }
+    }
+  } catch (error) {
+    console.warn("Local read marks could not be counted.", error);
+  }
+  return count;
 }
 
 export async function saveReaderStats(
@@ -279,6 +303,20 @@ export async function preserveLifetimeChapterCount(uid: string, minimum: number)
     );
     return true;
   });
+}
+
+export async function syncLocalReadMarksWithUser(uid: string): Promise<void> {
+  if (!uid) throw new Error("A signed-in user is required to synchronize local read marks.");
+  const firebase = getStatsWindow().firebase;
+  const user = firebase?.auth?.().currentUser || getStatsWindow().currentUser;
+  if (user?.uid !== uid) {
+    throw new Error("The signed-in account changed during local read mark synchronization.");
+  }
+
+  const localReadMarks = getLocalReadMarksCount();
+  if (localReadMarks > 0) {
+    await preserveLifetimeChapterCount(uid, localReadMarks);
+  }
 }
 
 export async function subscribeToReadingStats(
@@ -583,10 +621,19 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
       return null;
     }
   })();
-  const [profileSnapshot, commentSnapshotResult, bookmarksCount] = await Promise.all([
+  const followersCountPromise = (async () => {
+    try {
+      return await loadFollowerCount(uid);
+    } catch (error) {
+      console.warn("Follower count is not publicly available for this user.", error);
+      return null;
+    }
+  })();
+  const [profileSnapshot, commentSnapshotResult, bookmarksCount, followersCount] = await Promise.all([
     profileSnapshotPromise,
     commentSnapshotPromise,
     bookmarksCountPromise,
+    followersCountPromise,
   ]);
   const profile = profileSnapshot.exists ? profileSnapshot.data() || {} : {};
   const readingStats = asRecord(profile.readingStats);
@@ -643,6 +690,7 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
     activity,
     totalChaptersRead,
     bookmarksCount,
+    followersCount,
     commentHistory,
     commentHistoryError,
   };

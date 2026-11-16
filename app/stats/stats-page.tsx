@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import "./stats-animations.css";
 import {
+  getLocalReadMarksCount,
   loadPublicReadingStats,
   preserveLifetimeChapterCount,
   subscribeToReadingStats,
@@ -10,6 +11,12 @@ import {
   type PublicReadingStats,
   type ReadingProgressItem,
 } from "../../lib/reading-stats";
+import {
+  cacheFollowingUids,
+  getCachedFollowingUids,
+  loadFollowingUids,
+  setUserFollowing,
+} from "../../lib/user-following";
 import {
   getCachedReadingStats,
   setCachedReadingStats,
@@ -37,7 +44,10 @@ type ProfileBannerFirebase = {
   };
 };
 type ProfileBannerWindow = Window & {
+  currentUser?: ProfileBannerUser;
   firebase?: ProfileBannerFirebase;
+  openDmToUser?: (uid: string, name?: string, avatar?: string) => void;
+  openMikorokuDmToUser?: (uid: string, name?: string, avatar?: string) => void;
 };
 
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
@@ -199,27 +209,6 @@ function stringValue(value: unknown): string {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
-}
-
-function getLocalReadMarksCount(): number {
-  let count = 0;
-  try {
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (!key?.startsWith("read_")) continue;
-      try {
-        const marks: unknown = JSON.parse(localStorage.getItem(key) || "[]");
-        if (Array.isArray(marks)) {
-          count += new Set(marks.map((mark) => String(mark).trim()).filter(Boolean)).size;
-        }
-      } catch (error) {
-        console.warn(`Local read marks for "${key}" are invalid and were ignored.`, error);
-      }
-    }
-  } catch (error) {
-    console.warn("Local read marks could not be counted.", error);
-  }
-  return count;
 }
 
 function formatCustomBadgeLabel(id: string): string {
@@ -847,6 +836,147 @@ function CommentHistorySection({
   );
 }
 
+function ProfileFollowControls({
+  uid,
+  followersCount,
+  isOwner,
+  displayName,
+  avatar,
+}: {
+  uid: string;
+  followersCount: number | null;
+  isOwner: boolean;
+  displayName: string;
+  avatar: string;
+}) {
+  const [following, setFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState<number | null>(
+    typeof followersCount === "number" ? followersCount : null,
+  );
+  const [viewerUid, setViewerUid] = useState("");
+  const [followError, setFollowError] = useState("");
+  const [messageError, setMessageError] = useState("");
+  const operationRevision = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    const firebase = (window as ProfileBannerWindow).firebase;
+    const auth = firebase?.auth?.();
+    const updateViewer = (currentUid: string) => {
+      const revision = ++operationRevision.current;
+      setViewerUid(currentUid);
+      setFollowerCount(typeof followersCount === "number" ? followersCount : null);
+      setFollowError("");
+      setMessageError("");
+
+      if (!currentUid || currentUid === uid) {
+        setFollowing(false);
+        return;
+      }
+
+      setFollowing(getCachedFollowingUids(currentUid).includes(uid));
+      void loadFollowingUids(currentUid)
+        .then((followingUids) => {
+          if (active && operationRevision.current === revision) {
+            setFollowing(followingUids.includes(uid));
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Could not load follow status.", error);
+          if (active && operationRevision.current === revision) {
+            setFollowError("Could not load follow status.");
+          }
+        });
+    };
+
+    updateViewer(auth?.currentUser?.uid || (window as ProfileBannerWindow).currentUser?.uid || "");
+    const unsubscribe = auth?.onAuthStateChanged((user) => updateViewer(user?.uid || ""));
+    return () => {
+      active = false;
+      unsubscribe?.();
+      operationRevision.current += 1;
+    };
+  }, [followersCount, uid]);
+
+  const handleFollow = () => {
+    if (!viewerUid || viewerUid === uid) return;
+
+    const nextFollowing = !following;
+    const updatedFollowing = new Set(getCachedFollowingUids(viewerUid));
+    if (nextFollowing) updatedFollowing.add(uid);
+    else updatedFollowing.delete(uid);
+    cacheFollowingUids(viewerUid, [...updatedFollowing]);
+
+    const revision = ++operationRevision.current;
+    setFollowing(nextFollowing);
+    setFollowerCount((count) => (
+      count === null ? null : Math.max(0, count + (nextFollowing ? 1 : -1))
+    ));
+    setFollowError("");
+
+    void setUserFollowing(viewerUid, uid, nextFollowing).catch((error: unknown) => {
+      console.error("Could not synchronize follow status.", error);
+      if (operationRevision.current === revision) {
+        setFollowError("Follow could not be synchronized. Try again later.");
+      }
+    });
+  };
+
+  const handleMessage = () => {
+    if (!viewerUid || viewerUid === uid) return;
+    const appWindow = window as ProfileBannerWindow;
+    const openDm = appWindow.openMikorokuDmToUser || appWindow.openDmToUser;
+    if (!openDm) {
+      console.error("Direct messaging is unavailable on this page.");
+      setMessageError("Messaging is unavailable.");
+      return;
+    }
+
+    setMessageError("");
+    openDm(uid, displayName, avatar);
+  };
+
+  const isSelf = isOwner || viewerUid === uid;
+
+  return (
+    <div className="flex w-full flex-col items-center gap-1">
+      <span className="text-center text-xs font-semibold text-slate-700 dark:text-zinc-200">
+        {followerCount === null ? "Followers —" : `${followerCount.toLocaleString()} followers`}
+      </span>
+      <button
+        type="button"
+        onClick={handleFollow}
+        disabled={isSelf || !viewerUid}
+        className={`w-full rounded-lg border px-3 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+          following
+            ? "border-violet-600 bg-violet-600 text-white hover:bg-violet-700"
+            : "border-violet-500 text-violet-700 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-500/10"
+        }`}
+      >
+        {isSelf ? "You" : following ? "Following" : "Follow"}
+      </button>
+      <button
+        type="button"
+        onClick={handleMessage}
+        disabled={isSelf || !viewerUid}
+        className="w-full rounded-lg border border-slate-400 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-500 dark:text-zinc-200 dark:hover:bg-white/10"
+      >
+        Message
+      </button>
+      {followError && (
+        <span role="alert" className="w-full text-center text-xs text-red-700 dark:text-red-300">
+          {followError}
+        </span>
+      )}
+      {messageError && (
+        <span role="alert" className="w-full text-center text-xs text-red-700 dark:text-red-300">
+          {messageError}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [stats, setStats] = useState<PublicReadingStats | null>(null);
   const [error, setError] = useState("");
@@ -1206,12 +1336,21 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
               </>
             )}
             <div className={`relative z-10 flex items-start gap-3 sm:gap-4 ${isOwner ? "pr-1 sm:pr-24" : ""}`}>
-              <img
-                src={avatar}
-                alt=""
-                onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
-                className="size-14 shrink-0 rounded-xl border-2 border-[var(--mikoroku-accent)] object-cover shadow-lg sm:size-[76px] sm:rounded-2xl lg:size-[92px]"
-              />
+              <div className="flex w-24 shrink-0 flex-col items-center gap-2">
+                <img
+                  src={avatar}
+                  alt=""
+                  onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
+                  className="size-14 rounded-xl border-2 border-[var(--mikoroku-accent)] object-cover shadow-lg sm:size-[76px] sm:rounded-2xl lg:size-[92px]"
+                />
+                <ProfileFollowControls
+                  uid={uid}
+                  followersCount={stats?.followersCount ?? null}
+                  isOwner={isOwner}
+                  displayName={name}
+                  avatar={avatar}
+                />
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--mikoroku-accent)] sm:text-xs sm:tracking-[0.2em]">Reader stats</p>
                 <h1 className="mt-0.5 truncate text-lg font-bold leading-tight text-slate-900 dark:text-white sm:mt-1 sm:text-3xl">{name}</h1>

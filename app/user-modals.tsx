@@ -6,6 +6,12 @@ import {
   deleteReadingHistoryEntry,
   upsertReadingHistoryEntry,
 } from "../lib/reading-history";
+import {
+  cacheFollowingUids,
+  getCachedFollowingUids,
+  loadFollowingUids,
+  setUserFollowing,
+} from "../lib/user-following";
 import settingsStyles from "./settings/settings.module.css";
 import { normalizeProfileLink } from "./lib/profile-link";
 
@@ -26,7 +32,10 @@ type CompatQuerySnapshot = {
   forEach: (callback: (doc: CompatDocument) => void) => void;
 };
 type CompatDocumentReference = {
+  collection: (name: string) => CompatCollection;
   get: () => Promise<CompatDocument>;
+  set: (data: DataRecord, options?: { merge?: boolean }) => Promise<void>;
+  delete: () => Promise<void>;
   update: (data: DataRecord) => Promise<void>;
 };
 type CompatQuery = {
@@ -83,6 +92,7 @@ type HistoryInput = {
 type LegacyModalWindow = {
   firebase?: CompatSdk;
   currentUser?: CompatUser | null;
+  commentDisplayName?: string | null;
   currentChatUid?: string | null;
   closeAuthDropdown?: () => void;
   showHistory?: () => void;
@@ -375,10 +385,12 @@ html.dark .profile-box.leaderboard-rank-6{background:linear-gradient(145deg,#1d4
 .profile-close{position:absolute;top:10px;right:14px;background:none;border:0;font-size:24px;color:#aaa;cursor:pointer}
 .profile-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}.profile-avatar{width:80px;height:80px;border-radius:15px;border:3px solid #7c3aed;object-fit:cover}
 .profile-bio-link{display:block;width:fit-content;max-width:100%;margin-top:8px;color:#93c5fd;font-size:.82rem;line-height:1.35;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:2px}.profile-bio-link:hover{color:#bfdbfe}.profile-bio-link[hidden]{display:none}
-.profile-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}
-.profile-dm,.profile-stats-link{display:flex;align-items:center;justify-content:center;width:auto;height:34px;min-width:0;box-sizing:border-box;margin:0;border-radius:8px;font-size:12px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
+.profile-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.profile-dm,.profile-follow,.profile-stats-link{display:flex;align-items:center;justify-content:center;width:auto;height:34px;min-width:0;box-sizing:border-box;margin:0;border-radius:8px;font-size:12px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
 .profile-dm{background:transparent;color:#22c55e;border:1px solid #22c55e;cursor:pointer}
+.profile-follow{background:transparent;color:#a78bfa;border:1px solid #8b5cf6;cursor:pointer}.profile-follow:hover{background:rgba(139,92,246,.12)}.profile-follow.is-following{background:#7c3aed;border-color:#7c3aed;color:#fff}.profile-follow.is-following:hover{background:#6d28d9;border-color:#6d28d9}.profile-follow:disabled{opacity:.6;cursor:default}.profile-follow[hidden]{display:none}
 .profile-stats-link{border:1px solid #f472b6;color:#f9a8d4;transition:background .2s,color .2s}.profile-stats-link:hover{background:rgba(244,114,182,.12);color:#fff}
+.profile-follow-error{margin:-6px 0 12px;color:#fca5a5;font-size:.75rem;line-height:1.4;overflow-wrap:anywhere}
 .profile-stats{background:#28283a;border-radius:12px;padding:14px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center}.profile-stat-label{color:#aaa;font-size:.75rem}.profile-badge-title{display:flex;align-items:center;gap:10px;margin:12px 0;color:#ddd;font-size:13px;font-weight:700}.profile-badge-title:after{content:"";flex:1;height:1px;background:rgba(255,255,255,.15)}
 .user-custom-badge{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:var(--mikoroku-badge-height,24px);min-height:var(--mikoroku-badge-height,24px);padding:0 var(--mikoroku-badge-padding-x,8px);border:1px solid transparent;border-radius:var(--mikoroku-badge-radius,6px);background:linear-gradient(45deg,#7c3aed,#ec4899);color:white;font-size:var(--mikoroku-badge-font-size,11px);font-weight:600;line-height:1;white-space:nowrap;margin:2px}.game-role{display:inline-flex;padding:4px 9px;border-radius:8px;background:transparent;color:white;font-size:.78rem;font-weight:600;margin:2px}
 #dm-modal{z-index:30000;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -433,6 +445,22 @@ function stringValue(value: unknown, fallback = ""): string {
 
 function numberValue(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function waitWithTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), milliseconds);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 function getUserProfileCacheData(data: DataRecord): DataRecord {
@@ -606,7 +634,13 @@ function initializeUserModals(): () => void {
 
   const profileModal = createElement("div");
   profileModal.id = "user-profile-modal";
-  profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><div class="profile-actions"><button type="button" class="profile-dm" data-profile-dm>Message</button><a class="profile-stats-link" data-profile-stats href="#">View Reading Stats</a></div><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
+  profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><div class="profile-actions"><button type="button" class="profile-follow" data-profile-follow>Follow</button><button type="button" class="profile-dm" data-profile-dm>Message</button><a class="profile-stats-link" data-profile-stats href="#">Stats</a></div><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
+  const followErrorElement = createElement("p", "profile-follow-error");
+  followErrorElement.dataset.profileFollowError = "";
+  followErrorElement.setAttribute("role", "status");
+  followErrorElement.hidden = true;
+  profileModal.querySelector(".profile-actions")?.after(followErrorElement);
+
   const bioLink = document.createElement("a");
   bioLink.className = "profile-bio-link";
   bioLink.dataset.profile = "bioLink";
@@ -719,8 +753,111 @@ function initializeUserModals(): () => void {
 
   let profileDmTarget: { uid: string; name: string; avatar: string } | null = null;
   let activeProfileUid: string | null = null;
+  let followStatus: "following" | "not-following" = "not-following";
+  let followErrorMessage = "";
+  let followRevision = 0;
+  const signedInUser = () =>
+    legacy.currentUser || legacy.firebase?.auth?.().currentUser || null;
+  const updateFollowButton = () => {
+    const button = profileModal.querySelector<HTMLButtonElement>("[data-profile-follow]");
+    const actions = profileModal.querySelector<HTMLElement>(".profile-actions");
+    if (!button || !actions || !activeProfileUid) return;
+
+    const user = signedInUser();
+    const isSelf = user?.uid === activeProfileUid;
+    button.hidden = false;
+    actions.style.gridTemplateColumns = "repeat(3,minmax(0,1fr))";
+    button.classList.toggle("is-following", followStatus === "following" && !isSelf);
+    followErrorElement.hidden = !followErrorMessage;
+    followErrorElement.textContent = followErrorMessage;
+    if (isSelf) {
+      button.textContent = "You";
+      button.disabled = true;
+      button.title = "This is your profile.";
+      return;
+    }
+
+    button.textContent = followStatus === "following" ? "Following" : "Follow";
+    button.disabled = !user;
+    button.title = !user
+      ? "Sign in to follow users."
+      : followStatus === "following"
+        ? "Click to unfollow."
+        : "";
+  };
+  const loadFollowStatus = async (uid: string) => {
+    const user = signedInUser();
+    if (!user || user.uid === uid) {
+      followStatus = "not-following";
+      updateFollowButton();
+      return;
+    }
+
+    const requestRevision = followRevision;
+    try {
+      const followingUids = await loadFollowingUids(user.uid);
+      if (activeProfileUid !== uid || followRevision !== requestRevision) return;
+      if (signedInUser()?.uid !== user.uid) {
+        void loadFollowStatus(uid);
+        return;
+      }
+      followStatus = followingUids.includes(uid)
+        ? "following"
+        : "not-following";
+    } catch (error) {
+      console.error("Could not load user follow status.", error);
+      if (activeProfileUid !== uid || followRevision !== requestRevision) return;
+      followErrorMessage = error instanceof Error ? error.message : "Could not load follow status.";
+    }
+    updateFollowButton();
+  };
+  const persistFollowChange = async (
+    uid: string,
+    userUid: string,
+    shouldFollow: boolean,
+    requestRevision: number,
+  ) => {
+    try {
+      await waitWithTimeout(
+        setUserFollowing(userUid, uid, shouldFollow),
+        15000,
+        "Firestore did not confirm the follow update within 15 seconds.",
+      );
+      if (activeProfileUid !== uid || followRevision !== requestRevision) return;
+      followErrorMessage = "";
+    } catch (error) {
+      console.error("Could not update user follow status.", error);
+      if (activeProfileUid !== uid || followRevision !== requestRevision) return;
+      followErrorMessage = error instanceof Error ? error.message : "Could not update follow status.";
+    }
+    updateFollowButton();
+  };
+  const toggleFollow = () => {
+    const uid = activeProfileUid;
+    const user = signedInUser();
+    if (!uid || !user || user.uid === uid) return;
+    const shouldFollow = followStatus !== "following";
+    const followingUids = new Set(getCachedFollowingUids(user.uid));
+    if (shouldFollow) followingUids.add(uid);
+    else followingUids.delete(uid);
+    cacheFollowingUids(user.uid, [...followingUids]);
+    followStatus = shouldFollow ? "following" : "not-following";
+    followErrorMessage = "";
+    followRevision += 1;
+    updateFollowButton();
+    void persistFollowChange(uid, user.uid, shouldFollow, followRevision);
+  };
   const renderUserProfile = (uid: string, data: DataRecord, preferredAvatar?: string) => {
-    const displayName = stringValue(data.displayName, "Anonymous");
+    const isCurrentUser = legacy.currentUser?.uid === uid;
+    const displayName = [
+      data.displayName,
+      isCurrentUser ? legacy.commentDisplayName : undefined,
+      isCurrentUser ? legacy.currentUser?.displayName : undefined,
+      data.username,
+    ].find(
+      (name): name is string =>
+        typeof name === "string" && Boolean(name.trim()) && name.trim().toLowerCase() !== "anonymous",
+    )?.trim() || "Anonymous";
     const avatarUrl = stringValue(preferredAvatar) ||
       stringValue(data.avatar) ||
       stringValue(legacy.userStatsCache?.[uid]?.avatar, DEFAULT_AVATAR) ||
@@ -821,6 +958,14 @@ function initializeUserModals(): () => void {
   ): Promise<void> => {
     if (!uid) return;
     activeProfileUid = uid;
+    followRevision += 1;
+    const user = signedInUser();
+    followStatus = user && user.uid !== uid && getCachedFollowingUids(user.uid).includes(uid)
+      ? "following"
+      : "not-following";
+    followErrorMessage = "";
+    updateFollowButton();
+    void loadFollowStatus(uid);
     profileModal.dataset.profileUid = uid;
     const statsLink = profileModal.querySelector<HTMLAnchorElement>("[data-profile-stats]");
     if (statsLink) statsLink.href = `/stats/${encodeURIComponent(uid)}`;
@@ -1309,6 +1454,7 @@ function initializeUserModals(): () => void {
     }
     if (!target.closest(".dm-message-actions")) closeMessageMenus();
     if (target.closest("[data-close-profile]")) closeProfile();
+    else if (target.closest("[data-profile-follow]")) void toggleFollow();
     else if (target.closest("[data-profile-dm]")) {
       const dmTarget = profileDmTarget;
       closeProfile();
