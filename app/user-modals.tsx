@@ -386,13 +386,14 @@ html.dark .profile-box.leaderboard-rank-6{background:linear-gradient(145deg,#1d4
 .profile-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}.profile-avatar{width:80px;height:80px;border-radius:15px;border:3px solid #7c3aed;object-fit:cover}
 .profile-bio-link{display:block;width:fit-content;max-width:100%;margin-top:8px;color:#93c5fd;font-size:.82rem;line-height:1.35;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:2px}.profile-bio-link:hover{color:#bfdbfe}.profile-bio-link[hidden]{display:none}
 .profile-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
-.profile-dm,.profile-follow,.profile-stats-link{display:flex;align-items:center;justify-content:center;width:auto;height:34px;min-width:0;box-sizing:border-box;margin:0;border-radius:8px;font-size:12px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
+.profile-dm,.profile-follow,.profile-stats-link{display:flex;align-items:center;justify-content:center;gap:5px;width:auto;height:34px;min-width:0;box-sizing:border-box;margin:0;border-radius:8px;font-size:12px;font-weight:600;line-height:1.2;text-align:center;text-decoration:none;white-space:nowrap}
+.profile-actions svg{width:15px;height:15px;flex:0 0 15px}
 .profile-dm{background:transparent;color:#22c55e;border:1px solid #22c55e;cursor:pointer}
 .profile-follow{background:transparent;color:#a78bfa;border:1px solid #8b5cf6;cursor:pointer}.profile-follow:hover{background:rgba(139,92,246,.12)}.profile-follow.is-following{background:#7c3aed;border-color:#7c3aed;color:#fff}.profile-follow.is-following:hover{background:#6d28d9;border-color:#6d28d9}.profile-follow:disabled{opacity:.6;cursor:default}.profile-follow[hidden]{display:none}
 .profile-stats-link{border:1px solid #f472b6;color:#f9a8d4;transition:background .2s,color .2s}.profile-stats-link:hover{background:rgba(244,114,182,.12);color:#fff}
 .profile-follow-error{margin:-6px 0 12px;color:#fca5a5;font-size:.75rem;line-height:1.4;overflow-wrap:anywhere}
 .profile-stats{background:#28283a;border-radius:12px;padding:14px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center}.profile-stat-label{color:#aaa;font-size:.75rem}.profile-badge-title{display:flex;align-items:center;gap:10px;margin:12px 0;color:#ddd;font-size:13px;font-weight:700}.profile-badge-title:after{content:"";flex:1;height:1px;background:rgba(255,255,255,.15)}
-.user-custom-badge{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:var(--mikoroku-badge-height,24px);min-height:var(--mikoroku-badge-height,24px);padding:0 var(--mikoroku-badge-padding-x,8px);border:1px solid transparent;border-radius:var(--mikoroku-badge-radius,6px);background:linear-gradient(45deg,#7c3aed,#ec4899);color:white;font-size:var(--mikoroku-badge-font-size,11px);font-weight:600;line-height:1;white-space:nowrap;margin:2px}.game-role{display:inline-flex;padding:4px 9px;border-radius:8px;background:transparent;color:white;font-size:.78rem;font-weight:600;margin:2px}
+.user-custom-badge{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:var(--mikoroku-badge-height,24px);min-height:var(--mikoroku-badge-height,24px);padding:0 var(--mikoroku-badge-padding-x,8px);border:1px solid transparent;border-radius:var(--mikoroku-badge-radius,6px);background:linear-gradient(45deg,#7c3aed,#ec4899);color:white;font-size:var(--mikoroku-badge-font-size,11px);font-weight:600;line-height:1;white-space:nowrap;margin:2px}.game-roles-list{display:flex;flex-wrap:wrap}.game-role{display:inline-flex;padding:4px 9px;border-radius:8px;background:transparent;color:white;font-size:.78rem;font-weight:600;margin:2px;animation:game-role-reveal .28s ease-out both}.game-roles-load-more{display:block;margin:8px auto 0;padding:6px 12px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:rgba(255,255,255,.06);color:#ddd;font:inherit;font-size:.75rem;font-weight:600;cursor:pointer;transition:background .2s ease,border-color .2s ease,transform .2s ease}.game-roles-load-more:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35)}.game-roles-load-more:active{transform:scale(.96)}.game-roles-load-more[hidden]{display:none}@keyframes game-role-reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){.game-role{animation:none}.game-roles-load-more{transition:none}}
 #dm-modal{z-index:30000;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .dm-wrapper{width:100%;max-width:720px;height:78vh;display:flex;flex-direction:column;overflow:hidden;border-radius:22px;background:rgba(2,7,2,.92);border:1px solid rgba(77,255,101,.18);box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .dm-header{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:0 24px;background:rgba(133,255,77,.04);border-bottom:1px solid rgba(255,255,255,.06)}
@@ -647,7 +648,7 @@ function initializeUserModals(): () => void {
 
   const profileModal = createElement("div");
   profileModal.id = "user-profile-modal";
-  profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><div class="profile-actions"><button type="button" class="profile-follow" data-profile-follow>Follow</button><button type="button" class="profile-dm" data-profile-dm>Message</button><a class="profile-stats-link" data-profile-stats href="#">Stats</a></div><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
+  profileModal.innerHTML = `<section class="profile-box"><button type="button" class="profile-close" data-close-profile aria-label="Close">×</button><div class="profile-top"><div><img class="profile-avatar" data-profile="avatar" src="${DEFAULT_AVATAR}" alt="User avatar"><div style="margin-top:8px;font-size:.78em;color:#aaa"><div style="color:#777">Joined</div><div data-profile="joined" style="color:#60a5fa;font-weight:600">—</div></div></div><div style="flex:1;min-width:0"><h2 data-profile="displayName" style="margin:0;font-size:1.15rem;line-height:1.3;word-break:break-word">Loading...</h2><p data-profile="username" style="margin:4px 0;color:#aaa;font-size:.85rem"></p><p data-profile="bio" style="margin:6px 0 0;color:#ccc;font-size:.85rem;line-height:1.4;word-break:break-word"></p></div></div><div class="profile-actions"><button type="button" class="profile-follow" data-profile-follow><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 19c0-2.2-1.8-4-4-4H7a4 4 0 0 0-4 4"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m-3-3h6"/></svg><span data-profile-follow-label>Follow</span></button><button type="button" class="profile-dm" data-profile-dm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg><span>Message</span></button><a class="profile-stats-link" data-profile-stats href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-5 5"/></svg><span>Stats</span></a></div><div class="profile-stats"><div><div class="profile-stat-label">Level</div><div data-profile="level"></div></div><div><div class="profile-stat-label">Points</div><div data-profile="points"></div></div><div><div class="profile-stat-label">Comments</div><div data-profile="comments"></div></div><div><div class="profile-stat-label">Reputation</div><div data-profile="reputation"></div></div></div><div class="profile-badge-title">Badge Collection</div><div data-profile="badges" style="text-align:center;min-height:32px"></div><div data-profile="roles"></div></section>`;
   const followErrorElement = createElement("p", "profile-follow-error");
   followErrorElement.dataset.profileFollowError = "";
   followErrorElement.setAttribute("role", "status");
@@ -773,6 +774,7 @@ function initializeUserModals(): () => void {
     legacy.currentUser || legacy.firebase?.auth?.().currentUser || null;
   const updateFollowButton = () => {
     const button = profileModal.querySelector<HTMLButtonElement>("[data-profile-follow]");
+    const buttonLabel = button?.querySelector<HTMLElement>("[data-profile-follow-label]");
     const actions = profileModal.querySelector<HTMLElement>(".profile-actions");
     if (!button || !actions || !activeProfileUid) return;
 
@@ -784,13 +786,13 @@ function initializeUserModals(): () => void {
     followErrorElement.hidden = !followErrorMessage;
     followErrorElement.textContent = followErrorMessage;
     if (isSelf) {
-      button.textContent = "You";
+      if (buttonLabel) buttonLabel.textContent = "You";
       button.disabled = true;
       button.title = "This is your profile.";
       return;
     }
 
-    button.textContent = followStatus === "following" ? "Following" : "Follow";
+    if (buttonLabel) buttonLabel.textContent = followStatus === "following" ? "Following" : "Follow";
     button.disabled = !user;
     button.title = !user
       ? "Sign in to follow users."
@@ -953,16 +955,38 @@ function initializeUserModals(): () => void {
       });
     }
     if (rolesContainer && Array.isArray(data.gameRoles) && data.gameRoles.length) {
-      const title = createElement("div", "profile-badge-title", "Game Roles");
-      rolesContainer.appendChild(title);
-      data.gameRoles.forEach((roleId) => {
-        if (typeof roleId !== "string") return;
+      const roleEntries = data.gameRoles.reduce<Array<{ name: string; icon: string; color: string }>>((items, roleId) => {
+        if (typeof roleId !== "string") return items;
         const roleInfo = GAME_ROLES.get(roleId);
-        if (!roleInfo) return;
-        const role = createElement("span", "game-role", `${roleInfo.icon} ${roleInfo.name}`);
-        role.style.color = roleInfo.color;
-        rolesContainer.appendChild(role);
-      });
+        if (roleInfo) items.push(roleInfo);
+        return items;
+      }, []);
+      if (roleEntries.length === 0) return;
+      const title = createElement("div", "profile-badge-title", "Game Roles");
+      const roleList = createElement("div", "game-roles-list");
+      const loadMoreButton = createElement("button", "game-roles-load-more");
+      loadMoreButton.type = "button";
+      rolesContainer.appendChild(title);
+      rolesContainer.appendChild(roleList);
+      rolesContainer.appendChild(loadMoreButton);
+
+      let renderedRoleCount = 0;
+      const renderNextRoleBatch = () => {
+        const nextCount = Math.min(renderedRoleCount + 12, roleEntries.length);
+        for (let index = renderedRoleCount; index < nextCount; index += 1) {
+          const roleInfo = roleEntries[index];
+          const role = createElement("span", "game-role", `${roleInfo.icon} ${roleInfo.name}`);
+          role.style.color = roleInfo.color;
+          roleList.appendChild(role);
+        }
+        renderedRoleCount = nextCount;
+        const remainingCount = roleEntries.length - renderedRoleCount;
+        loadMoreButton.hidden = remainingCount === 0;
+        loadMoreButton.textContent = `Load more (${remainingCount})`;
+      };
+
+      loadMoreButton.addEventListener("click", renderNextRoleBatch);
+      renderNextRoleBatch();
     }
   };
   const showProfile = async (

@@ -226,10 +226,18 @@
 }
 
 .settings-nav-icon {
-  font-size: 1.05rem;
-  line-height: 1;
   width: 1.4em;
+  height: 1.4em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 1.4em;
   text-align: center;
+}
+
+.settings-nav-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .settings-nav-label {
@@ -642,6 +650,39 @@
   outline-offset: 2px;
   box-shadow: 0 0 0 4px var(--us-accent-glow);
   transform: translateY(-1px);
+}
+
+.settings-achievement-grid {
+  margin-top: 12px;
+}
+
+.settings-achievement-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: auto;
+  min-height: 48px;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: normal;
+}
+
+.settings-achievement-item img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.settings-achievement-name {
+  min-width: 0;
+}
+
+.settings-empty-state {
+  margin: 12px 0 0;
+  color: var(--us-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 /* Badge colors (kept from original) */

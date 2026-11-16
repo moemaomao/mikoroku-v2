@@ -132,11 +132,11 @@
 }
 .medal-fireflies[data-medal="crown"] .medal-firefly {
   --ff-dur: 3s;
-  color: #60a5fa;
+  color: #a78bfa;
 }
 .medal-fireflies[data-medal="laurel"] .medal-firefly {
   --ff-dur: 3.8s;
-  color: #a78bfa;
+  color: #4ade80;
 }
 .medal-fireflies[data-medal="comet"] .medal-firefly {
   --ff-dur: 2.6s;

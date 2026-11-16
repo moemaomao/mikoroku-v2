@@ -92,8 +92,8 @@ const readingMedals: Array<{
     chapters: 100,
     name: "Chapter Champion",
     description: "Reached a century of chapters",
-    color: "#2563eb",
-    gradient: "linear-gradient(135deg, #dbeafe 0%, #60a5fa 40%, #2563eb 100%)",
+    color: "#7c3aed",
+    gradient: "linear-gradient(135deg, #ede9fe 0%, #a78bfa 40%, #7c3aed 100%)",
     symbol: "crown",
     unlockMessage: "100 chapters! True champion energy.",
   },
@@ -101,8 +101,8 @@ const readingMedals: Array<{
     chapters: 250,
     name: "Lore Keeper",
     description: "Collected stories across series",
-    color: "#7c3aed",
-    gradient: "linear-gradient(135deg, #ede9fe 0%, #a78bfa 40%, #7c3aed 100%)",
+    color: "#16a34a",
+    gradient: "linear-gradient(135deg, #dcfce7 0%, #86efac 40%, #16a34a 100%)",
     symbol: "laurel",
     unlockMessage: "Lore is safe with you. Keep collecting.",
   },
@@ -205,6 +205,32 @@ async function detectNewMedalUnlocks(totalChaptersRead: number) {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function dateValue(value: unknown): Date | null {
+  let timestamp: number;
+  if (typeof value === "number") {
+    timestamp = value;
+  } else if (typeof value === "string") {
+    timestamp = Date.parse(value);
+  } else if (value && typeof value === "object") {
+    const dateLike = value as { toDate?: () => Date; toMillis?: () => number; seconds?: number };
+    if (typeof dateLike.toDate === "function") {
+      const date = dateLike.toDate();
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+    if (typeof dateLike.toMillis === "function") {
+      timestamp = dateLike.toMillis();
+    } else if (typeof dateLike.seconds === "number") {
+      timestamp = dateLike.seconds * 1000;
+    } else {
+      return null;
+    }
+  } else {
+    return null;
+  }
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function numberValue(value: unknown): number {
@@ -601,7 +627,7 @@ function ReadingMedals({
         ) : (
           <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All reading medals earned!</p>
         )}
-        <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-8">
           {readingMedals.map((medal) => {
             const unlocked = earnedTotal >= medal.chapters;
             const medalTileStyle: CSSProperties & { "--stats-medal-color": string } = {
@@ -623,7 +649,7 @@ function ReadingMedals({
                     setCurrent(medal);
                   }
                 }}
-                className={`flex aspect-[4/5] min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center transition sm:aspect-auto sm:flex-row sm:justify-start sm:gap-3 sm:p-3 sm:text-left ${
+                className={`flex aspect-[4/5] min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center transition sm:p-3 lg:gap-1 lg:p-2 ${
                   unlocked
                     ? "stats-gradient-card cursor-pointer border-black/10 shadow-md hover:brightness-105 hover:shadow-lg active:scale-[0.98] dark:border-white/15"
                     : "border-black/10 bg-slate-100/80 dark:border-white/10 dark:bg-black/20"
@@ -635,7 +661,7 @@ function ReadingMedals({
                 <img
                   src={medalImageMap[medal.symbol]}
                   alt=""
-                  className={`size-16 shrink-0 object-contain sm:size-14 ${unlocked ? "" : "grayscale opacity-40"}`}
+                  className={`size-16 shrink-0 object-contain lg:size-12 ${unlocked ? "" : "grayscale opacity-40"}`}
                   draggable={false}
                 />
                 <div className="min-w-0">
@@ -1244,6 +1270,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const profile = stats?.profile || {};
   const name = stringValue(profile.displayName) || stringValue(profile.username) || "Reader";
   const username = stringValue(profile.username);
+  const joinedAt = dateValue(profile.joinedAt) || dateValue(profile.createdAt);
   const avatar = stringValue(profile.avatar) || "/assets/icons/favicon.ico";
   const profileBanner = stringValue(profile.profileBanner);
   const hiddenStatsSections = getHiddenStatsSections(profile.hiddenStatsSections);
@@ -1354,9 +1381,18 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--mikoroku-accent)] sm:text-xs sm:tracking-[0.2em]">Reader stats</p>
                 <h1 className="mt-0.5 truncate text-lg font-bold leading-tight text-slate-900 dark:text-white sm:mt-1 sm:text-3xl">{name}</h1>
-                <p className="mt-1 truncate text-[11px] text-slate-600 dark:text-zinc-400 sm:text-sm">
-                  {username ? `@${username.replace(/^@/, "")}` : `Reader ID ${uid}`}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-zinc-400 sm:text-sm">
+                  <span className="truncate">{username ? `@${username.replace(/^@/, "")}` : `Reader ID ${uid}`}</span>
+                  {joinedAt && (
+                    <time
+                      dateTime={joinedAt.toISOString()}
+                      title={`Joined ${joinedAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`}
+                      className="inline-flex shrink-0 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-800 dark:border-emerald-300/20 dark:bg-emerald-500/10 dark:text-emerald-200 sm:text-[10px]"
+                    >
+                      Joined {joinedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </time>
+                  )}
+                </div>
                 <div className="mt-2 grid max-w-[360px] grid-cols-2 gap-1.5 text-[10px] sm:mt-3 sm:flex sm:max-w-none sm:flex-wrap sm:gap-2 sm:text-xs">
                   <span className="profile-stat-badge border border-violet-200 bg-violet-100/90 font-semibold text-violet-800 dark:border-violet-300/20 dark:bg-violet-500/15 dark:text-violet-200">
                     Level {level}
@@ -1491,6 +1527,14 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                       const height = day.chapters
                         ? Math.max(8, (day.chapters / maxActivity) * 100)
                         : 3;
+                      const intensity = day.chapters && maxActivity > 1
+                        ? (day.chapters - 1) / (maxActivity - 1)
+                        : day.chapters ? 0 : null;
+                      const color = intensity === null
+                        ? undefined
+                        : intensity <= 0.5
+                          ? `rgb(${Math.round(34 + (234 - 34) * (intensity * 2))} ${Math.round(197 + (179 - 197) * (intensity * 2))} ${Math.round(94 + (8 - 94) * (intensity * 2))})`
+                          : `rgb(${Math.round(234 + (239 - 234) * ((intensity - 0.5) * 2))} ${Math.round(179 + (68 - 179) * ((intensity - 0.5) * 2))} ${Math.round(8 + (68 - 8) * ((intensity - 0.5) * 2))})`;
                       return (
                         <div key={day.date} className="flex min-w-0 flex-col items-center gap-2" title={`${day.date}: ${day.chapters} chapters`}>
                           <span className="h-4 text-xs font-semibold text-slate-700 dark:text-zinc-300">
@@ -1501,7 +1545,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                               className={`w-full rounded-t-md transition-[height] ${day.chapters ? "shadow-[0_0_16px_color-mix(in_srgb,var(--mikoroku-accent)_20%,transparent)]" : "bg-slate-300 dark:bg-white/10"}`}
                               style={{
                                 height: `${height}%`,
-                                ...(day.chapters ? { backgroundColor: "var(--mikoroku-accent)" } : {}),
+                                ...(color ? { backgroundColor: color } : {}),
                               }}
                               role="img"
                               aria-label={`${day.chapters} chapters`}

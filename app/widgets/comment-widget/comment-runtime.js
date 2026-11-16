@@ -2291,6 +2291,7 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
               return badge ? `<span class="user-custom-badge ${badge.id}">${badge.text}</span>` : '';
             }).join('');
           })()}
+          ${renderReadingMedalBadges(comment.uid ? userStatsCache[comment.uid] : null)}
         </div>
         ${(() => {
           let username = null;
@@ -2574,6 +2575,16 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
 
     statsRequest.then(doc => {
       const data = doc.exists ? doc.data() : {};
+      if (!cachedStats && doc.exists) {
+        userStatsCache[userId] = data;
+        saveUserStatsCache();
+      }
+
+      const authorNameRow = div.querySelector('.author-name-row');
+      if (authorNameRow) {
+        authorNameRow.querySelectorAll('[data-reading-medal-badge]').forEach(element => element.remove());
+        authorNameRow.insertAdjacentHTML('beforeend', renderReadingMedalBadges(data));
+      }
       
       const level = getCommentLevel(data.commentCount || 0);
 
@@ -5144,6 +5155,31 @@ function getSelectedBadges(stats = {}) {
     : getCommentLevel(stats.commentCount || 0);
   return [...new Set(saved.filter(id => BADGES.some(badge => badge.id === id)))]
     .slice(0, getBadgeLimit({ ...stats, level }));
+}
+
+const READING_MEDAL_BADGES = [
+  { id: "medal-first-spark", text: "First Spark", chapters: 10, gradient: "linear-gradient(135deg,#fef3c7,#fde68a 40%,#f59e0b)", color: "#422006" },
+  { id: "medal-page-scout", text: "Page Scout", chapters: 25, gradient: "linear-gradient(135deg,#e2e8f0,#94a3b8 45%,#64748b)", color: "#0f172a" },
+  { id: "medal-story-seeker", text: "Story Seeker", chapters: 50, gradient: "linear-gradient(135deg,#ffedd5,#fdba74 40%,#ea580c)", color: "#431407" },
+  { id: "medal-chapter-champion", text: "Chapter Champion", chapters: 100, gradient: "linear-gradient(135deg,#ede9fe,#a78bfa 40%,#7c3aed)", color: "#fff" },
+  { id: "medal-lore-keeper", text: "Lore Keeper", chapters: 250, gradient: "linear-gradient(135deg,#dcfce7,#86efac 40%,#16a34a)", color: "#052e16" },
+  { id: "medal-story-sage", text: "Story Sage", chapters: 500, gradient: "linear-gradient(135deg,#fae8ff,#e879f9 35%,#c026d3 70%,#86198f)", color: "#fff" },
+  { id: "medal-eternal-reader", text: "Eternal Reader", chapters: 1000, gradient: "linear-gradient(135deg,#fef3c7,#fbbf24 30%,#f59e0b 55%,#ea580c 80%,#c2410c)", color: "#431407" },
+  { id: "medal-infinity-archive", text: "Infinity Archive", chapters: 1500, gradient: "linear-gradient(135deg,#a5f3fc,#22d3ee 20%,#a78bfa 45%,#f472b6 70%,#fbbf24)", color: "#164e63" }
+];
+
+function renderReadingMedalBadges(stats) {
+  if (!stats || typeof stats !== "object" || !Array.isArray(stats.achievementBadges)) return "";
+  const readingStats = stats.readingStats && typeof stats.readingStats === "object"
+    ? stats.readingStats
+    : {};
+  const chaptersRead = Number(readingStats.totalChaptersRead || stats.totalChaptersRead || 0);
+  if (!Number.isFinite(chaptersRead)) return "";
+  return READING_MEDAL_BADGES
+    .filter(medal => stats.achievementBadges.includes(medal.id) && chaptersRead >= medal.chapters)
+    .slice(0, 1)
+    .map(medal => `<span class="user-custom-badge reading-medal-badge" data-reading-medal-badge="true" title="Reading Medal" style="background:${medal.gradient};color:${medal.color};">${medal.text}</span>`)
+    .join("");
 }
 
 function getBadgeLimit(stats = {}) {
