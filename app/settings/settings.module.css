@@ -656,6 +656,10 @@
   margin-top: 12px;
 }
 
+.settings-achievement-heading {
+  margin-top: 20px;
+}
+
 .settings-achievement-item {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;

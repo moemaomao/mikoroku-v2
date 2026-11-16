@@ -2291,7 +2291,7 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
               return badge ? `<span class="user-custom-badge ${badge.id}">${badge.text}</span>` : '';
             }).join('');
           })()}
-          ${renderReadingMedalBadges(comment.uid ? userStatsCache[comment.uid] : null)}
+          ${renderAchievementMedalBadge(comment.uid ? userStatsCache[comment.uid] : null)}
         </div>
         ${(() => {
           let username = null;
@@ -2582,8 +2582,8 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
 
       const authorNameRow = div.querySelector('.author-name-row');
       if (authorNameRow) {
-        authorNameRow.querySelectorAll('[data-reading-medal-badge]').forEach(element => element.remove());
-        authorNameRow.insertAdjacentHTML('beforeend', renderReadingMedalBadges(data));
+        authorNameRow.querySelectorAll('[data-achievement-medal-badge]').forEach(element => element.remove());
+        authorNameRow.insertAdjacentHTML('beforeend', renderAchievementMedalBadge(data));
       }
       
       const level = getCommentLevel(data.commentCount || 0);
@@ -5168,17 +5168,35 @@ const READING_MEDAL_BADGES = [
   { id: "medal-infinity-archive", text: "Infinity Archive", chapters: 1500, gradient: "linear-gradient(135deg,#a5f3fc,#22d3ee 20%,#a78bfa 45%,#f472b6 70%,#fbbf24)", color: "#164e63" }
 ];
 
-function renderReadingMedalBadges(stats) {
+const COMMENT_MEDAL_BADGES = [
+  { id: "comment-medal-first-voice", text: "First Voice", comments: 10, gradient: "linear-gradient(135deg,#fef3c7,#fde68a 40%,#f59e0b)", color: "#422006" },
+  { id: "comment-medal-conversation-starter", text: "Conversation Starter", comments: 25, gradient: "linear-gradient(135deg,#e2e8f0,#94a3b8 45%,#64748b)", color: "#0f172a" },
+  { id: "comment-medal-regular-voice", text: "Regular Voice", comments: 50, gradient: "linear-gradient(135deg,#ffedd5,#fdba74 40%,#ea580c)", color: "#431407" },
+  { id: "comment-medal-discussion-champion", text: "Discussion Champion", comments: 100, gradient: "linear-gradient(135deg,#ede9fe,#a78bfa 40%,#7c3aed)", color: "#fff" },
+  { id: "comment-medal-community-voice", text: "Community Voice", comments: 250, gradient: "linear-gradient(135deg,#dcfce7,#86efac 40%,#16a34a)", color: "#052e16" },
+  { id: "comment-medal-comment-sage", text: "Comment Sage", comments: 500, gradient: "linear-gradient(135deg,#fae8ff,#e879f9 35%,#c026d3 70%,#86198f)", color: "#fff" },
+  { id: "comment-medal-community-legend", text: "Community Legend", comments: 1000, gradient: "linear-gradient(135deg,#fef3c7,#fbbf24 30%,#f59e0b 55%,#ea580c 80%,#c2410c)", color: "#431407" },
+  { id: "comment-medal-infinite-conversationalist", text: "Infinite Conversationalist", comments: 1500, gradient: "linear-gradient(135deg,#a5f3fc,#22d3ee 20%,#a78bfa 45%,#f472b6 70%,#fbbf24)", color: "#164e63" }
+];
+
+function renderAchievementMedalBadge(stats) {
   if (!stats || typeof stats !== "object" || !Array.isArray(stats.achievementBadges)) return "";
   const readingStats = stats.readingStats && typeof stats.readingStats === "object"
     ? stats.readingStats
     : {};
   const chaptersRead = Number(readingStats.totalChaptersRead || stats.totalChaptersRead || 0);
-  if (!Number.isFinite(chaptersRead)) return "";
-  return READING_MEDAL_BADGES
-    .filter(medal => stats.achievementBadges.includes(medal.id) && chaptersRead >= medal.chapters)
-    .slice(0, 1)
-    .map(medal => `<span class="user-custom-badge reading-medal-badge" data-reading-medal-badge="true" title="Reading Medal" style="background:${medal.gradient};color:${medal.color};">${medal.text}</span>`)
+  const commentCount = Number(stats.commentCount || 0);
+  if (!Number.isFinite(chaptersRead) || !Number.isFinite(commentCount)) return "";
+  const selectedMedals = [
+    READING_MEDAL_BADGES.filter(medal =>
+      stats.achievementBadges.includes(medal.id) && chaptersRead >= medal.chapters
+    ).slice(0, 1),
+    COMMENT_MEDAL_BADGES.filter(medal =>
+      stats.achievementBadges.includes(medal.id) && commentCount >= medal.comments
+    ).slice(0, 1)
+  ].flat();
+  return selectedMedals
+    .map(medal => `<span class="user-custom-badge reading-medal-badge" data-achievement-medal-badge="true" title="Achievement Medal" style="background:${medal.gradient};color:${medal.color};">${medal.text}</span>`)
     .join("");
 }
 

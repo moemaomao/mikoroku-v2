@@ -22,6 +22,8 @@ import {
   setCachedReadingStats,
   getUnlockedMedals,
   setUnlockedMedals,
+  getUnlockedCommentMedals,
+  setUnlockedCommentMedals,
 } from "../lib/reading-stats-cache";
 import SiteChrome from "../site-chrome";
 import { CoverImage } from "../lib/cover-image";
@@ -32,8 +34,7 @@ type MedalSymbol = "spark" | "book" | "flame" | "crown" | "laurel" | "comet" | "
 /* ------------------------------------------------------------------ */
 /*  3D Card Shift (inspired by CodePen "Card Shift: 3D-ish")          */
 /* ------------------------------------------------------------------ */
-type ReadingMedalData = {
-  chapters: number;
+type MedalAchievementData = {
   name: string;
   description: string;
   color: string;
@@ -43,13 +44,20 @@ type ReadingMedalData = {
   unlockMessage: string;
 };
 
-function ReadingMedalCard({
+type ReadingMedalData = MedalAchievementData & { chapters: number };
+type CommentMedalData = MedalAchievementData & { comments: number };
+
+function MedalCard({
   medal,
+  count,
+  countLabel,
   unlocked,
   imageSrc,
   onOpen,
 }: {
-  medal: ReadingMedalData;
+  medal: MedalAchievementData;
+  count: number;
+  countLabel: "chapters" | "comments";
   unlocked: boolean;
   imageSrc: string;
   onOpen?: () => void;
@@ -148,7 +156,7 @@ function ReadingMedalCard({
           transformStyle: "preserve-3d",
           transformOrigin: "center bottom",
         }}
-        aria-label={`${medal.name}, ${medal.chapters} chapters, ${unlocked ? "unlocked, click to view" : "locked"}`}
+        aria-label={`${medal.name}, ${count} ${countLabel}, ${unlocked ? "unlocked, click to view" : "locked"}`}
         title={unlocked ? "Click to view celebration" : undefined}
       >
         {/* Mirror / ghost of medal that stays on the card when image lifts */}
@@ -178,7 +186,7 @@ function ReadingMedalCard({
             unlocked ? "" : "text-slate-400 dark:text-white/30"
           } reading-medal-count`}
         >
-          {medal.chapters}
+          {count}
         </span>
 
         {/* Bottom labels */}
@@ -353,6 +361,28 @@ const medalImageMap: Record<MedalSymbol, string> = {
   infinity: "/assets/medals/8.webp",
 };
 
+const commentMedals: CommentMedalData[] = [
+  { comments: 10, name: "First Voice", description: "Started joining the conversation", color: "#b7791f", darkColor: "#fcd34d", gradient: "linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #f59e0b 100%)", symbol: "spark", unlockMessage: "Your voice is part of the community now." },
+  { comments: 25, name: "Conversation Starter", description: "Shared your thoughts", color: "#64748b", darkColor: "#cbd5e1", gradient: "linear-gradient(135deg, #e2e8f0 0%, #94a3b8 45%, #64748b 100%)", symbol: "book", unlockMessage: "You always have something worth saying." },
+  { comments: 50, name: "Regular Voice", description: "Became a familiar face", color: "#c2410c", darkColor: "#fdba74", gradient: "linear-gradient(135deg, #ffedd5 0%, #fdba74 40%, #ea580c 100%)", symbol: "flame", unlockMessage: "The discussions are better with you in them." },
+  { comments: 100, name: "Discussion Champion", description: "Reached 100 comments", color: "#7c3aed", darkColor: "#c4b5fd", gradient: "linear-gradient(135deg, #ede9fe 0%, #a78bfa 40%, #7c3aed 100%)", symbol: "crown", unlockMessage: "A hundred contributions. What a champion." },
+  { comments: 250, name: "Community Voice", description: "Helped bring the community together", color: "#16a34a", darkColor: "#86efac", gradient: "linear-gradient(135deg, #dcfce7 0%, #86efac 40%, #16a34a 100%)", symbol: "laurel", unlockMessage: "Your words have become part of the community." },
+  { comments: 500, name: "Comment Sage", description: "A seasoned conversation keeper", color: "#c026d3", darkColor: "#f0abfc", gradient: "linear-gradient(135deg, #fae8ff 0%, #e879f9 35%, #c026d3 70%, #86198f 100%)", symbol: "comet", unlockMessage: "Five hundred comments of wisdom and fun." },
+  { comments: 1000, name: "Community Legend", description: "A thousand contributions", color: "#d97706", darkColor: "#fcd34d", gradient: "linear-gradient(135deg, #fef3c7 0%, #fbbf24 30%, #f59e0b 55%, #ea580c 80%, #c2410c 100%)", symbol: "gem", unlockMessage: "Your presence has left a lasting mark." },
+  { comments: 1500, name: "Infinite Conversationalist", description: "Never out of things to say", color: "#06b6d4", darkColor: "#67e8f9", gradient: "linear-gradient(135deg, #a5f3fc 0%, #22d3ee 20%, #a78bfa 45%, #f472b6 70%, #fbbf24 100%)", symbol: "infinity", unlockMessage: "The conversation goes on, and so do you." },
+];
+
+const commentMedalImageMap: Record<MedalSymbol, string> = {
+  spark: "/assets/comment-medals/1.webp",
+  book: "/assets/comment-medals/2.webp",
+  flame: "/assets/comment-medals/3.webp",
+  crown: "/assets/comment-medals/4.webp",
+  laurel: "/assets/comment-medals/5.webp",
+  comet: "/assets/comment-medals/6.webp",
+  gem: "/assets/comment-medals/7.webp",
+  infinity: "/assets/comment-medals/8.webp",
+};
+
 const statsSectionSettings = [
   {
     id: "stat-cards",
@@ -363,6 +393,11 @@ const statsSectionSettings = [
     id: "medals",
     label: "Reading medals",
     description: "Milestones and unlocked medals.",
+  },
+  {
+    id: "comment-medals",
+    label: "Comment medals",
+    description: "Comment milestones and earned medals.",
   },
   {
     id: "reading-charts",
@@ -405,6 +440,19 @@ async function detectNewMedalUnlocks(totalChaptersRead: number) {
   if (newly.length > 0) {
     await setUnlockedMedals(
       readingMedals.filter((m) => totalChaptersRead >= m.chapters).map((m) => m.chapters),
+    );
+  }
+  return newly;
+}
+
+async function detectNewCommentMedalUnlocks(commentCount: number) {
+  const previously = new Set(await getUnlockedCommentMedals());
+  const newly = commentMedals.filter(
+    (medal) => commentCount >= medal.comments && !previously.has(medal.comments),
+  );
+  if (newly.length > 0) {
+    await setUnlockedCommentMedals(
+      commentMedals.filter((medal) => commentCount >= medal.comments).map((medal) => medal.comments),
     );
   }
   return newly;
@@ -612,14 +660,19 @@ function StatsCard({
 
 function MedalUnlockModal({
   medal,
+  count,
+  countLabel,
+  imageSrc,
   onClose,
 }: {
-  medal: (typeof readingMedals)[number];
+  medal: MedalAchievementData;
+  count: number;
+  countLabel: "chapters" | "comments";
+  imageSrc: string;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [entered, setEntered] = useState(false);
-  const medalImage = medalImageMap[medal.symbol] ?? "/assets/medals/1.webp";
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -645,6 +698,7 @@ function MedalUnlockModal({
         ["--medal-light-text" as string]: medal.color,
         ["--medal-dark-text" as string]: medal.darkColor,
       }}
+      data-medal-kind={countLabel === "comments" ? "comment" : "reading"}
     >
       <div
         className="absolute inset-0 transition-opacity duration-300"
@@ -694,7 +748,7 @@ function MedalUnlockModal({
     ))}
   </div>
   <img
-    src={medalImage}
+    src={imageSrc}
     alt={medal.name}
     className={`relative z-[1] h-auto w-full object-contain ${entered ? "medal-img-enter" : "opacity-0"}`}
     draggable={false}
@@ -722,7 +776,7 @@ function MedalUnlockModal({
             className={`medal-unlock-text medal-unlock-subtext mt-1 text-xs font-medium ${entered ? "medal-text-enter" : "opacity-0"}`}
             style={{ animationDelay: "0.55s" }}
           >
-            {medal.chapters.toLocaleString()} chapters
+            {count.toLocaleString()} {countLabel}
           </p>
           <p
             className={`medal-unlock-text medal-unlock-subtext mt-3 text-sm leading-relaxed ${entered ? "medal-text-enter" : "opacity-0"}`}
@@ -767,8 +821,8 @@ function ReadingMedals({
     ? Math.max(0, Math.min(100, ((earnedTotal - previousMilestone) / (nextMedal.chapters - previousMilestone)) * 100))
     : 100;
 
-  const [queue, setQueue] = useState<Array<(typeof readingMedals)[number]>>([]);
-  const [current, setCurrent] = useState<(typeof readingMedals)[number] | null>(null);
+  const [queue, setQueue] = useState<ReadingMedalData[]>([]);
+  const [current, setCurrent] = useState<ReadingMedalData | null>(null);
 
   useEffect(() => {
     if (!isOwner) {
@@ -845,9 +899,11 @@ function ReadingMedals({
           {readingMedals.map((medal) => {
             const unlocked = earnedTotal >= medal.chapters;
             return (
-              <ReadingMedalCard
+              <MedalCard
                 key={medal.chapters}
                 medal={medal}
+                count={medal.chapters}
+                countLabel="chapters"
                 unlocked={unlocked}
                 imageSrc={medalImageMap[medal.symbol]}
                 onOpen={() => setCurrent(medal)}
@@ -856,7 +912,133 @@ function ReadingMedals({
           })}
         </div>
       </section>
-      {current && <MedalUnlockModal medal={current} onClose={() => setCurrent(null)} />}
+      {current && (
+        <MedalUnlockModal
+          medal={current}
+          count={current.chapters}
+          countLabel="chapters"
+          imageSrc={medalImageMap[current.symbol]}
+          onClose={() => setCurrent(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function CommentMedals({
+  commentCount,
+  isOwner,
+}: {
+  commentCount: number;
+  isOwner: boolean;
+}) {
+  const [persistedUnlocks, setPersistedUnlocks] = useState<number[]>([]);
+  const earnedTotal = Math.max(commentCount, ...(isOwner ? persistedUnlocks : []));
+  const unlockedCount = commentMedals.filter((medal) => earnedTotal >= medal.comments).length;
+  const nextMedal = commentMedals.find((medal) => earnedTotal < medal.comments);
+  const previousMilestone = nextMedal
+    ? commentMedals[commentMedals.indexOf(nextMedal) - 1]?.comments || 0
+    : 0;
+  const progressToNext = nextMedal
+    ? Math.max(0, Math.min(100, ((earnedTotal - previousMilestone) / (nextMedal.comments - previousMilestone)) * 100))
+    : 100;
+  const [queue, setQueue] = useState<CommentMedalData[]>([]);
+  const [current, setCurrent] = useState<CommentMedalData | null>(null);
+
+  useEffect(() => {
+    if (!isOwner) {
+      setPersistedUnlocks([]);
+      return;
+    }
+    let cancelled = false;
+    void getUnlockedCommentMedals().then((unlocked) => {
+      if (!cancelled) setPersistedUnlocks(unlocked);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner]);
+
+  useEffect(() => {
+    if (!isOwner || commentCount <= 0) return;
+    let cancelled = false;
+    void (async () => {
+      const newly = await detectNewCommentMedalUnlocks(commentCount);
+      const unlocked = await getUnlockedCommentMedals();
+      if (cancelled) return;
+      setPersistedUnlocks((currentUnlocks) => [...new Set([...currentUnlocks, ...unlocked])]);
+      if (newly.length > 0) {
+        setQueue((previous) => [...previous, ...newly.sort((left, right) => right.comments - left.comments)]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [commentCount, isOwner]);
+
+  useEffect(() => {
+    if (current || queue.length === 0) return;
+    const [next, ...rest] = queue;
+    setCurrent(next);
+    setQueue(rest);
+  }, [current, queue]);
+
+  return (
+    <>
+      <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Comment Medals</h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
+              {earnedTotal.toLocaleString()} comments posted
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-slate-600 dark:text-zinc-400">
+            {unlockedCount} / {commentMedals.length} unlocked
+          </span>
+        </div>
+        {nextMedal ? (
+          <div className="mt-4">
+            <div className="mb-1.5 flex justify-between gap-3 text-xs text-slate-600 dark:text-zinc-400">
+              <span>Next: {nextMedal.name}</span>
+              <span>{Math.max(0, nextMedal.comments - earnedTotal).toLocaleString()} to go</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+              <div
+                className="h-full rounded-full transition-[width]"
+                style={{ width: `${progressToNext}%`, backgroundColor: "var(--mikoroku-accent)" }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All comment medals earned!</p>
+        )}
+        <div className="mt-5 grid grid-cols-3 gap-1.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-6 lg:grid-cols-6">
+          {commentMedals.map((medal) => {
+            const unlocked = earnedTotal >= medal.comments;
+            return (
+              <MedalCard
+                key={medal.comments}
+                medal={medal}
+                count={medal.comments}
+                countLabel="comments"
+                unlocked={unlocked}
+                imageSrc={commentMedalImageMap[medal.symbol]}
+                onOpen={() => setCurrent(medal)}
+              />
+            );
+          })}
+        </div>
+      </section>
+      {current && (
+        <MedalUnlockModal
+          medal={current}
+          count={current.comments}
+          countLabel="comments"
+          imageSrc={commentMedalImageMap[current.symbol]}
+          onClose={() => setCurrent(null)}
+        />
+      )}
     </>
   );
 }
@@ -1664,6 +1846,10 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
               {!hiddenStatsSections.includes("medals") && (
                 <ReadingMedals totalChaptersRead={stats.totalChaptersRead} isOwner={isOwner} />
+              )}
+
+              {!hiddenStatsSections.includes("comment-medals") && (
+                <CommentMedals commentCount={commentCount} isOwner={isOwner} />
               )}
 
               {!hiddenStatsSections.includes("reading-charts") && (

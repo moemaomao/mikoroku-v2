@@ -292,6 +292,26 @@ const BADGE_LABELS = new Map(
     return [id, label] as const;
   }),
 );
+const READING_MEDAL_BADGES = [
+  { id: "medal-first-spark", name: "First Spark", chapters: 10, gradient: "linear-gradient(135deg,#fef3c7,#fde68a 40%,#f59e0b)", color: "#422006" },
+  { id: "medal-page-scout", name: "Page Scout", chapters: 25, gradient: "linear-gradient(135deg,#e2e8f0,#94a3b8 45%,#64748b)", color: "#0f172a" },
+  { id: "medal-story-seeker", name: "Story Seeker", chapters: 50, gradient: "linear-gradient(135deg,#ffedd5,#fdba74 40%,#ea580c)", color: "#431407" },
+  { id: "medal-chapter-champion", name: "Chapter Champion", chapters: 100, gradient: "linear-gradient(135deg,#ede9fe,#a78bfa 40%,#7c3aed)", color: "#fff" },
+  { id: "medal-lore-keeper", name: "Lore Keeper", chapters: 250, gradient: "linear-gradient(135deg,#dcfce7,#86efac 40%,#16a34a)", color: "#052e16" },
+  { id: "medal-story-sage", name: "Story Sage", chapters: 500, gradient: "linear-gradient(135deg,#fae8ff,#e879f9 35%,#c026d3 70%,#86198f)", color: "#fff" },
+  { id: "medal-eternal-reader", name: "Eternal Reader", chapters: 1000, gradient: "linear-gradient(135deg,#fef3c7,#fbbf24 30%,#f59e0b 55%,#ea580c 80%,#c2410c)", color: "#431407" },
+  { id: "medal-infinity-archive", name: "Infinity Archive", chapters: 1500, gradient: "linear-gradient(135deg,#a5f3fc,#22d3ee 20%,#a78bfa 45%,#f472b6 70%,#fbbf24)", color: "#164e63" },
+];
+const COMMENT_MEDAL_BADGES = [
+  { id: "comment-medal-first-voice", name: "First Voice", comments: 10, gradient: "linear-gradient(135deg,#fef3c7,#fde68a 40%,#f59e0b)", color: "#422006" },
+  { id: "comment-medal-conversation-starter", name: "Conversation Starter", comments: 25, gradient: "linear-gradient(135deg,#e2e8f0,#94a3b8 45%,#64748b)", color: "#0f172a" },
+  { id: "comment-medal-regular-voice", name: "Regular Voice", comments: 50, gradient: "linear-gradient(135deg,#ffedd5,#fdba74 40%,#ea580c)", color: "#431407" },
+  { id: "comment-medal-discussion-champion", name: "Discussion Champion", comments: 100, gradient: "linear-gradient(135deg,#ede9fe,#a78bfa 40%,#7c3aed)", color: "#fff" },
+  { id: "comment-medal-community-voice", name: "Community Voice", comments: 250, gradient: "linear-gradient(135deg,#dcfce7,#86efac 40%,#16a34a)", color: "#052e16" },
+  { id: "comment-medal-comment-sage", name: "Comment Sage", comments: 500, gradient: "linear-gradient(135deg,#fae8ff,#e879f9 35%,#c026d3 70%,#86198f)", color: "#fff" },
+  { id: "comment-medal-community-legend", name: "Community Legend", comments: 1000, gradient: "linear-gradient(135deg,#fef3c7,#fbbf24 30%,#f59e0b 55%,#ea580c 80%,#c2410c)", color: "#431407" },
+  { id: "comment-medal-infinite-conversationalist", name: "Infinite Conversationalist", comments: 1500, gradient: "linear-gradient(135deg,#a5f3fc,#22d3ee 20%,#a78bfa 45%,#f472b6 70%,#fbbf24)", color: "#164e63" },
+];
 const GAME_ROLE_DATA = `genshin|Genshin Impact|🌟|#a78bfa
 honkai-star-rail|Honkai: Star Rail|🚂|#c084fc
 zenless-zone-zero|Zenless Zone Zero|🦾|#22d3ee
@@ -477,6 +497,9 @@ function getUserProfileCacheData(data: DataRecord): DataRecord {
     "reputation",
     "customBadges",
     "customBadge",
+    "achievementBadges",
+    "readingStats",
+    "totalChaptersRead",
     "gameRoles",
   ]) {
     if (data[key] !== undefined) cached[key] = data[key];
@@ -951,6 +974,35 @@ function initializeUserModals(): () => void {
           `user-custom-badge settings-badge-option profile-custom-badge ${settingsStyles["settings-badge-chip"]} badge-${customBadge}`,
           badgeLabel,
         );
+        badgeContainer.appendChild(badge);
+      });
+      const selectedMedals = Array.isArray(data.achievementBadges)
+        ? data.achievementBadges.filter((badge): badge is string => typeof badge === "string")
+        : [];
+      const readingStats = asRecord(data.readingStats);
+      const chaptersRead = numberValue(readingStats.totalChaptersRead, numberValue(data.totalChaptersRead));
+      READING_MEDAL_BADGES.filter(
+        (medal) => selectedMedals.includes(medal.id) && chaptersRead >= medal.chapters,
+      ).slice(0, 1).forEach((medal) => {
+        const badge = createElement(
+          "span",
+          `user-custom-badge profile-custom-badge reading-medal-badge ${settingsStyles["settings-badge-chip"]}`,
+          medal.name,
+        );
+        badge.style.background = medal.gradient;
+        badge.style.color = medal.color;
+        badgeContainer.appendChild(badge);
+      });
+      COMMENT_MEDAL_BADGES.filter(
+        (medal) => selectedMedals.includes(medal.id) && comments >= medal.comments,
+      ).slice(0, 1).forEach((medal) => {
+        const badge = createElement(
+          "span",
+          `user-custom-badge profile-custom-badge reading-medal-badge ${settingsStyles["settings-badge-chip"]}`,
+          medal.name,
+        );
+        badge.style.background = medal.gradient;
+        badge.style.color = medal.color;
         badgeContainer.appendChild(badge);
       });
     }

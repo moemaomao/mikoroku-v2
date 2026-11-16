@@ -30,13 +30,25 @@ function getReadingChapterCount(data: unknown): number {
   return typeof total === "number" && Number.isFinite(total) ? Math.max(0, total) : 0;
 }
 
-function normalizeAchievementBadges(value: unknown, chaptersRead: number): string[] {
+function getCommentCount(data: unknown): number {
+  if (!data || typeof data !== "object") return 0;
+  const count = (data as { commentCount?: unknown }).commentCount;
+  return typeof count === "number" && Number.isFinite(count) ? Math.max(0, count) : 0;
+}
+
+function normalizeAchievementBadges(value: unknown, chaptersRead: number, commentCount: number): string[] {
   if (!Array.isArray(value)) return [];
-  const unlockedIds = new Set<string>(
-    readingMedals.filter((medal) => chaptersRead >= medal.chapters).map((medal) => medal.id),
-  );
-  return [...new Set(value.filter((id): id is string => typeof id === "string" && unlockedIds.has(id)))]
-    .slice(0, 1);
+  const selectedIds = new Set(value.filter((id): id is string => typeof id === "string"));
+  const readingBadge = readingMedals.find(
+    (medal) => selectedIds.has(medal.id) && chaptersRead >= medal.chapters,
+  )?.id;
+  const commentBadge = commentMedals.find(
+    (medal) => selectedIds.has(medal.id) && commentCount >= medal.comments,
+  )?.id;
+  const normalized: string[] = [];
+  if (readingBadge) normalized.push(readingBadge);
+  if (commentBadge) normalized.push(commentBadge);
+  return normalized;
 }
 
 
@@ -71,6 +83,16 @@ const readingMedals = [
   { id: "medal-story-sage", name: "Story Sage", chapters: 500, image: "/assets/medals/6.webp", gradient: "linear-gradient(135deg, #fae8ff 0%, #e879f9 35%, #c026d3 70%, #86198f 100%)", textColor: "#fff" },
   { id: "medal-eternal-reader", name: "Eternal Reader", chapters: 1000, image: "/assets/medals/7.webp", gradient: "linear-gradient(135deg, #fef3c7 0%, #fbbf24 30%, #f59e0b 55%, #ea580c 80%, #c2410c 100%)", textColor: "#431407" },
   { id: "medal-infinity-archive", name: "Infinity Archive", chapters: 1500, image: "/assets/medals/8.webp", gradient: "linear-gradient(135deg, #a5f3fc 0%, #22d3ee 20%, #a78bfa 45%, #f472b6 70%, #fbbf24 100%)", textColor: "#164e63" },
+] as const;
+const commentMedals = [
+  { id: "comment-medal-first-voice", name: "First Voice", comments: 10, image: "/assets/comment-medals/1.webp", gradient: "linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #f59e0b 100%)", textColor: "#422006" },
+  { id: "comment-medal-conversation-starter", name: "Conversation Starter", comments: 25, image: "/assets/comment-medals/2.webp", gradient: "linear-gradient(135deg, #e2e8f0 0%, #94a3b8 45%, #64748b 100%)", textColor: "#0f172a" },
+  { id: "comment-medal-regular-voice", name: "Regular Voice", comments: 50, image: "/assets/comment-medals/3.webp", gradient: "linear-gradient(135deg, #ffedd5 0%, #fdba74 40%, #ea580c 100%)", textColor: "#431407" },
+  { id: "comment-medal-discussion-champion", name: "Discussion Champion", comments: 100, image: "/assets/comment-medals/4.webp", gradient: "linear-gradient(135deg, #ede9fe 0%, #a78bfa 40%, #7c3aed 100%)", textColor: "#fff" },
+  { id: "comment-medal-community-voice", name: "Community Voice", comments: 250, image: "/assets/comment-medals/5.webp", gradient: "linear-gradient(135deg, #dcfce7 0%, #86efac 40%, #16a34a 100%)", textColor: "#052e16" },
+  { id: "comment-medal-comment-sage", name: "Comment Sage", comments: 500, image: "/assets/comment-medals/6.webp", gradient: "linear-gradient(135deg, #fae8ff 0%, #e879f9 35%, #c026d3 70%, #86198f 100%)", textColor: "#fff" },
+  { id: "comment-medal-community-legend", name: "Community Legend", comments: 1000, image: "/assets/comment-medals/7.webp", gradient: "linear-gradient(135deg, #fef3c7 0%, #fbbf24 30%, #f59e0b 55%, #ea580c 80%, #c2410c 100%)", textColor: "#431407" },
+  { id: "comment-medal-infinite-conversationalist", name: "Infinite Conversationalist", comments: 1500, image: "/assets/comment-medals/8.webp", gradient: "linear-gradient(135deg, #a5f3fc 0%, #22d3ee 20%, #a78bfa 45%, #f472b6 70%, #fbbf24 100%)", textColor: "#164e63" },
 ] as const;
 const badges = [
   ["", "None"], ["milf", "Milf Lover"], ["horny", "Team Horny"], ["night-owl", "Night Owl"],
@@ -377,6 +399,7 @@ export default function SettingsPage() {
   const [badgeLimit, setBadgeLimit] = useState(1);
   const [userLevel, setUserLevel] = useState(0);
   const [readingChapterCount, setReadingChapterCount] = useState(0);
+  const [userCommentCount, setUserCommentCount] = useState(0);
   const [customBgError, setCustomBgError] = useState("");
   const [customBgUploading, setCustomBgUploading] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
@@ -396,7 +419,9 @@ export default function SettingsPage() {
         if (cached) {
           const parsed = JSON.parse(cached) as Partial<Settings>;
           const cachedChapterCount = getReadingChapterCount(parsed);
+          const cachedCommentCount = getCommentCount(parsed);
           setReadingChapterCount(cachedChapterCount);
+          setUserCommentCount(cachedCommentCount);
           setSettings({
             ...initialSettings,
             ...parsed,
@@ -405,7 +430,7 @@ export default function SettingsPage() {
             avatar: String(parsed.avatar || user.photoURL || anonymousAvatar),
             customBadge: String(parsed.customBadge || parsed.customBadges?.[0] || ""),
             customBadges: normalizeBadges(parsed),
-            achievementBadges: normalizeAchievementBadges(parsed.achievementBadges, cachedChapterCount),
+            achievementBadges: normalizeAchievementBadges(parsed.achievementBadges, cachedChapterCount, cachedCommentCount),
             gameRoles: Array.isArray(parsed.gameRoles) ? parsed.gameRoles.map(String) : [],
             disableAnimations: parsed.disableAnimations === true ||
               localStorage.getItem("commentWidget_disableAnimations") === "true",
@@ -425,7 +450,9 @@ export default function SettingsPage() {
         };
         if (!active) return;
         const chapterCount = getReadingChapterCount(data);
+        const commentCount = getCommentCount(data);
         setReadingChapterCount(chapterCount);
+        setUserCommentCount(commentCount);
         setUserLevel(getCommentLevel(data.commentCount));
         setBadgeLimit(getBadgeSelectionLimit(data.commentCount));
         setSettings({
@@ -437,7 +464,7 @@ export default function SettingsPage() {
           avatar: String(data.avatar || user.photoURL || anonymousAvatar),
           customBadge: String(data.customBadge || data.customBadges?.[0] || ""),
           customBadges: normalizeBadges(data),
-          achievementBadges: normalizeAchievementBadges(data.achievementBadges, chapterCount),
+          achievementBadges: normalizeAchievementBadges(data.achievementBadges, chapterCount, commentCount),
           customAvatarFrame: String(data.customAvatarFrame || ""),
           customFontStyle: String(data.customFontStyle || ""),
           customBorder: String(data.customBorder || ""),
@@ -556,10 +583,23 @@ export default function SettingsPage() {
 
   function toggleAchievementBadge(badgeId: string) {
     const earnedIds = new Set<string>(
-      readingMedals.filter((medal) => readingChapterCount >= medal.chapters).map((medal) => medal.id),
+      [
+        ...readingMedals.filter((medal) => readingChapterCount >= medal.chapters),
+        ...commentMedals.filter((medal) => userCommentCount >= medal.comments),
+      ].map((medal) => medal.id),
     );
     if (!earnedIds.has(badgeId)) return;
-    update("achievementBadges", settings.achievementBadges.includes(badgeId) ? [] : [badgeId]);
+    const isCommentMedal = commentMedals.some((medal) => medal.id === badgeId);
+    const categoryIds = new Set<string>(
+      (isCommentMedal ? commentMedals : readingMedals).map((medal) => medal.id),
+    );
+    const withoutCategory = settings.achievementBadges.filter((id) => !categoryIds.has(id));
+    update(
+      "achievementBadges",
+      settings.achievementBadges.includes(badgeId)
+        ? withoutCategory
+        : [...withoutCategory, badgeId],
+    );
   }
 
   async function selectAvatar(file?: File) {
@@ -621,7 +661,11 @@ export default function SettingsPage() {
       ...settings,
       customBadges: settings.customBadges.slice(0, badgeLimit),
       customBadge: settings.customBadges[0] || "",
-      achievementBadges: normalizeAchievementBadges(settings.achievementBadges, readingChapterCount),
+      achievementBadges: normalizeAchievementBadges(
+        settings.achievementBadges,
+        readingChapterCount,
+        userCommentCount,
+      ),
       displayName: settings.displayName.trim() || "Anonymous",
       username: sanitizedUsername,
       bio: settings.bio.trim(),
@@ -636,7 +680,11 @@ export default function SettingsPage() {
       );
       localStorage.setItem(
         "userSettingsPreview",
-        JSON.stringify({ ...next, totalChaptersRead: readingChapterCount }),
+        JSON.stringify({
+          ...next,
+          totalChaptersRead: readingChapterCount,
+          commentCount: userCommentCount,
+        }),
       );
       window.userStatsCache = window.userStatsCache || {};
       const currentStatsCache = window.userStatsCache[account.uid] || {};
@@ -674,6 +722,7 @@ export default function SettingsPage() {
   const knownRoles = new Set(roles.map(([id]) => id));
   const extraRoles = settings.gameRoles.filter((role) => !knownRoles.has(role));
   const earnedMedals = readingMedals.filter((medal) => readingChapterCount >= medal.chapters);
+  const earnedCommentMedals = commentMedals.filter((medal) => userCommentCount >= medal.comments);
 
   return (
     <>
@@ -855,7 +904,7 @@ export default function SettingsPage() {
                     <section className={styles['settings-section']} hidden={activeSection !== "achievements"}>
                       <div className={styles['settings-section-header']}>
                         <h2>Achievement</h2>
-                        <p>Choose one earned Reading Medal to display as a badge on your comments.</p>
+                        <p>Choose one earned Reading Medal and one earned Comment Medal to display on your comments.</p>
                       </div>
                       <div className={styles['settings-card']}>
                         <p className={styles['settings-hint-sm']}>
@@ -891,6 +940,41 @@ export default function SettingsPage() {
                         ) : (
                           <p className={styles['settings-empty-state']}>
                             No Reading Medals earned yet. Read at least 10 chapters to unlock your first medal.
+                          </p>
+                        )}
+                        <p className={cx(styles['settings-hint-sm'], styles['settings-achievement-heading'])}>
+                          {earnedCommentMedals.length} of {commentMedals.length} Comment Medals earned · {userCommentCount.toLocaleString()} comments
+                        </p>
+                        {earnedCommentMedals.length > 0 ? (
+                          <div className={cx(styles['settings-badge-grid'], styles['settings-achievement-grid'])}>
+                            {earnedCommentMedals.map((medal) => {
+                              const selected = settings.achievementBadges.includes(medal.id);
+                              return (
+                                <button
+                                  type="button"
+                                  key={medal.id}
+                                  className={cx(
+                                    styles['settings-badge-chip'],
+                                    styles['settings-achievement-item'],
+                                    selected && styles['is-selected'],
+                                  )}
+                                  style={{
+                                    background: selected ? medal.gradient : undefined,
+                                    color: selected ? medal.textColor : undefined,
+                                  }}
+                                  aria-pressed={selected}
+                                  aria-label={`${selected ? "Hide" : "Show"} ${medal.name} on comments`}
+                                  onClick={() => toggleAchievementBadge(medal.id)}
+                                >
+                                  <img src={medal.image} alt="" />
+                                  <span className={styles['settings-achievement-name']}>{medal.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className={styles['settings-empty-state']}>
+                            No Comment Medals earned yet. Post at least 10 comments to unlock your first medal.
                           </p>
                         )}
                       </div>

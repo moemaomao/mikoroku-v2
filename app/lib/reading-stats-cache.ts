@@ -13,7 +13,7 @@ type StatsCacheRecord = {
 };
 
 type MedalCacheRecord = {
-  key: "unlocked";
+  key: "unlocked" | "unlocked-comments";
   chapters: number[];
   updatedAt: number;
 };
@@ -114,6 +114,61 @@ export async function clearCachedReadingStats(uid?: string): Promise<void> {
 /* ───────────────────────────── Medal unlock cache ───────────────────────────── */
 
 const LOCAL_STORAGE_MEDAL_KEY = "mikoroku:unlocked-medals";
+const LOCAL_STORAGE_COMMENT_MEDAL_KEY = "mikoroku:unlocked-comment-medals";
+
+async function getUnlockedMilestones(key: MedalCacheRecord["key"], localStorageKey: string): Promise<number[]> {
+  try {
+    const db = await openDb();
+    try {
+      const tx = db.transaction(STORE_MEDALS, "readonly");
+      const record = (await idbRequest(tx.objectStore(STORE_MEDALS).get(key))) as MedalCacheRecord | undefined;
+      if (record && Array.isArray(record.chapters)) {
+        return record.chapters.filter((n) => typeof n === "number" && Number.isFinite(n));
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+  }
+  try {
+    const raw = localStorage.getItem(localStorageKey);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((n): n is number => typeof n === "number" && Number.isFinite(n))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function setUnlockedMilestones(
+  key: MedalCacheRecord["key"],
+  localStorageKey: string,
+  milestones: number[],
+): Promise<void> {
+  const unique = [...new Set(milestones)].sort((a, b) => a - b);
+  try {
+    const db = await openDb();
+    try {
+      const tx = db.transaction(STORE_MEDALS, "readwrite");
+      await idbRequest(tx.objectStore(STORE_MEDALS).put({
+        key,
+        chapters: unique,
+        updatedAt: Date.now(),
+      } satisfies MedalCacheRecord));
+      return;
+    } finally {
+      db.close();
+    }
+  } catch {
+    try {
+      localStorage.setItem(localStorageKey, JSON.stringify(unique));
+    } catch {
+      // ignore
+    }
+  }
+}
 
 export async function getUnlockedMedals(): Promise<number[]> {
   try {
@@ -145,6 +200,14 @@ export async function getUnlockedMedals(): Promise<number[]> {
   } catch {
     return [];
   }
+}
+
+export function getUnlockedCommentMedals(): Promise<number[]> {
+  return getUnlockedMilestones("unlocked-comments", LOCAL_STORAGE_COMMENT_MEDAL_KEY);
+}
+
+export function setUnlockedCommentMedals(comments: number[]): Promise<void> {
+  return setUnlockedMilestones("unlocked-comments", LOCAL_STORAGE_COMMENT_MEDAL_KEY, comments);
 }
 
 export async function setUnlockedMedals(chapters: number[]): Promise<void> {
