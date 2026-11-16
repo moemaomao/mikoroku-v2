@@ -1428,19 +1428,26 @@ html.no-animations .comment.transcendent,
       background-size: cover !important;
       background-position: center center !important;
       background-repeat: no-repeat !important;
-      background-color: transparent !important;
       border: 2px solid #a78bfa !important;
       box-shadow: inset 0 0 30px rgba(167,139,250,0.45), 0 0 20px rgba(167,139,250,0.6) !important;
       overflow: hidden;
+    }
+
+    .comment.transcendent:not([style*="--custom-bg"]) {
+      background-color: rgba(0,0,0,0.1) !important;
     }
 
     .comment.transcendent::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(10,10,25,0.45);
+      background: transparent;
       pointer-events: none;
       z-index: 1;
+    }
+
+    .comment.transcendent[style*="--custom-bg"]::after {
+      background: rgba(10,10,25,0.45);
     }
 
     .comment.transcendent > * {
@@ -2254,7 +2261,9 @@ html.no-animations .comment.transcendent,
   --comment-firefly-color: 34 197 94;
 }
 
-.comment-fireflies {
+.comment-fireflies,
+.comment-fireworks,
+.comment-snow {
   position: absolute;
   z-index: 2;
   inset: 0;
@@ -2263,14 +2272,22 @@ html.no-animations .comment.transcendent,
   pointer-events: none;
 }
 
-.comment.top-commenter > .comment-fireflies {
+.comment.top-commenter > .comment-fireflies,
+.comment.top-commenter > .comment-fireworks,
+.comment.top-commenter > .comment-snow {
   position: absolute;
   z-index: 2;
 }
 
 html.disable-top-comment-fireflies .comment-fireflies,
+html.disable-top-comment-fireflies .comment-fireworks,
+html.disable-top-comment-fireflies .comment-snow,
 html.no-animations .comment-fireflies,
-#comment-widget.no-animations .comment-fireflies {
+html.no-animations .comment-fireworks,
+html.no-animations .comment-snow,
+#comment-widget.no-animations .comment-fireflies,
+#comment-widget.no-animations .comment-fireworks,
+#comment-widget.no-animations .comment-snow {
   display: none !important;
 }
 
@@ -2285,7 +2302,39 @@ html.no-animations .comment-fireflies,
   will-change: opacity, transform;
 }
 
-.comment.top-commenter > :not(.comment-fireflies) {
+.comment-fireworks {
+  width: 100%;
+  height: 100%;
+  mix-blend-mode: screen;
+}
+
+.comment-snow {
+  width: 100%;
+  height: 100%;
+}
+
+.comment-snowflake {
+  position: absolute;
+  top: -100px;
+  display: block;
+  border-radius: 50%;
+  background: #fff;
+  animation: comment-snow-falling linear forwards;
+  will-change: top, transform;
+}
+
+.comment-snow.is-paused .comment-snowflake {
+  animation-play-state: paused;
+}
+
+@keyframes comment-snow-falling {
+  to {
+    top: calc(100% + 100px);
+    transform: translateX(var(--snow-drift-x));
+  }
+}
+
+.comment.top-commenter > :not(.comment-fireflies):not(.comment-fireworks):not(.comment-snow) {
   position: relative;
   z-index: 3;
 }

@@ -26,7 +26,7 @@ type CommunityWidgetRuntime = {
   emojiElement: (HTMLElement & { pageId?: string }) | null;
 };
 
-const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=comment-count-total-2";
+const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=top-comment-snow-4";
 const EMOJI_SCRIPT_SRC = "/widgets/emoji-reaction.js";
 
 function getCommunityRuntime(): CommunityWidgetRuntime {

@@ -17,7 +17,7 @@
 
   export let pageId = "home";
 
-  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=comment-count-total-2";
+  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=top-comment-snow-4";
   const featureStyleHrefs = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
@@ -98,7 +98,7 @@
   }
 
   onMount(() => {
-    loadCommentStyles("/widgets/comment-widget.css?v=reply-border-motion-1");
+    loadCommentStyles("/widgets/comment-widget.css?v=top-comment-snow-4");
     window.loadCommentFeatureStyles = loadFeatureStyles;
     const idle = "requestIdleCallback" in window
       ? window.requestIdleCallback(() => loadFeatureStyles("effects"), { timeout: 2500 })

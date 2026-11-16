@@ -37,6 +37,34 @@
         localStorage.setItem('userStatsCache_v1', JSON.stringify(userStatsCache));
       } catch (e) {}
     }
+
+    window.addEventListener('storage', event => {
+      if (event.key !== 'userStatsCache_v1' || !event.newValue) return;
+
+      try {
+        const incomingStats = JSON.parse(event.newValue);
+        if (!incomingStats || typeof incomingStats !== 'object' || Array.isArray(incomingStats)) {
+          console.warn('Received an invalid user stats cache update.');
+          return;
+        }
+
+        const effectChanged = Object.entries(incomingStats).some(([uid, stats]) =>
+          stats &&
+          typeof stats === 'object' &&
+          userStatsCache[uid]?.topCommenterEffect !== stats.topCommenterEffect
+        );
+        Object.assign(userStatsCache, incomingStats);
+        window.userStatsCache = userStatsCache;
+
+        if (effectChanged && window.__commentsCache?.length) {
+          window._forceCommentRerender = true;
+          renderComments(window.__commentsCache);
+        }
+      } catch (error) {
+        console.warn('Could not apply the user stats cache update.', error);
+      }
+    });
+
     setInterval(saveUserStatsCache, 15000);
 
     // ==================== BATCH FETCH USER STATS ====================
@@ -2558,9 +2586,12 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
   if (comment.uid) {
     const userId = comment.uid;
     const badgeId = `badge-${comment.id}`;
-    applyTopCommentRankBadge(div, getCachedCommentLeaderboardRank(userId));
+    const applyCommenterRank = rank => {
+      applyTopCommentRankBadge(div, rank, userStatsCache[userId]?.topCommenterEffect);
+    };
+    applyCommenterRank(getCachedCommentLeaderboardRank(userId));
     void getCommentLeaderboardRank(userId).then(rank => {
-      applyTopCommentRankBadge(div, rank);
+      applyCommenterRank(rank);
     }).catch(error => {
       console.warn('Gagal memuat peringkat leaderboard untuk komentar.', error);
     });
@@ -2579,6 +2610,7 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
         userStatsCache[userId] = data;
         saveUserStatsCache();
       }
+      applyCommenterRank(getCachedCommentLeaderboardRank(userId));
 
       const authorNameRow = div.querySelector('.author-name-row');
       if (authorNameRow) {
@@ -6175,7 +6207,309 @@ function getCachedCommentLeaderboardRank(uid) {
   return index >= 0 ? index + 1 : null;
 }
 
-function applyTopCommentRankBadge(commentElement, rank) {
+const activeCommentFireworkStates = new Set();
+const commentFireworkStatesByCanvas = new WeakMap();
+let commentFireworkObserver = null;
+let commentFireworkFrame = 0;
+
+function createCommentFireworkLayer() {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'comment-fireworks';
+  canvas.setAttribute('aria-hidden', 'true');
+  return canvas;
+}
+
+function removeCommentFireworkLayer(commentElement) {
+  const canvas = commentElement.querySelector('.comment-fireworks');
+  if (!canvas) return;
+
+  const state = commentFireworkStatesByCanvas.get(canvas);
+  if (state) {
+    state.visible = false;
+    activeCommentFireworkStates.delete(state);
+    commentFireworkObserver?.unobserve(canvas);
+  }
+  canvas.remove();
+}
+
+function scheduleCommentFireworkFrame() {
+  if (commentFireworkFrame) return;
+  for (const state of activeCommentFireworkStates) {
+    if (state.visible) {
+      commentFireworkFrame = window.requestAnimationFrame(drawCommentFireworks);
+      return;
+    }
+  }
+}
+
+function observeCommentFireworkLayer(canvas, state) {
+  if (typeof IntersectionObserver === 'undefined') {
+    state.visible = true;
+    scheduleCommentFireworkFrame();
+    return;
+  }
+
+  if (!commentFireworkObserver) {
+    commentFireworkObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const observedState = commentFireworkStatesByCanvas.get(entry.target);
+        if (!observedState) return;
+        if (!observedState.canvas.isConnected) {
+          activeCommentFireworkStates.delete(observedState);
+          commentFireworkObserver.unobserve(observedState.canvas);
+          return;
+        }
+        observedState.visible = entry.isIntersecting;
+      });
+      scheduleCommentFireworkFrame();
+    });
+  }
+
+  commentFireworkObserver.observe(canvas);
+}
+
+function startCommentFireworkAnimation(canvas) {
+  if (
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+    document.documentElement.classList.contains('no-animations') ||
+    document.getElementById('comment-widget')?.classList.contains('no-animations')
+  ) return;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    console.warn('Canvas fireworks are unavailable for this comment.');
+    return;
+  }
+
+  const state = {
+    canvas,
+    context,
+    width: 0,
+    height: 0,
+    dpr: 1,
+    visible: false,
+    initialized: false,
+    startedAt: 0,
+    lastFrameAt: 0,
+    nextBurst: 0,
+    flocks: []
+  };
+  commentFireworkStatesByCanvas.set(canvas, state);
+  activeCommentFireworkStates.add(state);
+  observeCommentFireworkLayer(canvas, state);
+}
+
+function createCommentFireworkFlock(state) {
+  return {
+    x: Math.random() * state.width,
+    y: Math.random() * state.height,
+    dots: Array.from({ length: 150 }, () => ({
+      px: 0,
+      py: 0,
+      vx: Math.random() * 4,
+      vy: Math.random() * 4,
+      angle: Math.random() * Math.PI * 2,
+      life: 0.5 + Math.random(),
+      color: Math.random() > 0.3
+        ? ['#ffd166', '#ff5f6d', '#74b9ff', '#c77dff', '#4de0c1', '#ff9f1c'][Math.floor(Math.random() * 6)]
+        : 'white',
+      dead: false
+    }))
+  };
+}
+
+function drawCommentFireworks(timestamp) {
+  commentFireworkFrame = 0;
+  let hasVisibleCanvas = false;
+
+  for (const state of activeCommentFireworkStates) {
+    const { canvas, context } = state;
+    if (!canvas.isConnected) {
+      activeCommentFireworkStates.delete(state);
+      commentFireworkObserver?.unobserve(canvas);
+      continue;
+    }
+    if (!state.visible) continue;
+
+    hasVisibleCanvas = true;
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) continue;
+    const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (bounds.width !== state.width || bounds.height !== state.height || nextDpr !== state.dpr) {
+      state.width = bounds.width;
+      state.height = bounds.height;
+      state.dpr = nextDpr;
+      canvas.width = Math.round(state.width * state.dpr);
+      canvas.height = Math.round(state.height * state.dpr);
+      context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    }
+
+    if (!state.initialized) {
+      state.initialized = true;
+      state.startedAt = timestamp;
+      state.lastFrameAt = timestamp;
+      state.flocks.push(createCommentFireworkFlock(state));
+    }
+
+    const delta = Math.min(2, Math.max(0.5, (timestamp - state.lastFrameAt) / 16.67));
+    state.lastFrameAt = timestamp;
+    context.clearRect(0, 0, state.width, state.height);
+
+    const burstDelays = [400, 700, 2000];
+    while (
+      state.nextBurst < burstDelays.length &&
+      timestamp - state.startedAt >= burstDelays[state.nextBurst]
+    ) {
+      state.flocks.push(createCommentFireworkFlock(state));
+      state.nextBurst += 1;
+    }
+
+    for (let flockIndex = 0; flockIndex < state.flocks.length; flockIndex += 1) {
+      const flock = state.flocks[flockIndex];
+      let allDead = true;
+      for (const dot of flock.dots) {
+        if (dot.dead) continue;
+
+        dot.px += dot.vx * Math.cos(dot.angle) * delta;
+        dot.py += dot.vy * Math.sin(dot.angle) * delta;
+        dot.vx *= Math.pow(0.98, delta);
+        dot.vy = dot.vy * Math.pow(0.98, delta) + (dot.angle > Math.PI ? -0.025 : 0.02) * delta;
+        dot.life -= 0.009 * delta;
+        if (dot.life < 0) {
+          dot.dead = true;
+          continue;
+        }
+
+        allDead = false;
+        if (Math.random() > 0.95) continue;
+        context.globalAlpha = Math.min(1, dot.life);
+        context.fillStyle = dot.color;
+        context.shadowColor = dot.color;
+        context.shadowBlur = 10;
+        context.beginPath();
+        context.arc(flock.x + dot.px, flock.y + dot.py, Math.max(0.35, 0.55 + 1.1 * dot.life - dot.vy * 0.03), 0, Math.PI * 2);
+        context.fill();
+      }
+
+      if (allDead) state.flocks[flockIndex] = createCommentFireworkFlock(state);
+    }
+    context.globalAlpha = 1;
+    context.shadowBlur = 0;
+  }
+
+  if (hasVisibleCanvas) {
+    commentFireworkFrame = window.requestAnimationFrame(drawCommentFireworks);
+  }
+}
+
+const commentSnowStatesByLayer = new WeakMap();
+let commentSnowObserver = null;
+
+function stopCommentSnowAnimation(state) {
+  if (state.interval) {
+    window.clearInterval(state.interval);
+    state.interval = 0;
+  }
+  document.removeEventListener('visibilitychange', state.onVisibilityChange);
+  state.motionQuery?.removeEventListener('change', state.onVisibilityChange);
+  commentSnowObserver?.unobserve(state.layer);
+  commentSnowStatesByLayer.delete(state.layer);
+}
+
+function removeCommentSnowLayer(commentElement) {
+  const layer = commentElement.querySelector('.comment-snow');
+  if (!layer) return;
+
+  const state = commentSnowStatesByLayer.get(layer);
+  if (state) stopCommentSnowAnimation(state);
+  layer.remove();
+}
+
+function createCommentSnowflake(state) {
+  const { layer } = state;
+  if (!layer.isConnected) {
+    stopCommentSnowAnimation(state);
+    return;
+  }
+
+  if (layer.childElementCount >= 120) layer.firstElementChild?.remove();
+
+  const size = Math.floor(Math.random() * 31) + 2;
+  const duration = 3 / (size * 0.1);
+  const blur = Math.abs(size - 8);
+  const flake = document.createElement('span');
+  layer.style.setProperty('--snow-drift-x', `-${Math.max(layer.clientHeight, 100)}px`);
+  flake.className = 'comment-snowflake';
+  flake.style.width = `${size}px`;
+  flake.style.height = `${size}px`;
+  flake.style.left = `${Math.random() * 150}%`;
+  flake.style.filter = `blur(${blur < 4 ? 0 : blur}px)`;
+  flake.style.animationDuration = `${duration}s`;
+  flake.addEventListener('animationend', () => flake.remove(), { once: true });
+  layer.append(flake);
+}
+
+function syncCommentSnowAnimation(state) {
+  if (!state.layer.isConnected) {
+    stopCommentSnowAnimation(state);
+    return;
+  }
+
+  const shouldRun =
+    state.visible &&
+    !document.hidden &&
+    !state.motionQuery?.matches &&
+    !document.documentElement.classList.contains('no-animations') &&
+    !document.getElementById('comment-widget')?.classList.contains('no-animations');
+  state.layer.classList.toggle('is-paused', !shouldRun);
+
+  if (shouldRun && !state.interval) {
+    createCommentSnowflake(state);
+    state.interval = window.setInterval(() => createCommentSnowflake(state), 50);
+  } else if (!shouldRun && state.interval) {
+    window.clearInterval(state.interval);
+    state.interval = 0;
+  }
+}
+
+function startCommentSnowAnimation(layer) {
+  const motionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  if (
+    motionQuery?.matches ||
+    document.documentElement.classList.contains('no-animations') ||
+    document.getElementById('comment-widget')?.classList.contains('no-animations')
+  ) return;
+
+  const state = {
+    layer,
+    motionQuery,
+    visible: typeof IntersectionObserver === 'undefined',
+    interval: 0,
+    onVisibilityChange: null
+  };
+  state.onVisibilityChange = () => syncCommentSnowAnimation(state);
+  commentSnowStatesByLayer.set(layer, state);
+
+  if (typeof IntersectionObserver !== 'undefined') {
+    if (!commentSnowObserver) {
+      commentSnowObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const observedState = commentSnowStatesByLayer.get(entry.target);
+          if (!observedState) return;
+          observedState.visible = entry.isIntersecting;
+          syncCommentSnowAnimation(observedState);
+        });
+      });
+    }
+    commentSnowObserver.observe(layer);
+  }
+
+  document.addEventListener('visibilitychange', state.onVisibilityChange);
+  motionQuery?.addEventListener('change', state.onVisibilityChange);
+  syncCommentSnowAnimation(state);
+}
+
+function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'fireflies') {
   let rankBadge = commentElement.querySelector('.top-comment-rank-badge');
   if (!Number.isInteger(rank) || rank < 1 || rank > 6) {
     rankBadge?.remove();
@@ -6188,7 +6522,10 @@ function applyTopCommentRankBadge(commentElement, rank) {
       'top-commenter-rank-5',
       'top-commenter-rank-6'
     );
+    commentElement.classList.remove('top-commenter-firework');
     commentElement.querySelector('.comment-fireflies')?.remove();
+    removeCommentFireworkLayer(commentElement);
+    removeCommentSnowLayer(commentElement);
     return;
   }
   const authorName = commentElement.querySelector('.author-name');
@@ -6205,41 +6542,67 @@ function applyTopCommentRankBadge(commentElement, rank) {
   );
   commentElement.classList.add(`top-commenter-rank-${rank}`);
 
-  let fireflyLayer = commentElement.querySelector('.comment-fireflies');
-  const firefliesDisabled =
+  const effect = selectedEffect === 'firework' || selectedEffect === 'snow'
+    ? selectedEffect
+    : 'fireflies';
+  commentElement.classList.toggle('top-commenter-firework', effect === 'firework');
+  const effectSelector = effect === 'firework'
+    ? '.comment-fireworks'
+    : effect === 'snow'
+      ? '.comment-snow'
+      : '.comment-fireflies';
+  let effectLayer = commentElement.querySelector(effectSelector);
+  const effectDisabled =
     localStorage.getItem('commentWidget_disableTopCommentFireflies') === 'true' ||
     localStorage.getItem('commentWidget_disableAnimations') === 'true';
-  document.documentElement.classList.toggle('disable-top-comment-fireflies', firefliesDisabled);
+  document.documentElement.classList.toggle('disable-top-comment-fireflies', effectDisabled);
+  if (effect !== 'firework') {
+    removeCommentFireworkLayer(commentElement);
+  }
+  if (effect !== 'snow') removeCommentSnowLayer(commentElement);
+  if (effect !== 'fireflies') commentElement.querySelector('.comment-fireflies')?.remove();
 
-  if (firefliesDisabled) {
-    fireflyLayer?.remove();
-  } else if (!fireflyLayer) {
-    fireflyLayer = document.createElement('div');
-    fireflyLayer.className = 'comment-fireflies';
-    fireflyLayer.setAttribute('aria-hidden', 'true');
+  if (effectDisabled) {
+    if (effect === 'firework') removeCommentFireworkLayer(commentElement);
+    else if (effect === 'snow') removeCommentSnowLayer(commentElement);
+    else effectLayer?.remove();
+  } else if (!effectLayer) {
+    if (effect === 'firework') {
+      effectLayer = createCommentFireworkLayer();
+    } else if (effect === 'snow') {
+      effectLayer = document.createElement('div');
+      effectLayer.className = 'comment-snow';
+      effectLayer.setAttribute('aria-hidden', 'true');
+    } else {
+      effectLayer = document.createElement('div');
+      effectLayer.className = 'comment-fireflies';
+      effectLayer.setAttribute('aria-hidden', 'true');
 
-    for (let index = 0; index < 26; index += 1) {
-      const firefly = document.createElement('span');
-      const edge = Math.floor(Math.random() * 4);
-      const position = 5 + Math.random() * 90;
-      const x = 12 + Math.random() * 34;
-      const y = 12 + Math.random() * 34;
+      for (let index = 0; index < 26; index += 1) {
+        const firefly = document.createElement('span');
+        const edge = Math.floor(Math.random() * 4);
+        const position = 5 + Math.random() * 90;
+        const x = 12 + Math.random() * 34;
+        const y = 12 + Math.random() * 34;
 
-      firefly.className = 'comment-firefly';
-      firefly.style.left = edge === 1 ? '96%' : edge === 3 ? '4%' : `${position}%`;
-      firefly.style.top = edge === 0 ? '4%' : edge === 2 ? '96%' : `${position}%`;
-      firefly.style.width = `${5 + Math.random() * 6}px`;
-      firefly.style.height = firefly.style.width;
-      firefly.style.animationDelay = `${Math.random() * -5}s`;
-      firefly.style.animationDuration = `${2.5 + Math.random() * 3}s`;
-      firefly.style.setProperty('--firefly-x', `${Math.random() > 0.5 ? x : -x}px`);
-      firefly.style.setProperty('--firefly-y', `${Math.random() > 0.5 ? y : -y}px`);
-      firefly.style.setProperty('--firefly-return-x', `${Math.random() > 0.5 ? x : -x}px`);
-      firefly.style.setProperty('--firefly-return-y', `${Math.random() > 0.5 ? y : -y}px`);
-      fireflyLayer.append(firefly);
+        firefly.className = 'comment-firefly';
+        firefly.style.left = edge === 1 ? '96%' : edge === 3 ? '4%' : `${position}%`;
+        firefly.style.top = edge === 0 ? '4%' : edge === 2 ? '96%' : `${position}%`;
+        firefly.style.width = `${5 + Math.random() * 6}px`;
+        firefly.style.height = firefly.style.width;
+        firefly.style.animationDelay = `${Math.random() * -5}s`;
+        firefly.style.animationDuration = `${2.5 + Math.random() * 3}s`;
+        firefly.style.setProperty('--firefly-x', `${Math.random() > 0.5 ? x : -x}px`);
+        firefly.style.setProperty('--firefly-y', `${Math.random() > 0.5 ? y : -y}px`);
+        firefly.style.setProperty('--firefly-return-x', `${Math.random() > 0.5 ? x : -x}px`);
+        firefly.style.setProperty('--firefly-return-y', `${Math.random() > 0.5 ? y : -y}px`);
+        effectLayer.append(firefly);
+      }
     }
 
-    commentElement.prepend(fireflyLayer);
+    commentElement.prepend(effectLayer);
+    if (effect === 'firework') startCommentFireworkAnimation(effectLayer);
+    else if (effect === 'snow') startCommentSnowAnimation(effectLayer);
   }
 
   if (!rankBadge) rankBadge = document.createElement('span');

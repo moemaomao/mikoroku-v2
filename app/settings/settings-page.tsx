@@ -67,6 +67,7 @@ type Settings = {
   customShape: string;
   customCommentBg: string;
   gameRoles: string[];
+  topCommenterEffect: "fireflies" | "firework" | "snow";
   disableAnimations: boolean;
   disableTopCommentFireflies: boolean;
 };
@@ -74,6 +75,254 @@ type Settings = {
 type Account = { uid: string; displayName?: string | null; photoURL?: string | null };
 
 const anonymousAvatar = "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
+function normalizeTopCommenterEffect(value: unknown): Settings["topCommenterEffect"] {
+  return value === "firework" || value === "snow" ? value : "fireflies";
+}
+
+function getTopCommenterEffectName(effect: Settings["topCommenterEffect"]) {
+  if (effect === "fireflies") return "Fireflies";
+  if (effect === "firework") return "Firework";
+  return "Snow";
+}
+
+function FireworkPreviewCanvas({ active, className }: { active: boolean; className: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context || !active) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (reducedMotion.matches) return;
+
+    type Dot = {
+      px: number;
+      py: number;
+      vx: number;
+      vy: number;
+      angle: number;
+      life: number;
+      color: string;
+      dead: boolean;
+    };
+    type Flock = { x: number; y: number; dots: Dot[] };
+    const flocks: Flock[] = [];
+    const burstDelays = [400, 700, 2000];
+    const colors = ["white", "#ffd166", "#ff5f6d", "#74b9ff", "#c77dff", "#4de0c1", "#ff9f1c"];
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+    let startedAt = 0;
+    let lastFrameAt = 0;
+    let nextBurst = 0;
+    let animationFrame = 0;
+    let visible = typeof IntersectionObserver === "undefined";
+    let initialized = false;
+
+    const resize = () => {
+      const bounds = canvas.getBoundingClientRect();
+      const nextWidth = bounds.width;
+      const nextHeight = bounds.height;
+      const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (!nextWidth || !nextHeight) return;
+      if (nextWidth === width && nextHeight === height && nextDpr === dpr) return;
+
+      width = nextWidth;
+      height = nextHeight;
+      dpr = nextDpr;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    const createFlock = (): Flock => ({
+      x: width * Math.random(),
+      y: height * Math.random(),
+      dots: Array.from({ length: 150 }, (): Dot => ({
+        px: 0,
+        py: 0,
+        vx: Math.random() * 4,
+        vy: Math.random() * 4,
+        angle: Math.random() * Math.PI * 2,
+        life: 0.5 + Math.random(),
+        color: Math.random() > 0.3 ? colors[1 + Math.floor(Math.random() * (colors.length - 1))] : colors[0],
+        dead: false,
+      })),
+    });
+
+    const schedule = () => {
+      if (!animationFrame && visible && !document.hidden && !reducedMotion.matches) {
+        animationFrame = window.requestAnimationFrame(draw);
+      }
+    };
+
+    const draw = (timestamp: number) => {
+      animationFrame = 0;
+      if (!visible || document.hidden || reducedMotion.matches) return;
+
+      resize();
+      if (!width || !height) return;
+      if (!initialized) {
+        startedAt = timestamp;
+        lastFrameAt = timestamp;
+        flocks.push(createFlock());
+        initialized = true;
+      }
+
+      const delta = Math.min(2, Math.max(0.5, (timestamp - lastFrameAt) / 16.67));
+      lastFrameAt = timestamp;
+      context.clearRect(0, 0, width, height);
+
+      while (nextBurst < burstDelays.length && timestamp - startedAt >= burstDelays[nextBurst]) {
+        flocks.push(createFlock());
+        nextBurst += 1;
+      }
+
+      for (let flockIndex = 0; flockIndex < flocks.length; flockIndex += 1) {
+        const flock = flocks[flockIndex];
+        let allDead = true;
+        for (const dot of flock.dots) {
+          if (dot.dead) continue;
+
+          dot.px += dot.vx * Math.cos(dot.angle) * delta;
+          dot.py += dot.vy * Math.sin(dot.angle) * delta;
+          dot.vx *= Math.pow(0.98, delta);
+          dot.vy = dot.vy * Math.pow(0.98, delta) + (dot.angle > Math.PI ? -0.025 : 0.02) * delta;
+          dot.life -= 0.009 * delta;
+          if (dot.life < 0) {
+            dot.dead = true;
+            continue;
+          }
+
+          allDead = false;
+          if (Math.random() > 0.95) continue;
+          context.globalAlpha = Math.min(1, dot.life);
+          context.fillStyle = dot.color;
+          context.shadowColor = dot.color;
+          context.shadowBlur = 10;
+          context.beginPath();
+          context.arc(flock.x + dot.px, flock.y + dot.py, Math.max(0.35, 0.55 + 1.1 * dot.life - dot.vy * 0.03), 0, Math.PI * 2);
+          context.fill();
+        }
+
+        if (allDead) flocks[flockIndex] = createFlock();
+      }
+
+      context.globalAlpha = 1;
+      context.shadowBlur = 0;
+      schedule();
+    };
+
+    const visibilityObserver = typeof IntersectionObserver === "undefined"
+      ? null
+      : new IntersectionObserver((entries) => {
+          visible = entries.some((entry) => entry.isIntersecting);
+          schedule();
+        });
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => {
+          resize();
+          schedule();
+        });
+    const onVisibilityChange = () => schedule();
+    const onMotionChange = () => schedule();
+
+    visibilityObserver?.observe(canvas);
+    resizeObserver?.observe(canvas);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    reducedMotion.addEventListener("change", onMotionChange);
+    if (visible) schedule();
+
+    return () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      visibilityObserver?.disconnect();
+      resizeObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      reducedMotion.removeEventListener("change", onMotionChange);
+    };
+  }, [active]);
+
+  return <canvas ref={canvasRef} className={className} aria-hidden="true" />;
+}
+
+function SnowPreview({ active, className }: { active: boolean; className: string }) {
+  const layerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || !active) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let visible = typeof IntersectionObserver === "undefined";
+    let interval: number | undefined;
+
+    const updateSnowDistance = () => {
+      layer.style.setProperty("--snow-drift-x", `-${Math.max(layer.clientHeight, 100)}px`);
+    };
+
+    const createSnowflake = () => {
+      if (layer.childElementCount >= 120) layer.firstElementChild?.remove();
+
+      const size = Math.floor(Math.random() * 31) + 2;
+      const duration = 3 / (size * 0.1);
+      const blur = Math.abs(size - 8);
+      const flake = document.createElement("span");
+      flake.className = styles['settings-snowflake'];
+      flake.style.width = `${size}px`;
+      flake.style.height = `${size}px`;
+      flake.style.left = `${Math.random() * 150}%`;
+      flake.style.filter = `blur(${blur < 4 ? 0 : blur}px)`;
+      flake.style.animationDuration = `${duration}s`;
+      flake.addEventListener("animationend", () => flake.remove(), { once: true });
+      layer.append(flake);
+    };
+
+    const syncAnimation = () => {
+      const shouldRun = visible && !document.hidden && !reducedMotion.matches;
+      layer.classList.toggle("is-paused", !shouldRun);
+      if (shouldRun && interval === undefined) {
+        updateSnowDistance();
+        createSnowflake();
+        interval = window.setInterval(createSnowflake, 50);
+      } else if (!shouldRun && interval !== undefined) {
+        window.clearInterval(interval);
+        interval = undefined;
+      }
+    };
+
+    const visibilityObserver = typeof IntersectionObserver === "undefined"
+      ? null
+      : new IntersectionObserver((entries) => {
+          visible = entries.some((entry) => entry.isIntersecting);
+          syncAnimation();
+        });
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateSnowDistance);
+    const onVisibilityChange = () => syncAnimation();
+    const onMotionChange = () => syncAnimation();
+
+    visibilityObserver?.observe(layer);
+    resizeObserver?.observe(layer);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    reducedMotion.addEventListener("change", onMotionChange);
+    syncAnimation();
+
+    return () => {
+      if (interval !== undefined) window.clearInterval(interval);
+      visibilityObserver?.disconnect();
+      resizeObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      reducedMotion.removeEventListener("change", onMotionChange);
+      layer.replaceChildren();
+    };
+  }, [active]);
+
+  return <div ref={layerRef} className={className} aria-hidden="true" />;
+}
+
 const readingMedals = [
   { id: "medal-first-spark", name: "First Spark", chapters: 10, image: "/assets/medals/1.webp", gradient: "linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #f59e0b 100%)", textColor: "#422006" },
   { id: "medal-page-scout", name: "Page Scout", chapters: 25, image: "/assets/medals/2.webp", gradient: "linear-gradient(135deg, #e2e8f0 0%, #94a3b8 45%, #64748b 100%)", textColor: "#0f172a" },
@@ -173,13 +422,36 @@ const commentFirebaseConfig = {
   appId: "1:249700505242:web:dab240af09caf30ad7f123",
 };
 
+const COMMENT_LEADERBOARD_CACHE_KEY = "mikoroku:comment-leaderboard-top-users:v1";
+const COMMENT_LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+
 function getCommentFirestore() {
   const app = getApps().find((candidate) => candidate.name === "mikoroku-leaderboard") ??
     initializeApp(commentFirebaseConfig, "mikoroku-leaderboard");
   return getFirestore(app);
 }
 
-async function isTopCommenter(uid: string): Promise<boolean> {
+function getCachedTopCommenterRank(uid: string): number | null | undefined {
+  try {
+    const raw = localStorage.getItem(COMMENT_LEADERBOARD_CACHE_KEY);
+    if (!raw) return undefined;
+    const cache = JSON.parse(raw) as { updatedAt?: unknown; users?: unknown };
+    if (
+      typeof cache.updatedAt !== "number" ||
+      Date.now() - cache.updatedAt > COMMENT_LEADERBOARD_CACHE_TTL_MS ||
+      !Array.isArray(cache.users) ||
+      !cache.users.every((userId) => typeof userId === "string")
+    ) return undefined;
+
+    const index = cache.users.indexOf(uid);
+    return index >= 0 && index < 6 ? index + 1 : null;
+  } catch (error) {
+    console.warn("Cached commenter eligibility could not be read.", error);
+    return undefined;
+  }
+}
+
+async function getTopCommenterRank(uid: string): Promise<number | null> {
   const firestore = getCommentFirestore();
   let visibleRank = 0;
   let lastDocument: QueryDocumentSnapshot | undefined;
@@ -189,19 +461,19 @@ async function isTopCommenter(uid: string): Promise<boolean> {
       collection(firestore, "userStats"),
       orderBy("commentCount", "desc"),
       ...(lastDocument ? [startAfter(lastDocument)] : []),
-      limit(100),
+      limit(10),
     );
     const snapshot = await getDocs(leaderboardQuery);
     for (const userDocument of snapshot.docs) {
       if (userDocument.data().leaderboardHidden === true) continue;
       visibleRank += 1;
-      if (userDocument.id === uid) return visibleRank <= 6;
-      if (visibleRank >= 6) return false;
+      if (userDocument.id === uid) return visibleRank <= 6 ? visibleRank : null;
+      if (visibleRank >= 6) return null;
     }
 
-    if (snapshot.empty) return false;
+    if (snapshot.empty) return null;
     lastDocument = snapshot.docs.at(-1);
-    if (!lastDocument) return false;
+    if (!lastDocument) return null;
   }
 }
 
@@ -382,6 +654,7 @@ const initialSettings: Settings = {
   customShape: "",
   customCommentBg: "",
   gameRoles: [],
+  topCommenterEffect: "fireflies",
   disableAnimations: false,
   disableTopCommentFireflies: false,
 };
@@ -391,6 +664,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [status, setStatus] = useState<"loading" | "guest" | "ready" | "error">("loading");
   const [topCommenterAccess, setTopCommenterAccess] = useState<"checking" | "allowed" | "denied" | "error">("checking");
+  const [topCommenterRank, setTopCommenterRank] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"info" | "success" | "error">("info");
   const [saving, setSaving] = useState(false);
@@ -412,7 +686,23 @@ export default function SettingsPage() {
 
     const applyUser = async (user: Account & { photoURL?: string | null }) => {
       setAccount(user);
-      setTopCommenterAccess("checking");
+      const cachedRank = getCachedTopCommenterRank(user.uid);
+      setTopCommenterRank(cachedRank ?? null);
+      setTopCommenterAccess(
+        cachedRank === undefined ? "checking" : cachedRank ? "allowed" : "denied",
+      );
+      void getTopCommenterRank(user.uid).then((rank) => {
+        if (!active) return;
+        setTopCommenterRank(rank);
+        setTopCommenterAccess(rank ? "allowed" : "denied");
+      }).catch((error: unknown) => {
+        console.error("Top commenter eligibility failed to load.", error);
+        if (active) {
+          setTopCommenterRank(null);
+          setTopCommenterAccess("error");
+          showNotification("Top commenter status could not be verified. This setting stays locked.", "error");
+        }
+      });
 
       try {
         const cached = localStorage.getItem("userSettingsPreview");
@@ -432,6 +722,7 @@ export default function SettingsPage() {
             customBadges: normalizeBadges(parsed),
             achievementBadges: normalizeAchievementBadges(parsed.achievementBadges, cachedChapterCount, cachedCommentCount),
             gameRoles: Array.isArray(parsed.gameRoles) ? parsed.gameRoles.map(String) : [],
+            topCommenterEffect: normalizeTopCommenterEffect(parsed.topCommenterEffect),
             disableAnimations: parsed.disableAnimations === true ||
               localStorage.getItem("commentWidget_disableAnimations") === "true",
             disableTopCommentFireflies: parsed.disableTopCommentFireflies === true ||
@@ -471,23 +762,13 @@ export default function SettingsPage() {
           customShape: String(data.customShape || ""),
           customCommentBg: String(data.customCommentBg || ""),
           gameRoles: Array.isArray(data.gameRoles) ? data.gameRoles.map(String) : [],
+          topCommenterEffect: normalizeTopCommenterEffect(data.topCommenterEffect),
           disableAnimations: data.disableAnimations === true ||
             localStorage.getItem("commentWidget_disableAnimations") === "true",
           disableTopCommentFireflies: data.disableTopCommentFireflies === true ||
             localStorage.getItem("commentWidget_disableTopCommentFireflies") === "true",
         });
         setStatus("ready");
-
-        try {
-          const isEligible = await isTopCommenter(user.uid);
-          if (active) setTopCommenterAccess(isEligible ? "allowed" : "denied");
-        } catch (error) {
-          console.error("Top commenter eligibility failed to load.", error);
-          if (active) {
-            setTopCommenterAccess("error");
-            showNotification("Top commenter status could not be verified. This setting stays locked.", "error");
-          }
-        }
       } catch (error) {
         console.error("User settings failed to load.", error);
         if (active) {
@@ -513,6 +794,7 @@ export default function SettingsPage() {
         if (!user) {
           setAccount(null);
           setTopCommenterAccess("denied");
+          setTopCommenterRank(null);
           setStatus("guest");
           return;
         }
@@ -602,6 +884,11 @@ export default function SettingsPage() {
     );
   }
 
+  function toggleTopCommentFireflies() {
+    if (topCommenterAccess !== "allowed") return;
+    update("disableTopCommentFireflies", !settings.disableTopCommentFireflies);
+  }
+
   async function selectAvatar(file?: File) {
     setAvatarError("");
     if (!file) return;
@@ -666,6 +953,12 @@ export default function SettingsPage() {
         readingChapterCount,
         userCommentCount,
       ),
+      disableTopCommentFireflies: topCommenterAccess === "denied"
+        ? false
+        : settings.disableTopCommentFireflies,
+      topCommenterEffect: topCommenterAccess === "denied"
+        ? "fireflies"
+        : settings.topCommenterEffect,
       displayName: settings.displayName.trim() || "Anonymous",
       username: sanitizedUsername,
       bio: settings.bio.trim(),
@@ -723,6 +1016,7 @@ export default function SettingsPage() {
   const extraRoles = settings.gameRoles.filter((role) => !knownRoles.has(role));
   const earnedMedals = readingMedals.filter((medal) => readingChapterCount >= medal.chapters);
   const earnedCommentMedals = commentMedals.filter((medal) => userCommentCount >= medal.comments);
+  const topCommenterPreviewEnabled = !settings.disableAnimations;
 
   return (
     <>
@@ -977,6 +1271,126 @@ export default function SettingsPage() {
                             No Comment Medals earned yet. Post at least 10 comments to unlock your first medal.
                           </p>
                         )}
+                        <div className={styles['settings-fireflies-panel']}>
+                          <div className={styles['settings-fireflies-heading']}>
+                            <div className={styles['settings-toggle-info']}>
+                              <strong>Top Commenter Background</strong>
+                              <span>
+                                {topCommenterAccess === "allowed"
+                                  ? `Rank #${topCommenterRank} · Choose a background effect for your comments.`
+                                  : topCommenterAccess === "checking"
+                                    ? "Preview available to everyone · Checking Top 6 selection access..."
+                                    : topCommenterAccess === "error"
+                                      ? "Preview available to everyone · Selection is locked until verified."
+                                      : "Preview available to everyone · Selection is limited to the Top 6 commenters."}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className={styles['settings-fireflies-toggle']}
+                              disabled={topCommenterAccess !== "allowed"}
+                              aria-label={topCommenterAccess === "allowed"
+                                ? `${settings.disableTopCommentFireflies ? "Show" : "Disable"} background effect`
+                                : "Background effect locked to Top 6 commenters"}
+                              aria-pressed={topCommenterAccess === "allowed" && !settings.disableTopCommentFireflies}
+                              onClick={toggleTopCommentFireflies}
+                            >
+                              {topCommenterAccess !== "allowed"
+                                ? "Locked"
+                                : settings.disableTopCommentFireflies
+                                  ? "Show"
+                                  : "Disable"}
+                            </button>
+                          </div>
+                          <div
+                            className={styles['settings-top-comment-effect-options']}
+                            role="group"
+                            aria-label="Top Commenter background effect"
+                          >
+                            {(["fireflies", "firework", "snow"] as const).map((effect) => (
+                              <button
+                                type="button"
+                                key={effect}
+                                className={cx(
+                                  styles['settings-top-comment-effect-option'],
+                                  settings.topCommenterEffect === effect && styles['is-selected'],
+                                )}
+                                aria-label={topCommenterAccess === "allowed"
+                                  ? `Select ${getTopCommenterEffectName(effect)} background effect`
+                                  : `${getTopCommenterEffectName(effect)} preview; selection is limited to Top 6 commenters`}
+                                aria-pressed={settings.topCommenterEffect === effect}
+                                disabled={topCommenterAccess !== "allowed"}
+                                onClick={() => update("topCommenterEffect", effect)}
+                              >
+                                <span className={styles['settings-top-comment-effect-option-header']}>
+                                  <strong>{getTopCommenterEffectName(effect)}</strong>
+                                  <span>
+                                    {topCommenterAccess !== "allowed"
+                                      ? "Top 6 only"
+                                      : settings.topCommenterEffect === effect
+                                        ? "Selected"
+                                        : "Select effect"}
+                                  </span>
+                                </span>
+                                <div
+                                  className={cx(
+                                    styles['settings-fireflies-preview'],
+                                    styles[`settings-fireflies-rank-${topCommenterRank || 1}`],
+                                    topCommenterPreviewEnabled && styles['is-active'],
+                                  )}
+                                >
+                                  {effect === "fireflies" ? (
+                                    <div className={styles['settings-fireflies-particles']} aria-hidden="true">
+                                      {Array.from({ length: 10 }, (_, index) => (
+                                        <span key={index} />
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    effect === "firework" ? (
+                                      <FireworkPreviewCanvas
+                                        active={topCommenterPreviewEnabled}
+                                        className={styles['settings-fireworks-canvas']}
+                                      />
+                                    ) : (
+                                      <SnowPreview
+                                        active={topCommenterPreviewEnabled}
+                                        className={styles['settings-snow-layer']}
+                                      />
+                                    )
+                                  )}
+                                  <div className={styles['settings-fireflies-comment']}>
+                                    <span className={styles['settings-fireflies-rank']}>
+                                      {topCommenterRank ? `TOP ${topCommenterRank}` : "TOP COMMENTER"}
+                                    </span>
+                                    <strong>
+                                      {effect === "fireflies"
+                                        ? "Fireflies preview"
+                                        : effect === "firework"
+                                          ? "Firework preview"
+                                          : "Snow preview"}
+                                    </strong>
+                                    <span>
+                                      {effect === "fireflies"
+                                        ? "Fireflies glow behind Top Commenter comments."
+                                        : effect === "firework"
+                                          ? "Firework bursts sparkle behind Top Commenter comments."
+                                          : "Snow falls gently behind Top Commenter comments."}
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                          <p className={styles['settings-hint-sm']}>
+                            {settings.disableAnimations
+                              ? "All previews are paused because all animations are disabled."
+                              : topCommenterAccess === "allowed"
+                                ? settings.disableTopCommentFireflies
+                                  ? "The selected effect is disabled on comments; previews remain active."
+                                  : "Select an effect, then save Settings to apply it to your comments."
+                                : "All three effects are previewed here; only Top 6 commenters can choose or disable them."}
+                          </p>
+                        </div>
                       </div>
                     </section>
 
@@ -997,32 +1411,6 @@ export default function SettingsPage() {
                               type="checkbox"
                               checked={settings.disableAnimations}
                               onChange={(e) => update("disableAnimations", e.target.checked)}
-                            />
-                            <span className={styles['settings-toggle-track']} />
-                          </div>
-                        </label>
-                        <label className={cx(
-                          styles['settings-toggle-row'],
-                          topCommenterAccess !== "allowed" && styles['settings-toggle-row-locked'],
-                        )}>
-                          <div className={styles['settings-toggle-info']}>
-                            <strong>Disable Top Commenter Fireflies</strong>
-                            <span>
-                              {topCommenterAccess === "allowed"
-                                ? "Hide the rank-colored particles on Top 6 commenters' comments."
-                                : topCommenterAccess === "checking"
-                                  ? "Checking Top 6 commenter eligibility..."
-                                  : topCommenterAccess === "error"
-                                    ? "Top commenter status could not be verified; this setting is locked."
-                                    : "Only users in the Top 6 commenters can change this setting."}
-                            </span>
-                          </div>
-                          <div className={styles['settings-toggle']}>
-                            <input
-                              type="checkbox"
-                              checked={settings.disableTopCommentFireflies}
-                              disabled={topCommenterAccess !== "allowed"}
-                              onChange={(e) => update("disableTopCommentFireflies", e.target.checked)}
                             />
                             <span className={styles['settings-toggle-track']} />
                           </div>
