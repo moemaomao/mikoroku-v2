@@ -601,7 +601,7 @@ function ReadingMedals({
         ) : (
           <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All reading medals earned!</p>
         )}
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
           {readingMedals.map((medal) => {
             const unlocked = earnedTotal >= medal.chapters;
             const medalTileStyle: CSSProperties & { "--stats-medal-color": string } = {
