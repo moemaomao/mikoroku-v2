@@ -6480,10 +6480,12 @@ function startCommentSnowAnimation(layer) {
     document.getElementById('comment-widget')?.classList.contains('no-animations')
   ) return;
 
+  // Assume visible initially so newly posted comments show snow right away.
+  // IntersectionObserver will correct the flag asynchronously if needed.
   const state = {
     layer,
     motionQuery,
-    visible: typeof IntersectionObserver === 'undefined',
+    visible: true,
     interval: 0,
     onVisibilityChange: null
   };
@@ -6499,14 +6501,20 @@ function startCommentSnowAnimation(layer) {
           observedState.visible = entry.isIntersecting;
           syncCommentSnowAnimation(observedState);
         });
-      });
+      }, { threshold: 0, rootMargin: '80px' });
     }
     commentSnowObserver.observe(layer);
   }
 
   document.addEventListener('visibilitychange', state.onVisibilityChange);
   motionQuery?.addEventListener('change', state.onVisibilityChange);
+
+  // Kick the animation immediately for comments that are already in view
+  // (observer callback is async and often misses the first paint for newly inserted nodes)
   syncCommentSnowAnimation(state);
+  requestAnimationFrame(() => {
+    if (state.layer?.isConnected) syncCommentSnowAnimation(state);
+  });
 }
 
 function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'fireflies') {
