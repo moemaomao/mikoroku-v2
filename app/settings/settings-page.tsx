@@ -1336,24 +1336,30 @@ export default function SettingsPage() {
                                   className={cx(
                                     styles['settings-fireflies-preview'],
                                     styles[`settings-fireflies-rank-${topCommenterRank || 1}`],
-                                    topCommenterPreviewEnabled && styles['is-active'],
+                                    // Only the currently selected effect should play its live preview
+                                    topCommenterPreviewEnabled &&
+                                      settings.topCommenterEffect === effect &&
+                                      styles['is-active'],
                                   )}
                                 >
                                   {effect === "fireflies" ? (
-                                    <div className={styles['settings-fireflies-particles']} aria-hidden="true">
-                                      {Array.from({ length: 10 }, (_, index) => (
-                                        <span key={index} />
-                                      ))}
-                                    </div>
+                                    // Fireflies particles only animate when this option is selected
+                                    topCommenterPreviewEnabled && settings.topCommenterEffect === effect ? (
+                                      <div className={styles['settings-fireflies-particles']} aria-hidden="true">
+                                        {Array.from({ length: 10 }, (_, index) => (
+                                          <span key={index} />
+                                        ))}
+                                      </div>
+                                    ) : null
                                   ) : (
                                     effect === "firework" ? (
                                       <FireworkPreviewCanvas
-                                        active={topCommenterPreviewEnabled}
+                                        active={topCommenterPreviewEnabled && settings.topCommenterEffect === effect}
                                         className={styles['settings-fireworks-canvas']}
                                       />
                                     ) : (
                                       <SnowPreview
-                                        active={topCommenterPreviewEnabled}
+                                        active={topCommenterPreviewEnabled && settings.topCommenterEffect === effect}
                                         className={styles['settings-snow-layer']}
                                       />
                                     )
