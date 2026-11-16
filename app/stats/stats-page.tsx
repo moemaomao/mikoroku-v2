@@ -7,6 +7,7 @@ import {
   loadPublicReadingStats,
   preserveLifetimeChapterCount,
   subscribeToReadingStats,
+  COMMENT_HISTORY_LIMIT,
   type CommentHistoryItem,
   type PublicReadingStats,
   type ReadingProgressItem,
@@ -1157,7 +1158,17 @@ function CommentHistorySection({
   limitReached: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(10);
+  const [visibleImages, setVisibleImages] = useState<Set<string>>(() => new Set());
   const visibleComments = comments.slice(0, visibleCount);
+
+  const toggleImageVisibility = (id: string) => {
+    setVisibleImages((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <section className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 backdrop-blur-sm dark:border-white/10 dark:bg-[#15151d]/85 dark:shadow-black/10 sm:p-6">
@@ -1169,7 +1180,7 @@ function CommentHistorySection({
           </p>
           {limitReached && (
             <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-              Showing a sample of up to 50 matching comments to keep Stats responsive.
+              Showing a sample of up to {COMMENT_HISTORY_LIMIT} matching comments to keep Stats responsive.
             </p>
           )}
         </div>
@@ -1180,34 +1191,59 @@ function CommentHistorySection({
         </p>
       ) : comments.length ? (
         <div className="mt-4 space-y-3">
-          {visibleComments.map((comment) => (
-            <article
-              key={`${comment.threadUrl}:${comment.id}`}
-              className="rounded-2xl border border-black/10 bg-white/60 p-3 dark:border-white/10 dark:bg-black/15 sm:p-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {comment.isReply && (
-                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-400/15 dark:text-violet-200">
-                    Reply
-                  </span>
+          {visibleComments.map((comment) => {
+            const imageKey = `${comment.threadUrl}:${comment.id}`;
+            const imageVisible = visibleImages.has(imageKey);
+            return (
+              <article
+                key={imageKey}
+                className="rounded-2xl border border-black/10 bg-white/60 p-3 dark:border-white/10 dark:bg-black/15 sm:p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {comment.isReply && (
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-400/15 dark:text-violet-200">
+                      Reply
+                    </span>
+                  )}
+                  <time className="ml-auto text-[11px] text-slate-500 dark:text-zinc-500">
+                    {formatCommentDate(comment.createdAt)}
+                  </time>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-zinc-200">
+                  {comment.text || (comment.hasImage ? "Image comment." : "Empty comment.")}
+                </p>
+                {comment.imageUrl && (
+                  <>
+                    <button
+                      type="button"
+                      aria-expanded={imageVisible}
+                      onClick={() => toggleImageVisibility(imageKey)}
+                      className="mt-2 inline-flex text-xs font-semibold text-[var(--mikoroku-accent)] underline-offset-4 hover:underline"
+                    >
+                      {imageVisible ? "Hide images" : "Show images"}
+                    </button>
+                    {imageVisible && (
+                      <img
+                        src={comment.imageUrl}
+                        alt="Comment attachment"
+                        loading="lazy"
+                        decoding="async"
+                        className="mt-3 max-h-[28rem] max-w-full rounded-xl border border-black/10 object-contain dark:border-white/10"
+                      />
+                    )}
+                  </>
                 )}
-                <time className="ml-auto text-[11px] text-slate-500 dark:text-zinc-500">
-                  {formatCommentDate(comment.createdAt)}
-                </time>
-              </div>
-              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-zinc-200">
-                {comment.text || (comment.hasImage ? "Image comment." : "Empty comment.")}
-              </p>
-              {comment.threadUrl && (
-                <a
-                  href={comment.threadUrl}
-                  className="mt-3 inline-flex text-xs font-semibold text-[var(--mikoroku-accent)] underline-offset-4 hover:underline"
-                >
-                  {comment.linkTitle}
-                </a>
-              )}
-            </article>
-          ))}
+                {comment.threadUrl && (
+                  <a
+                    href={comment.threadUrl}
+                    className="mt-3 inline-flex text-xs font-semibold text-[var(--mikoroku-accent)] underline-offset-4 hover:underline"
+                  >
+                    {comment.linkTitle}
+                  </a>
+                )}
+              </article>
+            );
+          })}
           {visibleCount < comments.length && (
             <button
               type="button"

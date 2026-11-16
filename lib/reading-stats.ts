@@ -110,6 +110,7 @@ export type CommentHistoryItem = {
   id: string;
   text: string;
   hasImage: boolean;
+  imageUrl: string;
   createdAt: number;
   isReply: boolean;
   linkTitle: string;
@@ -129,6 +130,8 @@ export type PublicReadingStats = {
 };
 
 export type LiveReadingStats = Pick<PublicReadingStats, "profile" | "activity" | "totalChaptersRead">;
+
+export const COMMENT_HISTORY_LIMIT = 20;
 
 function getStatsWindow(): StatsWindow {
   return window as StatsWindow;
@@ -370,6 +373,18 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function imageUrlValue(value: unknown): string {
+  const imageUrl = stringValue(value);
+  if (!imageUrl) return "";
+
+  try {
+    const url = new URL(imageUrl);
+    return url.protocol === "https:" || url.protocol === "http:" ? imageUrl : "";
+  } catch {
+    return "";
+  }
+}
+
 function decodePathPart(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -589,7 +604,6 @@ function parseProgressItem(value: unknown): ReadingProgressItem | null {
 }
 
 export async function loadPublicReadingStats(uid: string): Promise<PublicReadingStats> {
-  const commentHistoryLimit = 50;
   const firestore = await waitForFirestore();
   const userReference = firestore.collection("userStats").doc(uid);
   const profileSnapshotPromise = userReference.get({ source: "server" });
@@ -607,7 +621,7 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
         throw new Error("Firestore comment limits are unavailable.");
       }
       return {
-        snapshot: await filteredCommentsQuery.limit(commentHistoryLimit).get(),
+        snapshot: await filteredCommentsQuery.limit(COMMENT_HISTORY_LIMIT).get(),
         error: "",
       };
     } catch (error) {
@@ -669,7 +683,7 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
   const commentHistory: CommentHistoryItem[] = [];
   let commentHistoryError = commentSnapshotResult.error;
   const commentHistoryLimitReached =
-    commentSnapshotResult.snapshot?.docs?.length === commentHistoryLimit;
+    commentSnapshotResult.snapshot?.docs?.length === COMMENT_HISTORY_LIMIT;
   if (commentSnapshotResult.snapshot) {
     try {
       commentSnapshotResult.snapshot.forEach((document) => {
@@ -677,10 +691,12 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
         if (stringValue(data.uid) !== uid) return;
         const postId = document.ref?.parent.parent?.id;
         if (!postId) return;
+        const imageUrl = imageUrlValue(data.image);
         commentHistory.push({
           id: document.id,
           text: stringValue(data.text),
           hasImage: Boolean(data.image),
+          imageUrl,
           createdAt: timestampValue(data.date),
           isReply: Boolean(data.parentId),
           linkTitle: getCommentLinkTitle(postId, data.postTitle, data.postUrl, profile),
