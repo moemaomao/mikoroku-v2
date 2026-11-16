@@ -13,11 +13,18 @@ import {
   updateReadingHistoryProgress,
   upsertReadingHistoryEntry,
 } from "../../lib/reading-history";
-import { saveReaderStats, type ReaderStatsInput } from "../../lib/reading-stats";
+import {
+  acknowledgeLocalReadingActivity,
+  recordLocalChapterRead,
+  saveReaderStats,
+  setLocalChapterTotal,
+  type ReaderStatsInput,
+} from "../../lib/reading-stats";
 import {
   readCachedReaderData,
   writeCachedReaderData,
 } from "../lib/reader-data-cache";
+import { updateCachedReaderStats } from "../lib/reading-stats-cache";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
@@ -1643,14 +1650,29 @@ export default function ReaderPage({
     const chapterKey = `${slug}:${activeReaderData.kind}:${activeReaderData.chapter}`;
     if (lastStatsChapterRef.current === chapterKey) return;
     lastStatsChapterRef.current = chapterKey;
+    lastStatsActivityRef.current = chapterKey;
 
-    void saveReaderStats(input, true).then((saved) => {
+    void saveReaderStats(input, true, (uid, activityDate) => {
+      const localTotal = recordLocalChapterRead(uid, true, activityDate);
+      void updateCachedReaderStats(uid, input, true)
+        .then((cachedTotal) => setLocalChapterTotal(uid, Math.max(localTotal, cachedTotal || 0)))
+        .catch((cacheError: unknown) => {
+          console.warn("Reading stats could not be updated in the local cache.", cacheError);
+        });
+    }, (uid, activityDate) => {
+      acknowledgeLocalReadingActivity(uid, activityDate);
+    }).then((saved) => {
       if (saved) {
         lastStatsActivityRef.current = chapterKey;
         lastStatsProgressRef.current = `${chapterKey}:${Math.round(input.chapterProgress)}`;
+      } else if (lastStatsActivityRef.current === chapterKey) {
+        lastStatsActivityRef.current = "";
       }
     }).catch((statsError: unknown) => {
-      if (lastStatsChapterRef.current === chapterKey) lastStatsChapterRef.current = "";
+      if (lastStatsChapterRef.current === chapterKey) {
+        lastStatsChapterRef.current = "";
+        lastStatsActivityRef.current = "";
+      }
       console.error("Reading stats could not be saved.", statsError);
     });
   }, [activeReaderData, readerProgress, slug]);
@@ -1664,13 +1686,28 @@ export default function ReaderPage({
       const progressKey = `${chapterKey}:${Math.round(input.chapterProgress)}`;
       const needsActivity = lastStatsActivityRef.current !== chapterKey;
       if (!needsActivity && lastStatsProgressRef.current === progressKey) return;
+      if (needsActivity) lastStatsActivityRef.current = chapterKey;
 
-      void saveReaderStats(input, needsActivity).then((saved) => {
+      void saveReaderStats(input, needsActivity, (uid, activityDate) => {
+        const localTotal = recordLocalChapterRead(uid, needsActivity, activityDate);
+        void updateCachedReaderStats(uid, input, needsActivity)
+          .then((cachedTotal) => setLocalChapterTotal(uid, Math.max(localTotal, cachedTotal || 0)))
+          .catch((cacheError: unknown) => {
+            console.warn("Reading stats could not be updated in the local cache.", cacheError);
+          });
+      }, (uid, activityDate) => {
+        if (needsActivity) acknowledgeLocalReadingActivity(uid, activityDate);
+      }).then((saved) => {
         if (saved) {
           if (needsActivity) lastStatsActivityRef.current = chapterKey;
           lastStatsProgressRef.current = progressKey;
+        } else if (needsActivity && lastStatsActivityRef.current === chapterKey) {
+          lastStatsActivityRef.current = "";
         }
       }).catch((statsError: unknown) => {
+        if (needsActivity && lastStatsActivityRef.current === chapterKey) {
+          lastStatsActivityRef.current = "";
+        }
         console.error("Reading progress stats could not be saved.", statsError);
       });
     };

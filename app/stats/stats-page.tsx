@@ -4,9 +4,16 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from
 import "./stats-animations.css";
 import {
   getLocalReadMarksCount,
+  getLocalBookmarkCount,
+  getLocalChapterTotal,
+  getLocalChapterTotalStorageKey,
+  hasFreshLocalBookmarks,
   loadPublicReadingStats,
+  mergeLocalReadingActivity,
   preserveLifetimeChapterCount,
-  subscribeToReadingStats,
+  setLocalChapterTotal,
+  setLocalReadingActivityBaseline,
+  getLocalReadingActivityStorageKey,
   COMMENT_HISTORY_LIMIT,
   type CommentHistoryItem,
   type PublicReadingStats,
@@ -20,6 +27,7 @@ import {
 } from "../../lib/user-following";
 import {
   getCachedReadingStats,
+  READING_STATS_CACHE_TTL_MS,
   setCachedReadingStats,
   getUnlockedMedals,
   setUnlockedMedals,
@@ -1332,7 +1340,7 @@ function ProfileFollowControls({
     const updatedFollowing = new Set(getCachedFollowingUids(viewerUid));
     if (nextFollowing) updatedFollowing.add(uid);
     else updatedFollowing.delete(uid);
-    cacheFollowingUids(viewerUid, [...updatedFollowing]);
+    cacheFollowingUids(viewerUid, [...updatedFollowing], false);
 
     const revision = ++operationRevision.current;
     setFollowing(nextFollowing);
@@ -1419,34 +1427,63 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const statsSettingsDialogRef = useRef<HTMLDivElement>(null);
   const lifetimeChapterHighWaterRef = useRef({ uid, total: 0 });
+  const statsRef = useRef<PublicReadingStats | null>(stats);
+  const lastHandledRetryRef = useRef(retry);
+  statsRef.current = stats;
   if (lifetimeChapterHighWaterRef.current.uid !== uid) {
     lifetimeChapterHighWaterRef.current = { uid, total: 0 };
   }
 
   useEffect(() => {
     let active = true;
-    let freshStatsLoaded = false;
-    let freshStatsError = "";
+    let refreshing = false;
+    let refreshTimer: number | undefined;
+    let lastSyncedAt = 0;
+    const forceRefresh = retry !== lastHandledRetryRef.current;
+    lastHandledRetryRef.current = retry;
     setVisibleProgressCount(10);
     setError("");
 
-    const applyFresh = async () => {
+    const scheduleRefresh = (delay: number) => {
+      if (!active || document.visibilityState === "hidden") return;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = undefined;
+        void refreshStats();
+      }, Math.max(0, delay));
+    };
+
+    const refreshStats = async () => {
+      if (!active || refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
       try {
-        const [result, cached, unlockedMedals] = await Promise.all([
+        const [result, unlockedMedals] = await Promise.all([
           loadPublicReadingStats(uid),
-          getCachedReadingStats(uid),
           getUnlockedMedals(),
         ]);
         if (!active) return;
         const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
+        const localChapterTotal = isOwner ? getLocalChapterTotal(uid) : 0;
         const totalChaptersRead = Math.max(
           result.totalChaptersRead,
-          cached?.data.totalChaptersRead || 0,
           localReadMarks,
+          localChapterTotal,
           lifetimeChapterHighWaterRef.current.total,
           ...(isOwner ? unlockedMedals.filter(Number.isFinite) : []),
         );
-        const preservedResult = { ...result, totalChaptersRead };
+        if (isOwner) setLocalChapterTotal(uid, totalChaptersRead);
+        if (isOwner) setLocalReadingActivityBaseline(uid, result.activity);
+        const activity = isOwner ? mergeLocalReadingActivity(uid, result.activity) : result.activity;
+        const preservedResult = {
+          ...result,
+          activity,
+          totalChaptersRead,
+          bookmarksCount: (isOwner && hasFreshLocalBookmarks() ? getLocalBookmarkCount() : null)
+            ?? result.bookmarksCount
+            ?? (isOwner ? getLocalBookmarkCount() : null)
+            ?? statsRef.current?.bookmarksCount
+            ?? null,
+        };
         lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
         if (isOwner && totalChaptersRead > result.totalChaptersRead) {
           try {
@@ -1455,14 +1492,18 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
             console.warn("The lifetime chapter count could not be restored to Firestore.", recoveryError);
           }
         }
-        freshStatsLoaded = true;
+        if (!active) return;
         setStats(preservedResult);
         setError("");
-        void setCachedReadingStats(uid, preservedResult);
+        await setCachedReadingStats(uid, {
+          ...preservedResult,
+          activity: result.activity,
+        });
+        lastSyncedAt = Date.now();
       } catch (loadError: unknown) {
         console.error("Public reading stats could not be loaded.", loadError);
         if (!active) return;
-        freshStatsError = loadError instanceof Error
+        const freshStatsError = loadError instanceof Error
           ? loadError.message
           : "Reading stats could not be loaded.";
         setStats((current) => {
@@ -1470,81 +1511,119 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
           setError(freshStatsError);
           return current;
         });
+      } finally {
+        refreshing = false;
+        if (active) scheduleRefresh(READING_STATS_CACHE_TTL_MS);
       }
     };
 
-    const loadStats = async () => {
-      const freshRequest = applyFresh();
-      const cached = await getCachedReadingStats(uid);
-      if (!active) return;
-      if (cached?.data) {
-        const totalChaptersRead = Math.max(
-          cached.data.totalChaptersRead,
-          lifetimeChapterHighWaterRef.current.total,
-        );
-        lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
-        if (!freshStatsLoaded) {
-          setStats({ ...cached.data, totalChaptersRead });
+    const refreshWhenDue = () => {
+      if (!active || document.visibilityState === "hidden") return;
+      const timeUntilRefresh = READING_STATS_CACHE_TTL_MS - (Date.now() - lastSyncedAt);
+      if (timeUntilRefresh <= 0) {
+        void refreshStats();
+      } else {
+        scheduleRefresh(timeUntilRefresh);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+        refreshTimer = undefined;
+        return;
+      }
+      refreshWhenDue();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const loadCachedStats = async () => {
+      try {
+        const [cached, unlockedMedals] = await Promise.all([
+          getCachedReadingStats(uid),
+          getUnlockedMedals(),
+        ]);
+        if (!active) return;
+        const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
+        if (cached?.data) {
+          const localChapterTotal = isOwner ? getLocalChapterTotal(uid) : 0;
+          const totalChaptersRead = Math.max(
+            cached.data.totalChaptersRead,
+            localReadMarks,
+            localChapterTotal,
+            lifetimeChapterHighWaterRef.current.total,
+            ...(isOwner ? unlockedMedals.filter(Number.isFinite) : []),
+          );
+          if (isOwner) setLocalChapterTotal(uid, totalChaptersRead);
+          if (isOwner) setLocalReadingActivityBaseline(uid, cached.data.activity);
+          const activity = isOwner
+            ? mergeLocalReadingActivity(uid, cached.data.activity)
+            : cached.data.activity;
+          lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
+          setStats({
+            ...cached.data,
+            activity,
+            totalChaptersRead,
+            bookmarksCount: isOwner
+              ? (hasFreshLocalBookmarks() ? getLocalBookmarkCount() : null)
+                ?? cached.data.bookmarksCount
+                ?? getLocalBookmarkCount()
+              : cached.data.bookmarksCount,
+          });
           setError("");
+          lastSyncedAt = cached.savedAt;
+          if (forceRefresh || cached.stale) {
+            void refreshStats();
+          } else {
+            scheduleRefresh(READING_STATS_CACHE_TTL_MS - (Date.now() - cached.savedAt));
+          }
+          return;
         }
-      } else if (!freshStatsLoaded) {
+
         setStats(null);
-        if (freshStatsError) setError(freshStatsError);
+        lastSyncedAt = 0;
+        void refreshStats();
+      } catch (cacheError: unknown) {
+        console.warn("Cached reading stats could not be loaded.", cacheError);
+        if (!active) return;
+        setStats(null);
+        void refreshStats();
       }
-      await freshRequest;
     };
 
-    const onStatsUpdated = () => { void applyFresh(); };
-    void loadStats();
-    window.addEventListener("mikoroku:reading-stats-updated", onStatsUpdated);
+    void loadCachedStats();
     return () => {
       active = false;
-      window.removeEventListener("mikoroku:reading-stats-updated", onStatsUpdated);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [isOwner, retry, uid]);
 
   useEffect(() => {
     if (!isOwner) return;
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    void subscribeToReadingStats(
-      uid,
-      (liveStats) => {
-        if (!active) return;
-        const totalChaptersRead = Math.max(
-          liveStats.totalChaptersRead,
-          lifetimeChapterHighWaterRef.current.total,
-        );
-        lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
-        setStats((current) => {
-          if (!current) return current;
-          const updated = {
-            ...current,
-            profile: liveStats.profile,
-            activity: liveStats.activity,
-            totalChaptersRead,
-          };
-          return updated;
-        });
-        if (totalChaptersRead > liveStats.totalChaptersRead) {
-          void preserveLifetimeChapterCount(uid, totalChaptersRead).catch((error: unknown) => {
-            console.warn("The synced lifetime chapter count could not be restored to Firestore.", error);
-          });
-        }
-      },
-      (error) => {
-        console.error("Live reading stats updates could not be received.", error);
-      },
-    ).then((stop) => {
-      if (active) unsubscribe = stop;
-      else stop();
-    }).catch((error: unknown) => {
-      console.error("Live reading stats subscription could not be started.", error);
-    });
-
+    const updateLocalChapterCount = () => {
+      const localTotal = getLocalChapterTotal(uid);
+      setStats((current) => {
+        if (!current) return current;
+        const totalChaptersRead = Math.max(current.totalChaptersRead, localTotal);
+        const activity = mergeLocalReadingActivity(uid, current.activity);
+        return totalChaptersRead === current.totalChaptersRead
+          && activity.every((day, index) => day.chapters === current.activity[index]?.chapters)
+          ? current
+          : { ...current, totalChaptersRead, activity };
+      });
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key === getLocalChapterTotalStorageKey(uid)
+        || event.key === getLocalReadingActivityStorageKey(uid)
+      ) updateLocalChapterCount();
+    };
+    window.addEventListener("mikoroku:reading-stats-local-updated", updateLocalChapterCount);
+    window.addEventListener("storage", onStorage);
     return () => {
-      active = false;
-      unsubscribe?.();
+      window.removeEventListener("mikoroku:reading-stats-local-updated", updateLocalChapterCount);
+      window.removeEventListener("storage", onStorage);
     };
   }, [isOwner, uid]);
 
@@ -1618,9 +1697,14 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
         throw new Error("The signed-in account changed before the banner was saved. Please try again.");
       }
       await firestore.collection("userStats").doc(uid).set({ profileBanner: imageUrl }, { merge: true });
-      setStats((current) => current
-        ? { ...current, profile: { ...current.profile, profileBanner: imageUrl } }
-        : current);
+      if (stats) {
+        const updatedStats = {
+          ...stats,
+          profile: { ...stats.profile, profileBanner: imageUrl },
+        };
+        setStats(updatedStats);
+        void setCachedReadingStats(uid, updatedStats, false);
+      }
       setBannerError("");
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
     } catch (uploadError) {
@@ -1654,7 +1738,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
           profile: { ...stats.profile, hiddenStatsSections },
         };
         setStats(updatedStats);
-        void setCachedReadingStats(uid, updatedStats);
+        void setCachedReadingStats(uid, updatedStats, false);
       }
       setStatsSettingsOpen(false);
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));

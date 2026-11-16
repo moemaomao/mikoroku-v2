@@ -132,6 +132,10 @@ export type PublicReadingStats = {
 export type LiveReadingStats = Pick<PublicReadingStats, "profile" | "activity" | "totalChaptersRead">;
 
 export const COMMENT_HISTORY_LIMIT = 20;
+const LOCAL_BOOKMARK_FRESHNESS_KEY = "mikoroku:bookmarks:updatedAt";
+const LOCAL_BOOKMARK_FRESHNESS_MS = 1000 * 60 * 30;
+export const LOCAL_CHAPTER_TOTAL_PREFIX = "mikoroku:reading-stats:chapters:";
+const LOCAL_CHAPTER_ACTIVITY_SUFFIX = ":activity";
 
 function getStatsWindow(): StatsWindow {
   return window as StatsWindow;
@@ -213,21 +217,209 @@ export function getLocalReadMarksCount(): number {
   return count;
 }
 
+export function getLocalBookmarkCount(): number | null {
+  try {
+    const raw = localStorage.getItem("mangaBookmarks");
+    if (raw === null) return null;
+    const bookmarks: unknown = JSON.parse(raw);
+    if (!Array.isArray(bookmarks)) return null;
+    const titles = new Set<string>();
+    for (const bookmark of bookmarks) {
+      const title = typeof bookmark === "string"
+        ? bookmark.trim()
+        : stringValue(asRecord(bookmark).title).trim();
+      if (title) titles.add(title.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""));
+    }
+    return titles.size;
+  } catch (error) {
+    console.warn("Local bookmarks could not be counted.", error);
+    return null;
+  }
+}
+
+export function markLocalBookmarksUpdated(): void {
+  try {
+    localStorage.setItem(LOCAL_BOOKMARK_FRESHNESS_KEY, String(Date.now()));
+  } catch (error) {
+    console.warn("Local bookmark freshness could not be saved.", error);
+  }
+}
+
+export function hasFreshLocalBookmarks(): boolean {
+  try {
+    const savedAt = Number(localStorage.getItem(LOCAL_BOOKMARK_FRESHNESS_KEY));
+    const age = Date.now() - savedAt;
+    return Number.isFinite(savedAt) && savedAt > 0 && age >= 0 && age < LOCAL_BOOKMARK_FRESHNESS_MS;
+  } catch (error) {
+    console.warn("Local bookmark freshness could not be checked.", error);
+    return false;
+  }
+}
+
+export function getLocalChapterTotalStorageKey(uid: string): string {
+  return `${LOCAL_CHAPTER_TOTAL_PREFIX}${uid}`;
+}
+
+export function getLocalReadingActivityStorageKey(uid: string): string {
+  return `${getLocalChapterTotalStorageKey(uid)}${LOCAL_CHAPTER_ACTIVITY_SUFFIX}`;
+}
+
+function readLocalReadingActivity(uid: string): Record<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(getLocalReadingActivityStorageKey(uid)) || "{}");
+    const activity = asRecord(parsed);
+    const baseline = asRecord(activity.baseline);
+    const pending = asRecord(activity.pending);
+    const source = Object.keys(baseline).length || Object.keys(pending).length ? baseline : activity;
+    return Object.fromEntries(
+      Object.entries(source)
+        .filter(([date, count]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && typeof count === "number" && Number.isFinite(count))
+        .map(([date, count]) => [date, Math.max(0, Math.floor(count as number))]),
+    );
+  } catch (error) {
+    console.warn("Local reading activity could not be read.", error);
+    return {};
+  }
+}
+
+type LocalReadingActivity = {
+  baseline: Record<string, number>;
+  pending: Record<string, number>;
+};
+
+function readLocalReadingActivityState(uid: string): LocalReadingActivity {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(getLocalReadingActivityStorageKey(uid)) || "{}");
+    const data = asRecord(parsed);
+    if (!data.baseline && !data.pending) {
+      return { baseline: readLocalReadingActivity(uid), pending: {} };
+    }
+    const normalize = (value: unknown) => Object.fromEntries(
+      Object.entries(asRecord(value))
+        .filter(([date, count]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && typeof count === "number" && Number.isFinite(count))
+        .map(([date, count]) => [date, Math.max(0, Math.floor(count as number))]),
+    );
+    return {
+      baseline: normalize(data.baseline),
+      pending: normalize(data.pending),
+    };
+  } catch (error) {
+    console.warn("Local reading activity could not be read.", error);
+    return { baseline: {}, pending: {} };
+  }
+}
+
+function writeLocalReadingActivity(uid: string, activity: LocalReadingActivity): void {
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - 30);
+  const cutoffDate = utcDateKey(cutoff);
+  const recent = {
+    baseline: Object.fromEntries(Object.entries(activity.baseline).filter(([date]) => date >= cutoffDate)),
+    pending: Object.fromEntries(Object.entries(activity.pending).filter(([date]) => date >= cutoffDate)),
+  };
+  try {
+    localStorage.setItem(getLocalReadingActivityStorageKey(uid), JSON.stringify(recent));
+  } catch (error) {
+    console.warn("Local reading activity could not be saved.", error);
+  }
+}
+
+export function mergeLocalReadingActivity(
+  uid: string,
+  activity: ReadingActivityDay[],
+): ReadingActivityDay[] {
+  const localActivity = readLocalReadingActivityState(uid);
+  return activity.map((day) => ({
+    ...day,
+    chapters: Math.max(
+      day.chapters,
+      (localActivity.baseline[day.date] || 0) + (localActivity.pending[day.date] || 0),
+    ),
+  }));
+}
+
+export function setLocalReadingActivityBaseline(
+  uid: string,
+  activity: ReadingActivityDay[],
+): void {
+  const localActivity = readLocalReadingActivityState(uid);
+  activity.forEach((day) => {
+    localActivity.baseline[day.date] = Math.max(localActivity.baseline[day.date] || 0, day.chapters);
+  });
+  writeLocalReadingActivity(uid, localActivity);
+}
+
+export function acknowledgeLocalReadingActivity(uid: string, date: string): void {
+  const activity = readLocalReadingActivityState(uid);
+  const pending = activity.pending[date] || 0;
+  if (!pending) return;
+  activity.pending[date] = pending - 1;
+  activity.baseline[date] = (activity.baseline[date] || 0) + 1;
+  writeLocalReadingActivity(uid, activity);
+  window.dispatchEvent(new Event("mikoroku:reading-stats-local-updated"));
+}
+
+export function getLocalChapterTotal(uid: string): number {
+  try {
+    const stored = Number(localStorage.getItem(getLocalChapterTotalStorageKey(uid)));
+    return Number.isFinite(stored) && stored >= 0 ? Math.floor(stored) : 0;
+  } catch (error) {
+    console.warn("Local chapter total could not be read.", error);
+    return 0;
+  }
+}
+
+export function setLocalChapterTotal(uid: string, total: number): void {
+  if (!Number.isFinite(total) || total < 0) return;
+  const next = Math.max(getLocalChapterTotal(uid), Math.floor(total));
+  try {
+    localStorage.setItem(getLocalChapterTotalStorageKey(uid), String(next));
+    window.dispatchEvent(new Event("mikoroku:reading-stats-local-updated"));
+  } catch (error) {
+    console.warn("Local chapter total could not be saved.", error);
+  }
+}
+
+export function recordLocalChapterRead(
+  uid: string,
+  recordChapterActivity: boolean,
+  activityDate = utcDateKey(new Date()),
+): number {
+  const previous = getLocalChapterTotal(uid);
+  const localReadMarks = getLocalReadMarksCount();
+  const next = Math.max(previous + (recordChapterActivity ? 1 : 0), localReadMarks);
+  try {
+    localStorage.setItem(getLocalChapterTotalStorageKey(uid), String(next));
+  } catch (error) {
+    console.warn("Local chapter total could not be saved.", error);
+  }
+  if (recordChapterActivity) {
+    const activity = readLocalReadingActivityState(uid);
+    activity.pending[activityDate] = (activity.pending[activityDate] || 0) + 1;
+    writeLocalReadingActivity(uid, activity);
+    window.dispatchEvent(new Event("mikoroku:reading-stats-local-updated"));
+  }
+  return next;
+}
+
 export async function saveReaderStats(
   input: ReaderStatsInput,
   recordChapterActivity: boolean,
+  onOptimisticUpdate?: (uid: string, activityDate: string) => void,
+  onSynced?: (uid: string, activityDate: string) => void,
 ): Promise<boolean> {
-  const firestore = await waitForFirestore();
   const sdk = getStatsWindow().firebase;
   const user = getStatsWindow().currentUser || sdk?.auth?.().currentUser;
-  if (!sdk || !user?.uid) return false;
+  if (!user?.uid) return false;
+  const activityDate = utcDateKey(new Date());
+  onOptimisticUpdate?.(user.uid, activityDate);
+  if (!sdk) return false;
 
   const now = new Date().toISOString();
   const chapterProgress = clampPercentage(input.chapterProgress);
   const seriesProgress = input.chapterCount > 0 && input.chapterPosition > 0
     ? clampPercentage(((input.chapterPosition - 1 + chapterProgress / 100) / input.chapterCount) * 100)
     : chapterProgress;
-  const userReference = firestore.collection("userStats").doc(user.uid);
   const readingStats: Record<string, unknown> = {
     progress: {
       [safeDocumentId(input.slug)]: {
@@ -247,32 +439,24 @@ export async function saveReaderStats(
     },
   };
 
-  const profileFields: Record<string, unknown> = {};
   if (recordChapterActivity) {
-    const profileSnapshot = await userReference.get();
-    if (!profileSnapshot.exists) {
-      const name = user.displayName || user.email?.split("@")[0] || "Reader";
-      profileFields.displayName = name;
-      profileFields.username = name;
-      profileFields.avatar = user.photoURL || "";
-      profileFields.createdAt = now;
-    }
-
     const increment = sdk.firestore?.FieldValue?.increment;
     if (typeof increment !== "function") {
       throw new Error("Firestore atomic increment is unavailable.");
     }
-    const day = utcDateKey(new Date());
     readingStats.activity = {
-      [day]: { chapters: increment(1) },
+      [activityDate]: { chapters: increment(1) },
     };
     readingStats.totalChaptersRead = increment(1);
   }
 
-  await userReference.set({
-    ...profileFields,
-    readingStats,
-  }, { merge: true });
+  const firestore = await waitForFirestore();
+  const userReference = firestore.collection("userStats").doc(user.uid);
+  void userReference.set({ readingStats }, { merge: true }).then(() => {
+    if (recordChapterActivity) onSynced?.(user.uid, activityDate);
+  }, (error: unknown) => {
+    console.error("Reading stats are queued locally but could not be synchronized yet.", error);
+  });
 
   if (recordChapterActivity) window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
   return true;

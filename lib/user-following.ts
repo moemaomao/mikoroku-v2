@@ -35,6 +35,11 @@ type FollowingWindow = Window & {
 };
 
 const FOLLOWING_CACHE_PREFIX = "mikoroku:following:";
+const FOLLOWING_CACHE_TTL_MS = 1000 * 60 * 30;
+
+function followingCacheTimestampKey(uid: string): string {
+  return `${FOLLOWING_CACHE_PREFIX}${uid}:savedAt`;
+}
 
 function followingWindow(): FollowingWindow {
   return window as FollowingWindow;
@@ -94,18 +99,33 @@ export function getCachedFollowingUids(uid: string): string[] {
   }
 }
 
-export function cacheFollowingUids(uid: string, following: string[]): void {
+export function cacheFollowingUids(uid: string, following: string[], isFresh = true): void {
   try {
     window.localStorage.setItem(
       `${FOLLOWING_CACHE_PREFIX}${uid}`,
       JSON.stringify([...new Set(following)]),
     );
+    if (isFresh) {
+      window.localStorage.setItem(followingCacheTimestampKey(uid), String(Date.now()));
+    } else {
+      window.localStorage.removeItem(followingCacheTimestampKey(uid));
+    }
   } catch (error) {
     console.warn("Cached following list could not be saved.", error);
   }
 }
 
 export async function loadFollowingUids(uid: string): Promise<string[]> {
+  try {
+    const savedAt = Number(window.localStorage.getItem(followingCacheTimestampKey(uid)));
+    const age = Date.now() - savedAt;
+    if (Number.isFinite(savedAt) && savedAt > 0 && age >= 0 && age < FOLLOWING_CACHE_TTL_MS) {
+      return getCachedFollowingUids(uid);
+    }
+  } catch (error) {
+    console.warn("Following cache freshness could not be checked.", error);
+  }
+
   const firestore = await waitForFirestore();
   const snapshot = await firestore.collection("userStats").doc(uid).get();
   const value = snapshot.exists ? snapshot.data()?.following : undefined;
@@ -140,6 +160,10 @@ export async function setUserFollowing(
     { following: followingUpdate },
     { merge: true },
   );
+  const updatedFollowing = new Set(getCachedFollowingUids(uid));
+  if (shouldFollow) updatedFollowing.add(targetUid);
+  else updatedFollowing.delete(targetUid);
+  cacheFollowingUids(uid, [...updatedFollowing]);
 }
 
 export async function loadFollowerCount(uid: string): Promise<number | null> {

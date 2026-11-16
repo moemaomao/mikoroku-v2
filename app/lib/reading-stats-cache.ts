@@ -1,11 +1,11 @@
-import type { PublicReadingStats } from "../../lib/reading-stats";
+import type { PublicReadingStats, ReaderStatsInput } from "../../lib/reading-stats";
 
 const DB_NAME = "mikoroku-v2";
 const DB_VERSION = 1;
 const STORE_STATS = "readingStats";
 const STORE_MEDALS = "medalUnlocks";
 
-const STATS_MAX_AGE_MS = 1000 * 60 * 30;
+export const READING_STATS_CACHE_TTL_MS = 1000 * 60 * 30;
 type StatsCacheRecord = {
   uid: string;
   savedAt: number;
@@ -62,7 +62,7 @@ export async function getCachedReadingStats(
       return {
         data: record.data,
         savedAt: record.savedAt,
-        stale: age > STATS_MAX_AGE_MS,
+        stale: age < 0 || age >= READING_STATS_CACHE_TTL_MS,
       };
     } finally {
       db.close();
@@ -75,15 +75,17 @@ export async function getCachedReadingStats(
 export async function setCachedReadingStats(
   uid: string,
   data: PublicReadingStats,
+  refreshAge = true,
 ): Promise<void> {
   try {
+    const previous = refreshAge ? null : await getCachedReadingStats(uid);
     const db = await openDb();
     try {
       const tx = db.transaction(STORE_STATS, "readwrite");
       const store = tx.objectStore(STORE_STATS);
       const record: StatsCacheRecord = {
         uid,
-        savedAt: Date.now(),
+        savedAt: previous?.savedAt || Date.now(),
         data,
       };
       await idbRequest(store.put(record));
@@ -93,6 +95,71 @@ export async function setCachedReadingStats(
   } catch {
     // non-fatal
   }
+}
+
+export async function updateCachedReaderStats(
+  uid: string,
+  input: ReaderStatsInput,
+  recordChapterActivity: boolean,
+): Promise<number | null> {
+  const cached = await getCachedReadingStats(uid);
+  if (!cached) return null;
+
+  const now = new Date();
+  const updatedAt = now.toISOString();
+  const seriesProgress = input.chapterCount > 0 && input.chapterPosition > 0
+    ? Math.max(0, Math.min(100, ((input.chapterPosition - 1 + input.chapterProgress / 100) / input.chapterCount) * 100))
+    : input.chapterProgress;
+  const progressItem = {
+    slug: input.slug,
+    title: input.title,
+    cover: input.cover,
+    kind: input.kind,
+    chapter: input.chapter,
+    chapterTitle: input.chapterTitle,
+    chapterProgress: input.chapterProgress,
+    seriesProgress,
+    chapterPosition: input.chapterPosition,
+    chapterCount: input.chapterCount,
+    source: input.source || "",
+    updatedAt: Date.parse(updatedAt),
+  };
+  const profile = cached.data.profile;
+  const readingStats = profile.readingStats && typeof profile.readingStats === "object"
+    ? profile.readingStats as Record<string, unknown>
+    : {};
+  const progress = readingStats.progress && typeof readingStats.progress === "object"
+    ? readingStats.progress as Record<string, unknown>
+    : {};
+  const nextReadingStats = {
+    ...readingStats,
+    progress: { ...progress, [encodeURIComponent(input.slug)]: progressItem },
+    ...(recordChapterActivity ? {
+      totalChaptersRead: cached.data.totalChaptersRead + 1,
+    } : {}),
+  };
+  const nextData: PublicReadingStats = {
+    ...cached.data,
+    profile: { ...profile, readingStats: nextReadingStats },
+    progress: [
+      progressItem,
+      ...cached.data.progress.filter((item) => item.slug !== input.slug),
+    ].sort((left, right) => right.updatedAt - left.updatedAt),
+    totalChaptersRead: cached.data.totalChaptersRead + (recordChapterActivity ? 1 : 0),
+  };
+
+  await setCachedReadingStats(uid, nextData, false);
+  return nextData.totalChaptersRead;
+}
+
+export async function setCachedBookmarkCount(uid: string, count: number): Promise<void> {
+  if (!Number.isFinite(count) || count < 0) return;
+  const cached = await getCachedReadingStats(uid);
+  if (!cached) return;
+  await setCachedReadingStats(uid, {
+    ...cached.data,
+    bookmarksCount: Math.floor(count),
+  }, false);
 }
 
 export async function clearCachedReadingStats(uid?: string): Promise<void> {

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
+import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
+import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import MangaDataProvider from "../manga-data-provider";
@@ -376,6 +378,8 @@ export default function BookmarkPage() {
           (b.updatedAt || b.addedAt) - (a.updatedAt || a.addedAt),
         );
         localStorage.setItem("mangaBookmarks", JSON.stringify(merged));
+        markLocalBookmarksUpdated();
+        void setCachedBookmarkCount(user.uid, merged.length);
         if (active) setBookmarks(merged);
       } catch (error) {
         console.error("Bookmark Firestore gagal dimuat; menggunakan data lokal.", error);
@@ -429,10 +433,12 @@ export default function BookmarkPage() {
         ...readLocalBookmarks().filter((item) => normalizeTitle(item.title) !== normalizeTitle(title)),
       ];
       localStorage.setItem("mangaBookmarks", JSON.stringify(next));
+      markLocalBookmarksUpdated();
       setBookmarks(next);
 
       const user = window.firebase?.auth().currentUser;
       if (!user || !window.firebase) return;
+      void setCachedBookmarkCount(user.uid, next.length);
       try {
         await getFirestoreCollection(user).doc(normalizeTitle(title)).set({
           ...nextBookmark,
@@ -471,6 +477,7 @@ export default function BookmarkPage() {
       (item) => normalizeTitle(item.title) !== normalizeTitle(bookmark.title),
     );
     localStorage.setItem("mangaBookmarks", JSON.stringify(next));
+    markLocalBookmarksUpdated();
     setBookmarks(next);
     window.dispatchEvent(new Event("bookmarkUpdated"));
 
@@ -479,6 +486,7 @@ export default function BookmarkPage() {
       setRemoving(null);
       return;
     }
+    void setCachedBookmarkCount(user.uid, next.length);
     try {
       await getFirestoreCollection(user).doc(normalizeTitle(bookmark.title)).delete();
     } catch (error) {

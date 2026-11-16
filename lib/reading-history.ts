@@ -583,9 +583,7 @@ export async function upsertReadingHistoryEntry(entry: ReadingHistoryEntry): Pro
     ...existing.filter((item) => item.url !== entry.url),
   ].slice(0, HISTORY_LIMIT);
   await writeLocalHistory(updated);
-  if (currentUser()) {
-    await syncCurrentUser(updated, { type: "upsert", url: entry.url });
-  }
+  scheduleProgressSync();
 }
 
 export async function updateReadingHistoryProgress(url: string, progress: number): Promise<void> {

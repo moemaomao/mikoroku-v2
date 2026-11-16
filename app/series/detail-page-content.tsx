@@ -25,6 +25,8 @@ import {
   initializeFirebaseClient,
   loadFirestoreMangaCatalog,
 } from "../lib/firebase-client";
+import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
+import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import {
   fetchMangaMetadataPayload,
   MANGA_METADATA_CACHE_UPDATED_EVENT,
@@ -94,6 +96,22 @@ type DetailState = "loading" | "ready" | "not-found" | "error";
 type ChapterSource = Chapter["source"];
 type CompatCommentCountCollection = {
   get: () => Promise<{ forEach: (callback: (document: unknown) => void) => void }>;
+};
+
+type SeriesBookmarkReference = {
+  set: (data: Record<string, unknown>, options?: { merge?: boolean }) => Promise<void>;
+  delete: () => Promise<void>;
+};
+
+type SeriesBookmarkFirebase = {
+  auth?: () => { currentUser?: { uid?: string } | null };
+  firestore?: () => {
+    collection: (name: string) => {
+      doc: (id: string) => {
+        collection: (name: string) => { doc: (id: string) => SeriesBookmarkReference };
+      };
+    };
+  };
 };
 
 function isCompatCommentCountCollection(value: unknown): value is CompatCommentCountCollection {
@@ -1891,8 +1909,37 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       next.unshift({ title: manga.title, img: manga.cover || manga.img || "", slug, addedAt: Date.now() });
     }
     localStorage.setItem("mangaBookmarks", JSON.stringify(next));
+    markLocalBookmarksUpdated();
     setBookmarked(isSaved);
     window.dispatchEvent(new Event("bookmarkUpdated"));
+    const firebaseWindow = window as Window & {
+      currentUser?: { uid?: string } | null;
+      firebase?: SeriesBookmarkFirebase;
+    };
+    const uid = firebaseWindow.firebase?.auth?.().currentUser?.uid || firebaseWindow.currentUser?.uid;
+    if (uid) {
+      void setCachedBookmarkCount(uid, next.length).catch((cacheError: unknown) => {
+        console.warn("Bookmark count could not be updated in the Stats cache.", cacheError);
+      });
+      void (async () => {
+        const firestore = firebaseWindow.firebase?.firestore?.();
+        if (!firestore) throw new Error("Bookmark synchronization is unavailable.");
+        const reference = firestore.collection("users").doc(uid).collection("bookmarks").doc(key);
+        if (isSaved) {
+          await reference.set({
+            title: manga.title,
+            img: manga.cover || manga.img || "",
+            slug,
+            addedAt: Date.now(),
+            updatedAt: Date.now(),
+          }, { merge: true });
+        } else {
+          await reference.delete();
+        }
+      })().catch((syncError: unknown) => {
+        console.warn("Bookmark is saved locally and will need cloud synchronization.", syncError);
+      });
+    }
   }, [manga, slug]);
 
   async function submitDetailReport(event: FormEvent<HTMLFormElement>) {
