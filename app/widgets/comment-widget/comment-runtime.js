@@ -142,6 +142,7 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
     let noMoreData = false;
     let currentUser = null;
     let unsubscribeComments = null;
+    let commentLoadingTimeout = null;
     let unreadReplies = 0;
     let replyNotifications = [];
     let sortingLocked = false;
@@ -2873,6 +2874,10 @@ function applyCollapsedView() {
 
 
 async function startRealtimeListener() {
+  if (commentLoadingTimeout !== null) {
+    window.clearTimeout(commentLoadingTimeout);
+    commentLoadingTimeout = null;
+  }
   if (unsubscribeComments) {
     unsubscribeComments();
     unsubscribeComments = null;
@@ -2888,6 +2893,18 @@ async function startRealtimeListener() {
     </div>
   `;
   setFormDisabled(true);
+  commentLoadingTimeout = window.setTimeout(() => {
+    commentLoadingTimeout = null;
+    const loadingEl = document.getElementById("comment-loading");
+    if (!loadingEl) return;
+
+    commentsList.innerHTML = `
+      <div class="no-comments" style="text-align:center; padding:20px; opacity:.7;">
+        Belum ada komentar.
+      </div>
+    `;
+    setFormDisabled(false);
+  }, 3000);
 
   try {
     const commentsRef = db
@@ -2898,6 +2915,11 @@ async function startRealtimeListener() {
       .limit(150);
 
     unsubscribeComments = commentsRef.onSnapshot(async (snapshot) => {
+      if (commentLoadingTimeout !== null) {
+        window.clearTimeout(commentLoadingTimeout);
+        commentLoadingTimeout = null;
+      }
+
       const comments = [];
       snapshot.forEach(doc => {
         comments.push({ id: doc.id, ...doc.data() });
@@ -2929,12 +2951,20 @@ async function startRealtimeListener() {
 
       setFormDisabled(false);
     }, (err) => {
+      if (commentLoadingTimeout !== null) {
+        window.clearTimeout(commentLoadingTimeout);
+        commentLoadingTimeout = null;
+      }
       console.error(err);
       commentsList.innerHTML = `<div class="no-comments" style="text-align:center;padding:20px;color:#ff5555;">Gagal memuat komentar</div>`;
       setFormDisabled(false);
     });
 
   } catch (err) {
+    if (commentLoadingTimeout !== null) {
+      window.clearTimeout(commentLoadingTimeout);
+      commentLoadingTimeout = null;
+    }
     console.error(err);
     setFormDisabled(false);
   }

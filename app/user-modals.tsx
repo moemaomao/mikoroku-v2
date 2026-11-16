@@ -514,6 +514,19 @@ function readUserProfileCache(uid: string, legacy: LegacyModalWindow): DataRecor
   return null;
 }
 
+function readOwnProfilePreview(uid: string, legacy: LegacyModalWindow): DataRecord {
+  const user = legacy.currentUser || legacy.firebase?.auth?.().currentUser;
+  if (user?.uid !== uid) return {};
+
+  try {
+    const preview = asRecord(JSON.parse(window.localStorage.getItem("userSettingsPreview") || "null"));
+    return getUserProfileCacheData(preview);
+  } catch (error) {
+    console.warn("Local user profile preview could not be read.", error);
+    return {};
+  }
+}
+
 function writeUserProfileCache(uid: string, data: DataRecord, legacy: LegacyModalWindow): void {
   const cachedData = getUserProfileCacheData(data);
   legacy.userStatsCache ||= {};
@@ -860,6 +873,7 @@ function initializeUserModals(): () => void {
     )?.trim() || "Anonymous";
     const avatarUrl = stringValue(preferredAvatar) ||
       stringValue(data.avatar) ||
+      (isCurrentUser ? stringValue(legacy.currentUser?.photoURL) : "") ||
       stringValue(legacy.userStatsCache?.[uid]?.avatar, DEFAULT_AVATAR) ||
       DEFAULT_AVATAR;
     profileDmTarget = { uid, name: displayName, avatar: avatarUrl };
@@ -997,9 +1011,11 @@ function initializeUserModals(): () => void {
         avatar: commentAvatar,
       };
     }
-    const cachedProfile = readUserProfileCache(uid, legacy);
-    if (cachedProfile) {
-      renderUserProfile(uid, cachedProfile, commentAvatar);
+    const cachedProfile = readUserProfileCache(uid, legacy) || {};
+    const ownProfilePreview = readOwnProfilePreview(uid, legacy);
+    const fallbackProfile = { ...cachedProfile, ...ownProfilePreview };
+    if (Object.keys(fallbackProfile).length > 0) {
+      renderUserProfile(uid, fallbackProfile, commentAvatar);
     } else {
       setText(profileField("displayName"), "Loading...");
       setText(profileField("username"), "");
@@ -1023,13 +1039,14 @@ function initializeUserModals(): () => void {
     try {
       const firestore = await waitForFirestore();
       const data = await loadUserProfile(firestore, uid);
-      writeUserProfileCache(uid, data, legacy);
+      const mergedProfile = { ...fallbackProfile, ...data };
+      writeUserProfileCache(uid, mergedProfile, legacy);
       if (activeProfileUid === uid) {
-        renderUserProfile(uid, data, commentAvatar);
+        renderUserProfile(uid, mergedProfile, commentAvatar);
       }
     } catch (error) {
       console.error("User profile could not be refreshed.", error);
-      if (activeProfileUid === uid && !cachedProfile) {
+      if (activeProfileUid === uid && Object.keys(fallbackProfile).length === 0) {
         setText(profileField("displayName"), "Profile unavailable");
         setText(profileField("joined"), "—");
       }
