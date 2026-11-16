@@ -19,11 +19,13 @@ type StatsQueryDocument = {
 };
 
 type StatsQuerySnapshot = {
+  docs?: unknown[];
   forEach: (callback: (document: StatsQueryDocument) => void) => void;
 };
 
 type StatsQuery = {
   where?: (field: string, operator: string, value: unknown) => StatsQuery;
+  limit?: (count: number) => StatsQuery;
   get: () => Promise<StatsQuerySnapshot>;
 };
 
@@ -123,6 +125,7 @@ export type PublicReadingStats = {
   followersCount: number | null;
   commentHistory: CommentHistoryItem[];
   commentHistoryError: string;
+  commentHistoryLimitReached: boolean;
 };
 
 export type LiveReadingStats = Pick<PublicReadingStats, "profile" | "activity" | "totalChaptersRead">;
@@ -586,6 +589,7 @@ function parseProgressItem(value: unknown): ReadingProgressItem | null {
 }
 
 export async function loadPublicReadingStats(uid: string): Promise<PublicReadingStats> {
+  const commentHistoryLimit = 50;
   const firestore = await waitForFirestore();
   const userReference = firestore.collection("userStats").doc(uid);
   const profileSnapshotPromise = userReference.get({ source: "server" });
@@ -598,8 +602,12 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
       if (typeof commentsQuery.where !== "function") {
         throw new Error("Firestore comment filtering is unavailable.");
       }
+      const filteredCommentsQuery = commentsQuery.where("uid", "==", uid);
+      if (typeof filteredCommentsQuery.limit !== "function") {
+        throw new Error("Firestore comment limits are unavailable.");
+      }
       return {
-        snapshot: await commentsQuery.where("uid", "==", uid).get(),
+        snapshot: await filteredCommentsQuery.limit(commentHistoryLimit).get(),
         error: "",
       };
     } catch (error) {
@@ -660,6 +668,8 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
 
   const commentHistory: CommentHistoryItem[] = [];
   let commentHistoryError = commentSnapshotResult.error;
+  const commentHistoryLimitReached =
+    commentSnapshotResult.snapshot?.docs?.length === commentHistoryLimit;
   if (commentSnapshotResult.snapshot) {
     try {
       commentSnapshotResult.snapshot.forEach((document) => {
@@ -693,5 +703,6 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
     followersCount,
     commentHistory,
     commentHistoryError,
+    commentHistoryLimitReached,
   };
 }

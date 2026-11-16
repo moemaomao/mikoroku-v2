@@ -1150,9 +1150,11 @@ function ProgressCard({ item }: { item: ReadingProgressItem }) {
 function CommentHistorySection({
   comments,
   error,
+  limitReached,
 }: {
   comments: CommentHistoryItem[];
   error: string;
+  limitReached: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(10);
   const visibleComments = comments.slice(0, visibleCount);
@@ -1163,8 +1165,13 @@ function CommentHistorySection({
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">Comment history</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
-            Showing {visibleComments.length} of {comments.length} comments · newest first
+            Showing {visibleComments.length} of {comments.length} loaded comments · sorted newest first
           </p>
+          {limitReached && (
+            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-500">
+              Showing a sample of up to 50 matching comments to keep Stats responsive.
+            </p>
+          )}
         </div>
       </div>
       {error ? (
@@ -1973,6 +1980,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                   key={uid}
                   comments={stats.commentHistory}
                   error={stats.commentHistoryError}
+                  limitReached={stats.commentHistoryLimitReached}
                 />
               )}
             </>
