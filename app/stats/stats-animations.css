@@ -50,6 +50,47 @@
   }
 }
 
+.reading-medal-card.is-unlocked .reading-medal-count,
+.reading-medal-card.is-unlocked .reading-medal-label,
+.reading-medal-card.is-unlocked .reading-medal-detail {
+  color: var(--medal-light-text);
+}
+
+.reading-medal-card.is-unlocked .reading-medal-count {
+  opacity: 0.8;
+}
+
+.reading-medal-card.is-unlocked .reading-medal-detail {
+  opacity: 0.85;
+}
+
+html.dark .reading-medal-card.is-unlocked .reading-medal-count,
+html.dark .reading-medal-card.is-unlocked .reading-medal-label,
+html.dark .reading-medal-card.is-unlocked .reading-medal-detail {
+  color: var(--medal-dark-text);
+}
+
+html.dark .reading-medal-card.is-unlocked .reading-medal-count,
+html.dark .reading-medal-card.is-unlocked .reading-medal-detail {
+  opacity: 1;
+}
+
+.medal-unlock-text {
+  color: var(--medal-light-text);
+}
+
+.medal-unlock-subtext {
+  opacity: 0.9;
+}
+
+html.dark .medal-unlock-text {
+  color: var(--medal-dark-text);
+}
+
+html.dark .medal-unlock-subtext {
+  opacity: 1;
+}
+
 .medal-img-enter {
   animation:
     medal-pop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both,

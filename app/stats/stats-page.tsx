@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import "./stats-animations.css";
 import {
   getLocalReadMarksCount,
@@ -28,6 +28,204 @@ import { CoverImage } from "../lib/cover-image";
 import { isNsfwManga } from "../lib/nsfw";
 
 type MedalSymbol = "spark" | "book" | "flame" | "crown" | "laurel" | "comet" | "gem" | "infinity";
+
+/* ------------------------------------------------------------------ */
+/*  3D Card Shift (inspired by CodePen "Card Shift: 3D-ish")          */
+/* ------------------------------------------------------------------ */
+type ReadingMedalData = {
+  chapters: number;
+  name: string;
+  description: string;
+  color: string;
+  darkColor: string;
+  gradient: string;
+  symbol: MedalSymbol;
+  unlockMessage: string;
+};
+
+function ReadingMedalCard({
+  medal,
+  unlocked,
+  imageSrc,
+  onOpen,
+}: {
+  medal: ReadingMedalData;
+  unlocked: boolean;
+  imageSrc: string;
+  onOpen?: () => void;
+}) {
+  const cardRef = useRef<HTMLElement>(null);
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
+  const [glare, setGlare] = useState({ x: 50, y: 50, opacity: 0 });
+  const [active, setActive] = useState(false);
+
+  const handleMove = (e: MouseEvent<HTMLElement>) => {
+    if (!unlocked || !cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    // "Tidur" pose: stronger rotateX so card lays further back
+    setTilt({
+      rx: 54 + (0.5 - py) * 8,
+      ry: (px - 0.5) * 12,
+    });
+    setGlare({ x: px * 100, y: py * 100, opacity: 0.7 });
+    setActive(true);
+  };
+
+  const handleLeave = () => {
+    setTilt({ rx: 0, ry: 0 });
+    setGlare((g) => ({ ...g, opacity: 0 }));
+    setActive(false);
+  };
+
+  return (
+    <div
+      className="relative aspect-[3/4] min-w-0 sm:aspect-[3/4]"
+      style={{ perspective: "1100px" }}
+    >
+      {/* Floating medal image – leaves the card on hover (like Pikachu) */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-center"
+        style={{
+          height: "68%",
+          transform: unlocked && active
+            ? "translateY(-12%) scale(1.16)"
+            : "translateY(0) scale(1)",
+          transition: "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+          filter: unlocked
+            ? `drop-shadow(0 10px 22px ${medal.color}aa) drop-shadow(0 0 14px ${medal.color}66)`
+            : undefined,
+        }}
+      >
+        <img
+          src={imageSrc}
+          alt=""
+          draggable={false}
+          className={`size-[3.4rem] object-contain sm:size-[5.5rem] lg:size-[6rem] ${
+            unlocked ? "" : "grayscale opacity-45 dark:opacity-35"
+          }`}
+        />
+      </div>
+
+      {/* The actual card plane that tilts underneath */}
+      <article
+        ref={cardRef}
+        role={unlocked ? "button" : undefined}
+        tabIndex={unlocked ? 0 : undefined}
+        onClick={() => unlocked && onOpen?.()}
+        onKeyDown={(e) => {
+          if (!unlocked) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen?.();
+          }
+        }}
+        onMouseMove={handleMove}
+        onMouseLeave={handleLeave}
+        className={`relative flex h-full w-full flex-col items-center justify-end overflow-hidden rounded-2xl border text-center ${
+          unlocked
+            ? "cursor-pointer border-black/8 bg-white/70 dark:border-white/12 dark:bg-white/[0.04]"
+            : "border-black/10 bg-slate-100/90 dark:border-white/5 dark:bg-black/25"
+        } reading-medal-card ${unlocked ? "is-unlocked" : ""}`}
+        style={{
+          ["--medal-light-text" as string]: medal.color,
+          ["--medal-dark-text" as string]: medal.darkColor,
+          backgroundImage: unlocked
+            ? `linear-gradient(165deg, color-mix(in srgb, ${medal.color} 18%, transparent) 0%, color-mix(in srgb, ${medal.color} 10%, transparent) 50%, color-mix(in srgb, ${medal.color} 5%, transparent) 100%)`
+            : undefined,
+          boxShadow: unlocked
+            ? active
+              ? `0 18px 36px -10px ${medal.color}77, 0 8px 18px rgba(0,0,0,0.28)`
+              : `0 8px 22px -8px ${medal.color}55, 0 4px 12px rgba(0,0,0,0.18)`
+            : "0 2px 8px rgba(0,0,0,0.06)",
+          transform: unlocked
+            ? `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`
+            : undefined,
+          transition: unlocked
+            ? "transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease"
+            : undefined,
+          transformStyle: "preserve-3d",
+          transformOrigin: "center bottom",
+        }}
+        aria-label={`${medal.name}, ${medal.chapters} chapters, ${unlocked ? "unlocked, click to view" : "locked"}`}
+        title={unlocked ? "Click to view celebration" : undefined}
+      >
+        {/* Mirror / ghost of medal that stays on the card when image lifts */}
+        {unlocked && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center"
+            style={{ height: "68%" }}
+            aria-hidden
+          >
+            <img
+              src={imageSrc}
+              alt=""
+              draggable={false}
+              className="size-[3.4rem] object-contain sm:size-[5.5rem] lg:size-[6rem]"
+              style={{
+                filter: `grayscale(0.25) brightness(1.05) contrast(1.05) drop-shadow(0 0 12px ${medal.color}aa)`,
+                opacity: active ? 0.48 : 0,
+                transition: "opacity 280ms ease",
+              }}
+            />
+          </div>
+        )}
+
+        {/* Chapter count top-left */}
+        <span
+          className={`absolute left-2 top-1.5 z-20 text-[8px] font-bold tracking-wider sm:left-2.5 sm:top-2 sm:text-[10px] ${
+            unlocked ? "" : "text-slate-400 dark:text-white/30"
+          } reading-medal-count`}
+        >
+          {medal.chapters}
+        </span>
+
+        {/* Bottom labels */}
+        <div className="relative z-10 w-full px-1.5 pb-2 pt-0.5 sm:px-2.5 sm:pb-3 sm:pt-1">
+          <p
+            className={`truncate text-[10px] font-bold leading-tight tracking-wide sm:text-[13px] ${
+              unlocked ? "drop-shadow-sm" : "text-slate-500 dark:text-white/45"
+            } reading-medal-label`}
+          >
+            {medal.name}
+          </p>
+          <p
+            className={`mt-0.5 text-[7px] font-semibold uppercase tracking-[0.12em] sm:text-[10px] sm:tracking-[0.14em] ${
+              unlocked ? "" : "text-slate-400 dark:text-white/30"
+            } reading-medal-detail`}
+          >
+            {unlocked ? "Unlocked · view" : medal.description}
+          </p>
+        </div>
+
+        {/* Bottom accent */}
+        {unlocked && (
+          <div
+            className="absolute bottom-0 left-0 right-0 h-[2px]"
+            style={{
+              background: `linear-gradient(90deg, transparent 5%, ${medal.color} 50%, transparent 95%)`,
+              opacity: active ? 1 : 0.5,
+              transition: "opacity 200ms ease",
+            }}
+            aria-hidden
+          />
+        )}
+
+        {/* Inner border */}
+        <div
+          className="pointer-events-none absolute inset-0 rounded-2xl"
+          style={{
+            boxShadow: unlocked
+              ? "inset 0 0 0 1px rgba(255,255,255,0.35)"
+              : undefined,
+          }}
+          aria-hidden
+        />
+      </article>
+    </div>
+  );
+}
 
 type ProfileBannerUser = { uid: string } | null;
 type ProfileBannerFirebase = {
@@ -57,6 +255,7 @@ const readingMedals: Array<{
   name: string;
   description: string;
   color: string;
+  darkColor: string;
   gradient: string;
   symbol: MedalSymbol;
   unlockMessage: string;
@@ -66,6 +265,7 @@ const readingMedals: Array<{
     name: "First Spark",
     description: "Started the reading journey",
     color: "#b7791f",
+    darkColor: "#fcd34d",
     gradient: "linear-gradient(135deg, #fef3c7 0%, #fde68a 40%, #f59e0b 100%)",
     symbol: "spark",
     unlockMessage: "The journey begins. Keep turning those pages!",
@@ -75,6 +275,7 @@ const readingMedals: Array<{
     name: "Page Scout",
     description: "Explored the first stories",
     color: "#64748b",
+    darkColor: "#cbd5e1",
     gradient: "linear-gradient(135deg, #e2e8f0 0%, #94a3b8 45%, #64748b 100%)",
     symbol: "book",
     unlockMessage: "You're officially exploring the library.",
@@ -84,6 +285,7 @@ const readingMedals: Array<{
     name: "Story Seeker",
     description: "Kept turning the pages",
     color: "#c2410c",
+    darkColor: "#fdba74",
     gradient: "linear-gradient(135deg, #ffedd5 0%, #fdba74 40%, #ea580c 100%)",
     symbol: "flame",
     unlockMessage: "Stories are calling. You're answering.",
@@ -93,6 +295,7 @@ const readingMedals: Array<{
     name: "Chapter Champion",
     description: "Reached a century of chapters",
     color: "#7c3aed",
+    darkColor: "#c4b5fd",
     gradient: "linear-gradient(135deg, #ede9fe 0%, #a78bfa 40%, #7c3aed 100%)",
     symbol: "crown",
     unlockMessage: "100 chapters! True champion energy.",
@@ -102,6 +305,7 @@ const readingMedals: Array<{
     name: "Lore Keeper",
     description: "Collected stories across series",
     color: "#16a34a",
+    darkColor: "#86efac",
     gradient: "linear-gradient(135deg, #dcfce7 0%, #86efac 40%, #16a34a 100%)",
     symbol: "laurel",
     unlockMessage: "Lore is safe with you. Keep collecting.",
@@ -111,6 +315,7 @@ const readingMedals: Array<{
     name: "Story Sage",
     description: "A seasoned reader",
     color: "#c026d3",
+    darkColor: "#f0abfc",
     gradient: "linear-gradient(135deg, #fae8ff 0%, #e879f9 35%, #c026d3 70%, #86198f 100%)",
     symbol: "comet",
     unlockMessage: "Seasoned. Wise. Still hungry for more.",
@@ -120,6 +325,7 @@ const readingMedals: Array<{
     name: "Eternal Reader",
     description: "Master of a thousand chapters",
     color: "#d97706",
+    darkColor: "#fcd34d",
     gradient: "linear-gradient(135deg, #fef3c7 0%, #fbbf24 30%, #f59e0b 55%, #ea580c 80%, #c2410c 100%)",
     symbol: "gem",
     unlockMessage: "A thousand chapters. You are legend.",
@@ -129,6 +335,7 @@ const readingMedals: Array<{
     name: "Infinity Archive",
     description: "Beyond the final page",
     color: "#06b6d4",
+    darkColor: "#67e8f9",
     gradient: "linear-gradient(135deg, #a5f3fc 0%, #22d3ee 20%, #a78bfa 45%, #f472b6 70%, #fbbf24 100%)",
     symbol: "infinity",
     unlockMessage: "1500 chapters. The archive has no end — and neither do you.",
@@ -433,7 +640,11 @@ function MedalUnlockModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="medal-unlock-title"
-      style={{ ["--stats-medal-color" as string]: medal.color }}
+      style={{
+        ["--stats-medal-color" as string]: medal.color,
+        ["--medal-light-text" as string]: medal.color,
+        ["--medal-dark-text" as string]: medal.darkColor,
+      }}
     >
       <div
         className="absolute inset-0 transition-opacity duration-300"
@@ -492,26 +703,29 @@ function MedalUnlockModal({
 
         <div className="mt-4 px-2 text-center">
           <p
-            className={`text-[11px] font-bold uppercase tracking-[0.22em] ${entered ? "medal-text-enter" : "opacity-0"}`}
-            style={{ color: medal.color, animationDelay: "0.35s" }}
+            className={`medal-unlock-text text-[11px] font-bold uppercase tracking-[0.22em] ${entered ? "medal-text-enter" : "opacity-0"}`}
+            style={{ animationDelay: "0.35s" }}
           >
             Medal Unlocked
           </p>
           <h2
             id="medal-unlock-title"
-            className={`mt-2 text-2xl font-bold text-white ${entered ? "medal-text-enter" : "opacity-0"}`}
-            style={{ textShadow: `0 0 28px ${medal.color}66`, animationDelay: "0.45s" }}
+            className={`medal-unlock-text mt-2 text-2xl font-bold ${entered ? "medal-text-enter" : "opacity-0"}`}
+            style={{
+              textShadow: `0 0 28px ${medal.color}88`,
+              animationDelay: "0.45s",
+            }}
           >
             {medal.name}
           </h2>
           <p
-            className={`mt-1 text-xs font-medium text-zinc-400 ${entered ? "medal-text-enter" : "opacity-0"}`}
+            className={`medal-unlock-text medal-unlock-subtext mt-1 text-xs font-medium ${entered ? "medal-text-enter" : "opacity-0"}`}
             style={{ animationDelay: "0.55s" }}
           >
             {medal.chapters.toLocaleString()} chapters
           </p>
           <p
-            className={`mt-3 text-sm leading-relaxed text-zinc-300 ${entered ? "medal-text-enter" : "opacity-0"}`}
+            className={`medal-unlock-text medal-unlock-subtext mt-3 text-sm leading-relaxed ${entered ? "medal-text-enter" : "opacity-0"}`}
             style={{ animationDelay: "0.65s" }}
           >
             {medal.unlockMessage}
@@ -627,55 +841,17 @@ function ReadingMedals({
         ) : (
           <p className="mt-4 text-sm font-semibold text-[var(--mikoroku-accent)]">All reading medals earned!</p>
         )}
-        <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-8">
+        <div className="mt-5 grid grid-cols-3 gap-1.5 sm:grid-cols-3 sm:gap-3 md:grid-cols-6 lg:grid-cols-6">
           {readingMedals.map((medal) => {
             const unlocked = earnedTotal >= medal.chapters;
-            const medalTileStyle: CSSProperties & { "--stats-medal-color": string } = {
-              "--stats-medal-color": medal.color,
-              background: medal.gradient,
-            };
             return (
-              <article
+              <ReadingMedalCard
                 key={medal.chapters}
-                role={unlocked ? "button" : undefined}
-                tabIndex={unlocked ? 0 : undefined}
-                onClick={() => {
-                  if (unlocked) setCurrent(medal);
-                }}
-                onKeyDown={(event) => {
-                  if (!unlocked) return;
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setCurrent(medal);
-                  }
-                }}
-                className={`flex aspect-[4/5] min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border p-2 text-center transition sm:p-3 lg:gap-1 lg:p-2 ${
-                  unlocked
-                    ? "stats-gradient-card cursor-pointer border-black/10 shadow-md hover:brightness-105 hover:shadow-lg active:scale-[0.98] dark:border-white/15"
-                    : "border-black/10 bg-slate-100/80 dark:border-white/10 dark:bg-black/20"
-                }`}
-                style={unlocked ? medalTileStyle : undefined}
-                aria-label={`${medal.name}, ${medal.chapters} chapters, ${unlocked ? "unlocked, click to view celebration" : "locked"}`}
-                title={unlocked ? "Click to view celebration" : undefined}
-              >
-                <img
-                  src={medalImageMap[medal.symbol]}
-                  alt=""
-                  className={`size-16 shrink-0 object-contain lg:size-12 ${unlocked ? "" : "grayscale opacity-40"}`}
-                  draggable={false}
-                />
-                <div className="min-w-0">
-                  <p className={`truncate text-xs font-bold ${unlocked ? "text-slate-900 drop-shadow-sm" : "text-slate-900 dark:text-white"}`}>
-                    {medal.name}
-                  </p>
-                  <p className={`mt-0.5 text-[10px] ${unlocked ? "text-slate-800/80" : "text-slate-600 dark:text-zinc-400"}`}>
-                    {medal.chapters.toLocaleString()} chapters
-                  </p>
-                  <p className={`mt-1 line-clamp-2 text-[10px] font-semibold ${unlocked ? "text-slate-900/90" : "text-slate-500 dark:text-zinc-500"}`}>
-                    {unlocked ? "Unlocked · view" : medal.description}
-                  </p>
-                </div>
-              </article>
+                medal={medal}
+                unlocked={unlocked}
+                imageSrc={medalImageMap[medal.symbol]}
+                onOpen={() => setCurrent(medal)}
+              />
             );
           })}
         </div>
