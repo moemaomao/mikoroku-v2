@@ -920,6 +920,87 @@ html.no-animations .comment.transcendent,
       gap: 8px;
     }
 
+    .comment-loading-skeleton-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .comment-loading-skeleton-card {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 8px;
+      padding: 16px 20px;
+      border: 1px solid #a1a1a1;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .comment-loading-skeleton-header {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .comment-loading-skeleton-avatar,
+    .comment-loading-skeleton-line {
+      display: block;
+      background: linear-gradient(90deg, rgba(148, 163, 184, 0.12), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.12));
+      background-size: 200% 100%;
+      animation: comment-skeleton-shimmer 1.4s ease-in-out infinite;
+    }
+
+    .comment-loading-skeleton-avatar {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      border-radius: 50%;
+    }
+
+    .comment-loading-skeleton-line {
+      height: 10px;
+      border-radius: 999px;
+    }
+
+    .comment-loading-skeleton-name {
+      width: 32%;
+    }
+
+    .comment-loading-skeleton-date {
+      width: 18%;
+      margin-left: auto;
+    }
+
+    .comment-loading-skeleton-text {
+      width: 88%;
+    }
+
+    .comment-loading-skeleton-text-short {
+      width: 56%;
+    }
+
+    .comment-loading-retry {
+      justify-self: center;
+      padding: 7px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.16);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    @keyframes comment-skeleton-shimmer {
+      to {
+        background-position: -200% 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .comment-loading-skeleton-avatar,
+      .comment-loading-skeleton-line {
+        animation: none;
+      }
+    }
+
 
 .font-anime { 
   font-family: 'Comic Sans MS', cursive; 

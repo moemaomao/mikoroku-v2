@@ -17,7 +17,7 @@
 
   export let pageId = "home";
 
-  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=reply-border-motion-1";
+  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=comment-count-total-2";
   const featureStyleHrefs = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",

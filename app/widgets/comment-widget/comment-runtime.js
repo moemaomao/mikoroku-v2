@@ -143,10 +143,13 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
     let currentUser = null;
     let unsubscribeComments = null;
     let commentLoadingTimeout = null;
+    let loadMoreError = false;
+    let commentsLoadGeneration = 0;
     let unreadReplies = 0;
     let replyNotifications = [];
     let sortingLocked = false;
     const LIMIT = 10;
+    const INITIAL_COMMENT_BATCH = 30;
     window.__showAllComments = window.__showAllComments || false;
     window.__commentsCache = window.__commentsCache || null;
 
@@ -2844,18 +2847,46 @@ function updateLoadMoreUI() {
       }).length
     : 0;
   const remaining = Math.max(0, totalTops - shownTops);
+  const hasMore = !noMoreData && Boolean(lastVisible);
 
-  if (window.__showAllComments || totalTops <= LIMIT || remaining === 0) {
+  if (!window.__showAllComments) {
+      if (!hasMore && remaining === 0) {
+        wrap.style.display = 'none';
+        if (endEl) endEl.style.display = 'none';
+        return;
+      }
+
+      wrap.style.display = 'flex';
+      if (endEl) endEl.style.display = 'none';
+      var collapsedLabel = btn && btn.querySelector('.load-more-label');
+      if (collapsedLabel) {
+        collapsedLabel.textContent = loadMoreError
+          ? 'Retry loading comments'
+          : remaining > 0
+            ? 'Show all comments (' + remaining + ' more)'
+            : 'Load more comments';
+      }
+      if (btn) btn.disabled = isLoading;
+      return;
+  }
+
+  if (hasMore) {
+      wrap.style.display = 'flex';
+      if (endEl) endEl.style.display = 'none';
+      var expandedLabel = btn && btn.querySelector('.load-more-label');
+      if (expandedLabel) {
+        expandedLabel.textContent = loadMoreError
+          ? 'Retry loading comments'
+          : isLoading
+            ? 'Loading...'
+            : 'Load more comments';
+      }
+      if (btn) btn.disabled = isLoading;
+  } else {
     wrap.style.display = 'none';
     if (endEl) {
-      endEl.style.display = (window.__showAllComments && totalTops > LIMIT) ? 'block' : 'none';
+        endEl.style.display = totalTops > LIMIT ? 'block' : 'none';
     }
-  } else {
-    wrap.style.display = 'flex';
-    if (endEl) endEl.style.display = 'none';
-    var label = btn && btn.querySelector('.load-more-label');
-    if (label) label.textContent = 'Show all comments (' + remaining + ' more)';
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -2874,6 +2905,7 @@ function applyCollapsedView() {
 
 
 async function startRealtimeListener() {
+  const generation = ++commentsLoadGeneration;
   if (commentLoadingTimeout !== null) {
     window.clearTimeout(commentLoadingTimeout);
     commentLoadingTimeout = null;
@@ -2886,25 +2918,9 @@ async function startRealtimeListener() {
   const commentsList = document.getElementById("comments-list");
   if (!commentsList) return;
 
-  commentsList.innerHTML = `
-    <div id="comment-loading" class="comment-loading">
-      <div class="spinner"></div>
-      <p>Loading comments...</p>
-    </div>
-  `;
+  void listenCommentCount();
+  renderCommentLoadingSkeleton(commentsList, false);
   setFormDisabled(true);
-  commentLoadingTimeout = window.setTimeout(() => {
-    commentLoadingTimeout = null;
-    const loadingEl = document.getElementById("comment-loading");
-    if (!loadingEl) return;
-
-    commentsList.innerHTML = `
-      <div class="no-comments" style="text-align:center; padding:20px; opacity:.7;">
-        Belum ada komentar.
-      </div>
-    `;
-    setFormDisabled(false);
-  }, 3000);
 
   try {
     const commentsRef = db
@@ -2912,26 +2928,67 @@ async function startRealtimeListener() {
       .doc(postId)
       .collection('postComments')
       .orderBy('date', 'desc')
-      .limit(150);
+      .limit(INITIAL_COMMENT_BATCH + 1);
+    const pinnedCommentsRef = db
+      .collection('comments')
+      .doc(postId)
+      .collection('postComments')
+      .where('pinned', '==', true);
 
-    unsubscribeComments = commentsRef.onSnapshot(async (snapshot) => {
+    let hasInitialSnapshot = false;
+    let hasServerSnapshot = false;
+    let fallbackRequest = null;
+    let pinnedComments = [];
+
+    const mergePinnedComments = () => {
+      if (generation !== commentsLoadGeneration) return;
+      const currentComments = window.__commentsCache || [];
+      const mergedById = new Map(
+        currentComments
+          .filter(comment => comment.pinned !== true)
+          .map(comment => [comment.id, comment])
+      );
+      pinnedComments.forEach(comment => mergedById.set(comment.id, comment));
+      const mergedComments = [...mergedById.values()];
+      window.__commentsCache = mergedComments;
+      if (!mergedComments.length) return;
+      window._forceCommentRerender = true;
+      renderComments(mergedComments);
+      updateLoadMoreUI();
+    };
+
+    const applySnapshot = (snapshot, fromServer = false) => {
+      if (generation !== commentsLoadGeneration) return;
+      const isFromCache = snapshot.metadata?.fromCache === true;
+      if (isFromCache && snapshot.empty) return;
+      if (isFromCache && hasServerSnapshot) return;
+
+      hasInitialSnapshot = true;
+      if (fromServer || !isFromCache) hasServerSnapshot = true;
       if (commentLoadingTimeout !== null) {
         window.clearTimeout(commentLoadingTimeout);
         commentLoadingTimeout = null;
       }
 
-      const comments = [];
-      snapshot.forEach(doc => {
-        comments.push({ id: doc.id, ...doc.data() });
-      });
-
+      const recentDocs = snapshot.docs.slice(0, INITIAL_COMMENT_BATCH);
+      lastVisible = recentDocs.length ? recentDocs[recentDocs.length - 1] : null;
+      noMoreData = snapshot.docs.length <= INITIAL_COMMENT_BATCH;
+      loadMoreError = false;
+      const recentComments = recentDocs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const recentIds = new Set(recentComments.map(comment => comment.id));
+      const previouslyLoaded = (window.__commentsCache || []).filter(
+        comment =>
+          !recentIds.has(comment.id) &&
+          (window.__showAllComments || comment.pinned === true)
+      );
+      const comments = [...recentComments, ...previouslyLoaded];
       window.__commentsCache = comments;
 
       const visibleComments = getCommentsToRender(comments);
       const uniqueUids = [...new Set(
         visibleComments.filter(c => c.uid).map(c => c.uid)
       )];
-      await batchGetUserStats(uniqueUids);
+      const userStatsPromise = batchGetUserStats(uniqueUids);
 
       const loadingEl = document.getElementById("comment-loading");
       if (loadingEl) loadingEl.remove();
@@ -2942,32 +2999,138 @@ async function startRealtimeListener() {
             Belum ada komentar
           </div>
         `;
-        safeUpdateCount(0);
       } else {
         renderComments(comments);
         if (typeof attachMarkdownButtons === 'function') attachMarkdownButtons();
-        safeUpdateCount(comments.length);
       }
 
       setFormDisabled(false);
-    }, (err) => {
-      if (commentLoadingTimeout !== null) {
-        window.clearTimeout(commentLoadingTimeout);
-        commentLoadingTimeout = null;
-      }
-      console.error(err);
-      commentsList.innerHTML = `<div class="no-comments" style="text-align:center;padding:20px;color:#ff5555;">Gagal memuat komentar</div>`;
-      setFormDisabled(false);
+      updateLoadMoreUI();
+      void userStatsPromise.then(() => {
+        if (generation !== commentsLoadGeneration || !commentsList.isConnected) return;
+        window._forceCommentRerender = true;
+        renderComments(window.__commentsCache || []);
+      }).catch((error) => {
+        console.error("Comment user details could not be refreshed.", error);
+      });
+    };
+
+    void pinnedCommentsRef.get({ source: "server" }).then((snapshot) => {
+      if (generation !== commentsLoadGeneration) return;
+      pinnedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      mergePinnedComments();
+    }).catch((error) => {
+      console.error("Pinned comments could not be loaded.", error);
     });
 
+    const fetchServerSnapshot = () => {
+      if (fallbackRequest) return fallbackRequest;
+      fallbackRequest = commentsRef.get({ source: "server" })
+        .then((snapshot) => applySnapshot(snapshot, true))
+        .catch((error) => {
+          if (generation !== commentsLoadGeneration || hasInitialSnapshot) return;
+          console.error("The initial comment query could not be loaded.", error);
+          if (commentLoadingTimeout !== null) {
+            window.clearTimeout(commentLoadingTimeout);
+            commentLoadingTimeout = null;
+          }
+          renderCommentLoadError(commentsList, "Gagal memuat komentar.");
+          setFormDisabled(false);
+        })
+        .finally(() => {
+          fallbackRequest = null;
+        });
+      return fallbackRequest;
+    };
+
+    let unsubscribed = false;
+    const unsubscribe = commentsRef.onSnapshot((snapshot) => {
+      if (snapshot.metadata?.fromCache === true && snapshot.empty) {
+        void fetchServerSnapshot();
+        return;
+      }
+      applySnapshot(snapshot);
+    }, (error) => {
+      console.error("The comment listener failed.", error);
+      if (!hasInitialSnapshot) void fetchServerSnapshot();
+    });
+    unsubscribeComments = () => {
+      unsubscribed = true;
+      unsubscribe();
+    };
+
+    commentLoadingTimeout = window.setTimeout(() => {
+      commentLoadingTimeout = null;
+      if (generation !== commentsLoadGeneration || hasInitialSnapshot) return;
+
+      renderCommentLoadingSkeleton(commentsList, true);
+      setFormDisabled(false);
+      if (!unsubscribed && unsubscribeComments) {
+        unsubscribeComments();
+        unsubscribeComments = null;
+      }
+      void fetchServerSnapshot();
+    }, 3000);
   } catch (err) {
-    if (commentLoadingTimeout !== null) {
+    if (generation === commentsLoadGeneration && commentLoadingTimeout !== null) {
       window.clearTimeout(commentLoadingTimeout);
       commentLoadingTimeout = null;
     }
     console.error(err);
-    setFormDisabled(false);
+    if (generation === commentsLoadGeneration) {
+      renderCommentLoadError(commentsList, "Gagal memuat komentar.");
+      setFormDisabled(false);
+    }
   }
+}
+
+function renderCommentLoadError(commentsList, message) {
+  const container = document.createElement("div");
+  container.className = "comment-load-error";
+  container.setAttribute("role", "status");
+  container.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px;text-align:center;opacity:.8";
+
+  const text = document.createElement("p");
+  text.textContent = message;
+  container.appendChild(text);
+
+  const retryButton = document.createElement("button");
+  retryButton.type = "button";
+  retryButton.textContent = "Coba lagi";
+  retryButton.addEventListener("click", () => void startRealtimeListener());
+  container.appendChild(retryButton);
+
+  commentsList.replaceChildren(container);
+}
+
+function renderCommentLoadingSkeleton(commentsList, showRetry) {
+  const wrapper = document.createElement("div");
+  wrapper.id = "comment-loading";
+  wrapper.className = "comment-loading-skeleton-list";
+  wrapper.setAttribute("aria-label", "Loading comments");
+  wrapper.setAttribute("aria-live", "polite");
+  wrapper.innerHTML = Array.from({ length: 3 }, () => `
+    <article class="comment-loading-skeleton-card" aria-hidden="true">
+      <div class="comment-loading-skeleton-header">
+        <span class="comment-loading-skeleton-avatar"></span>
+        <span class="comment-loading-skeleton-line comment-loading-skeleton-name"></span>
+        <span class="comment-loading-skeleton-line comment-loading-skeleton-date"></span>
+      </div>
+      <span class="comment-loading-skeleton-line comment-loading-skeleton-text"></span>
+      <span class="comment-loading-skeleton-line comment-loading-skeleton-text comment-loading-skeleton-text-short"></span>
+    </article>
+  `).join("");
+
+  if (showRetry) {
+    const retryButton = document.createElement("button");
+    retryButton.type = "button";
+    retryButton.className = "comment-loading-retry";
+    retryButton.textContent = "Coba lagi";
+    retryButton.addEventListener("click", () => void startRealtimeListener());
+    wrapper.appendChild(retryButton);
+  }
+
+  commentsList.replaceChildren(wrapper);
 }
 
 window.setCommentCommunityPageId = function(pageId) {
@@ -2984,29 +3147,67 @@ window.setCommentCommunityPageId = function(pageId) {
   lastVisible = null;
   isLoading = false;
   noMoreData = false;
+  loadMoreError = false;
   window.__showAllComments = false;
   window.__commentsCache = [];
   startRealtimeListener();
 };
 
 async function loadMoreComments() {
+  if (isLoading) return;
   window.__showAllComments = true;
-  noMoreData = true;
-  const btn = document.getElementById('load-more-btn');
-  if (btn) {
-    btn.disabled = true;
-    const label = btn.querySelector('.load-more-label');
-    if (label) label.textContent = 'Memuat...';
-  }
+  loadMoreError = false;
 
   const cache = window.__commentsCache || [];
   if (cache.length) {
-    const uniqueUids = [...new Set(cache.filter(c => c.uid).map(c => c.uid))];
-    await batchGetUserStats(uniqueUids);
     window._forceCommentRerender = true;
     renderComments(cache);
-  } else {
-    applyCollapsedView();
+  }
+  if (noMoreData || !lastVisible) {
+    updateLoadMoreUI();
+    return;
+  }
+
+  isLoading = true;
+  updateLoadMoreUI();
+  try {
+    const snapshot = await db
+      .collection('comments')
+      .doc(postId)
+      .collection('postComments')
+      .orderBy('date', 'desc')
+      .startAfter(lastVisible)
+      .limit(INITIAL_COMMENT_BATCH + 1)
+      .get();
+    const nextDocs = snapshot.docs.slice(0, INITIAL_COMMENT_BATCH);
+    if (nextDocs.length) lastVisible = nextDocs[nextDocs.length - 1];
+    noMoreData = snapshot.docs.length <= INITIAL_COMMENT_BATCH;
+
+    const currentComments = window.__commentsCache || [];
+    const knownIds = new Set(currentComments.map(comment => comment.id));
+    const nextComments = nextDocs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(comment => !knownIds.has(comment.id));
+    const allComments = [...currentComments, ...nextComments];
+    window.__commentsCache = allComments;
+    if (allComments.length) {
+      renderComments(allComments);
+    }
+
+    const uniqueUids = [...new Set(nextComments.filter(comment => comment.uid).map(comment => comment.uid))];
+    void batchGetUserStats(uniqueUids).then(() => {
+      if (!document.getElementById('comments-list')?.isConnected) return;
+      window._forceCommentRerender = true;
+      renderComments(window.__commentsCache || []);
+    }).catch((error) => {
+      console.error("Comment user details could not be refreshed.", error);
+    });
+  } catch (error) {
+    console.error("The next comment page could not be loaded.", error);
+    loadMoreError = true;
+  } finally {
+    isLoading = false;
+    updateLoadMoreUI();
   }
 }
 
@@ -3200,6 +3401,7 @@ function generateUsername(user, fallbackName = '') {
       .collection('postComments')
       .add(newComment);
     commentSaved = true;
+    void listenCommentCount();
 
     console.log("Comment success:", ref.id);
 
@@ -3430,6 +3632,7 @@ initEditPreviewListeners();
 
   try {
     await commentRef.delete();
+    void listenCommentCount();
     console.log("✅ Komentar berhasil dihapus");
   } catch (e) {
     console.error('Gagal delete:', e);

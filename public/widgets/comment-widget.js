@@ -2744,7 +2744,7 @@ var Ps = `
 function Ls(e, t) {
   qn(t, !1);
   let n = Ts(t, "pageId", 12, "home");
-  const r = "/widgets/comment-runtime.js?v=reply-border-motion-1", i = {
+  const r = "/widgets/comment-runtime.js?v=comment-count-total-2", i = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
     settings: "/widgets/comment-settings.css",
