@@ -173,6 +173,7 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
     let commentLoadingTimeout = null;
     let loadMoreError = false;
     let commentsLoadGeneration = 0;
+    const locallySubmittedCommentTimes = new Map();
     let unreadReplies = 0;
     let replyNotifications = [];
     let pendingCommentSyncInProgress = false;
@@ -1433,6 +1434,26 @@ function handleQuoteBtnClick(e) {
   ]);
 }
 
+function getLocallyReadNotificationKeys(uid) {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(`mikoroku_notifications_v1:${uid}`) || "[]"
+    );
+    if (!Array.isArray(stored)) return new Set();
+    return new Set(stored
+      .filter(notification =>
+        notification &&
+        typeof notification === "object" &&
+        notification.read === true &&
+        (notification.notifType === "reply" || notification.notifType === "mention")
+      )
+      .map(notification => getNotificationKey(notification, notification.notifType)));
+  } catch (error) {
+    console.warn("Cached notification read states could not be loaded.", error);
+    return new Set();
+  }
+}
+
     window.addEventListener('mikoroku:notifications-read', event => {
   const keys = new Set(event.detail && Array.isArray(event.detail.keys) ? event.detail.keys : []);
   if (!keys.size) return;
@@ -2030,6 +2051,7 @@ async function addMentionNotifications(text) {
       console.log("NOTIF DATA:", data);
       const replies = data.replies || [];
       const mentions = data.mentions || [];
+      const locallyReadKeys = getLocallyReadNotificationKeys(currentUser.uid);
 
       replyNotifications = [
         ...replies.map(r => ({
@@ -2041,7 +2063,12 @@ async function addMentionNotifications(text) {
           ...m,
           notifType: 'mention'
         }))
-      ];
+      ].map(notification => {
+        const type = notification.notifType === 'mention' ? 'mention' : 'reply';
+        return locallyReadKeys.has(getNotificationKey(notification, type))
+          ? { ...notification, read: true }
+          : notification;
+      });
 
       replyNotifications.sort((a, b) => {
         return (b.date || 0) - (a.date || 0);
@@ -3285,6 +3312,7 @@ function renderComments(comments) {
   const oldScroll = window.scrollY;
   const noCommentMsg = list.querySelector('.no-comments, div[style*="Belum ada komentar"]');
   if (noCommentMsg) noCommentMsg.remove();
+  list.querySelector(".comment-load-error")?.remove();
   const existing = {};
   list.querySelectorAll('.comment').forEach(el => {
   const id = el.dataset.commentId;
@@ -3607,8 +3635,18 @@ async function startRealtimeListener() {
           .filter(comment => comment.pendingSync === true)
           .map(comment => comment.id)
       );
+      const cachedCommentsById = new Map(
+        (window.__commentsCache || []).map(comment => [comment.id, comment])
+      );
       const recentComments = recentDocs
-        .map(doc => applyPendingCommentMutation({ id: doc.id, ...doc.data() }))
+        .map(doc => {
+          const comment = { id: doc.id, ...doc.data({ serverTimestamps: "estimate" }) };
+          const cachedComment = cachedCommentsById.get(doc.id);
+          if (comment.date == null && cachedComment?.date != null) {
+            comment.date = cachedComment.date;
+          }
+          return applyPendingCommentMutation(comment);
+        })
         .filter(Boolean)
         .map(comment => ({
           ...comment,
@@ -3621,7 +3659,11 @@ async function startRealtimeListener() {
         comment =>
           !pendingCommentDeleteIds.has(comment.id) &&
           !recentIds.has(comment.id) &&
-          (window.__showAllComments || comment.pinned === true)
+          (
+            window.__showAllComments ||
+            comment.pinned === true ||
+            locallySubmittedCommentTimes.has(comment.id)
+          )
       );
       const pendingComments = (window.__commentsCache || []).filter(
         comment =>
@@ -3630,6 +3672,13 @@ async function startRealtimeListener() {
           !recentIds.has(comment.id)
       );
       const comments = [...recentComments, ...previouslyLoaded, ...pendingComments];
+      comments.sort((a, b) => {
+        const aLocalTime = locallySubmittedCommentTimes.get(a.id);
+        const bLocalTime = locallySubmittedCommentTimes.get(b.id);
+        if (aLocalTime === undefined) return bLocalTime === undefined ? 0 : 1;
+        if (bLocalTime === undefined) return -1;
+        return bLocalTime - aLocalTime;
+      });
       window.__commentsCache = comments;
 
       const visibleComments = getCommentsToRender(comments);
@@ -3674,25 +3723,32 @@ async function startRealtimeListener() {
 
     const fetchServerSnapshot = () => {
       if (fallbackRequest) return fallbackRequest;
-      fallbackRequest = commentsRef.get({ source: "server" })
-        .then((snapshot) => applySnapshot(snapshot, true))
+      let timeout;
+      const request = commentsRef.get({ source: "server" })
+        .then((snapshot) => {
+          applySnapshot(snapshot, true);
+        });
+      fallbackRequest = Promise.race([
+        request,
+        new Promise((_, reject) => {
+          timeout = window.setTimeout(
+            () => reject(new Error("Loading comments from the server timed out.")),
+            8000
+          );
+        }),
+      ])
         .catch((error) => {
           if (generation !== commentsLoadGeneration || hasInitialSnapshot) return;
           console.error("The initial comment query could not be loaded.", error);
-          if (commentLoadingTimeout !== null) {
-            window.clearTimeout(commentLoadingTimeout);
-            commentLoadingTimeout = null;
-          }
-          renderCommentLoadError(commentsList, "Gagal memuat komentar.");
           setFormDisabled(false);
         })
         .finally(() => {
+          if (timeout !== undefined) window.clearTimeout(timeout);
           fallbackRequest = null;
         });
       return fallbackRequest;
     };
 
-    let unsubscribed = false;
     const unsubscribe = commentsRef.onSnapshot((snapshot) => {
       if (snapshot.metadata?.fromCache === true && snapshot.empty) {
         void fetchServerSnapshot();
@@ -3703,10 +3759,7 @@ async function startRealtimeListener() {
       console.error("The comment listener failed.", error);
       if (!hasInitialSnapshot) void fetchServerSnapshot();
     });
-    unsubscribeComments = () => {
-      unsubscribed = true;
-      unsubscribe();
-    };
+    unsubscribeComments = unsubscribe;
 
     commentLoadingTimeout = window.setTimeout(() => {
       commentLoadingTimeout = null;
@@ -3714,10 +3767,6 @@ async function startRealtimeListener() {
 
       renderCommentLoadingSkeleton(commentsList);
       setFormDisabled(false);
-      if (!unsubscribed && unsubscribeComments) {
-        unsubscribeComments();
-        unsubscribeComments = null;
-      }
       void fetchServerSnapshot();
     }, 3000);
   } catch (err) {
@@ -3727,30 +3776,9 @@ async function startRealtimeListener() {
     }
     console.error(err);
     if (generation === commentsLoadGeneration) {
-      renderCommentLoadError(commentsList, "Gagal memuat komentar.");
       setFormDisabled(false);
     }
   }
-}
-
-function renderCommentLoadError(commentsList, message) {
-  commentsList.setAttribute("aria-busy", "false");
-  const container = document.createElement("div");
-  container.className = "comment-load-error";
-  container.setAttribute("role", "status");
-  container.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px;text-align:center;opacity:.8";
-
-  const text = document.createElement("p");
-  text.textContent = message;
-  container.appendChild(text);
-
-  const retryButton = document.createElement("button");
-  retryButton.type = "button";
-  retryButton.textContent = "Coba lagi";
-  retryButton.addEventListener("click", () => void startRealtimeListener());
-  container.appendChild(retryButton);
-
-  commentsList.replaceChildren(container);
 }
 
 function renderCommentLoadingSkeleton(commentsList) {
@@ -3797,6 +3825,7 @@ window.setCommentCommunityPageId = function(pageId) {
   isLoading = false;
   noMoreData = false;
   loadMoreError = false;
+  locallySubmittedCommentTimes.clear();
   window.__showAllComments = false;
   window.__commentsCache = [];
   startRealtimeListener();
@@ -3901,6 +3930,14 @@ function sortComments() {
   const comments = Array.from(commentsList.querySelectorAll(":scope > .comment"));
 
   comments.sort((a, b) => {
+    const aLocalTime = locallySubmittedCommentTimes.get(a.dataset.commentId);
+    const bLocalTime = locallySubmittedCommentTimes.get(b.dataset.commentId);
+    if (aLocalTime !== undefined || bLocalTime !== undefined) {
+      if (aLocalTime === undefined) return 1;
+      if (bLocalTime === undefined) return -1;
+      return bLocalTime - aLocalTime;
+    }
+
     const aPinned = a.dataset.pinned === "true" || a.classList.contains('pinned');
     const bPinned = b.dataset.pinned === "true" || b.classList.contains('pinned');
 
@@ -4062,6 +4099,7 @@ function generateUsername(user, fallbackName = '') {
     };
     await writePendingCommentRecord(record);
 
+    if (!parentId) locallySubmittedCommentTimes.set(commentId, newComment.date);
     const cachedComments = window.__commentsCache || [];
     window.__commentsCache = [
       { ...newComment, id: commentId, pendingSync: true },
@@ -4781,6 +4819,8 @@ if (commentFileInput) {
   });
 }
 
+startRealtimeListener();
+
     auth.onAuthStateChanged(user => {
   currentUser = user;
   initializePendingCommentSync();
@@ -4925,7 +4965,6 @@ if (user) {
 
   setupAuthorInputListener();
   attachMarkdownButtons();
-  startRealtimeListener();
 
   updateUI();
   setupUserAvatarClick();

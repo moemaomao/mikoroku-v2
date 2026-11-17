@@ -1,5 +1,6 @@
 import { loadFollowerCount } from "./user-following";
 import { loadUserStatsProfile } from "./user-stats-cache";
+import { mergeReadingProgressFromHistory } from "./reading-history";
 
 type StatsUser = {
   uid: string;
@@ -137,6 +138,11 @@ const LOCAL_BOOKMARK_FRESHNESS_KEY = "mikoroku:bookmarks:updatedAt";
 const LOCAL_BOOKMARK_FRESHNESS_MS = 1000 * 60 * 30;
 export const LOCAL_CHAPTER_TOTAL_PREFIX = "mikoroku:reading-stats:chapters:";
 const LOCAL_CHAPTER_ACTIVITY_SUFFIX = ":activity";
+const LOCAL_READING_PROGRESS_PREFIX = "mikoroku:reading-stats:progress:";
+const LOCAL_READING_PROGRESS_LIMIT = 200;
+const LOCAL_READ_MARK_SYNC_PREFIX = "mikoroku:reading-stats:read-mark-sync:";
+const LOCAL_READ_MARK_SYNC_RETRY_MS = 60 * 60 * 1000;
+const pendingReadMarkSyncs = new Map<string, Promise<void>>();
 
 function getStatsWindow(): StatsWindow {
   return window as StatsWindow;
@@ -263,6 +269,145 @@ export function getLocalChapterTotalStorageKey(uid: string): string {
 
 export function getLocalReadingActivityStorageKey(uid: string): string {
   return `${getLocalChapterTotalStorageKey(uid)}${LOCAL_CHAPTER_ACTIVITY_SUFFIX}`;
+}
+
+export function getLocalReadingProgressStorageKey(uid: string): string {
+  return `${LOCAL_READING_PROGRESS_PREFIX}${uid}`;
+}
+
+function readLocalReadingProgress(uid: string): ReadingProgressItem[] {
+  try {
+    const stored: unknown = JSON.parse(
+      localStorage.getItem(getLocalReadingProgressStorageKey(uid)) || "{}",
+    );
+    return Object.values(asRecord(stored))
+      .map(parseProgressItem)
+      .filter((item): item is ReadingProgressItem => item !== null);
+  } catch (error) {
+    console.warn("Local reading progress could not be read.", error);
+    return [];
+  }
+}
+
+function writeLocalReadingProgress(
+  uid: string,
+  item: ReadingProgressItem,
+  preserveNewer = false,
+): void {
+  try {
+    const progress = new Map(readLocalReadingProgress(uid).map((current) => [current.slug, current]));
+    const currentItem = progress.get(item.slug);
+    if (preserveNewer && currentItem && currentItem.updatedAt > item.updatedAt) return;
+    progress.set(item.slug, item);
+    const retained = [...progress.values()]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, LOCAL_READING_PROGRESS_LIMIT);
+    localStorage.setItem(
+      getLocalReadingProgressStorageKey(uid),
+      JSON.stringify(Object.fromEntries(retained.map((entry) => [encodeURIComponent(entry.slug), entry]))),
+    );
+    window.dispatchEvent(new Event("mikoroku:reading-stats-local-updated"));
+  } catch (error) {
+    console.warn("Local reading progress could not be saved.", error);
+  }
+}
+
+export function mergeLocalReadingProgress(
+  uid: string,
+  progress: ReadingProgressItem[],
+): ReadingProgressItem[] {
+  const merged = new Map(progress.map((item) => [item.slug, item]));
+  for (const localItem of readLocalReadingProgress(uid)) {
+    const currentItem = merged.get(localItem.slug);
+    if (!currentItem || localItem.updatedAt > currentItem.updatedAt) {
+      merged.set(localItem.slug, localItem);
+    }
+  }
+  return [...merged.values()].sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+function recordLocalReadingProgress(uid: string, input: ReaderStatsInput): void {
+  const previousItem = readLocalReadingProgress(uid).find((item) => item.slug === input.slug);
+  const chapterProgress = clampPercentage(input.chapterProgress);
+  const seriesProgress = input.chapterCount > 0 && input.chapterPosition > 0
+    ? clampPercentage(((input.chapterPosition - 1 + chapterProgress / 100) / input.chapterCount) * 100)
+    : chapterProgress;
+  writeLocalReadingProgress(uid, {
+    slug: input.slug,
+    title: input.title,
+    cover: input.cover,
+    kind: input.kind,
+    chapter: input.chapter,
+    chapterTitle: input.chapterTitle,
+    chapterProgress,
+    seriesProgress,
+    chapterPosition: input.chapterPosition,
+    chapterCount: input.chapterCount,
+    source: input.source || "",
+    updatedAt: Math.max(Date.now(), (previousItem?.updatedAt || 0) + 1),
+  });
+}
+
+export async function ensureSeriesTracked(
+  uid: string,
+  input: Pick<ReaderStatsInput, "slug" | "title" | "cover" | "kind" | "chapterCount">,
+): Promise<void> {
+  const previousItem = readLocalReadingProgress(uid).find((item) => item.slug === input.slug);
+  const trackedItem: ReadingProgressItem = previousItem
+    ? previousItem.chapterPosition === 0 && input.chapterCount > previousItem.chapterCount
+      ? {
+        ...previousItem,
+        title: input.title,
+        cover: input.cover,
+        chapterCount: input.chapterCount,
+      }
+      : previousItem
+    : {
+      ...input,
+      chapter: "",
+      chapterTitle: "Not started",
+      chapterProgress: 0,
+      seriesProgress: 0,
+      chapterPosition: 0,
+      source: "",
+      updatedAt: 0,
+    };
+  if (!previousItem || trackedItem !== previousItem) {
+    writeLocalReadingProgress(uid, trackedItem);
+  }
+
+  const firestore = await waitForFirestore();
+  const userReference = firestore.collection("userStats").doc(uid);
+  const progressKey = safeDocumentId(input.slug);
+  const syncTransaction = async (transaction: StatsTransaction) => {
+    const snapshot = await transaction.get(userReference);
+    const remoteProgress = asRecord(asRecord(snapshot.data()?.readingStats).progress);
+    const existing = parseProgressItem(remoteProgress[progressKey]);
+    if (existing) return existing;
+
+    const updatedAt = new Date().toISOString();
+    const syncedItem = { ...trackedItem, updatedAt };
+    transaction.set(userReference, {
+      readingStats: { progress: { [progressKey]: syncedItem } },
+    }, { merge: true });
+    return parseProgressItem(syncedItem) || trackedItem;
+  };
+  const syncedItem = firestore.runTransaction
+    ? await firestore.runTransaction(syncTransaction)
+    : await (async () => {
+      const snapshot = await userReference.get();
+      const remoteProgress = asRecord(asRecord(snapshot.data()?.readingStats).progress);
+      const existing = parseProgressItem(remoteProgress[progressKey]);
+      if (existing) return existing;
+      const updatedAt = new Date().toISOString();
+      const item = { ...trackedItem, updatedAt };
+      await userReference.set({
+        readingStats: { progress: { [progressKey]: item } },
+      }, { merge: true });
+      return parseProgressItem(item) || trackedItem;
+    })();
+  writeLocalReadingProgress(uid, syncedItem, true);
+  window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
 }
 
 function readLocalReadingActivity(uid: string): Record<string, number> {
@@ -413,6 +558,7 @@ export async function saveReaderStats(
   const user = getStatsWindow().currentUser || sdk?.auth?.().currentUser;
   if (!user?.uid) return false;
   const activityDate = utcDateKey(new Date());
+  recordLocalReadingProgress(user.uid, input);
   onOptimisticUpdate?.(user.uid, activityDate);
   if (!sdk) return false;
 
@@ -504,9 +650,56 @@ export async function syncLocalReadMarksWithUser(uid: string): Promise<void> {
     throw new Error("The signed-in account changed during local read mark synchronization.");
   }
 
-  const localReadMarks = getLocalReadMarksCount();
-  if (localReadMarks > 0) {
-    await preserveLifetimeChapterCount(uid, localReadMarks);
+  const pending = pendingReadMarkSyncs.get(uid);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const localReadMarks = getLocalReadMarksCount();
+    if (localReadMarks <= 0) return;
+
+    const syncKey = `${LOCAL_READ_MARK_SYNC_PREFIX}${uid}`;
+    let syncState: { syncedCount?: number; attemptedCount?: number; retryAfter?: number } = {};
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(syncKey) || "{}");
+      if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+        syncState = stored as typeof syncState;
+      }
+    } catch (error) {
+      console.warn("Local chapter read sync state is invalid and will be ignored.", error);
+    }
+
+    if (localReadMarks <= (syncState.syncedCount || 0)) return;
+    if (
+      localReadMarks <= (syncState.attemptedCount || 0) &&
+      (syncState.retryAfter || 0) > Date.now()
+    ) return;
+
+    try {
+      await preserveLifetimeChapterCount(uid, localReadMarks);
+      if ((firebase?.auth?.().currentUser || getStatsWindow().currentUser)?.uid !== uid) {
+        throw new Error("The signed-in account changed during local read mark synchronization.");
+      }
+      localStorage.setItem(syncKey, JSON.stringify({ syncedCount: localReadMarks }));
+    } catch (error) {
+      try {
+        localStorage.setItem(syncKey, JSON.stringify({
+          ...syncState,
+          attemptedCount: localReadMarks,
+          retryAfter: Date.now() + LOCAL_READ_MARK_SYNC_RETRY_MS,
+        }));
+      } catch (storageError) {
+        console.warn("Local chapter read sync retry state could not be saved.", storageError);
+      }
+      throw error;
+    }
+  })();
+  pendingReadMarkSyncs.set(uid, request);
+  try {
+    await request;
+  } finally {
+    if (pendingReadMarkSyncs.get(uid) === request) {
+      pendingReadMarkSyncs.delete(uid);
+    }
   }
 }
 
@@ -847,10 +1040,11 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
   ]);
   const readingStats = asRecord(profile.readingStats);
   const progressBySlug = asRecord(readingStats.progress);
-  const progress = Object.values(progressBySlug)
+  const storedProgress = Object.values(progressBySlug)
     .map(parseProgressItem)
     .filter((item): item is ReadingProgressItem => item !== null)
     .sort((left, right) => right.updatedAt - left.updatedAt);
+  const progress = mergeReadingProgressFromHistory(storedProgress, profile.readingHistory);
   const activityByDate = asRecord(readingStats.activity);
   const activity = getLastSevenUtcDates().map((date) => ({
     date,

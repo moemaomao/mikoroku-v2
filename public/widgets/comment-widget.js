@@ -2774,7 +2774,7 @@ var Ls = `
 function Is(e, t) {
   Vn(t, !1);
   let n = Cs(t, "pageId", 12, "home");
-  const r = "/widgets/comment-runtime.js?v=top-comment-snow-4", i = {
+  const r = "/widgets/comment-runtime.js?v=notifications-cache-1", i = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
     settings: "/widgets/comment-settings.css",
@@ -2847,7 +2847,7 @@ function Is(e, t) {
     (p = (E = window).setCommentCommunityPageId) === null || p === void 0 || p.call(E, n() || "home");
   }
   $s(() => {
-    v("/widgets/comment-widget.css?v=top-comment-snow-4"), window.loadCommentFeatureStyles = c;
+    v("/widgets/comment-widget.css?v=reply-buttons-6"), window.loadCommentFeatureStyles = c;
     const p = "requestIdleCallback" in window ? window.requestIdleCallback(() => c("effects"), { timeout: 2500 }) : window.setTimeout(() => c("effects"), 2500);
     return d().catch((E) => {
       console.error("Comment widget failed to initialize.", E);

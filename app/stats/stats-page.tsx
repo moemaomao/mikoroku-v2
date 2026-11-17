@@ -7,8 +7,10 @@ import {
   getLocalBookmarkCount,
   getLocalChapterTotal,
   getLocalChapterTotalStorageKey,
+  getLocalReadingProgressStorageKey,
   hasFreshLocalBookmarks,
   loadPublicReadingStats,
+  mergeLocalReadingProgress,
   mergeLocalReadingActivity,
   preserveLifetimeChapterCount,
   setLocalChapterTotal,
@@ -19,6 +21,10 @@ import {
   type PublicReadingStats,
   type ReadingProgressItem,
 } from "../../lib/reading-stats";
+import {
+  mergeReadingProgressFromHistory,
+  readReadingHistory,
+} from "../../lib/reading-history";
 import {
   cacheFollowingUids,
   getCachedFollowingUids,
@@ -1159,11 +1165,13 @@ function DonutCard({
 }
 
 function ProgressCard({ item }: { item: ReadingProgressItem }) {
-  const hasSeriesProgress = item.chapterCount > 0 && item.chapterPosition > 0;
+  const hasSeriesProgress = item.chapterCount > 0;
   const progress = hasSeriesProgress ? item.seriesProgress : item.chapterProgress;
   const chapterPosition = hasSeriesProgress
-    ? `${item.chapterPosition} / ${item.chapterCount} chapters`
-    : `Chapter ${item.chapter || "—"}`;
+    ? `${Math.max(0, item.chapterPosition)} / ${item.chapterCount} chapters`
+    : item.chapter
+      ? `Chapter ${item.chapter}`
+      : "Not started";
   const href = item.chapter
     ? `/${item.kind}/${encodeURIComponent(item.slug)}/${encodeURIComponent(item.chapter)}`
     : `/${item.kind}/${encodeURIComponent(item.slug)}`;
@@ -1183,7 +1191,7 @@ function ProgressCard({ item }: { item: ReadingProgressItem }) {
         >
           {item.title}
         </a>
-        <p className="mt-1 truncate text-xs text-slate-600 dark:text-zinc-400">{item.chapterTitle || `Chapter ${item.chapter || "—"}`}</p>
+        <p className="mt-1 truncate text-xs text-slate-600 dark:text-zinc-400">{item.chapterTitle || (item.chapter ? `Chapter ${item.chapter}` : "Not started")}</p>
         <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-slate-500 dark:text-zinc-500">
           <span>{chapterPosition}</span>
           <span>{progress}%{hasSeriesProgress ? "" : " chapter"}</span>
@@ -1599,9 +1607,10 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       if (!active || refreshing || document.visibilityState === "hidden") return;
       refreshing = true;
       try {
-        const [loadedResult, unlockedMedals] = await Promise.all([
+        const [loadedResult, unlockedMedals, localHistory] = await Promise.all([
           loadPublicReadingStats(uid),
           getUnlockedMedals(),
+          isOwner ? readReadingHistory() : Promise.resolve([]),
         ]);
         const pendingBanner = isOwner ? getPendingProfileBanner(uid) : null;
         const result = pendingBanner
@@ -1625,6 +1634,12 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
         const activity = isOwner ? mergeLocalReadingActivity(uid, result.activity) : result.activity;
         const preservedResult = {
           ...result,
+          progress: isOwner
+            ? mergeReadingProgressFromHistory(
+              mergeLocalReadingProgress(uid, result.progress),
+              localHistory,
+            )
+            : result.progress,
           activity,
           totalChaptersRead,
           bookmarksCount: (isOwner && hasFreshLocalBookmarks() ? getLocalBookmarkCount() : null)
@@ -1688,10 +1703,11 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
     const loadCachedStats = async () => {
       try {
-        const [cached, unlockedMedals, cachedProfile] = await Promise.all([
+        const [cached, unlockedMedals, cachedProfile, localHistory] = await Promise.all([
           getCachedReadingStats(uid),
           getUnlockedMedals(),
           Promise.resolve(getCachedUserStatsProfile(uid)),
+          isOwner ? readReadingHistory() : Promise.resolve([]),
         ]);
         if (!active) return;
         const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
@@ -1707,6 +1723,16 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
           }
           : null;
         if (cached && cachedStats) {
+          const cachedHistoryProgress = mergeReadingProgressFromHistory(
+            cachedStats.progress,
+            cached.data.profile.readingHistory,
+          );
+          const progress = isOwner
+            ? mergeReadingProgressFromHistory(
+              mergeLocalReadingProgress(uid, cachedHistoryProgress),
+              localHistory,
+            )
+            : cachedHistoryProgress;
           const localChapterTotal = isOwner ? getLocalChapterTotal(uid) : 0;
           const totalChaptersRead = Math.max(
             cachedStats.totalChaptersRead,
@@ -1723,6 +1749,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
           lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
           setStats({
             ...cachedStats,
+            progress,
             activity,
             totalChaptersRead,
             bookmarksCount: isOwner
@@ -1785,28 +1812,58 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
   useEffect(() => {
     if (!isOwner) return;
+    const updateLocalHistoryProgress = () => {
+      void readReadingHistory().then((history) => {
+        setStats((current) => {
+          if (!current) return current;
+          const progress = mergeReadingProgressFromHistory(
+            mergeLocalReadingProgress(uid, current.progress),
+            history,
+          );
+          const progressChanged = progress.length !== current.progress.length ||
+            progress.some((item, index) =>
+              item.slug !== current.progress[index]?.slug ||
+              item.updatedAt !== current.progress[index]?.updatedAt,
+            );
+          return progressChanged ? { ...current, progress } : current;
+        });
+      }).catch((historyError: unknown) => {
+        console.warn("Local reading history could not be merged into Stats progress.", historyError);
+      });
+    };
     const updateLocalChapterCount = () => {
       const localTotal = getLocalChapterTotal(uid);
       setStats((current) => {
         if (!current) return current;
         const totalChaptersRead = Math.max(current.totalChaptersRead, localTotal);
         const activity = mergeLocalReadingActivity(uid, current.activity);
+        const progress = mergeLocalReadingProgress(uid, current.progress);
+        const progressChanged = progress.length !== current.progress.length ||
+          progress.some((item, index) =>
+            item.slug !== current.progress[index]?.slug ||
+            item.updatedAt !== current.progress[index]?.updatedAt,
+          );
         return totalChaptersRead === current.totalChaptersRead
           && activity.every((day, index) => day.chapters === current.activity[index]?.chapters)
+          && !progressChanged
           ? current
-          : { ...current, totalChaptersRead, activity };
+          : { ...current, totalChaptersRead, activity, progress };
       });
     };
     const onStorage = (event: StorageEvent) => {
       if (
         event.key === getLocalChapterTotalStorageKey(uid)
         || event.key === getLocalReadingActivityStorageKey(uid)
+        || event.key === getLocalReadingProgressStorageKey(uid)
       ) updateLocalChapterCount();
+      if (event.key === "readingHistory") updateLocalHistoryProgress();
     };
     window.addEventListener("mikoroku:reading-stats-local-updated", updateLocalChapterCount);
+    window.addEventListener("mikoroku:reading-history-updated", updateLocalHistoryProgress);
     window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener("mikoroku:reading-stats-local-updated", updateLocalChapterCount);
+      window.removeEventListener("mikoroku:reading-history-updated", updateLocalHistoryProgress);
       window.removeEventListener("storage", onStorage);
     };
   }, [isOwner, uid]);
@@ -1965,8 +2022,8 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const sourceCount = new Set(progress.map((item) => item.source).filter(Boolean)).size;
   const mangaProgress = progress.filter((item) => item.kind === "manga");
   const novelProgress = progress.filter((item) => item.kind === "novel");
-  const mangaWithSeriesProgress = mangaProgress.filter((item) => item.chapterCount > 0 && item.chapterPosition > 0);
-  const novelWithSeriesProgress = novelProgress.filter((item) => item.chapterCount > 0 && item.chapterPosition > 0);
+  const mangaWithSeriesProgress = mangaProgress.filter((item) => item.chapterCount > 0);
+  const novelWithSeriesProgress = novelProgress.filter((item) => item.chapterCount > 0);
   const knownSeriesProgress = [...mangaWithSeriesProgress, ...novelWithSeriesProgress];
   const mangaProgressTotal = mangaWithSeriesProgress.reduce((total, item) => total + item.seriesProgress, 0);
   const novelProgressTotal = novelWithSeriesProgress.reduce((total, item) => total + item.seriesProgress, 0);

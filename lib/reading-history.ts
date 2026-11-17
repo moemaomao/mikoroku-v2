@@ -1,3 +1,5 @@
+import type { ReadingProgressItem } from "./reading-stats";
+
 export type ReadingHistoryEntry = {
   series?: string;
   title?: string;
@@ -396,6 +398,45 @@ function progressFromHistoryEntry(entry: ReadingHistoryEntry): { slug: string; v
       updatedAt: new Date(entryUpdatedAt(entry)).toISOString(),
     },
   };
+}
+
+export function mergeReadingProgressFromHistory(
+  progress: ReadingProgressItem[],
+  historyValue: unknown,
+): ReadingProgressItem[] {
+  if (!Array.isArray(historyValue)) return progress;
+  const historyProgress = new Map<string, ReadingProgressItem>();
+  normalizeHistory(historyValue).forEach((entry) => {
+    const candidate = progressFromHistoryEntry(entry);
+    if (!candidate) return;
+    const value = candidate.value;
+    const item: ReadingProgressItem = {
+      slug: candidate.slug,
+      title: stringValue(value.title) || candidate.slug,
+      cover: stringValue(value.cover),
+      kind: value.kind === "novel" ? "novel" : "manga",
+      chapter: stringValue(value.chapter),
+      chapterTitle: stringValue(value.chapterTitle),
+      chapterProgress: numberValue(value.chapterProgress),
+      seriesProgress: numberValue(value.seriesProgress),
+      chapterPosition: numberValue(value.chapterPosition),
+      chapterCount: numberValue(value.chapterCount),
+      source: stringValue(value.source),
+      updatedAt: timestampValue(value.updatedAt),
+    };
+    const current = historyProgress.get(item.slug);
+    if (!current || item.updatedAt > current.updatedAt) {
+      historyProgress.set(item.slug, item);
+    }
+  });
+
+  const merged = new Map(
+    progress
+      .filter((item) => !item.chapter && item.chapterPosition === 0)
+      .map((item) => [item.slug, item]),
+  );
+  historyProgress.forEach((item, slug) => merged.set(slug, item));
+  return [...merged.values()].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
 function mergeReadingStats(

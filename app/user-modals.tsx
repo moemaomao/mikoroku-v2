@@ -22,6 +22,7 @@ import settingsStyles from "./settings/settings.module.css";
 import { normalizeProfileLink } from "./lib/profile-link";
 
 type DataRecord = Record<string, unknown>;
+type StoredNotification = DataRecord & { notifType: "reply" | "mention" };
 type CompatTimestamp = {
   toDate?: () => Date;
   toMillis?: () => number;
@@ -122,6 +123,8 @@ type LegacyModalWindow = {
 };
 
 const HISTORY_KEY = "readingHistory";
+const NOTIFICATION_CACHE_PREFIX = "mikoroku_notifications_v1:";
+const NOTIFICATION_READ_QUEUE_PREFIX = "mikoroku_notification_read_queue_v1:";
 const DEFAULT_AVATAR =
   "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 const FALLBACK_COVER = "/assets/icons/favicon.ico";
@@ -483,6 +486,62 @@ function getNotificationKey(notification: DataRecord, type: string): string {
   ]);
 }
 
+function readStoredNotifications(uid: string): StoredNotification[] | null {
+  try {
+    const raw = window.localStorage.getItem(`${NOTIFICATION_CACHE_PREFIX}${uid}`);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.flatMap((item: unknown) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const notification = asRecord(item);
+      if (notification.notifType !== "reply" && notification.notifType !== "mention") return [];
+      return [{ ...notification, notifType: notification.notifType }];
+    });
+  } catch (error) {
+    console.warn("Cached notifications could not be read.", error);
+    return null;
+  }
+}
+
+function writeStoredNotifications(uid: string, notifications: StoredNotification[]): void {
+  try {
+    window.localStorage.setItem(
+      `${NOTIFICATION_CACHE_PREFIX}${uid}`,
+      JSON.stringify(notifications),
+    );
+  } catch (error) {
+    console.warn("Notifications could not be cached locally.", error);
+  }
+}
+
+function readPendingNotificationReadKeys(uid: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(`${NOTIFICATION_READ_QUEUE_PREFIX}${uid}`);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((key: unknown): key is string => typeof key === "string")
+      : [];
+  } catch (error) {
+    console.warn("Pending notification read states could not be read.", error);
+    return [];
+  }
+}
+
+function writePendingNotificationReadKeys(uid: string, keys: string[]): void {
+  try {
+    const key = `${NOTIFICATION_READ_QUEUE_PREFIX}${uid}`;
+    if (keys.length) {
+      window.localStorage.setItem(key, JSON.stringify([...new Set(keys)]));
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch (error) {
+    console.warn("Pending notification read states could not be saved.", error);
+  }
+}
+
 function waitWithTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => reject(new Error(message)), milliseconds);
@@ -706,6 +765,159 @@ function initializeUserModals(): () => void {
     const firestore = db();
     if (!firestore) throw new Error("Firebase Firestore is unavailable after initialization.");
     return firestore;
+  };
+  const notificationReadSyncs = new Set<string>();
+  const notificationReadRetryTimers = new Map<string, number>();
+  const notificationReadRetryAttempts = new Map<string, number>();
+  let notificationLoadGeneration = 0;
+  const clearNotificationReadRetry = (uid: string) => {
+    const timer = notificationReadRetryTimers.get(uid);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      notificationReadRetryTimers.delete(uid);
+    }
+    notificationReadRetryAttempts.delete(uid);
+  };
+  const scheduleNotificationReadRetry = (uid: string) => {
+    if (notificationReadRetryTimers.has(uid)) return;
+    const attempts = notificationReadRetryAttempts.get(uid) || 0;
+    const delay = Math.min(30_000 * (2 ** attempts), 15 * 60 * 1000);
+    notificationReadRetryTimers.set(uid, window.setTimeout(() => {
+      notificationReadRetryTimers.delete(uid);
+      if (legacy.currentUser?.uid !== uid) return;
+      const firestore = db();
+      if (firestore) void syncPendingNotificationReads(uid, firestore);
+    }, delay));
+  };
+  const syncPendingNotificationReads = async (uid: string, firestore: CompatFirestore) => {
+    if (!navigator.onLine || notificationReadSyncs.has(uid)) return;
+    const pendingKeys = readPendingNotificationReadKeys(uid);
+    if (!pendingKeys.length) return;
+    notificationReadSyncs.add(uid);
+    const pendingKeySet = new Set(pendingKeys);
+    const reference = firestore.collection("notifications").doc(uid);
+    try {
+      const synchronizedKeys = await firestore.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(reference);
+        if (!snapshot.exists) return [];
+        const data = asRecord(snapshot.data());
+        const updates: DataRecord = {};
+        const matchedKeys = new Set<string>();
+        let changed = false;
+        for (const [field, type] of [["replies", "reply"], ["mentions", "mention"]] as const) {
+          const notifications = data[field];
+          if (!Array.isArray(notifications)) continue;
+          updates[field] = notifications.map((notification) => {
+            const record = asRecord(notification);
+            const key = getNotificationKey(record, type);
+            if (!pendingKeySet.has(key)) return notification;
+            matchedKeys.add(key);
+            if (record.read === true) return notification;
+            changed = true;
+            return { ...record, read: true };
+          });
+        }
+        if (changed) transaction.set(reference, updates, { merge: true });
+        return [...matchedKeys];
+      });
+      const synchronizedKeySet = new Set(synchronizedKeys);
+      const remainingKeys = readPendingNotificationReadKeys(uid)
+        .filter((key) => !synchronizedKeySet.has(key));
+      writePendingNotificationReadKeys(uid, remainingKeys);
+      notificationReadRetryAttempts.delete(uid);
+      if (!remainingKeys.length) {
+        clearNotificationReadRetry(uid);
+      } else if (remainingKeys.some((key) => !pendingKeySet.has(key))) {
+        window.setTimeout(() => void syncPendingNotificationReads(uid, firestore), 0);
+      }
+    } catch (error) {
+      console.error("Notification read states could not be synchronized.", error);
+      notificationReadRetryAttempts.set(uid, (notificationReadRetryAttempts.get(uid) || 0) + 1);
+      scheduleNotificationReadRetry(uid);
+    } finally {
+      notificationReadSyncs.delete(uid);
+    }
+  };
+  const retryPendingNotificationReads = () => {
+    const uid = legacy.currentUser?.uid;
+    const firestore = uid ? db() : null;
+    if (uid && firestore) void syncPendingNotificationReads(uid, firestore);
+  };
+  const onNotificationVisibilityChange = () => {
+    if (document.visibilityState === "visible") retryPendingNotificationReads();
+  };
+  window.addEventListener("online", retryPendingNotificationReads);
+  document.addEventListener("visibilitychange", onNotificationVisibilityChange);
+  const markNotificationsRead = (
+    uid: string,
+    notifications: StoredNotification[],
+    firestore: CompatFirestore | null,
+  ): StoredNotification[] => {
+    const unreadKeys = notifications
+      .filter((notification) => notification.read !== true)
+      .map((notification) => getNotificationKey(notification, notification.notifType));
+    const unreadKeySet = new Set(unreadKeys);
+    const updated = notifications.map((notification) =>
+      unreadKeySet.has(getNotificationKey(notification, notification.notifType))
+        ? { ...notification, read: true }
+        : notification
+    );
+    writeStoredNotifications(uid, updated);
+    if (!unreadKeys.length) return updated;
+    writePendingNotificationReadKeys(uid, [
+      ...readPendingNotificationReadKeys(uid),
+      ...unreadKeys,
+    ]);
+    window.dispatchEvent(new CustomEvent("mikoroku:notifications-read", {
+      detail: { keys: unreadKeys },
+    }));
+    if (firestore) void syncPendingNotificationReads(uid, firestore);
+    return updated;
+  };
+  const renderNotifications = (list: HTMLDivElement, notifications: StoredNotification[]) => {
+    list.replaceChildren();
+    if (!notifications.length) {
+      const empty = createElement("div", undefined, "Tidak ada notifikasi");
+      empty.style.cssText = "text-align:center;padding:40px;color:#64748b";
+      list.appendChild(empty);
+      return;
+    }
+    notifications.forEach((item) => {
+      const isMention = item.notifType === "mention";
+      const card = createElement("article", "notif-item");
+      const header = createElement("div");
+      header.style.cssText = "display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:6px";
+      const author = createElement("span", undefined, stringValue(item.author, "Someone"));
+      author.style.cssText = `font-weight:700;color:${isMention ? "#93c5fd" : "#60a5fa"}`;
+      const kind = createElement("span", undefined, isMention ? "mentioned you" : "replied to you");
+      kind.style.cssText = "font-size:.8rem;color:rgba(203,213,225,.62)";
+      header.append(author, kind);
+      const text = createElement("div", undefined, stringValue(item.text || item.message));
+      text.style.cssText = "font-size:.88rem;color:#cbd5e1;line-height:1.4";
+      card.append(header, text);
+      if (item.date) {
+        const time = createElement(
+          "div",
+          undefined,
+          new Date(numberValue(item.date)).toLocaleString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        );
+        time.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:8px";
+        card.appendChild(time);
+      }
+      const link = stringValue(item.commentLink || item.link);
+      if (link && link !== "#") {
+        const anchor = createElement("a", undefined, "Lihat komentar →");
+        anchor.href = link;
+        anchor.style.cssText = "display:inline-block;margin-top:10px;color:#5edaff;font-weight:600;text-decoration:none;font-size:.85rem";
+        card.appendChild(anchor);
+      }
+      list.appendChild(card);
+    });
   };
   const byId = <T extends HTMLElement>(id: string): T | null =>
     document.getElementById(id) as T | null;
@@ -1418,123 +1630,58 @@ function initializeUserModals(): () => void {
       window.alert("Harap login terlebih dahulu");
       return;
     }
+    const uid = user.uid;
+    const generation = ++notificationLoadGeneration;
     notificationModal.style.display = "flex";
     const list = byId<HTMLDivElement>("reply-notif-list");
     if (!list) return;
-    list.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8">Loading notifications...</div>`;
+    const cached = readStoredNotifications(uid);
     const firestore = db();
-    if (!firestore) {
-      list.innerHTML = `<div style="text-align:center;padding:40px;color:#f87171">Firestore belum dimuat</div>`;
-      return;
+    if (cached === null) {
+      list.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8">Loading notifications...</div>`;
+    } else {
+      renderNotifications(list, markNotificationsRead(uid, cached, firestore));
     }
-    void firestore
-      .collection("notifications")
-      .doc(user.uid)
-      .get()
+    if (firestore) void syncPendingNotificationReads(uid, firestore);
+
+    void waitForFirestore()
+      .then((readyFirestore) => {
+        if (generation !== notificationLoadGeneration || legacy.currentUser?.uid !== uid) return null;
+        void syncPendingNotificationReads(uid, readyFirestore);
+        return readyFirestore.collection("notifications").doc(uid).get();
+      })
       .then((snapshot) => {
+        if (!snapshot || generation !== notificationLoadGeneration || legacy.currentUser?.uid !== uid) return;
         const data = snapshot.exists ? asRecord(snapshot.data()) : {};
         const replies = Array.isArray(data.replies) ? data.replies : [];
         const mentions = Array.isArray(data.mentions) ? data.mentions : [];
-        const all: Array<DataRecord & { notifType: string }> = [
-          ...replies.map(
-            (item): DataRecord & { notifType: string } => ({
-              ...asRecord(item),
-              notifType: "reply",
-            }),
-          ),
-          ...mentions.map(
-            (item): DataRecord & { notifType: string } => ({
-              ...asRecord(item),
-              notifType: "mention",
-            }),
-          ),
-        ].sort((a, b) => numberValue(b.date) - numberValue(a.date));
-        list.replaceChildren();
-        if (!all.length) {
-          const empty = createElement("div", undefined, "Tidak ada notifikasi");
-          empty.style.cssText = "text-align:center;padding:40px;color:#64748b";
-          list.appendChild(empty);
-          return;
-        }
-        all.forEach((item) => {
-          const isMention = item.notifType === "mention";
-          const card = createElement("article", "notif-item");
-          const author = createElement("div", undefined, stringValue(item.author, "Someone"));
-          author.style.cssText = `font-weight:700;color:${isMention ? "#93c5fd" : "#60a5fa"};margin-bottom:4px`;
-          const kind = createElement("div", undefined, isMention ? "mentioned you" : "replied to you");
-          kind.style.cssText = "font-size:.9rem;margin-bottom:6px";
-          const text = createElement("div", undefined, stringValue(item.text || item.message));
-          text.style.cssText = "font-size:.88rem;color:#cbd5e1;line-height:1.4";
-          card.append(author, kind, text);
-          if (item.date) {
-            const time = createElement(
-              "div",
-              undefined,
-              new Date(numberValue(item.date)).toLocaleString("id-ID", {
-                day: "2-digit",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            );
-            time.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:8px";
-            card.appendChild(time);
-          }
-          const link = stringValue(item.commentLink || item.link);
-          if (link && link !== "#") {
-            const anchor = createElement("a", undefined, "Lihat komentar →");
-            anchor.href = link;
-            anchor.style.cssText = "display:inline-block;margin-top:10px;color:#5edaff;font-weight:600;text-decoration:none;font-size:.85rem";
-            card.appendChild(anchor);
-          }
-          list.appendChild(card);
-        });
-
-        const readKeys = new Set(
-          all
-            .filter((item) => item.read !== true)
+        const locallyReadKeys = new Set([
+          ...(readStoredNotifications(uid) || [])
+            .filter((item) => item.read === true)
             .map((item) => getNotificationKey(item, item.notifType)),
-        );
-        if (!readKeys.size) return;
-        const keys = [...readKeys];
-        window.dispatchEvent(new CustomEvent("mikoroku:notifications-read", { detail: { keys } }));
-        const reference = firestore.collection("notifications").doc(user.uid);
-        void firestore.runTransaction(async (transaction) => {
-          const currentSnapshot = await transaction.get(reference);
-          if (!currentSnapshot.exists) return;
-          const currentData = asRecord(currentSnapshot.data());
-          const updates: DataRecord = {};
-          for (const [field, type] of [["replies", "reply"], ["mentions", "mention"]] as const) {
-            const notifications = currentData[field];
-            if (!Array.isArray(notifications)) continue;
-            updates[field] = notifications.map((notification) => {
-              const record = asRecord(notification);
-              return readKeys.has(getNotificationKey(record, type)) && record.read !== true
-                ? { ...record, read: true }
-                : record;
-            });
-          }
-          if (Object.keys(updates).length) {
-            transaction.set(reference, updates, { merge: true });
-          }
-        }).catch((markReadError: unknown) => {
-          console.error("Notifications could not be marked as read.", markReadError);
-          window.dispatchEvent(new CustomEvent("mikoroku:notifications-read-failed", { detail: { keys } }));
-          if (notificationModal.style.display === "flex") {
-            const warning = createElement(
-              "div",
-              undefined,
-              "Notifikasi terbuka, tetapi status dibaca belum tersimpan. Coba buka kembali.",
-            );
-            warning.setAttribute("role", "alert");
-            warning.style.cssText = "padding:10px;color:#fca5a5;text-align:center;font-size:.85rem";
-            list.prepend(warning);
-          }
-        });
+          ...readPendingNotificationReadKeys(uid),
+        ]);
+        const notifications: StoredNotification[] = [
+          ...replies.map((item): StoredNotification => ({
+            ...asRecord(item),
+            notifType: "reply",
+          })),
+          ...mentions.map((item): StoredNotification => ({
+            ...asRecord(item),
+            notifType: "mention",
+          })),
+        ].map((item) =>
+          locallyReadKeys.has(getNotificationKey(item, item.notifType))
+            ? { ...item, read: true }
+            : item
+        ).sort((a, b) => numberValue(b.date) - numberValue(a.date));
+        renderNotifications(list, markNotificationsRead(uid, notifications, db()));
       })
       .catch((error: unknown) => {
-        console.error("Notif error:", error);
-        list.replaceChildren(createElement("div", undefined, "Gagal memuat notifikasi"));
+        console.error("Notifications could not be refreshed.", error);
+        if (generation === notificationLoadGeneration && cached === null) {
+          list.replaceChildren(createElement("div", undefined, "Notifikasi belum tersedia"));
+        }
       });
   };
   const closeNotifications = () => {
@@ -1638,6 +1785,11 @@ function initializeUserModals(): () => void {
   };
 
   return () => {
+    notificationLoadGeneration += 1;
+    window.removeEventListener("online", retryPendingNotificationReads);
+    document.removeEventListener("visibilitychange", onNotificationVisibilityChange);
+    notificationReadRetryTimers.forEach((timer) => window.clearTimeout(timer));
+    notificationReadRetryTimers.clear();
     document.removeEventListener("click", onModalClick);
     inbox?.removeEventListener("click", onInboxClick);
     dmById("mikoroku-dm-close-btn")?.removeEventListener("click", closeDm);

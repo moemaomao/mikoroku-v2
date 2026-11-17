@@ -4072,3 +4072,70 @@ html.no-animations .comment-snow,
   line-height: 1 !important;
   white-space: nowrap;
 }
+
+.reply-form .reply-actions button[type="submit"] {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: #93c5fd !important;
+  border: 1px solid rgba(96, 165, 250, 0.72) !important;
+}
+
+.reply-form .reply-actions button.cancel-reply {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(248, 113, 113, 0.72) !important;
+}
+
+.reply-form .reply-actions button[type="submit"]:hover {
+  background: rgba(59, 130, 246, 0.3) !important;
+  color: #bfdbfe !important;
+}
+
+.reply-form .reply-actions button.cancel-reply:hover {
+  background: rgba(239, 68, 68, 0.3) !important;
+  color: #fecaca !important;
+}
+
+.reply-form .reply-actions {
+  gap: 0 !important;
+  padding: 0 !important;
+  border: 0;
+  border-radius: 13px;
+  background: transparent !important;
+}
+
+.reply-form .reply-actions button[type="submit"],
+.reply-form .reply-actions button.cancel-reply {
+  border-radius: 0 !important;
+}
+
+.reply-form .reply-actions button[type="submit"] {
+  border: 1px solid #60a5fa !important;
+  border-right: 0 !important;
+  border-radius: 11px 0 0 11px !important;
+}
+
+.reply-form .reply-actions button.cancel-reply {
+  border: 1px solid #f87171 !important;
+  border-left: 1px solid #f87171 !important;
+  border-radius: 0 11px 11px 0 !important;
+}
+
+html.light .reply-form .reply-actions button[type="submit"],
+body.light .reply-form .reply-actions button[type="submit"] {
+  color: #1d4ed8 !important;
+}
+
+html.light .reply-form .reply-actions button.cancel-reply,
+body.light .reply-form .reply-actions button.cancel-reply {
+  color: #b91c1c !important;
+}
+
+html.light .reply-form .reply-actions button[type="submit"]:hover,
+body.light .reply-form .reply-actions button[type="submit"]:hover {
+  color: #1e40af !important;
+}
+
+html.light .reply-form .reply-actions button.cancel-reply:hover,
+body.light .reply-form .reply-actions button.cancel-reply:hover {
+  color: #991b1b !important;
+}

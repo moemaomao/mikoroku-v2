@@ -26,7 +26,10 @@ import {
   loadFirestoreMangaCatalog,
 } from "../lib/firebase-client";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
-import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
+import {
+  ensureSeriesTracked,
+  markLocalBookmarksUpdated,
+} from "../../lib/reading-stats";
 import {
   fetchMangaMetadataPayload,
   MANGA_METADATA_CACHE_UPDATED_EVENT,
@@ -104,7 +107,10 @@ type SeriesBookmarkReference = {
 };
 
 type SeriesBookmarkFirebase = {
-  auth?: () => { currentUser?: { uid?: string } | null };
+  auth?: () => {
+    currentUser?: { uid?: string } | null;
+    onAuthStateChanged?: (callback: (user: { uid?: string } | null) => void) => () => void;
+  };
   firestore?: () => {
     collection: (name: string) => {
       doc: (id: string) => {
@@ -1211,6 +1217,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
   const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
   const chapterCacheSlugRef = useRef(slug);
+  const trackedSeriesRef = useRef(new Map<string, number>());
   const baseCoverUrl = manga?.covers?.length
     ? manga.covers[manga.covers.length - 1]
     : manga?.img || manga?.cover || "";
@@ -1752,6 +1759,63 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     document.querySelector('meta[name="twitter:image"]')?.setAttribute("content", manga.cover || manga.img || "");
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", window.location.href);
   }, [manga]);
+
+  useEffect(() => {
+    if (!manga || chapterState === "loading") return;
+    const firebaseWindow = window as Window & {
+      currentUser?: { uid?: string } | null;
+      firebase?: SeriesBookmarkFirebase;
+    };
+    const auth = firebaseWindow.firebase?.auth?.();
+    let active = true;
+    const trackSeries = (uid?: string) => {
+      if (!active || !uid) return;
+      const key = `${uid}:${slug}`;
+      const trackedCount = chapters.length;
+      if (trackedSeriesRef.current.get(key) === trackedCount) return;
+      trackedSeriesRef.current.set(key, trackedCount);
+      void ensureSeriesTracked(uid, {
+        slug,
+        title: manga.title,
+        cover: manga.cover || manga.img || "",
+        kind: isNovelSeries(manga) ? "novel" : "manga",
+        chapterCount: trackedCount,
+      }).catch((error: unknown) => {
+        console.warn(`Series tracking could not be synchronized for ${slug}.`, error);
+        if (trackedSeriesRef.current.get(key) === trackedCount) {
+          trackedSeriesRef.current.delete(key);
+        }
+      });
+    };
+    const updateCurrentUser = () => {
+      const uid = auth?.currentUser?.uid || firebaseWindow.currentUser?.uid;
+      if (uid) {
+        trackSeries(uid);
+        return;
+      }
+      for (const key of trackedSeriesRef.current.keys()) {
+        if (key.endsWith(`:${slug}`)) trackedSeriesRef.current.delete(key);
+      }
+    };
+    updateCurrentUser();
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = auth?.onAuthStateChanged?.((user) => {
+        if (user?.uid) trackSeries(user.uid);
+        else updateCurrentUser();
+      });
+    } catch (error) {
+      console.error("Could not monitor account state for series tracking.", error);
+    }
+    window.addEventListener("firebaseCompatReady", updateCurrentUser);
+    window.addEventListener(AUTH_USER_CHANGE_EVENT, updateCurrentUser);
+    return () => {
+      active = false;
+      unsubscribe?.();
+      window.removeEventListener("firebaseCompatReady", updateCurrentUser);
+      window.removeEventListener(AUTH_USER_CHANGE_EVENT, updateCurrentUser);
+    };
+  }, [chapterState, chapters.length, manga, slug]);
 
   const genreList = useMemo(
     () => [...new Set((manga?.genres || [])

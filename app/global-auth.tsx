@@ -26,6 +26,8 @@ let profileBannerSyncInProgress = false;
 let profileBannerListenersAttached = false;
 let commentBackgroundRetryTimer: number | undefined;
 let commentBackgroundSyncInProgress = false;
+let localReadMarkRetryTimer: number | undefined;
+let localReadMarkSyncInProgress = false;
 
 export default function GlobalAuth() {
   useEffect(() => {
@@ -59,6 +61,36 @@ export default function GlobalAuth() {
         commentBackgroundRetryTimer = undefined;
         void syncCommentBackground(uid);
       }, Math.max(1000, nextAttemptAt - Date.now()));
+    };
+
+    const clearLocalReadMarkRetry = () => {
+      if (localReadMarkRetryTimer !== undefined) {
+        window.clearTimeout(localReadMarkRetryTimer);
+        localReadMarkRetryTimer = undefined;
+      }
+    };
+
+    const syncLocalChapterReads = async (uid: string) => {
+      if (!uid || uid !== profileBannerSyncUid || localReadMarkSyncInProgress) return;
+      localReadMarkSyncInProgress = true;
+      try {
+        await syncLocalReadMarksWithUser(uid);
+        clearLocalReadMarkRetry();
+      } catch (error) {
+        console.error("Could not sync local chapter reads for the signed-in user.", error);
+        if (uid === profileBannerSyncUid) {
+          clearLocalReadMarkRetry();
+          localReadMarkRetryTimer = window.setTimeout(() => {
+            localReadMarkRetryTimer = undefined;
+            void syncLocalChapterReads(uid);
+          }, 60 * 60 * 1000 + 1000);
+        }
+      } finally {
+        localReadMarkSyncInProgress = false;
+        if (profileBannerSyncUid && profileBannerSyncUid !== uid) {
+          void syncLocalChapterReads(profileBannerSyncUid);
+        }
+      }
     };
 
     const syncCommentBackground = async (uid = profileBannerSyncUid) => {
@@ -185,6 +217,7 @@ export default function GlobalAuth() {
         window.__authListenerAttached = true;
         authInstance.onAuthStateChanged((user) => {
           window.currentUser = user;
+          clearLocalReadMarkRetry();
           profileBannerSyncUid = user?.uid || "";
           clearProfileBannerRetry();
           clearCommentBackgroundRetry();
@@ -193,9 +226,7 @@ export default function GlobalAuth() {
             void syncReadingHistoryWithUser(user.uid).catch((error: unknown) => {
               console.error("Could not sync reading history for the signed-in user.", error);
             });
-            void syncLocalReadMarksWithUser(user.uid).catch((error: unknown) => {
-              console.error("Could not sync local chapter reads for the signed-in user.", error);
-            });
+            void syncLocalChapterReads(user.uid);
             void syncProfileBanner(user.uid);
             void syncCommentBackground(user.uid);
           }
