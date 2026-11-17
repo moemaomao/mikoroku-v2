@@ -63,15 +63,47 @@
     const existing = scriptLoads.get(src);
     if (existing) return existing;
 
+    const absoluteSrc = new URL(src, document.baseURI).href;
+    const existingScript = Array.from(document.scripts)
+      .find((script) => script.src === absoluteSrc);
     const promise = new Promise<void>((resolve, reject) => {
+      if (existingScript) {
+        if (existingScript.dataset.loaded === "true") {
+          reject(new Error(`Script loaded without initializing its library: ${src}`));
+          return;
+        }
+        existingScript.addEventListener("load", () => {
+          if (isLoaded()) {
+            existingScript.dataset.loaded = "true";
+            resolve();
+          } else {
+            reject(new Error(`Script loaded without initializing its library: ${src}`));
+          }
+        }, { once: true });
+        existingScript.addEventListener("error", () => {
+          existingScript.remove();
+          reject(new Error(`Failed to load ${src}`));
+        }, { once: true });
+        return;
+      }
+
       const script = document.createElement("script");
       script.src = src;
       script.async = false;
-      script.addEventListener("load", () => resolve(), { once: true });
-      script.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), { once: true });
+      script.addEventListener("load", () => {
+        script.dataset.loaded = "true";
+        resolve();
+      }, { once: true });
+      script.addEventListener("error", () => {
+        script.remove();
+        reject(new Error(`Failed to load ${src}`));
+      }, { once: true });
       document.head.appendChild(script);
     });
     scriptLoads.set(src, promise);
+    void promise.catch(() => {
+      if (scriptLoads.get(src) === promise) scriptLoads.delete(src);
+    });
     return promise;
   }
 
