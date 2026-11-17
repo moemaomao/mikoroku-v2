@@ -2983,7 +2983,15 @@ export default function AdminPage() {
         },
         { merge: true },
       );
-      scheduleSharedMangaCatalogCacheRefresh();
+      let sharedCatalogRefreshFailed = false;
+      try {
+        await refreshSharedMangaCatalogCache();
+      } catch (error) {
+        sharedCatalogRefreshFailed = true;
+        console.error("The chapter was saved, but the shared manga catalog cache could not be refreshed.", error);
+      } finally {
+        notifyMangaMetadataUpdated();
+      }
       if (currentManga) {
         nextManga = {
           ...currentManga,
@@ -3023,7 +3031,11 @@ export default function AdminPage() {
         setChapters(nextChapters);
       }
       setChapterEditorOpen(false);
-      setMessage(`Chapter ${chapterNumber} saved successfully.`);
+      setMessage(
+        sharedCatalogRefreshFailed
+          ? `Chapter ${chapterNumber} saved, but the homepage catalog could not be refreshed. Check the browser console and retry the catalog refresh.`
+          : `Chapter ${chapterNumber} saved successfully.`,
+      );
       setEditingChapterNumber(null);
       if (selectedManga?.slug === mangaSlug && nextManga) {
         setSelectedManga(nextManga);
