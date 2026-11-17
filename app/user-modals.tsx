@@ -790,7 +790,11 @@ function initializeUserModals(): () => void {
     }, delay));
   };
   const syncPendingNotificationReads = async (uid: string, firestore: CompatFirestore) => {
-    if (!navigator.onLine || notificationReadSyncs.has(uid)) return;
+    if (
+      !navigator.onLine ||
+      notificationReadSyncs.has(uid) ||
+      notificationReadRetryTimers.has(uid)
+    ) return;
     const pendingKeys = readPendingNotificationReadKeys(uid);
     if (!pendingKeys.length) return;
     notificationReadSyncs.add(uid);
@@ -1642,7 +1646,6 @@ function initializeUserModals(): () => void {
     } else {
       renderNotifications(list, markNotificationsRead(uid, cached, firestore));
     }
-    if (firestore) void syncPendingNotificationReads(uid, firestore);
 
     void waitForFirestore()
       .then((readyFirestore) => {

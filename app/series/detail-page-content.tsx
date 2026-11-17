@@ -97,9 +97,6 @@ type Chapter = {
 
 type DetailState = "loading" | "ready" | "not-found" | "error";
 type ChapterSource = Chapter["source"];
-type CompatCommentCountCollection = {
-  get: () => Promise<{ forEach: (callback: (document: unknown) => void) => void }>;
-};
 
 type SeriesBookmarkReference = {
   set: (data: Record<string, unknown>, options?: { merge?: boolean }) => Promise<void>;
@@ -119,11 +116,6 @@ type SeriesBookmarkFirebase = {
     };
   };
 };
-
-function isCompatCommentCountCollection(value: unknown): value is CompatCommentCountCollection {
-  return typeof value === "object" && value !== null &&
-    "get" in value && typeof value.get === "function";
-}
 
 const COMMENT_COUNT_FIREBASE_APP_NAME = "mikoroku-series-comment-count";
 const COMMENT_COUNT_FIREBASE_CONFIG = {
@@ -1369,22 +1361,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
 
     const loadCount = async () => {
       try {
-        const compatFirestore = window.firebase?.firestore?.();
-        if (compatFirestore) {
-          const maybeCommentCollection: unknown = compatFirestore
-            .collection("comments")
-            .doc(pageId)
-            .collection("postComments");
-          if (!isCompatCommentCountCollection(maybeCommentCollection)) {
-            throw new Error("Firebase compat tidak menyediakan pembacaan komentar.");
-          }
-          const commentCollection = maybeCommentCollection;
-          const snapshot = await commentCollection.get();
-          let count = 0;
-          snapshot.forEach(() => { count += 1; });
-          if (active) setCommentCount(count);
-          return;
-        }
         const snapshot = await getDocs(
           collection(getCommentCountFirestore(), "comments", pageId, "postComments"),
         );
@@ -2913,10 +2889,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   );
 }
 
+let firebaseCompatInitialization: Promise<void> | undefined;
+
 function RouteIntegrations() {
   useEffect(() => {
-    const added: HTMLScriptElement[] = [];
-    const load = (src: string, persistent = false) => new Promise<void>((resolve) => {
+    const loadScript = (src: string) => new Promise<void>((resolve, reject) => {
       const existing = [...document.scripts].find((script) => script.src === new URL(src, location.href).href);
       if (existing) {
         const libraryReady = src.includes("firebase-app-compat.js")
@@ -2935,39 +2912,46 @@ function RouteIntegrations() {
           resolve();
         }, { once: true });
         existing.addEventListener("error", () => {
-          console.error(`Gagal memuat integrasi halaman manga: ${src}`);
-          resolve();
+          existing.remove();
+          reject(new Error(`Gagal memuat integrasi halaman manga: ${src}`));
         }, { once: true });
         return;
       }
       const script = document.createElement("script");
       script.src = src;
+      script.async = false;
       script.onload = () => {
         script.dataset.loaded = "true";
         resolve();
       };
       script.onerror = () => {
-        console.error(`Gagal memuat integrasi halaman manga: ${src}`);
-        resolve();
+        script.remove();
+        reject(new Error(`Gagal memuat integrasi halaman manga: ${src}`));
       };
-      if (!persistent) added.push(script);
-      document.body.appendChild(script);
+      document.head.appendChild(script);
     });
 
-    void (async () => {
-      await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
-      await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
-      await load("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
-      const firebaseInit = document.createElement("script");
-      firebaseInit.textContent = `if (typeof firebase !== "undefined" && !firebase.apps.some(function(app) { return app.name === "[DEFAULT]"; })) { firebase.initializeApp({ apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4", authDomain: "widget-comment.firebaseapp.com", projectId: "widget-comment", storageBucket: "widget-comment.firebasestorage.app", messagingSenderId: "249700505242", appId: "1:249700505242:web:dab240af09caf30ad7f123" }); }`;
-      added.push(firebaseInit);
-      document.head.appendChild(firebaseInit);
-      window.dispatchEvent(new Event("firebaseCompatReady"));
-    })();
+    if (!firebaseCompatInitialization) {
+      firebaseCompatInitialization = (async () => {
+        await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js");
+        const firebase = window.firebase;
+        if (!firebase) throw new Error("Firebase compat SDK tidak tersedia.");
+        if (!firebase.apps.some((candidate) => candidate.name === "[DEFAULT]")) {
+          firebase.initializeApp(COMMENT_COUNT_FIREBASE_CONFIG);
+        }
+        await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js");
+        await loadScript("https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js");
+      })().catch((error: unknown) => {
+        firebaseCompatInitialization = undefined;
+        console.error("Firebase halaman series gagal diinisialisasi.", error);
+        throw error;
+      });
+    }
 
-    return () => {
-      for (const script of added) script.remove();
-    };
+    void firebaseCompatInitialization.then(
+      () => window.dispatchEvent(new Event("firebaseCompatReady")),
+      () => undefined,
+    );
   }, []);
 
   return (
