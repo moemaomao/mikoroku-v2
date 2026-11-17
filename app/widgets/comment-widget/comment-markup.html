@@ -397,7 +397,37 @@
 
    
 
-    <div id='comments-list'></div>
+    <div id='comments-list' aria-busy="true">
+      <div id="comment-loading" class="comment-loading-skeleton-list" aria-label="Loading comments" aria-live="polite">
+        <article class="comment-loading-skeleton-card" aria-hidden="true">
+          <div class="comment-loading-skeleton-header">
+            <span class="comment-loading-skeleton-avatar"></span>
+            <span class="comment-loading-skeleton-line comment-loading-skeleton-name"></span>
+            <span class="comment-loading-skeleton-line comment-loading-skeleton-date"></span>
+          </div>
+          <span class="comment-loading-skeleton-line comment-loading-skeleton-text"></span>
+          <span class="comment-loading-skeleton-line comment-loading-skeleton-text comment-loading-skeleton-text-short"></span>
+        </article>
+        <article class="comment-loading-skeleton-card" aria-hidden="true">
+          <div class="comment-loading-skeleton-header">
+            <span class="comment-loading-skeleton-avatar"></span>
+            <span class="comment-loading-skeleton-line comment-loading-skeleton-name"></span>
+            <span class="comment-loading-skeleton-line comment-loading-skeleton-date"></span>
+          </div>
+          <span class="comment-loading-skeleton-line comment-loading-skeleton-text"></span>
+          <span class="comment-loading-skeleton-line comment-loading-skeleton-text comment-loading-skeleton-text-short"></span>
+        </article>
+        <article class="comment-loading-skeleton-card" aria-hidden="true">
+          <div class="comment-loading-skeleton-header">
+            <span class="comment-loading-skeleton-avatar"></span>
+            <span class="comment-loading-skeleton-line comment-loading-skeleton-name"></span>
+            <span class="comment-loading-skeleton-line comment-loading-skeleton-date"></span>
+          </div>
+          <span class="comment-loading-skeleton-line comment-loading-skeleton-text"></span>
+          <span class="comment-loading-skeleton-line comment-loading-skeleton-text comment-loading-skeleton-text-short"></span>
+        </article>
+      </div>
+    </div>
 
     <div id="load-more-wrap" style="display:none; justify-content:center; margin:16px 0;">
       <button id="load-more-btn" type="button" onclick="loadMoreComments()" style="

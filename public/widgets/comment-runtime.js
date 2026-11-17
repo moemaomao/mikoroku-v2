@@ -175,11 +175,512 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
     let commentsLoadGeneration = 0;
     let unreadReplies = 0;
     let replyNotifications = [];
-    let sortingLocked = false;
+    let pendingCommentSyncInProgress = false;
+    let pendingCommentSyncTimer = null;
+    let pendingCommentSyncListenersAttached = false;
+    const pendingCommentSyncOwner = `comment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const pendingCommentDeleteIds = new Set();
+    const pendingCommentEditUpdates = new Map();
+    const PENDING_COMMENTS_DATABASE = "mikoroku-pending-comments";
+    const PENDING_COMMENTS_STORE = "comments";
+    function applyPendingCommentMutation(comment) {
+      if (pendingCommentDeleteIds.has(comment.id)) return null;
+      const updates = pendingCommentEditUpdates.get(comment.id);
+      return updates ? { ...comment, ...updates, pendingSync: true } : comment;
+    }
+
     const LIMIT = 10;
     const INITIAL_COMMENT_BATCH = 30;
     window.__showAllComments = window.__showAllComments || false;
     window.__commentsCache = window.__commentsCache || null;
+
+    function openPendingCommentsDatabase() {
+      return new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB is unavailable in this browser."));
+          return;
+        }
+        const request = indexedDB.open(PENDING_COMMENTS_DATABASE, 1);
+        request.onupgradeneeded = () => {
+          if (!request.result.objectStoreNames.contains(PENDING_COMMENTS_STORE)) {
+            request.result.createObjectStore(PENDING_COMMENTS_STORE, { keyPath: "key" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("Could not open pending comment storage."));
+        request.onblocked = () => reject(new Error("Pending comment storage is blocked by another browser tab."));
+      });
+    }
+
+    async function readPendingCommentRecords() {
+      const database = await openPendingCommentsDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readonly");
+        const request = transaction.objectStore(PENDING_COMMENTS_STORE).getAll();
+        let records = [];
+        request.onsuccess = () => { records = request.result || []; };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve(records);
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Could not read pending comments."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Reading pending comments was aborted."));
+        };
+      });
+    }
+
+    async function writePendingCommentRecord(record) {
+      const database = await openPendingCommentsDatabase();
+      await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readwrite");
+        transaction.objectStore(PENDING_COMMENTS_STORE).put(record);
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || new Error("Could not store the comment locally."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || new Error("Storing the comment locally was aborted."));
+        };
+      });
+    }
+
+    async function queueCommentMutationRecord(operationType, commentId, updates = null) {
+      const database = await openPendingCommentsDatabase();
+      const now = Date.now();
+      const baseKey = `${postId}:${commentId}`;
+      const mutationKey = `mutation:${baseKey}`;
+      return new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readwrite");
+        const store = transaction.objectStore(PENDING_COMMENTS_STORE);
+        const request = store.get(baseKey);
+        let result = { queuedAsMutation: true, canceledPendingComment: false };
+        request.onsuccess = () => {
+          const pendingComment = request.result;
+          if (pendingComment && pendingComment.type !== "mutation") {
+            if (pendingComment.leaseUntil <= now) {
+              if (operationType === "delete") {
+                store.delete(baseKey);
+                result = { queuedAsMutation: false, canceledPendingComment: true };
+              } else {
+                store.put({
+                  ...pendingComment,
+                  comment: { ...pendingComment.comment, ...updates, pendingSync: true },
+                  attempts: 0,
+                  nextAttemptAt: now,
+                  updatedAt: now,
+                  leaseOwner: "",
+                  leaseUntil: 0
+                });
+                result = { queuedAsMutation: false, canceledPendingComment: false };
+              }
+              return;
+            }
+          }
+
+          store.put({
+            key: mutationKey,
+            type: "mutation",
+            operationType,
+            postId,
+            commentId,
+            baseKey,
+            waitForPending: Boolean(pendingComment && pendingComment.type !== "mutation"),
+            authUid: currentUser?.uid || null,
+            updates,
+            attempts: 0,
+            nextAttemptAt: now,
+            updatedAt: now,
+            leaseOwner: "",
+            leaseUntil: 0
+          });
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve(result);
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Could not save the comment change locally."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Saving the comment change was aborted."));
+        };
+      });
+    }
+
+    async function claimPendingCommentRecord(key) {
+      const database = await openPendingCommentsDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readwrite");
+        const store = transaction.objectStore(PENDING_COMMENTS_STORE);
+        const request = store.get(key);
+        let claimed = null;
+        request.onsuccess = () => {
+          const record = request.result;
+          const now = Date.now();
+          if (!record || record.nextAttemptAt > now || record.leaseUntil > now) return;
+          record.leaseOwner = pendingCommentSyncOwner;
+          record.leaseUntil = now + 60_000;
+          store.put(record);
+          claimed = record;
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve(claimed);
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Could not claim the pending comment."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Claiming the pending comment was aborted."));
+        };
+      });
+    }
+
+    async function updatePendingCommentRecord(record, updates) {
+      const database = await openPendingCommentsDatabase();
+      await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readwrite");
+        const store = transaction.objectStore(PENDING_COMMENTS_STORE);
+        const request = store.get(record.key);
+        request.onsuccess = () => {
+          const current = request.result;
+          if (
+            current &&
+            current.updatedAt === record.updatedAt &&
+            current.leaseOwner === pendingCommentSyncOwner
+          ) {
+            store.put({ ...current, ...updates, leaseOwner: "", leaseUntil: 0 });
+          }
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Could not update the pending comment."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Updating the pending comment was aborted."));
+        };
+      });
+    }
+
+    async function persistPendingCommentImageUrl(record, imageUrl) {
+      const database = await openPendingCommentsDatabase();
+      await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readwrite");
+        const store = transaction.objectStore(PENDING_COMMENTS_STORE);
+        const request = store.get(record.key);
+        request.onsuccess = () => {
+          const current = request.result;
+          if (
+            current &&
+            current.updatedAt === record.updatedAt &&
+            current.leaseOwner === pendingCommentSyncOwner
+          ) {
+            if (current.type === "mutation") current.updates.image = imageUrl;
+            else current.comment.image = imageUrl;
+            store.put(current);
+            if (record.type === "mutation") record.updates.image = imageUrl;
+            else record.comment.image = imageUrl;
+          }
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Could not save the uploaded comment image."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Saving the uploaded comment image was aborted."));
+        };
+      });
+    }
+
+    async function deletePendingCommentRecord(record) {
+      const database = await openPendingCommentsDatabase();
+      await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_COMMENTS_STORE, "readwrite");
+        const store = transaction.objectStore(PENDING_COMMENTS_STORE);
+        const request = store.get(record.key);
+        request.onsuccess = () => {
+          const current = request.result;
+          if (
+            current &&
+            current.updatedAt === record.updatedAt &&
+            current.leaseOwner === pendingCommentSyncOwner
+          ) {
+            store.delete(record.key);
+          }
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Could not remove the synced comment."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error || request.error || new Error("Removing the synced comment was aborted."));
+        };
+      });
+    }
+
+    async function restorePendingCommentsForPost(targetPostId) {
+      try {
+        const records = await readPendingCommentRecords();
+        if (targetPostId !== postId) return;
+        pendingCommentDeleteIds.clear();
+        pendingCommentEditUpdates.clear();
+        records
+          .filter(record =>
+            record.type === "mutation" &&
+            record.postId === targetPostId &&
+            (record.authUid === (currentUser?.uid || null) || record.authUid === null)
+          )
+          .forEach(record => {
+            if (record.operationType === "delete") pendingCommentDeleteIds.add(record.commentId);
+            else if (record.operationType === "edit") {
+              pendingCommentEditUpdates.set(record.commentId, record.updates || {});
+            }
+          });
+        const pending = records
+          .filter(record =>
+            record.type !== "mutation" &&
+            record.postId === targetPostId &&
+            (record.authUid === (currentUser?.uid || null) || record.authUid === null)
+          )
+          .map(record => ({ ...record.comment, id: record.commentId, pendingSync: true }));
+        const commentsById = new Map((window.__commentsCache || [])
+          .filter(comment => !pendingCommentDeleteIds.has(comment.id))
+          .map(comment => {
+            const updates = pendingCommentEditUpdates.get(comment.id);
+            return [comment.id, updates ? { ...comment, ...updates, pendingSync: true } : comment];
+          }));
+        pending.forEach(comment => commentsById.set(comment.id, comment));
+        if (!commentsById.size && !pendingCommentDeleteIds.size) return;
+        window.__commentsCache = [...commentsById.values()];
+        window._forceCommentRerender = true;
+        renderComments(window.__commentsCache);
+        updateLoadMoreUI();
+      } catch (error) {
+        console.error("Pending comments could not be restored from IndexedDB.", error);
+      }
+    }
+
+    function schedulePendingCommentSync(nextAttemptAt) {
+      if (pendingCommentSyncTimer !== null) {
+        window.clearTimeout(pendingCommentSyncTimer);
+      }
+      pendingCommentSyncTimer = window.setTimeout(() => {
+        pendingCommentSyncTimer = null;
+        void syncPendingComments();
+      }, Math.max(1000, nextAttemptAt - Date.now()));
+    }
+
+    async function syncPendingComments() {
+      if (pendingCommentSyncInProgress || !navigator.onLine) return;
+      pendingCommentSyncInProgress = true;
+      let nextAttemptAt = Infinity;
+      try {
+        const records = await readPendingCommentRecords();
+        const activeUid = currentUser?.uid || null;
+        for (const candidate of records) {
+          if (candidate.authUid !== activeUid && candidate.authUid !== null) continue;
+          if (candidate.leaseUntil > Date.now()) {
+            nextAttemptAt = Math.min(nextAttemptAt, candidate.leaseUntil);
+            continue;
+          }
+          if (candidate.nextAttemptAt > Date.now()) {
+            nextAttemptAt = Math.min(nextAttemptAt, candidate.nextAttemptAt);
+            continue;
+          }
+
+          const record = await claimPendingCommentRecord(candidate.key);
+          if (!record) continue;
+          try {
+            if (record.type === "mutation") {
+              const pendingBase = record.waitForPending
+                ? records.find(item => item.key === record.baseKey && item.type !== "mutation")
+                : null;
+              if (pendingBase) {
+                const retryAt = pendingBase.leaseUntil > Date.now()
+                  ? pendingBase.leaseUntil
+                  : Math.max(Date.now() + 1000, pendingBase.nextAttemptAt || 0);
+                await updatePendingCommentRecord(record, { nextAttemptAt: retryAt });
+                nextAttemptAt = Math.min(nextAttemptAt, retryAt);
+                continue;
+              }
+
+              const commentRef = db.collection("comments")
+                .doc(record.postId)
+                .collection("postComments")
+                .doc(record.commentId);
+              if (record.operationType === "delete") {
+                await commentRef.delete();
+              } else {
+                const updates = { ...(record.updates || {}) };
+                if (typeof updates.image === "string" && updates.image.startsWith("data:image/")) {
+                  const imageUrl = await uploadToImgBB(updates.image);
+                  if (!imageUrl) throw new Error("The edited comment image could not be uploaded.");
+                  await persistPendingCommentImageUrl(record, imageUrl);
+                  updates.image = imageUrl;
+                }
+                updates.date = firebase.firestore.FieldValue.serverTimestamp();
+                await commentRef.update(updates);
+              }
+              await deletePendingCommentRecord(record);
+
+              if (record.postId === postId) {
+                if (record.operationType === "delete") {
+                  pendingCommentDeleteIds.delete(record.commentId);
+                  pendingCommentEditUpdates.delete(record.commentId);
+                  window.__commentsCache = (window.__commentsCache || [])
+                    .filter(comment => comment.id !== record.commentId);
+                } else {
+                  pendingCommentEditUpdates.delete(record.commentId);
+                  window.__commentsCache = (window.__commentsCache || []).map(comment =>
+                    comment.id === record.commentId
+                      ? { ...comment, ...(record.updates || {}), pendingSync: false }
+                      : comment
+                  );
+                }
+                window._forceCommentRerender = true;
+                renderComments(window.__commentsCache || []);
+              }
+              void listenCommentCount();
+              continue;
+            }
+
+            const { pendingSync, ...commentData } = record.comment;
+            if (typeof commentData.image === "string" && commentData.image.startsWith("data:image/")) {
+              const imageUrl = await uploadToImgBB(commentData.image);
+              if (!imageUrl) throw new Error("The comment image could not be uploaded.");
+              await persistPendingCommentImageUrl(record, imageUrl);
+              commentData.image = imageUrl;
+            }
+            commentData.date = firebase.firestore.FieldValue.serverTimestamp();
+            let timeout;
+            try {
+              await Promise.race([
+                db.collection("comments")
+                  .doc(record.postId)
+                  .collection("postComments")
+                  .doc(record.commentId)
+                  .set(commentData),
+                new Promise((_, reject) => {
+                  timeout = window.setTimeout(() => reject(new Error("Comment synchronization timed out.")), 20_000);
+                }),
+              ]);
+            } finally {
+              if (timeout !== undefined) window.clearTimeout(timeout);
+            }
+            await deletePendingCommentRecord(record);
+
+            pendingCommentEditUpdates.delete(record.commentId);
+            if (record.postId === postId) {
+              const comments = (window.__commentsCache || []).map(comment =>
+                comment.id === record.commentId
+                  ? { ...comment, image: record.comment.image || null, pendingSync: false }
+                  : comment
+              );
+              window.__commentsCache = comments;
+              window._forceCommentRerender = true;
+              renderComments(comments);
+            }
+            void listenCommentCount();
+            if (record.comment.uid && currentUser?.uid === record.comment.uid) {
+              const textLength = String(record.comment.text || "").length;
+              const earnedPoints = record.isReply ? 2 : 1;
+              void db.collection("userStats").doc(record.comment.uid).set({
+                points: firebase.firestore.FieldValue.increment(earnedPoints),
+                reputation: firebase.firestore.FieldValue.increment(textLength),
+                commentCount: firebase.firestore.FieldValue.increment(1)
+              }, { merge: true }).then(() => {
+                if (!userStatsCache[record.comment.uid]) userStatsCache[record.comment.uid] = {};
+                userStatsCache[record.comment.uid].points = (userStatsCache[record.comment.uid].points || 0) + earnedPoints;
+                userStatsCache[record.comment.uid].reputation = (userStatsCache[record.comment.uid].reputation || 0) + textLength;
+                userStatsCache[record.comment.uid].commentCount = (userStatsCache[record.comment.uid].commentCount || 0) + 1;
+                saveUserStatsCache();
+              }).catch(error => {
+                console.error("Comment was posted, but its user stats could not be synchronized.", error);
+              });
+            }
+            void addMentionNotifications(record.comment.text);
+            if (record.isReply && record.parentId) {
+              db.collection("comments").doc(record.postId).collection("postComments")
+                .doc(record.parentId).get()
+                .then(snapshot => {
+                  if (snapshot.exists && currentUser && currentUser.uid === record.authUid) {
+                    addReplyNotification({ id: snapshot.id, ...snapshot.data() }, record.comment.text);
+                  }
+                })
+                .catch(error => console.error("Reply notification could not be synchronized.", error));
+            }
+          } catch (error) {
+            const attempts = (record.attempts || 0) + 1;
+            const retryDelay = Math.min(60_000 * (2 ** Math.min(attempts - 1, 10)), 60 * 60 * 1000);
+            await updatePendingCommentRecord(record, {
+              attempts,
+              nextAttemptAt: Date.now() + retryDelay,
+            });
+            nextAttemptAt = Math.min(nextAttemptAt, Date.now() + retryDelay);
+            console.warn("Comment remains saved locally and will retry synchronization.", error);
+          }
+        }
+        const remaining = await readPendingCommentRecords();
+        const pendingUid = currentUser?.uid || null;
+        remaining
+          .filter(record => record.authUid === pendingUid || record.authUid === null)
+          .forEach(record => {
+            nextAttemptAt = Math.min(
+              nextAttemptAt,
+              record.leaseUntil > Date.now() ? record.leaseUntil : record.nextAttemptAt,
+            );
+          });
+      } catch (error) {
+        console.error("Pending comments could not be synchronized.", error);
+        nextAttemptAt = Date.now() + 60_000;
+      } finally {
+        pendingCommentSyncInProgress = false;
+        if (Number.isFinite(nextAttemptAt)) schedulePendingCommentSync(nextAttemptAt);
+      }
+    }
+
+    function initializePendingCommentSync() {
+      if (pendingCommentSyncListenersAttached) {
+        void syncPendingComments();
+        return;
+      }
+      pendingCommentSyncListenersAttached = true;
+      const retry = () => { void syncPendingComments(); };
+      window.addEventListener("online", retry);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") retry();
+      });
+      void syncPendingComments();
+    }
 
     function getCommentsToRender(comments) {
       if (!comments || !comments.length) return [];
@@ -266,6 +767,8 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
 const IMGBB_API_KEY = '751e8d146b32b8a00499aef04f568e30';
 
 async function uploadToImgBB(base64) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
   try {
     const formData = new FormData();
     formData.append(
@@ -276,7 +779,8 @@ async function uploadToImgBB(base64) {
       `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
       {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: controller.signal
       }
     );
     const result = await response.json();
@@ -291,8 +795,10 @@ async function uploadToImgBB(base64) {
     console.error('ImgBB upload gagal:', result);
     return null;
   } catch (err) {
-    console.error('ImgBB error:', err);
+    console.error(controller.signal.aborted ? 'ImgBB upload timed out.' : 'ImgBB error:', err);
     return null;
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -2256,6 +2762,7 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
   if (userData.customFontStyle) fontClass = userData.customFontStyle;
 
   div.className = `comment ${shapeClass} ${borderClass} ${fontClass}`;
+  if (comment.pendingSync) div.classList.add('comment-pending-sync');
   // ====================================================================
 
   div.dataset.replyCount = 0;
@@ -2384,6 +2891,7 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
     ${imageHtml}
     <div class="comment-date">
       ${comment.date ? new Date(comment.date.toDate ? comment.date.toDate() : comment.date).toLocaleString() : 'Loading all...'}
+      ${comment.pendingSync ? '<span class="comment-sync-status"> · Saved locally, syncing…</span>' : ''}
     </div>
 
     <div class="comment-actions">
@@ -2762,6 +3270,7 @@ function renderComments(comments) {
   const list = document.getElementById('comments-list');
   if (!list) return;
 
+  list.setAttribute("aria-busy", String(Boolean(list.querySelector("#comment-loading"))));
   window.__commentsCache = comments;
   const fullCount = comments.length;
   comments = getCommentsToRender(comments);
@@ -2809,10 +3318,34 @@ function renderComments(comments) {
       const textEl = oldEl.querySelector('.comment-text');
       if (textEl) textEl.innerHTML = parseMarkdown(comment.text || '');
 
+      const currentImage = oldEl.querySelector('.comment-image');
+      if (comment.image) {
+        if (currentImage) {
+          currentImage.src = comment.image;
+        } else {
+          const image = document.createElement('img');
+          image.src = comment.image;
+          image.className = 'comment-image';
+          image.loading = 'lazy';
+          image.decoding = 'async';
+          oldEl.querySelector('.comment-text')?.after(image);
+        }
+      } else {
+        currentImage?.remove();
+      }
+
+      oldEl.classList.toggle('comment-pending-sync', comment.pendingSync === true);
       const dateEl = oldEl.querySelector('.comment-date');
       if (dateEl) {
-        dateEl.textContent = comment.date ? 
-          new Date(comment.date.toDate ? comment.date.toDate() : comment.date).toLocaleString() : 'Loading all...';
+        dateEl.textContent = comment.date
+          ? new Date(comment.date.toDate ? comment.date.toDate() : comment.date).toLocaleString()
+          : 'Loading all...';
+        if (comment.pendingSync) {
+          const syncStatus = document.createElement('span');
+          syncStatus.className = 'comment-sync-status';
+          syncStatus.textContent = ' · Saved locally, syncing…';
+          dateEl.appendChild(syncStatus);
+        }
       }
 
       elements[comment.id] = oldEl;
@@ -2888,6 +3421,8 @@ comments.forEach(comment => {
   attachLikeDislikeListeners();
   attachReportListeners();
   sortComments();
+  const loadingSkeleton = list.querySelector("#comment-loading");
+  if (loadingSkeleton) list.appendChild(loadingSkeleton);
   attachQuoteListeners();
   initMentionSystem();
   attachPinListeners();
@@ -3006,8 +3541,9 @@ async function startRealtimeListener() {
   const commentsList = document.getElementById("comments-list");
   if (!commentsList) return;
 
+  void restorePendingCommentsForPost(postId);
   void listenCommentCount();
-  renderCommentLoadingSkeleton(commentsList, false);
+  renderCommentLoadingSkeleton(commentsList);
   setFormDisabled(true);
 
   try {
@@ -3033,10 +3569,14 @@ async function startRealtimeListener() {
       const currentComments = window.__commentsCache || [];
       const mergedById = new Map(
         currentComments
-          .filter(comment => comment.pinned !== true)
+          .map(applyPendingCommentMutation)
+          .filter(comment => comment && comment.pinned !== true)
           .map(comment => [comment.id, comment])
       );
-      pinnedComments.forEach(comment => mergedById.set(comment.id, comment));
+      pinnedComments.forEach(comment => {
+        const updatedComment = applyPendingCommentMutation(comment);
+        if (updatedComment) mergedById.set(updatedComment.id, updatedComment);
+      });
       const mergedComments = [...mergedById.values()];
       window.__commentsCache = mergedComments;
       if (!mergedComments.length) return;
@@ -3062,14 +3602,34 @@ async function startRealtimeListener() {
       lastVisible = recentDocs.length ? recentDocs[recentDocs.length - 1] : null;
       noMoreData = snapshot.docs.length <= INITIAL_COMMENT_BATCH;
       loadMoreError = false;
-      const recentComments = recentDocs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const cachedPendingIds = new Set(
+        (window.__commentsCache || [])
+          .filter(comment => comment.pendingSync === true)
+          .map(comment => comment.id)
+      );
+      const recentComments = recentDocs
+        .map(doc => applyPendingCommentMutation({ id: doc.id, ...doc.data() }))
+        .filter(Boolean)
+        .map(comment => ({
+          ...comment,
+          ...(cachedPendingIds.has(comment.id) || pendingCommentEditUpdates.has(comment.id)
+            ? { pendingSync: true }
+            : {})
+        }));
       const recentIds = new Set(recentComments.map(comment => comment.id));
       const previouslyLoaded = (window.__commentsCache || []).filter(
         comment =>
+          !pendingCommentDeleteIds.has(comment.id) &&
           !recentIds.has(comment.id) &&
           (window.__showAllComments || comment.pinned === true)
       );
-      const comments = [...recentComments, ...previouslyLoaded];
+      const pendingComments = (window.__commentsCache || []).filter(
+        comment =>
+          comment.pendingSync === true &&
+          !pendingCommentDeleteIds.has(comment.id) &&
+          !recentIds.has(comment.id)
+      );
+      const comments = [...recentComments, ...previouslyLoaded, ...pendingComments];
       window.__commentsCache = comments;
 
       const visibleComments = getCommentsToRender(comments);
@@ -3082,6 +3642,7 @@ async function startRealtimeListener() {
       if (loadingEl) loadingEl.remove();
 
       if (comments.length === 0) {
+        commentsList.setAttribute("aria-busy", "false");
         commentsList.innerHTML = `
           <div class="no-comments" style="text-align:center; padding:20px; opacity:.7;">
             Belum ada komentar
@@ -3151,7 +3712,7 @@ async function startRealtimeListener() {
       commentLoadingTimeout = null;
       if (generation !== commentsLoadGeneration || hasInitialSnapshot) return;
 
-      renderCommentLoadingSkeleton(commentsList, true);
+      renderCommentLoadingSkeleton(commentsList);
       setFormDisabled(false);
       if (!unsubscribed && unsubscribeComments) {
         unsubscribeComments();
@@ -3173,6 +3734,7 @@ async function startRealtimeListener() {
 }
 
 function renderCommentLoadError(commentsList, message) {
+  commentsList.setAttribute("aria-busy", "false");
   const container = document.createElement("div");
   container.className = "comment-load-error";
   container.setAttribute("role", "status");
@@ -3191,7 +3753,8 @@ function renderCommentLoadError(commentsList, message) {
   commentsList.replaceChildren(container);
 }
 
-function renderCommentLoadingSkeleton(commentsList, showRetry) {
+function renderCommentLoadingSkeleton(commentsList) {
+  commentsList.setAttribute("aria-busy", "true");
   const wrapper = document.createElement("div");
   wrapper.id = "comment-loading";
   wrapper.className = "comment-loading-skeleton-list";
@@ -3209,16 +3772,14 @@ function renderCommentLoadingSkeleton(commentsList, showRetry) {
     </article>
   `).join("");
 
-  if (showRetry) {
-    const retryButton = document.createElement("button");
-    retryButton.type = "button";
-    retryButton.className = "comment-loading-retry";
-    retryButton.textContent = "Coba lagi";
-    retryButton.addEventListener("click", () => void startRealtimeListener());
-    wrapper.appendChild(retryButton);
-  }
-
-  commentsList.replaceChildren(wrapper);
+  const pendingIds = new Set(
+    (window.__commentsCache || [])
+      .filter(comment => comment.pendingSync === true)
+      .map(comment => comment.id)
+  );
+  const existingComments = Array.from(commentsList.querySelectorAll(":scope > .comment"))
+    .filter(comment => pendingIds.has(comment.dataset.commentId));
+  commentsList.replaceChildren(...existingComments, wrapper);
 }
 
 window.setCommentCommunityPageId = function(pageId) {
@@ -3274,7 +3835,8 @@ async function loadMoreComments() {
     const currentComments = window.__commentsCache || [];
     const knownIds = new Set(currentComments.map(comment => comment.id));
     const nextComments = nextDocs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .map(doc => applyPendingCommentMutation({ id: doc.id, ...doc.data() }))
+      .filter(Boolean)
       .filter(comment => !knownIds.has(comment.id));
     const allComments = [...currentComments, ...nextComments];
     window.__commentsCache = allComments;
@@ -3333,8 +3895,6 @@ document.querySelectorAll(".sort-btn").forEach(b=>{
 });
 
 function sortComments() {
-  if (sortingLocked) return;
-  
   const commentsList = document.getElementById("comments-list");
   if (!commentsList) return;
 
@@ -3460,7 +4020,7 @@ function generateUsername(user, fallbackName = '') {
     username: username,
     text: text.trim(),
     image: image || null,
-    date: firebase.firestore.FieldValue.serverTimestamp(),
+    date: Date.now(),
     postUrl: `${window.location.pathname}${window.location.search}`,
     postTitle: document.title,
     parentId: parentId || null,
@@ -3480,18 +4040,42 @@ function generateUsername(user, fallbackName = '') {
     };
   }
 
-  let commentSaved = false;
   try {
-    sortingLocked = true;
-
-    const ref = await db.collection('comments')
+    const commentRef = db.collection('comments')
       .doc(postId)
       .collection('postComments')
-      .add(newComment);
-    commentSaved = true;
-    void listenCommentCount();
+      .doc();
+    const commentId = commentRef.id;
+    const record = {
+      key: `${postId}:${commentId}`,
+      postId,
+      commentId,
+      parentId: parentId || null,
+      isReply: isReply === true,
+      authUid: currentUser?.uid || null,
+      comment: { ...newComment, pendingSync: true },
+      attempts: 0,
+      nextAttemptAt: Date.now(),
+      updatedAt: Date.now(),
+      leaseOwner: "",
+      leaseUntil: 0
+    };
+    await writePendingCommentRecord(record);
 
-    console.log("Comment success:", ref.id);
+    const cachedComments = window.__commentsCache || [];
+    window.__commentsCache = [
+      { ...newComment, id: commentId, pendingSync: true },
+      ...cachedComments.filter(comment => comment.id !== commentId)
+    ];
+    window._forceCommentRerender = true;
+    renderComments(window.__commentsCache);
+    updateLoadMoreUI();
+    const countText = document.getElementById("comment-count")?.textContent || "";
+    const visibleCount = Number.parseInt(countText, 10);
+    safeUpdateCount(
+      Number.isFinite(visibleCount) ? visibleCount + 1 : window.__commentsCache.length
+    );
+    console.log("Comment saved locally:", commentId);
 
     if (typeof activeQuoteData !== 'undefined') {
       activeQuoteData = null;
@@ -3499,44 +4083,13 @@ function generateUsername(user, fallbackName = '') {
       if (ov) ov.remove();
     }
 
-        // ==================== POINTS + REPUTATION ====================
-    if (currentUser && currentUser.uid) {
-      const userRef = db.collection('userStats').doc(currentUser.uid);
-      const textLength = text.length;
-      const reputationGain = Math.floor(textLength / 1);
+    void syncPendingComments();
 
-      void userRef.set({
-        points: firebase.firestore.FieldValue.increment(isReply ? 2 : 1),
-        reputation: firebase.firestore.FieldValue.increment(reputationGain),
-        commentCount: firebase.firestore.FieldValue.increment(1)
-      }, { merge: true }).then(() => {
-        const earnedPoints = isReply ? 2 : 1;
-        if (!userStatsCache[currentUser.uid]) {
-          userStatsCache[currentUser.uid] = {};
-        }
-        userStatsCache[currentUser.uid].points = (userStatsCache[currentUser.uid].points || 0) + earnedPoints;
-        userStatsCache[currentUser.uid].reputation = (userStatsCache[currentUser.uid].reputation || 0) + reputationGain;
-        userStatsCache[currentUser.uid].commentCount = (userStatsCache[currentUser.uid].commentCount || 0) + 1;
-        console.log(`✅ User ${currentUser.uid} earned ${earnedPoints} points + ${reputationGain} reputation (${textLength} chars)`);
-      }).catch((syncError) => {
-        console.error("Comment was posted, but its user stats could not be synchronized.", syncError);
-      });
-    }
-
-    void addMentionNotifications(text).catch((syncError) => {
-      console.error("Comment was posted, but mention notifications could not be synchronized.", syncError);
-    });
-
-    setTimeout(() => {
-      sortingLocked = false;
-      sortComments();
-    }, 400);
     return true;
 
   } catch (err) {
-    console.error("Gagal kirim komentar:", err);
-    sortingLocked = false;
-    return commentSaved;
+    console.error("Comment could not be saved to IndexedDB.", err);
+    return false;
   }
 }
 
@@ -3694,44 +4247,64 @@ function initEditPreviewListeners() {
 initEditPreviewListeners();
 
     async function editComment(commentId, newText, newImage) {
-      const ref = db.collection('comments').doc(postId).collection('postComments').doc(commentId);
-      const update = { text: newText.trim(), date: firebase.firestore.FieldValue.serverTimestamp() };
-      if (window.removeImageOnEdit) update.image = null;
-      else if (newImage) update.image = newImage;
+      const updates = { text: newText.trim() };
+      if (window.removeImageOnEdit) updates.image = null;
+      else if (newImage) updates.image = newImage;
       try {
-        await ref.update(update);
+        await queueCommentMutationRecord("edit", commentId, updates);
+        pendingCommentEditUpdates.set(commentId, updates);
+        window.__commentsCache = (window.__commentsCache || []).map(comment =>
+          comment.id === commentId ? { ...comment, ...updates, pendingSync: true } : comment
+        );
+        window._forceCommentRerender = true;
+        renderComments(window.__commentsCache);
         delete window.removeImageOnEdit;
-      } catch (e) {
-        console.error('Gagal edit:', e);
-        alert('Gagal edit: ' + e.message);
+        void syncPendingComments();
+        return true;
+      } catch (error) {
+        console.error("Could not save the comment edit locally.", error);
+        alert("Gagal menyimpan edit komentar: " + error.message);
+        return false;
       }
     }
 
     async function deleteComment(commentId) {
-  if (!commentId) return;
+      if (!commentId) return;
+      const comment = (window.__commentsCache || []).find(item => item.id === commentId);
+      if (
+        !comment ||
+        !currentUser ||
+        (comment.uid !== currentUser.uid && comment.email !== currentUser.email)
+      ) return;
+      if (!confirm('Apakah Anda yakin ingin menghapus komentar ini?')) return;
 
-  if (!confirm('Apakah Anda yakin ingin menghapus komentar ini?')) {
-    return;
-  }
-
-  const commentRef = db.collection('comments')
-    .doc(postId)
-    .collection('postComments')
-    .doc(commentId);
-
-  try {
-    await commentRef.delete();
-    void listenCommentCount();
-    console.log("✅ Komentar berhasil dihapus");
-  } catch (e) {
-    console.error('Gagal delete:', e);
-    if (e.code === 'permission-denied') {
-      console.log("Permission error, tapi komentar biasanya sudah terhapus.");
-    } else {
-      alert('Gagal menghapus: ' + e.message);
+      try {
+        const result = await queueCommentMutationRecord("delete", commentId);
+        pendingCommentEditUpdates.delete(commentId);
+        if (result.queuedAsMutation) pendingCommentDeleteIds.add(commentId);
+        window.__commentsCache = (window.__commentsCache || [])
+          .filter(item => item.id !== commentId);
+        window._forceCommentRerender = true;
+        renderComments(window.__commentsCache);
+        if (!window.__commentsCache.length) {
+          const commentsList = document.getElementById("comments-list");
+          if (commentsList) {
+            commentsList.innerHTML = `
+              <div class="no-comments" style="text-align:center; padding:20px; opacity:.7;">
+                Belum ada komentar
+              </div>
+            `;
+          }
+        }
+        const countText = document.getElementById("comment-count")?.textContent || "";
+        const visibleCount = Number.parseInt(countText, 10);
+        if (Number.isFinite(visibleCount)) safeUpdateCount(Math.max(0, visibleCount - 1));
+        void syncPendingComments();
+      } catch (error) {
+        console.error("Could not save the comment deletion locally.", error);
+        alert("Gagal menghapus komentar: " + error.message);
+      }
     }
-  }
-}
 
 document.addEventListener('click', (e) => {
   const delBtn = e.target.closest('.delete-button');
@@ -3768,14 +4341,19 @@ function attachEditButtons() {
     return;
   }
 
-  db.collection('comments')
-    .doc(postId)
-    .collection('postComments')
-    .doc(commentId)
-    .get()
-    .then(doc => {
-      if (doc.exists) {
-        const comment = doc.data();
+  const cachedComment = (window.__commentsCache || []).find(comment => comment.id === commentId);
+  const loadComment = cachedComment
+    ? Promise.resolve(cachedComment)
+    : db.collection('comments')
+        .doc(postId)
+        .collection('postComments')
+        .doc(commentId)
+        .get()
+        .then(doc => doc.exists ? { id: doc.id, ...doc.data() } : null);
+
+  loadComment
+    .then(comment => {
+      if (comment) {
         const textarea = editContainer.querySelector('.edit-text');
     
         let editText = comment.text || '';
@@ -3818,6 +4396,7 @@ function attachEditButtons() {
         }
 
         editContainer.style.display = 'block';
+        delete window.removeImageOnEdit;
         textarea.focus();
       } else {
         alert("Komentar tidak ditemukan");
@@ -3953,25 +4532,6 @@ if (fileInput) {
             return;
           }
 
-          db.collection('comments')
-            .doc(postId)
-            .collection('postComments')
-            .doc(parentId)
-            .get()
-            .then(doc => {
-              if (doc.exists) {
-                const parentComment = { id: doc.id, ...doc.data() };
-
-                if (
-                  currentUser &&
-                  (parentComment.uid !== currentUser.uid || DEBUG_SELF_NOTIFICATION)
-                ) {
-                  addReplyNotification(parentComment, text);
-                }
-              }
-            })
-            .catch(err => console.error('Gagal ambil parent comment:', err));
-
           form.reset();
           textarea.dataset.pastedImage = '';
           previewContainer.style.display = 'none';
@@ -4044,50 +4604,31 @@ if (fileInput) {
       )
     );
 
-    form.onsubmit = e => {
-
+    form.onsubmit = async e => {
       e.preventDefault();
-
-      const commentId =
-        form.dataset.commentId;
-      const text =
-        textarea.value.trim();
-
+      const commentId = form.dataset.commentId;
+      const text = textarea.value.trim();
       if (!text || !commentId) return;
 
-      let image = null;
-
-      if (textarea.dataset.pastedImage) {
-
-        image = textarea.dataset.pastedImage;
-
-      } else {
-
-        const fileInput =
-          form.querySelector('.reply-image');
-
-        if (fileInput && fileInput.files[0]) {
-
-          (async () => {
-       const imageUrl =
-         await uploadToImgBB(fileInput.files[0]);
-
-       if (!imageUrl) return;
-       editComment(commentId, text, imageUrl);
-       form.reset();
-
-            form.closest('.edit-form-container').style.display = 'none';
-            document.getElementById('comment-form-container').style.display = 'block';
+      let image = textarea.dataset.pastedImage || null;
+      const fileInput = form.querySelector('.reply-image');
+      if (!image && fileInput?.files[0]) {
+        try {
+          image = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error("Could not read the selected image."));
+            reader.readAsDataURL(fileInput.files[0]);
           });
-
+        } catch (error) {
+          console.error("Could not read the edited comment image.", error);
+          alert("Gagal membaca gambar komentar: " + error.message);
           return;
         }
       }
 
-      editComment(commentId, text, image);
-
+      if (!(await editComment(commentId, text, image))) return;
       form.reset();
-
       textarea.dataset.pastedImage = '';
       previewContainer.style.display = 'none';
       form.closest('.edit-form-container').style.display = 'none';
@@ -4099,6 +4640,7 @@ if (fileInput) {
 
       document.getElementById('comment-form-container').style.display = 'block';
       textarea.dataset.pastedImage = '';
+      delete window.removeImageOnEdit;
     };
 
     if (removeBtn) {
@@ -4241,6 +4783,8 @@ if (commentFileInput) {
 
     auth.onAuthStateChanged(user => {
   currentUser = user;
+  initializePendingCommentSync();
+  void restorePendingCommentsForPost(postId);
 
   if (unsubscribeUserStats) {
     unsubscribeUserStats();

@@ -1494,6 +1494,12 @@ html.no-animations .comment.transcendent,
   margin-top: 8px;
 }
 
+.comment-sync-status {
+  color: var(--muted, #778092);
+  font-size: .9em;
+  font-style: italic;
+}
+
 .left-actions {
   display: flex;
   gap: 4px;
