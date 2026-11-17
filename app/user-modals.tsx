@@ -521,7 +521,7 @@ function readPendingNotificationReadKeys(uid: string): string[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed)
-      ? parsed.filter((key: unknown): key is string => typeof key === "string")
+      ? [...new Set(parsed.filter((key: unknown): key is string => typeof key === "string"))]
       : [];
   } catch (error) {
     console.warn("Pending notification read states could not be read.", error);
@@ -532,8 +532,9 @@ function readPendingNotificationReadKeys(uid: string): string[] {
 function writePendingNotificationReadKeys(uid: string, keys: string[]): void {
   try {
     const key = `${NOTIFICATION_READ_QUEUE_PREFIX}${uid}`;
-    if (keys.length) {
-      window.localStorage.setItem(key, JSON.stringify([...new Set(keys)]));
+    const deduped = [...new Set(keys)];
+    if (deduped.length) {
+      window.localStorage.setItem(key, JSON.stringify(deduped));
     } else {
       window.localStorage.removeItem(key);
     }
@@ -803,10 +804,11 @@ function initializeUserModals(): () => void {
     try {
       const synchronizedKeys = await firestore.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(reference);
-        if (!snapshot.exists) return [];
+        if (!snapshot.exists) return [...pendingKeySet];
         const data = asRecord(snapshot.data());
         const updates: DataRecord = {};
         const matchedKeys = new Set<string>();
+        const seenKeys = new Set<string>();
         let changed = false;
         for (const [field, type] of [["replies", "reply"], ["mentions", "mention"]] as const) {
           const notifications = data[field];
@@ -814,6 +816,7 @@ function initializeUserModals(): () => void {
           updates[field] = notifications.map((notification) => {
             const record = asRecord(notification);
             const key = getNotificationKey(record, type);
+            seenKeys.add(key);
             if (!pendingKeySet.has(key)) return notification;
             matchedKeys.add(key);
             if (record.read === true) return notification;
@@ -822,7 +825,7 @@ function initializeUserModals(): () => void {
           });
         }
         if (changed) transaction.set(reference, updates, { merge: true });
-        return [...matchedKeys];
+        return [...new Set([...matchedKeys, ...[...pendingKeySet].filter((key) => !seenKeys.has(key))])];
       });
       const synchronizedKeySet = new Set(synchronizedKeys);
       const remainingKeys = readPendingNotificationReadKeys(uid)
@@ -868,10 +871,9 @@ function initializeUserModals(): () => void {
     );
     writeStoredNotifications(uid, updated);
     if (!unreadKeys.length) return updated;
-    writePendingNotificationReadKeys(uid, [
-      ...readPendingNotificationReadKeys(uid),
-      ...unreadKeys,
-    ]);
+    const pendingKeys = readPendingNotificationReadKeys(uid);
+    const queuedKeys = [...new Set([...pendingKeys, ...unreadKeys])];
+    writePendingNotificationReadKeys(uid, queuedKeys);
     window.dispatchEvent(new CustomEvent("mikoroku:notifications-read", {
       detail: { keys: unreadKeys },
     }));

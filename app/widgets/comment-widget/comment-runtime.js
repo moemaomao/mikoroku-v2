@@ -2032,11 +2032,19 @@ async function addMentionNotifications(text) {
   }
 }
 
+    let unsubscribeUserNotifications = null;
+
     function subscribeToUserNotifications() {
+  if (unsubscribeUserNotifications) {
+    unsubscribeUserNotifications();
+    unsubscribeUserNotifications = null;
+  }
   if (!currentUser) return;
-  db.collection('notifications')
-    .doc(currentUser.uid)
+  const uid = currentUser.uid;
+  unsubscribeUserNotifications = db.collection('notifications')
+    .doc(uid)
     .onSnapshot(doc => {
+      if (currentUser?.uid !== uid) return;
 
       if (!doc.exists) {
 
@@ -2051,7 +2059,7 @@ async function addMentionNotifications(text) {
       console.log("NOTIF DATA:", data);
       const replies = data.replies || [];
       const mentions = data.mentions || [];
-      const locallyReadKeys = getLocallyReadNotificationKeys(currentUser.uid);
+      const locallyReadKeys = getLocallyReadNotificationKeys(uid);
 
       replyNotifications = [
         ...replies.map(r => ({
@@ -4822,6 +4830,10 @@ if (commentFileInput) {
 startRealtimeListener();
 
     auth.onAuthStateChanged(user => {
+      if (unsubscribeUserNotifications) {
+        unsubscribeUserNotifications();
+        unsubscribeUserNotifications = null;
+      }
   currentUser = user;
   initializePendingCommentSync();
   void restorePendingCommentsForPost(postId);
