@@ -1,14 +1,14 @@
 import { normalizeChapterNumber } from "../../lib/chapter-number";
 
 const CHAPTER_CACHE_PREFIX = "chapters_";
-const CHAPTER_CACHE_TTL = 30 * 60 * 1000;
+const CHAPTER_CACHE_TTL = 5 * 60 * 1000;
 const MAX_CACHED_CHAPTERS_PER_SERIES = 200;
 const MAX_CHAPTER_CACHE_ENTRY_BYTES = 128 * 1024;
 const MAX_TOTAL_CHAPTER_CACHE_BYTES = 1024 * 1024;
 const LOCAL_STORAGE_HEADROOM_BYTES = 64 * 1024;
 const SHARED_CHAPTER_CACHE_DB = "mikoroku-chapter-cache";
 const SHARED_CHAPTER_CACHE_STORE = "chapters";
-const SHARED_CHAPTER_CACHE_TTL = 30 * 60 * 1000;
+const SHARED_CHAPTER_CACHE_TTL = 5 * 60 * 1000;
 const MAX_SHARED_CHAPTERS_PER_SERIES = 1000;
 
 export type SharedChapterSource = "blogger" | "blogger2" | "firestore";

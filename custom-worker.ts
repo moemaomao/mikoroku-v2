@@ -43,7 +43,7 @@ const BLOGGER_DOMAINS = {
   blogger2: "https://www.yomidays.my.id",
 } as const;
 
-const BLOGGER_CHAPTERS_TTL = 20 * 60;
+const BLOGGER_CHAPTERS_TTL = 5 * 60;
 const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
@@ -1035,7 +1035,6 @@ function corsFor(request: Request): HeadersInit {
 async function handleBloggerChaptersProxy(
   request: Request,
   env: CloudflareEnv,
-  ctx: ExecutionContext,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   if (url.pathname !== "/api/blogger/chapters") return null;
@@ -1100,7 +1099,7 @@ async function handleBloggerChaptersProxy(
         "content-type": "application/json; charset=utf-8",
         "cache-control":
           cacheStatus === "STALE"
-            ? "public, max-age=60, s-maxage=60, stale-while-revalidate=60"
+            ? "public, max-age=0, s-maxage=0, stale-while-revalidate=60"
             : `public, max-age=${BLOGGER_CHAPTERS_BROWSER_MAX_AGE}, s-maxage=${BLOGGER_CHAPTERS_TTL}, stale-while-revalidate=60`,
         "x-cache": cacheStatus,
         "x-content-type-options": "nosniff",
@@ -1132,12 +1131,22 @@ async function handleBloggerChaptersProxy(
       return respond(body, "HIT");
     }
 
-    ctx.waitUntil(
-      fetchAndCacheBloggerChapters(kv, source, title).catch((error: unknown) => {
-        console.error("[worker blogger-proxy] background refresh failed", error);
-      }),
-    );
-    return respond({ ...body, stale: true }, "STALE");
+    try {
+      const payload = await fetchAndCacheBloggerChapters(kv, source, title);
+      return respond(
+        {
+          chapters: payload.chapters,
+          source,
+          title,
+          cachedAt: payload.cachedAt,
+          count: payload.chapters.length,
+        },
+        "MISS",
+      );
+    } catch (error) {
+      console.error("[worker blogger-proxy] refresh failed; serving stale chapters", error);
+      return respond({ ...body, stale: true }, "STALE");
+    }
   }
 
   try {
@@ -1256,7 +1265,7 @@ export default {
     if (catalog) return catalog;
     const mangaDetail = await handleMangaDetailProxy(request, env, ctx);
     if (mangaDetail) return mangaDetail;
-    const proxied = await handleBloggerChaptersProxy(request, env, ctx);
+    const proxied = await handleBloggerChaptersProxy(request, env);
     if (proxied) return proxied;
     const response = await handler.fetch(request, env, ctx);
     return serveSocialMetadataFallback(request, response);

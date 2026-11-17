@@ -804,6 +804,7 @@ async function loadBloggerChapterSource(
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
     signal,
+    cache: "no-store",
     headers: { Accept: "application/json" },
   });
 
@@ -1528,7 +1529,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     if (cached) {
       try {
         const parsed = JSON.parse(cached) as { time?: number; data?: Chapter[] };
-        const valid = Date.now() - (parsed.time || 0) < 30 * 60 * 1000
+        const valid = Date.now() - (parsed.time || 0) < 5 * 60 * 1000
           ? parsed.data || []
           : [];
         cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
@@ -1570,7 +1571,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         const key = chapterSourceCacheKey(slug, chapterSource);
         const memoryCache = chapterSourceCacheRef.current;
         const cached = memoryCache.get(key);
-        if (cached && (chapterSource === "firestore" || chaptersHaveThumbnails(cached))) {
+        if (cached && chapterSource === "firestore") {
           try {
             await mergeSharedChapterCache(slug, chapterSource, cached);
           } catch (error) {
@@ -1587,7 +1588,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
             (chapterSource === "firestore" || chaptersHaveThumbnails(sharedCachedChapters))
           ) {
             memoryCache.set(key, sharedCachedChapters);
-            return sharedCachedChapters;
+            if (chapterSource === "firestore") return sharedCachedChapters;
           }
         } catch (error) {
           console.warn(`IndexedDB chapter cache could not be read for ${slug}.`, error);
