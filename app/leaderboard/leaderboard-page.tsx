@@ -453,7 +453,46 @@ export default function LeaderboardPage() {
         </header>
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-10 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400">Loading leaderboard...</div>
+          <div role="status" aria-label="Loading comment leaderboard" aria-busy="true">
+            <span className="sr-only">Loading leaderboard...</span>
+            <section aria-hidden="true" className="mb-8 grid grid-cols-3 gap-2 min-[900px]:grid-cols-6 min-[900px]:gap-3">
+              {Array.from({ length: 6 }, (_, index) => (
+                <div
+                  key={index}
+                  className="relative flex min-h-[162px] flex-col items-center rounded-xl border border-slate-200/80 bg-white/70 p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  <span className="absolute right-3 top-3 h-5 w-5 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                  <span className="mt-2 h-12 w-12 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                  <span className="mt-3 h-3 w-3/4 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                  <span className="mt-2 h-2.5 w-1/2 animate-pulse rounded bg-slate-200/80 dark:bg-white/[0.07]" />
+                  <span className="mt-4 h-5 w-12 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                  <span className="mt-1 h-2 w-14 animate-pulse rounded bg-slate-200/80 dark:bg-white/[0.07]" />
+                </div>
+              ))}
+            </section>
+            <section className="rounded-2xl border border-slate-200/80 bg-transparent p-4 shadow-sm dark:border-white/10 sm:p-5">
+              <div className="border-b border-slate-200/80 px-5 py-4 dark:border-white/10">
+                <span className="block h-5 w-48 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                <span className="mt-2 block h-3 w-64 max-w-full animate-pulse rounded bg-slate-200/80 dark:bg-white/[0.07]" />
+              </div>
+              <ol className="mt-4 grid gap-3 sm:grid-cols-2">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <li
+                    key={index}
+                    className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200/80 bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04] sm:gap-4"
+                  >
+                    <span className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                    <span className="h-11 w-11 shrink-0 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block h-3 w-2/3 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                      <span className="mt-2 block h-2.5 w-1/2 animate-pulse rounded bg-slate-200/80 dark:bg-white/[0.07]" />
+                    </span>
+                    <span className="h-3 w-12 shrink-0 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
         ) : error ? (
           <div role="alert" className="rounded-2xl border border-red-300/60 bg-red-50 p-6 text-center text-sm text-red-700 dark:border-red-400/30 dark:bg-red-950/30 dark:text-red-200">{error}</div>
         ) : !topUsers.length ? (

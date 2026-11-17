@@ -32,6 +32,11 @@ import {
   type UserStatsProfileUpdatedDetail,
 } from "../../lib/user-stats-cache";
 import {
+  getPendingProfileBanner,
+  PROFILE_BANNER_SYNCED_EVENT,
+  queueProfileBanner,
+} from "../../lib/profile-banner-sync";
+import {
   getCachedReadingStats,
   READING_STATS_CACHE_TTL_MS,
   setCachedReadingStats,
@@ -596,23 +601,59 @@ function compressProfileBanner(file: File): Promise<Blob> {
   });
 }
 
-async function uploadProfileBanner(file: File): Promise<string> {
-  const compressedImage = await compressProfileBanner(file);
+function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), milliseconds);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function uploadProfileBanner(
+  file: File,
+  onStageChange: (stage: string) => void,
+): Promise<string> {
+  const compressedImage = await withTimeout(
+    compressProfileBanner(file),
+    30000,
+    "Banner image processing timed out. Try a smaller or different image.",
+  );
+  onStageChange("Uploading image...");
   const formData = new FormData();
   formData.append("image", compressedImage, "profile-banner.webp");
-  const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-    method: "POST",
-    body: formData,
-  });
-  const result: {
-    success?: boolean;
-    data?: { url?: string };
-    error?: { message?: string };
-  } = await response.json();
-  if (!response.ok || !result.success || !result.data?.url) {
-    throw new Error(result.error?.message || `Banner upload failed (${response.status}).`);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+    const result: {
+      success?: boolean;
+      data?: { url?: string };
+      error?: { message?: string };
+    } = await response.json();
+    if (!response.ok || !result.success || !result.data?.url) {
+      throw new Error(result.error?.message || `Banner upload failed (${response.status}).`);
+    }
+    return result.data.url;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("Banner upload timed out after 60 seconds. Check your connection and try again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return result.data.url;
 }
 
 function formatUpdatedAt(timestamp: number): string {
@@ -1422,6 +1463,95 @@ function ProfileFollowControls({
   );
 }
 
+function StatsLoadingSkeleton() {
+  const shimmer = "animate-pulse rounded bg-slate-200 dark:bg-white/10";
+  const panel = "rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 dark:border-white/10 dark:bg-[#15151d]/85 sm:p-6";
+
+  return (
+    <div role="status" aria-label="Loading reader stats" aria-busy="true" className="space-y-5">
+      <span className="sr-only">Loading reader stats...</span>
+
+      <section className={`${panel} flex min-h-40 items-start gap-4 sm:p-7`}>
+        <div className={`${shimmer} size-16 shrink-0 rounded-2xl sm:size-20`} />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className={`${shimmer} h-3 w-24`} />
+          <div className={`${shimmer} h-7 w-48 max-w-3/4`} />
+          <div className={`${shimmer} h-3 w-36 max-w-2/3`} />
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className={`${shimmer} h-6 w-16`} />
+            ))}
+          </div>
+          <div className={`${shimmer} h-2 w-full`} />
+        </div>
+      </section>
+
+      <section className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4" aria-hidden="true">
+        {Array.from({ length: 8 }, (_, index) => (
+          <div key={index} className={`${panel} min-h-24 space-y-3`}>
+            <div className={`${shimmer} h-3 w-2/3`} />
+            <div className={`${shimmer} h-6 w-1/2`} />
+            <div className={`${shimmer} h-3 w-3/4`} />
+          </div>
+        ))}
+      </section>
+
+      {[0, 1].map((section) => (
+        <section key={section} className={panel} aria-hidden="true">
+          <div className={`${shimmer} h-5 w-40`} />
+          <div className={`${shimmer} mt-2 h-3 w-56 max-w-full`} />
+          <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index} className={`${shimmer} aspect-[3/4] rounded-2xl`} />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      <section className="grid gap-3 md:grid-cols-2" aria-hidden="true">
+        {Array.from({ length: 2 }, (_, index) => (
+          <div key={index} className={`${panel} flex min-h-64 flex-col items-center`}>
+            <div className={`${shimmer} mr-auto h-5 w-44`} />
+            <div className={`${shimmer} mt-6 size-36 rounded-full`} />
+            <div className={`${shimmer} mt-5 h-3 w-40`} />
+          </div>
+        ))}
+      </section>
+
+      <section className={panel} aria-hidden="true">
+        <div className={`${shimmer} h-5 w-40`} />
+        <div className="mt-6 grid h-44 grid-cols-7 items-end gap-2 sm:gap-4">
+          {[35, 65, 45, 80, 55, 30, 70].map((height, index) => (
+            <div key={index} className="flex h-full flex-col items-center justify-end gap-2">
+              <div className={`${shimmer} w-full rounded-t-md`} style={{ height: `${height}%` }} />
+              <div className={`${shimmer} h-3 w-full`} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {[0, 1].map((section) => (
+        <section key={section} className={panel} aria-hidden="true">
+          <div className={`${shimmer} h-5 w-44`} />
+          <div className={`${shimmer} mt-2 h-3 w-64 max-w-full`} />
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="flex items-center gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10">
+                <div className={`${shimmer} size-14 shrink-0 rounded-xl`} />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className={`${shimmer} h-4 w-3/4`} />
+                  <div className={`${shimmer} h-3 w-1/2`} />
+                  <div className={`${shimmer} h-2 w-full`} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [stats, setStats] = useState<PublicReadingStats | null>(null);
   const [error, setError] = useState("");
@@ -1429,7 +1559,9 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [visibleProgressCount, setVisibleProgressCount] = useState(10);
   const [isOwner, setIsOwner] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
+  const [bannerUploadStage, setBannerUploadStage] = useState("");
   const [bannerError, setBannerError] = useState("");
+  const [bannerSyncPending, setBannerSyncPending] = useState(false);
   const [statsSettingsOpen, setStatsSettingsOpen] = useState(false);
   const [hiddenStatsDraft, setHiddenStatsDraft] = useState<StatsSectionId[]>([]);
   const [statsSettingsError, setStatsSettingsError] = useState("");
@@ -1467,10 +1599,17 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       if (!active || refreshing || document.visibilityState === "hidden") return;
       refreshing = true;
       try {
-        const [result, unlockedMedals] = await Promise.all([
+        const [loadedResult, unlockedMedals] = await Promise.all([
           loadPublicReadingStats(uid),
           getUnlockedMedals(),
         ]);
+        const pendingBanner = isOwner ? getPendingProfileBanner(uid) : null;
+        const result = pendingBanner
+          ? {
+            ...loadedResult,
+            profile: { ...loadedResult.profile, profileBanner: pendingBanner.url },
+          }
+          : loadedResult;
         if (!active) return;
         const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
         const localChapterTotal = isOwner ? getLocalChapterTotal(uid) : 0;
@@ -1556,9 +1695,11 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
         ]);
         if (!active) return;
         const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
-        const freshProfile = cachedProfile?.version === 2 && !cachedProfile.stale
-          ? cachedProfile.data
-          : null;
+        const pendingBanner = isOwner ? getPendingProfileBanner(uid) : null;
+        const freshProfile = {
+          ...(cachedProfile?.version === 2 && !cachedProfile.stale ? cachedProfile.data : {}),
+          ...(pendingBanner ? { profileBanner: pendingBanner.url } : {}),
+        };
         const cachedStats = cached?.data
           ? {
             ...cached.data,
@@ -1630,8 +1771,15 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     };
 
     window.addEventListener(USER_STATS_PROFILE_UPDATED_EVENT, onUserStatsProfileUpdated);
+    const onBannerSynced = (event: Event) => {
+      const { uid: syncedUid } = (event as CustomEvent<{ uid: string }>).detail;
+      if (syncedUid === uid) setBannerSyncPending(false);
+    };
+    window.addEventListener(PROFILE_BANNER_SYNCED_EVENT, onBannerSynced);
+    setBannerSyncPending(Boolean(getPendingProfileBanner(uid)));
     return () => {
       window.removeEventListener(USER_STATS_PROFILE_UPDATED_EVENT, onUserStatsProfileUpdated);
+      window.removeEventListener(PROFILE_BANNER_SYNCED_EVENT, onBannerSynced);
     };
   }, [uid]);
 
@@ -1723,25 +1871,29 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     try {
       const firebase = (window as ProfileBannerWindow).firebase;
       const user = firebase?.auth?.().currentUser;
-      const firestore = firebase?.firestore?.();
-      if (!user || user.uid !== uid || !firestore) {
+      if (!user || user.uid !== uid) {
         throw new Error("Sign in as the profile owner to upload a banner.");
       }
 
-      const imageUrl = await uploadProfileBanner(file);
+      setBannerUploadStage("Compressing image...");
+      const imageUrl = await uploadProfileBanner(file, setBannerUploadStage);
       if (firebase.auth?.().currentUser?.uid !== uid) {
         throw new Error("The signed-in account changed before the banner was saved. Please try again.");
       }
-      await firestore.collection("userStats").doc(uid).set({ profileBanner: imageUrl }, { merge: true });
-      if (stats) {
+      setBannerUploadStage("Saving locally...");
+      queueProfileBanner(uid, imageUrl);
+      cacheUserStatsProfile(uid, { profileBanner: imageUrl });
+      setStats((current) => {
+        if (!current) return current;
         const updatedStats = {
-          ...stats,
-          profile: { ...stats.profile, profileBanner: imageUrl },
+          ...current,
+          profile: { ...current.profile, profileBanner: imageUrl },
         };
-        setStats(updatedStats);
+        statsRef.current = updatedStats;
         void setCachedReadingStats(uid, updatedStats, false);
-        cacheUserStatsProfile(uid, updatedStats.profile);
-      }
+        return updatedStats;
+      });
+      setBannerSyncPending(true);
       setBannerError("");
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
     } catch (uploadError) {
@@ -1751,6 +1903,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
         : "Banner upload failed. Please try again.");
     } finally {
       setBannerUploading(false);
+      setBannerUploadStage("");
       if (bannerInputRef.current) bannerInputRef.current.value = "";
     }
   }
@@ -1891,6 +2044,10 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       <SiteChrome showFooter={false} />
       <main className="route-page-background min-h-[calc(100vh-3.5rem)] px-3 pb-12 pt-6 text-slate-900 dark:text-zinc-100 sm:px-6">
         <div className="mx-auto max-w-6xl space-y-5">
+          {!stats && !error ? (
+            <StatsLoadingSkeleton />
+          ) : (
+            <>
           <section className="relative isolate overflow-hidden rounded-3xl border border-black/10 bg-white/80 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-sm dark:border-white/10 dark:bg-slate-950/80 dark:shadow-black/20 sm:p-7">
             {profileBanner && (
               <>
@@ -2051,14 +2208,6 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
             </section>
           )}
 
-          {!stats && !error && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading reader stats">
-              {Array.from({ length: 7 }, (_, index) => (
-                <div key={index} className="h-28 rounded-2xl border border-black/10 bg-white/70 dark:border-white/10 dark:bg-white/[0.04]" />
-              ))}
-            </div>
-          )}
-
           {stats && (
             <>
               {!hiddenStatsSections.includes("stat-cards") && (
@@ -2208,6 +2357,8 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
               )}
             </>
           )}
+            </>
+          )}
         </div>
       </main>
       {isOwner && statsSettingsOpen && (
@@ -2265,12 +2416,17 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                         <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
                       </svg>
                     )}
-                    {bannerUploading ? "Uploading..." : profileBanner ? "Change banner" : "Add banner"}
+                    {bannerUploading ? bannerUploadStage || "Uploading..." : profileBanner ? "Change banner" : "Add banner"}
                   </button>
                 </div>
                 {bannerError && (
                   <p role="alert" className="mt-3 rounded-lg bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-950/70 dark:text-red-100">
                     {bannerError}
+                  </p>
+                )}
+                {bannerSyncPending && (
+                  <p role="status" aria-live="polite" className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-100">
+                    Banner saved on this device. Syncing in the background when Firestore is available.
                   </p>
                 )}
               </section>

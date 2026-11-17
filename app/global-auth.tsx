@@ -3,14 +3,81 @@
 import { useEffect } from "react";
 import { syncReadingHistoryWithUser } from "../lib/reading-history";
 import { syncLocalReadMarksWithUser } from "../lib/reading-stats";
+import {
+  getPendingProfileBanner,
+  PROFILE_BANNER_QUEUED_EVENT,
+  syncPendingProfileBanner,
+  type ProfileBannerFirestore,
+} from "../lib/profile-banner-sync";
 
 type AuthProvider = {
   new (): unknown;
 };
 
+let profileBannerSyncUid = "";
+let profileBannerRetryTimer: number | undefined;
+let profileBannerSyncInProgress = false;
+let profileBannerListenersAttached = false;
+
 export default function GlobalAuth() {
   useEffect(() => {
     let authInitializationErrorLogged = false;
+
+    const clearProfileBannerRetry = () => {
+      if (profileBannerRetryTimer !== undefined) {
+        window.clearTimeout(profileBannerRetryTimer);
+        profileBannerRetryTimer = undefined;
+      }
+    };
+
+    const scheduleProfileBannerSync = (uid: string, nextAttemptAt: number) => {
+      clearProfileBannerRetry();
+      profileBannerRetryTimer = window.setTimeout(() => {
+        profileBannerRetryTimer = undefined;
+        void syncProfileBanner(uid);
+      }, Math.max(1000, nextAttemptAt - Date.now()));
+    };
+
+    const syncProfileBanner = async (uid = profileBannerSyncUid) => {
+      if (!uid || uid !== profileBannerSyncUid || profileBannerSyncInProgress) return;
+      const pending = getPendingProfileBanner(uid);
+      if (!pending) {
+        clearProfileBannerRetry();
+        return;
+      }
+      if (!navigator.onLine) return;
+      if (pending.nextAttemptAt > Date.now()) {
+        scheduleProfileBannerSync(uid, pending.nextAttemptAt);
+        return;
+      }
+
+      profileBannerSyncInProgress = true;
+      try {
+        const firebase = window.firebase as typeof window.firebase & {
+          auth?: () => { currentUser: { uid: string } | null };
+          firestore?: () => ProfileBannerFirestore;
+        };
+        if (firebase?.auth?.().currentUser?.uid !== uid) return;
+        const firestore = firebase.firestore?.();
+        if (!firestore) return;
+
+        const remaining = await syncPendingProfileBanner(uid, firestore);
+        if (uid !== profileBannerSyncUid) return;
+        if (remaining) scheduleProfileBannerSync(uid, remaining.nextAttemptAt);
+        else clearProfileBannerRetry();
+      } catch (error) {
+        console.warn("Queued profile banner synchronization will retry later.", error);
+        if (uid === profileBannerSyncUid) {
+          scheduleProfileBannerSync(uid, Date.now() + 60_000);
+        }
+      } finally {
+        profileBannerSyncInProgress = false;
+        if (profileBannerSyncUid && profileBannerSyncUid !== uid) {
+          void syncProfileBanner(profileBannerSyncUid);
+        }
+      }
+    };
+
     const initialize = () => {
       const firebase = window.firebase;
       if (!firebase?.auth || !firebase.apps.some((app) => app.name === "[DEFAULT]")) return false;
@@ -55,6 +122,8 @@ export default function GlobalAuth() {
         window.__authListenerAttached = true;
         authInstance.onAuthStateChanged((user) => {
           window.currentUser = user;
+          profileBannerSyncUid = user?.uid || "";
+          clearProfileBannerRetry();
           void window.updateHeaderAuth?.();
           if (user) {
             void syncReadingHistoryWithUser(user.uid).catch((error: unknown) => {
@@ -63,7 +132,17 @@ export default function GlobalAuth() {
             void syncLocalReadMarksWithUser(user.uid).catch((error: unknown) => {
               console.error("Could not sync local chapter reads for the signed-in user.", error);
             });
+            void syncProfileBanner(user.uid);
           }
+        });
+      }
+      if (!profileBannerListenersAttached) {
+        profileBannerListenersAttached = true;
+        const retryPendingBanner = () => { void syncProfileBanner(); };
+        window.addEventListener("online", retryPendingBanner);
+        window.addEventListener(PROFILE_BANNER_QUEUED_EVENT, retryPendingBanner);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") retryPendingBanner();
         });
       }
       window.dispatchEvent(new Event("firebaseCompatReady"));
