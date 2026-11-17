@@ -288,6 +288,31 @@ async function fetchLatestMangaMetadataPayload({
     throw new DOMException("The operation was aborted.", "AbortError");
   }
 
+  let useFirestoreFallback = false;
+  if (!force) {
+    try {
+      const response = await fetch(SHARED_MANGA_METADATA_URL, {
+        signal,
+        cache: "no-cache",
+      });
+      if (response.ok) {
+        const payload: unknown = await response.json();
+        return parseMangaMetadataPayload(payload);
+      }
+      useFirestoreFallback =
+        process.env.NODE_ENV !== "production" &&
+        (response.status === 404 || response.status === 405);
+      if (!useFirestoreFallback) {
+        console.warn(`Shared manga metadata cache returned HTTP ${response.status}; trying metadata.json.`);
+      }
+    } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        throw error;
+      }
+      console.warn("Shared manga metadata cache is unavailable; trying metadata.json.", error);
+    }
+  }
+
   let staticError: unknown;
   try {
     const url = force ? `${MANGA_METADATA_URL}?t=${Date.now()}` : MANGA_METADATA_URL;
@@ -308,27 +333,28 @@ async function fetchLatestMangaMetadataPayload({
     throw new DOMException("The operation was aborted.", "AbortError");
   }
 
-  let useFirestoreFallback = false;
-  try {
-    const response = await fetch(SHARED_MANGA_METADATA_URL, {
-      signal,
-      cache: force ? "no-store" : "no-cache",
-    });
-    if (response.ok) {
-      const payload: unknown = await response.json();
-      return parseMangaMetadataPayload(payload);
+  if (force) {
+    try {
+      const response = await fetch(SHARED_MANGA_METADATA_URL, {
+        signal,
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload: unknown = await response.json();
+        return parseMangaMetadataPayload(payload);
+      }
+      useFirestoreFallback =
+        process.env.NODE_ENV !== "production" &&
+        (response.status === 404 || response.status === 405);
+      if (!useFirestoreFallback) {
+        console.warn(`Shared manga metadata cache returned HTTP ${response.status}.`);
+      }
+    } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        throw error;
+      }
+      console.warn("Shared manga metadata cache is unavailable.", error);
     }
-    useFirestoreFallback =
-      process.env.NODE_ENV !== "production" &&
-      (response.status === 404 || response.status === 405);
-    if (!useFirestoreFallback) {
-      console.warn(`Shared manga metadata cache returned HTTP ${response.status}.`);
-    }
-  } catch (error) {
-    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
-      throw error;
-    }
-    console.warn("Shared manga metadata cache is unavailable.", error);
   }
 
   if (signal?.aborted) {

@@ -750,13 +750,18 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
 
    async function listenCommentCount() {
   try {
-    const snapshot = await db
+    const comments = db
       .collection('comments')
       .doc(postId)
-      .collection('postComments')
-      .get();
+      .collection('postComments');
+    let count;
+    if (typeof comments.count === 'function') {
+      const snapshot = await comments.count().get();
+      count = snapshot.data().count;
+    } else {
+      count = (await comments.get()).size;
+    }
 
-    const count = snapshot.size;
     safeUpdateCount(count);
 
   } catch (err) {
@@ -2032,64 +2037,123 @@ async function addMentionNotifications(text) {
   }
 }
 
-    let unsubscribeUserNotifications = null;
+    const USER_DATA_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    let userDataRefreshTimer = null;
+    let userDataRefreshUid = null;
+    let userDataRefreshInFlight = false;
+    let lastUserDataRefreshAt = 0;
+
+    function applyUserNotifications(uid, snapshot) {
+  if (currentUser?.uid !== uid) return;
+  if (!snapshot.exists) {
+    unreadReplies = 0;
+    replyNotifications = [];
+    updateReplyBadge();
+    return;
+  }
+
+  const data = snapshot.data() || {};
+  const replies = data.replies || [];
+  const mentions = data.mentions || [];
+  const locallyReadKeys = getLocallyReadNotificationKeys(uid);
+
+  replyNotifications = [
+    ...replies.map(r => ({ ...r, notifType: 'reply' })),
+    ...mentions.map(m => ({ ...m, notifType: 'mention' }))
+  ].map(notification => {
+    const type = notification.notifType === 'mention' ? 'mention' : 'reply';
+    return locallyReadKeys.has(getNotificationKey(notification, type))
+      ? { ...notification, read: true }
+      : notification;
+  });
+  replyNotifications.sort((a, b) => (b.date || 0) - (a.date || 0));
+  unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
+  updateReplyBadge();
+}
+
+    function refreshUserNotifications(uid) {
+  if (!navigator.onLine || currentUser?.uid !== uid) return Promise.resolve();
+  return db.collection('notifications').doc(uid).get()
+    .then(snapshot => applyUserNotifications(uid, snapshot))
+    .catch(error => console.error("Notifications could not be refreshed.", error));
+}
+
+    function applyCurrentUserStats(uid, data) {
+  if (currentUser?.uid !== uid) return;
+  userStatsCache[uid] = data;
+  document.querySelectorAll(`[data-uid="${uid}"]`).forEach(badgeEl => {
+    const commentDiv = badgeEl.closest('.comment');
+    if (commentDiv) applyUserStats(commentDiv, badgeEl.id, data, uid);
+  });
+  updateTranscendentGear();
+}
+
+    function refreshCurrentUserStats(uid) {
+  if (!navigator.onLine || currentUser?.uid !== uid) return Promise.resolve();
+  return db.collection('userStats').doc(uid).get()
+    .then(snapshot => {
+      if (currentUser?.uid !== uid) return;
+      if (snapshot.exists) {
+        applyCurrentUserStats(uid, snapshot.data());
+      } else {
+        const gear = document.getElementById('transcendent-gear-auth');
+        if (gear) gear.style.display = 'none';
+      }
+    })
+    .catch(error => console.warn("Current user stats could not be refreshed.", error));
+}
+
+    function refreshUserData(uid) {
+  if (
+    userDataRefreshInFlight ||
+    userDataRefreshUid !== uid ||
+    currentUser?.uid !== uid ||
+    document.visibilityState !== 'visible'
+  ) return;
+  userDataRefreshInFlight = true;
+  lastUserDataRefreshAt = Date.now();
+  Promise.all([
+    refreshCurrentUserStats(uid),
+    refreshUserNotifications(uid)
+  ]).finally(() => {
+    userDataRefreshInFlight = false;
+  });
+}
+
+    function refreshUserDataOnVisibilityChange() {
+  if (
+    document.visibilityState === 'visible' &&
+    Date.now() - lastUserDataRefreshAt >= USER_DATA_REFRESH_INTERVAL_MS
+  ) {
+    refreshUserData(userDataRefreshUid);
+  }
+}
+
+    function stopUserDataRefresh() {
+  if (userDataRefreshTimer !== null) {
+    window.clearInterval(userDataRefreshTimer);
+    userDataRefreshTimer = null;
+  }
+  document.removeEventListener('visibilitychange', refreshUserDataOnVisibilityChange);
+  userDataRefreshUid = null;
+}
+
+    function startUserDataRefresh(uid) {
+  stopUserDataRefresh();
+  userDataRefreshUid = uid;
+  lastUserDataRefreshAt = Date.now();
+  userDataRefreshTimer = window.setInterval(
+    () => refreshUserData(uid),
+    USER_DATA_REFRESH_INTERVAL_MS
+  );
+  document.addEventListener('visibilitychange', refreshUserDataOnVisibilityChange);
+}
 
     function subscribeToUserNotifications() {
-  if (unsubscribeUserNotifications) {
-    unsubscribeUserNotifications();
-    unsubscribeUserNotifications = null;
-  }
   if (!currentUser) return;
   const uid = currentUser.uid;
-  unsubscribeUserNotifications = db.collection('notifications')
-    .doc(uid)
-    .onSnapshot(doc => {
-      if (currentUser?.uid !== uid) return;
-
-      if (!doc.exists) {
-
-        unreadReplies = 0;
-        replyNotifications = [];
-        updateReplyBadge();
-
-        return;
-      }
-
-      const data = doc.data();
-      console.log("NOTIF DATA:", data);
-      const replies = data.replies || [];
-      const mentions = data.mentions || [];
-      const locallyReadKeys = getLocallyReadNotificationKeys(uid);
-
-      replyNotifications = [
-        ...replies.map(r => ({
-          ...r,
-          notifType: 'reply'
-        })),
-
-        ...mentions.map(m => ({
-          ...m,
-          notifType: 'mention'
-        }))
-      ].map(notification => {
-        const type = notification.notifType === 'mention' ? 'mention' : 'reply';
-        return locallyReadKeys.has(getNotificationKey(notification, type))
-          ? { ...notification, read: true }
-          : notification;
-      });
-
-      replyNotifications.sort((a, b) => {
-        return (b.date || 0) - (a.date || 0);
-      });
-
-      unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
-
-      updateReplyBadge();
-
-      console.log("TOTAL NOTIF:", unreadReplies);
-    }, err => {
-      console.error("Notif listener error:", err);
-    });
+  void refreshUserNotifications(uid);
+  startUserDataRefresh(uid);
 }
 
     function isTranscendent(level) {
@@ -2165,32 +2229,6 @@ async function addMentionNotifications(text) {
       document.getElementById('custom-bg-modal').style.display = 'none';
     });
     
-    let unsubscribeUserStats = null;
-
-function listenUserStats(uid) {
-  if (unsubscribeUserStats) unsubscribeUserStats();
-  
-  unsubscribeUserStats = db.collection('userStats')
-    .doc(uid)
-    .onSnapshot(doc => {
-      if (doc.exists) {
-        userStatsCache[uid] = doc.data();
-        
-        document.querySelectorAll(`[data-uid="${uid}"]`).forEach(badgeEl => {
-          const commentDiv = badgeEl.closest('.comment');
-          if (commentDiv) {
-            applyUserStats(commentDiv, badgeEl.id, doc.data(), uid);
-          }
-        });
-
-        updateTranscendentGear();
-
-      } else {
-        document.getElementById('transcendent-gear-auth').style.display = 'none';
-      }
-    });
-}
-
 function loadCurrentUserSettings() {
   if (!currentUser) return;
 
@@ -4830,18 +4868,10 @@ if (commentFileInput) {
 startRealtimeListener();
 
     auth.onAuthStateChanged(user => {
-      if (unsubscribeUserNotifications) {
-        unsubscribeUserNotifications();
-        unsubscribeUserNotifications = null;
-      }
+      stopUserDataRefresh();
   currentUser = user;
   initializePendingCommentSync();
   void restorePendingCommentsForPost(postId);
-
-  if (unsubscribeUserStats) {
-    unsubscribeUserStats();
-    unsubscribeUserStats = null;
-  }
 
   const mainAuthorInput = document.getElementById('author');
 
@@ -4944,7 +4974,7 @@ if (user) {
 }
 
   userStatsCache[user.uid] = doc.exists ? doc.data() : {};
-  listenUserStats(user.uid);
+  applyCurrentUserStats(user.uid, userStatsCache[user.uid]);
   updateUI();
   subscribeToUserNotifications();
   updateTranscendentGear();

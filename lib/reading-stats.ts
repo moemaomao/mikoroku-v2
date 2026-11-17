@@ -140,9 +140,23 @@ export const LOCAL_CHAPTER_TOTAL_PREFIX = "mikoroku:reading-stats:chapters:";
 const LOCAL_CHAPTER_ACTIVITY_SUFFIX = ":activity";
 const LOCAL_READING_PROGRESS_PREFIX = "mikoroku:reading-stats:progress:";
 const LOCAL_READING_PROGRESS_LIMIT = 200;
+const LOCAL_READER_STATS_QUEUE_PREFIX = "mikoroku:reading-stats:pending:";
+const READER_STATS_FLUSH_INTERVAL_MS = 2 * 60 * 1000;
 const LOCAL_READ_MARK_SYNC_PREFIX = "mikoroku:reading-stats:read-mark-sync:";
 const LOCAL_READ_MARK_SYNC_RETRY_MS = 60 * 60 * 1000;
 const pendingReadMarkSyncs = new Map<string, Promise<void>>();
+type PendingReaderStatsQueue = {
+  progress: Record<string, Record<string, unknown>>;
+  activityCounts: Record<string, number>;
+};
+const pendingReaderStatsQueues = new Map<string, PendingReaderStatsQueue>();
+const pendingReaderStatsFlushTimers = new Map<string, number>();
+const pendingReaderStatsFlushes = new Map<string, Promise<void>>();
+const pendingReaderStatsRetryAttempts = new Map<string, number>();
+const pendingReaderStatsCallbacks = new Map<
+  string,
+  Map<string, (uid: string, activityDate: string) => void>
+>();
 
 function getStatsWindow(): StatsWindow {
   return window as StatsWindow;
@@ -372,6 +386,7 @@ export async function ensureSeriesTracked(
       source: "",
       updatedAt: 0,
     };
+  if (previousItem && trackedItem === previousItem && previousItem.updatedAt > 0) return;
   if (!previousItem || trackedItem !== previousItem) {
     writeLocalReadingProgress(uid, trackedItem);
   }
@@ -548,6 +563,195 @@ export function recordLocalChapterRead(
   return next;
 }
 
+function readPendingReaderStatsQueue(uid: string): PendingReaderStatsQueue {
+  const cached = pendingReaderStatsQueues.get(uid);
+  if (cached) return cached;
+
+  let queue: PendingReaderStatsQueue = { progress: {}, activityCounts: {} };
+  try {
+    const stored: unknown = JSON.parse(
+      localStorage.getItem(`${LOCAL_READER_STATS_QUEUE_PREFIX}${uid}`) || "{}",
+    );
+    const data = asRecord(stored);
+    queue = {
+      progress: Object.fromEntries(
+        Object.entries(asRecord(data.progress)).filter(([, item]) =>
+          Boolean(item) &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          typeof (item as Record<string, unknown>).slug === "string" &&
+          typeof (item as Record<string, unknown>).updatedAt === "string",
+        ),
+      ) as PendingReaderStatsQueue["progress"],
+      activityCounts: Object.fromEntries(
+        Object.entries(asRecord(data.activityCounts))
+          .filter(([, count]) =>
+            typeof count === "number" &&
+            Number.isSafeInteger(count) &&
+            count > 0,
+          ),
+      ) as Record<string, number>,
+    };
+  } catch (error) {
+    console.warn("Pending reading stats could not be read.", error);
+  }
+  pendingReaderStatsQueues.set(uid, queue);
+  return queue;
+}
+
+function writePendingReaderStatsQueue(uid: string, queue: PendingReaderStatsQueue): void {
+  const hasProgress = Object.keys(queue.progress).length > 0;
+  const hasActivity = Object.keys(queue.activityCounts).length > 0;
+  try {
+    const key = `${LOCAL_READER_STATS_QUEUE_PREFIX}${uid}`;
+    if (!hasProgress && !hasActivity) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify(queue));
+    }
+  } catch (error) {
+    console.warn("Pending reading stats could not be saved.", error);
+  }
+}
+
+function schedulePendingReaderStatsFlush(
+  uid: string,
+  delay = READER_STATS_FLUSH_INTERVAL_MS,
+): void {
+  if (pendingReaderStatsFlushTimers.has(uid)) return;
+  const timer = window.setTimeout(() => {
+    pendingReaderStatsFlushTimers.delete(uid);
+    void flushPendingReaderStats(uid);
+  }, delay);
+  pendingReaderStatsFlushTimers.set(uid, timer);
+}
+
+async function flushPendingReaderStats(uid: string): Promise<void> {
+  const existing = pendingReaderStatsFlushes.get(uid);
+  if (existing) return existing;
+
+  const queue = readPendingReaderStatsQueue(uid);
+  if (!Object.keys(queue.progress).length && !Object.keys(queue.activityCounts).length) return;
+
+  const sdk = getStatsWindow().firebase;
+  const user = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
+  if (user?.uid !== uid || !navigator.onLine) {
+    schedulePendingReaderStatsFlush(uid);
+    return;
+  }
+
+  const queuedProgress = { ...queue.progress };
+  const queuedActivityCounts = { ...queue.activityCounts };
+  const timer = pendingReaderStatsFlushTimers.get(uid);
+  if (timer !== undefined) {
+    window.clearTimeout(timer);
+    pendingReaderStatsFlushTimers.delete(uid);
+  }
+
+  const request = (async () => {
+    try {
+      const firestore = await waitForFirestore();
+      const activeUser = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
+      if (activeUser?.uid !== uid) return;
+
+      const increment = sdk?.firestore?.FieldValue?.increment;
+      const activityTotal = Object.values(queuedActivityCounts)
+        .reduce((total, count) => total + count, 0);
+      if (activityTotal && typeof increment !== "function") {
+        throw new Error("Firestore atomic increment is unavailable.");
+      }
+      const incrementValue = (count: number): unknown => {
+        if (typeof increment !== "function") {
+          throw new Error("Firestore atomic increment is unavailable.");
+        }
+        return increment(count);
+      };
+
+      const readingStats: Record<string, unknown> = {
+        progress: queuedProgress,
+      };
+      if (activityTotal) {
+        readingStats.activity = Object.fromEntries(
+          Object.entries(queuedActivityCounts).map(([date, count]) => [
+            date,
+            { chapters: incrementValue(count) },
+          ]),
+        );
+        readingStats.totalChaptersRead = incrementValue(activityTotal);
+      }
+
+      await firestore.collection("userStats").doc(uid).set(
+        { readingStats },
+        { merge: true },
+      );
+
+      const currentQueue = readPendingReaderStatsQueue(uid);
+      Object.entries(queuedProgress).forEach(([key, sent]) => {
+        if (currentQueue.progress[key]?.updatedAt === sent.updatedAt) {
+          delete currentQueue.progress[key];
+        }
+      });
+      Object.entries(queuedActivityCounts).forEach(([date, sentCount]) => {
+        const remaining = (currentQueue.activityCounts[date] || 0) - sentCount;
+        if (remaining > 0) currentQueue.activityCounts[date] = remaining;
+        else delete currentQueue.activityCounts[date];
+      });
+      writePendingReaderStatsQueue(uid, currentQueue);
+
+      const callbacks = pendingReaderStatsCallbacks.get(uid);
+      Object.entries(queuedActivityCounts).forEach(([date, count]) => {
+        const callback = callbacks?.get(date);
+        for (let index = 0; index < count; index += 1) {
+          try {
+            if (callback) callback(uid, date);
+            else acknowledgeLocalReadingActivity(uid, date);
+          } catch (error) {
+            console.warn("A synchronized chapter activity could not be acknowledged locally.", error);
+          }
+        }
+        callbacks?.delete(date);
+      });
+      if (callbacks && callbacks.size === 0) pendingReaderStatsCallbacks.delete(uid);
+
+      pendingReaderStatsRetryAttempts.delete(uid);
+      window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
+      if (Object.keys(currentQueue.progress).length || Object.keys(currentQueue.activityCounts).length) {
+        schedulePendingReaderStatsFlush(uid);
+      }
+    } catch (error) {
+      console.error("Reading stats remain queued locally and will retry synchronization.", error);
+      const attempts = (pendingReaderStatsRetryAttempts.get(uid) || 0) + 1;
+      pendingReaderStatsRetryAttempts.set(uid, attempts);
+      schedulePendingReaderStatsFlush(
+        uid,
+        Math.min(60_000 * (2 ** (attempts - 1)), 15 * 60 * 1000),
+      );
+    }
+  })();
+  pendingReaderStatsFlushes.set(uid, request);
+  try {
+    await request;
+  } finally {
+    if (pendingReaderStatsFlushes.get(uid) === request) {
+      pendingReaderStatsFlushes.delete(uid);
+    }
+  }
+}
+
+function flushCurrentUserReaderStats(): void {
+  const sdk = getStatsWindow().firebase;
+  const user = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
+  if (user?.uid) void flushPendingReaderStats(user.uid);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushCurrentUserReaderStats);
+  window.addEventListener("online", flushCurrentUserReaderStats);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushCurrentUserReaderStats();
+  });
+}
+
 export async function saveReaderStats(
   input: ReaderStatsInput,
   recordChapterActivity: boolean,
@@ -562,50 +766,46 @@ export async function saveReaderStats(
   onOptimisticUpdate?.(user.uid, activityDate);
   if (!sdk) return false;
 
-  const now = new Date().toISOString();
+  const increment = sdk.firestore?.FieldValue?.increment;
+  if (recordChapterActivity && typeof increment !== "function") {
+    throw new Error("Firestore atomic increment is unavailable.");
+  }
+  const localProgress = readLocalReadingProgress(user.uid)
+    .find((item) => item.slug === input.slug);
   const chapterProgress = clampPercentage(input.chapterProgress);
   const seriesProgress = input.chapterCount > 0 && input.chapterPosition > 0
     ? clampPercentage(((input.chapterPosition - 1 + chapterProgress / 100) / input.chapterCount) * 100)
     : chapterProgress;
-  const readingStats: Record<string, unknown> = {
-    progress: {
-      [safeDocumentId(input.slug)]: {
-        slug: input.slug,
-        title: input.title,
-        cover: input.cover,
-        kind: input.kind,
-        chapter: input.chapter,
-        chapterTitle: input.chapterTitle,
-        chapterProgress,
-        seriesProgress,
-        chapterPosition: input.chapterPosition,
-        chapterCount: input.chapterCount,
-        source: input.source || "",
-        updatedAt: now,
-      },
-    },
+  const queue = readPendingReaderStatsQueue(user.uid);
+  queue.progress[safeDocumentId(input.slug)] = {
+    slug: input.slug,
+    title: input.title,
+    cover: input.cover,
+    kind: input.kind,
+    chapter: input.chapter,
+    chapterTitle: input.chapterTitle,
+    chapterProgress,
+    seriesProgress,
+    chapterPosition: input.chapterPosition,
+    chapterCount: input.chapterCount,
+    source: input.source || "",
+    updatedAt: new Date(localProgress?.updatedAt || Date.now()).toISOString(),
   };
 
   if (recordChapterActivity) {
-    const increment = sdk.firestore?.FieldValue?.increment;
-    if (typeof increment !== "function") {
-      throw new Error("Firestore atomic increment is unavailable.");
+    queue.activityCounts[activityDate] = (queue.activityCounts[activityDate] || 0) + 1;
+    if (onSynced) {
+      const callbacks = pendingReaderStatsCallbacks.get(user.uid) || new Map();
+      callbacks.set(activityDate, onSynced);
+      pendingReaderStatsCallbacks.set(user.uid, callbacks);
     }
-    readingStats.activity = {
-      [activityDate]: { chapters: increment(1) },
-    };
-    readingStats.totalChaptersRead = increment(1);
   }
 
-  const firestore = await waitForFirestore();
-  const userReference = firestore.collection("userStats").doc(user.uid);
-  void userReference.set({ readingStats }, { merge: true }).then(() => {
-    if (recordChapterActivity) onSynced?.(user.uid, activityDate);
-  }, (error: unknown) => {
-    console.error("Reading stats are queued locally but could not be synchronized yet.", error);
-  });
-
-  if (recordChapterActivity) window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
+  pendingReaderStatsQueues.set(user.uid, queue);
+  writePendingReaderStatsQueue(user.uid, queue);
+  schedulePendingReaderStatsFlush(user.uid);
+  if (recordChapterActivity) void flushPendingReaderStats(user.uid);
+  window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
   return true;
 }
 
