@@ -17,7 +17,7 @@
 
   export let pageId = "home";
 
-  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=notifications-cache-1";
+  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=firestore-persistence-1";
   const featureStyleHrefs = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
@@ -43,6 +43,34 @@
       return response.text();
     });
     return runtimeSource;
+  }
+
+  async function initializeCommentFirestoreCache() {
+    const firebaseApp = window.firebase.apps.find((app) => app.name === "[DEFAULT]")
+      || window.firebase.initializeApp({
+        apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
+        authDomain: "widget-comment.firebaseapp.com",
+        projectId: "widget-comment",
+        storageBucket: "widget-comment.firebasestorage.app",
+        messagingSenderId: "249700505242",
+        appId: "1:249700505242:web:dab240af09caf30ad7f123",
+      });
+    if (firebaseApp.options.projectId !== "widget-comment") {
+      throw new Error("The default Firebase app must use the shared comment authentication project.");
+    }
+
+    const firestore = await import(
+      /* @vite-ignore */ "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js"
+    );
+    try {
+      firestore.initializeFirestore(firebaseApp._delegate, {
+        localCache: firestore.persistentLocalCache({
+          tabManager: firestore.persistentMultipleTabManager(),
+        }),
+      });
+    } catch (error) {
+      console.warn("Comment Firestore persistent cache unavailable; using the default Firestore cache.", error);
+    }
   }
 
   function loadCommentStyles(styleHref: string) {
@@ -118,6 +146,7 @@
     await Promise.all(
       externalScripts.slice(2, 4).map(([src, isLoaded]) => loadExternalScript(src, isLoaded)),
     );
+    await initializeCommentFirestoreCache();
 
     if (!runtimeStarted) {
       const script = document.createElement("script");

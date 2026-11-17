@@ -7,13 +7,15 @@
   type FirebaseApi = {
     initializeApp: (config: { apiKey: string; projectId: string }, name: string) => unknown;
     getFirestore: (app: unknown) => unknown;
+    initializeFirestore: (app: unknown, settings: { localCache: unknown }) => unknown;
+    persistentLocalCache: (settings: { tabManager: unknown }) => unknown;
+    persistentMultipleTabManager: () => unknown;
     getAuth: (app: unknown) => unknown;
     doc: (db: unknown, collection: string, id: string) => unknown;
     setDoc: (ref: unknown, data: Record<string, unknown>, options: { merge: boolean }) => Promise<void>;
     increment: (value: number) => unknown;
     onSnapshot: (ref: unknown, next: (snapshot: { data: () => Record<string, unknown> }) => void, error: (error: unknown) => void) => () => void;
     onAuthStateChanged: (auth: unknown, callback: (user: { uid: string } | null) => void) => () => void;
-    enableIndexedDbPersistence: (db: unknown) => Promise<void>;
   };
 
   export let pageId = "";
@@ -36,6 +38,7 @@
   let currentUser: { uid: string } | null = null;
   let firebase: FirebaseApi | null = null;
   let firebaseApp: unknown = null;
+  let firestoreDb: unknown = null;
   let currentRef: unknown = null;
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeAuth: (() => void) | null = null;
@@ -85,13 +88,24 @@
     unsubscribeSnapshot?.();
     const api = await loadFirebase();
     firebaseApp ??= api.initializeApp({ apiKey: "AIzaSyAwXK4q1t_0HVA-eZN22PIlKgJ3zYXIuAs", projectId: "emoji-reaction-fb044" }, "mikoroku-emoji-reaction");
-    const db = api.getFirestore(firebaseApp);
+    if (!firestoreDb) {
+      try {
+        firestoreDb = api.initializeFirestore(firebaseApp, {
+          localCache: api.persistentLocalCache({
+            tabManager: api.persistentMultipleTabManager(),
+          }),
+        });
+      } catch (error) {
+        console.warn("Emoji persistent cache unavailable; using the default Firestore cache.", error);
+        firestoreDb = api.getFirestore(firebaseApp);
+      }
+    }
+    const db = firestoreDb;
     const auth = api.getAuth(firebaseApp);
     const id = pageDocumentId(nextPageId);
     const cached = readCache(id);
     if (cached) counts = normalize(cached);
     currentRef = api.doc(db, "emoji_reactions", id);
-    api.enableIndexedDbPersistence(db).catch((error: unknown) => console.warn("Emoji persistence unavailable.", error));
     unsubscribeAuth ??= api.onAuthStateChanged(auth, (user) => { currentUser = user; });
     unsubscribeSnapshot = api.onSnapshot(
       currentRef,

@@ -26,8 +26,8 @@ type CommunityWidgetRuntime = {
   emojiElement: (HTMLElement & { pageId?: string }) | null;
 };
 
-const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=reply-buttons-6";
-const EMOJI_SCRIPT_SRC = "/widgets/emoji-reaction.js";
+const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=firestore-persistence-1";
+const EMOJI_SCRIPT_SRC = "/widgets/emoji-reaction.js?v=firestore-persistence-1";
 
 function getCommunityRuntime(): CommunityWidgetRuntime {
   const existing = window.__mikorokuCommunityWidgets;

@@ -23,15 +23,6 @@
     const auth = firebaseApp.auth();
     const db = firebaseApp.firestore();
 
-    db.enablePersistence({ synchronizeTabs: true })
-      .catch((err) => {
-        if (err.code === 'failed-precondition') {
-          console.warn('Multiple tabs open, persistence disabled');
-        } else if (err.code === 'unimplemented') {
-          console.warn('Browser does not support persistence');
-        }
-      });
-
     function saveUserStatsCache() {
       try {
         localStorage.setItem('userStatsCache_v1', JSON.stringify(userStatsCache));
