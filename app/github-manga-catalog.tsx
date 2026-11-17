@@ -547,7 +547,12 @@ function MangaCard({
   const type = String(manga.type || "manga").toLowerCase();
   const commissionEnabled = manga.commissionEnabled === true;
   const chapter = chapterNumber(item, meta);
-  const updatedAt = Number(meta?.updatedAt || 0);
+  const updatedAt = [
+    meta?.updatedAt,
+    item.updatedAt,
+    (item as MangaItem & { latestUpdate?: unknown }).latestUpdate,
+    manga.updatedAt,
+  ].reduce<number>((latest, value) => Math.max(latest, toMilliseconds(value)), 0);
   manga.rating = meta?.rating ?? item.rating ?? "-";
 
   return (
@@ -562,7 +567,7 @@ function MangaCard({
       style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}
     >
       <div className={cardCoverClass}>
-        {(Boolean(item.isUp) || (isRecentUpdate(updatedAt) && isManaged(meta))) && (
+        {(Boolean(item.isUp) || isRecentUpdate(updatedAt)) && (
           <div className={upBadgeClass}>UP</div>
         )}
         {chapter >= 0 && <div className={chapterBadgeClass}>Ch. {chapter}</div>}
