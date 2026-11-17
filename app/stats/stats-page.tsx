@@ -26,6 +26,12 @@ import {
   setUserFollowing,
 } from "../../lib/user-following";
 import {
+  cacheUserStatsProfile,
+  getCachedUserStatsProfile,
+  USER_STATS_PROFILE_UPDATED_EVENT,
+  type UserStatsProfileUpdatedDetail,
+} from "../../lib/user-stats-cache";
+import {
   getCachedReadingStats,
   READING_STATS_CACHE_TTL_MS,
   setCachedReadingStats,
@@ -439,6 +445,10 @@ function getHiddenStatsSections(value: unknown): StatsSectionId[] {
   return [...new Set(value.filter(
     (section): section is StatsSectionId => typeof section === "string" && statsSectionIds.has(section),
   ))];
+}
+
+function getMedalBadgeId(prefix: "medal" | "comment-medal", name: string): string {
+  return `${prefix}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 }
 
 async function detectNewMedalUnlocks(totalChaptersRead: number) {
@@ -1539,36 +1549,46 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
 
     const loadCachedStats = async () => {
       try {
-        const [cached, unlockedMedals] = await Promise.all([
+        const [cached, unlockedMedals, cachedProfile] = await Promise.all([
           getCachedReadingStats(uid),
           getUnlockedMedals(),
+          Promise.resolve(getCachedUserStatsProfile(uid)),
         ]);
         if (!active) return;
         const localReadMarks = isOwner ? getLocalReadMarksCount() : 0;
-        if (cached?.data) {
+        const freshProfile = cachedProfile?.version === 2 && !cachedProfile.stale
+          ? cachedProfile.data
+          : null;
+        const cachedStats = cached?.data
+          ? {
+            ...cached.data,
+            profile: { ...cached.data.profile, ...freshProfile },
+          }
+          : null;
+        if (cached && cachedStats) {
           const localChapterTotal = isOwner ? getLocalChapterTotal(uid) : 0;
           const totalChaptersRead = Math.max(
-            cached.data.totalChaptersRead,
+            cachedStats.totalChaptersRead,
             localReadMarks,
             localChapterTotal,
             lifetimeChapterHighWaterRef.current.total,
             ...(isOwner ? unlockedMedals.filter(Number.isFinite) : []),
           );
           if (isOwner) setLocalChapterTotal(uid, totalChaptersRead);
-          if (isOwner) setLocalReadingActivityBaseline(uid, cached.data.activity);
+          if (isOwner) setLocalReadingActivityBaseline(uid, cachedStats.activity);
           const activity = isOwner
-            ? mergeLocalReadingActivity(uid, cached.data.activity)
-            : cached.data.activity;
+            ? mergeLocalReadingActivity(uid, cachedStats.activity)
+            : cachedStats.activity;
           lifetimeChapterHighWaterRef.current = { uid, total: totalChaptersRead };
           setStats({
-            ...cached.data,
+            ...cachedStats,
             activity,
             totalChaptersRead,
             bookmarksCount: isOwner
               ? (hasFreshLocalBookmarks() ? getLocalBookmarkCount() : null)
-                ?? cached.data.bookmarksCount
+                ?? cachedStats.bookmarksCount
                 ?? getLocalBookmarkCount()
-              : cached.data.bookmarksCount,
+              : cachedStats.bookmarksCount,
           });
           setError("");
           lastSyncedAt = cached.savedAt;
@@ -1598,6 +1618,22 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [isOwner, retry, uid]);
+
+  useEffect(() => {
+    const onUserStatsProfileUpdated = (event: Event) => {
+      const { uid: updatedUid, profile } =
+        (event as CustomEvent<UserStatsProfileUpdatedDetail>).detail;
+      if (updatedUid !== uid) return;
+      setStats((current) => current
+        ? { ...current, profile: { ...current.profile, ...profile } }
+        : current);
+    };
+
+    window.addEventListener(USER_STATS_PROFILE_UPDATED_EVENT, onUserStatsProfileUpdated);
+    return () => {
+      window.removeEventListener(USER_STATS_PROFILE_UPDATED_EVENT, onUserStatsProfileUpdated);
+    };
+  }, [uid]);
 
   useEffect(() => {
     if (!isOwner) return;
@@ -1704,6 +1740,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
         };
         setStats(updatedStats);
         void setCachedReadingStats(uid, updatedStats, false);
+        cacheUserStatsProfile(uid, updatedStats.profile);
       }
       setBannerError("");
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
@@ -1740,6 +1777,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
         statsRef.current = updatedStats;
         setStats(updatedStats);
         void setCachedReadingStats(uid, updatedStats, false);
+        cacheUserStatsProfile(uid, updatedStats.profile);
       }
       setStatsSettingsOpen(false);
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
@@ -1801,6 +1839,49 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   ]
     .filter((badge): badge is string => typeof badge === "string" && badge.trim().length > 0)
     .map((badge) => badge.trim()))];
+  const selectedMedals = new Set(
+    Array.isArray(profile.achievementBadges)
+      ? profile.achievementBadges.filter((badge): badge is string => typeof badge === "string")
+      : [],
+  );
+  const readingStats = profile.readingStats
+    && typeof profile.readingStats === "object"
+    && !Array.isArray(profile.readingStats)
+    ? profile.readingStats as Record<string, unknown>
+    : {};
+  const readingChaptersValue = readingStats.totalChaptersRead;
+  const readingChapters = numberValue(
+    typeof readingChaptersValue === "number" ? readingChaptersValue : profile.totalChaptersRead,
+  );
+  const selectedReadingMedal = readingMedals.find((medal) =>
+    selectedMedals.has(getMedalBadgeId("medal", medal.name))
+    && readingChapters >= medal.chapters);
+  const selectedCommentMedal = commentMedals.find((medal) =>
+    selectedMedals.has(getMedalBadgeId("comment-medal", medal.name))
+    && commentCount >= medal.comments);
+  const profileBadges = [
+    ...customBadges.map((badge) => ({
+      id: badge,
+      label: formatCustomBadgeLabel(badge),
+      style: undefined,
+    })),
+    ...(selectedReadingMedal ? [{
+      id: getMedalBadgeId("medal", selectedReadingMedal.name),
+      label: selectedReadingMedal.name,
+      style: {
+        background: selectedReadingMedal.gradient,
+        color: selectedReadingMedal.color,
+      },
+    }] : []),
+    ...(selectedCommentMedal ? [{
+      id: getMedalBadgeId("comment-medal", selectedCommentMedal.name),
+      label: selectedCommentMedal.name,
+      style: {
+        background: selectedCommentMedal.gradient,
+        color: selectedCommentMedal.color,
+      },
+    }] : []),
+  ];
   const reputationBadgeTone = reputation < 0
     ? "border-rose-200 bg-rose-100/90 text-rose-800 dark:border-rose-300/20 dark:bg-rose-500/15 dark:text-rose-200"
     : "border-emerald-200 bg-emerald-100/90 text-emerald-800 dark:border-emerald-300/20 dark:bg-emerald-500/15 dark:text-emerald-200";
@@ -1899,15 +1980,16 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                     </span>
                   )}
                 </div>
-                {customBadges.length > 0 && (
+                {profileBadges.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:mt-2.5">
                     <span className="mr-0.5 text-[10px] font-semibold text-slate-600 dark:text-zinc-300 sm:text-xs">Badges</span>
-                    {customBadges.map((badge) => (
+                    {profileBadges.map((badge) => (
                       <span
-                        key={badge}
-                        className={`settings-badge-option profile-custom-badge stats-custom-badge badge-${badge}`}
+                        key={badge.id}
+                        className={`settings-badge-option profile-custom-badge stats-custom-badge badge-${badge.id}`}
+                        style={badge.style}
                       >
-                        {formatCustomBadgeLabel(badge)}
+                        {badge.label}
                       </span>
                     ))}
                   </div>

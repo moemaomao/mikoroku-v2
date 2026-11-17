@@ -12,6 +12,12 @@ import {
   loadFollowingUids,
   setUserFollowing,
 } from "../lib/user-following";
+import {
+  getCachedUserStatsProfile,
+  getSanitizedUserStatsProfile,
+  loadUserStatsProfile,
+  notifyUserStatsProfileUpdated,
+} from "../lib/user-stats-cache";
 import settingsStyles from "./settings/settings.module.css";
 import { normalizeProfileLink } from "./lib/profile-link";
 
@@ -71,10 +77,6 @@ type CompatUser = {
   photoURL?: string | null;
   metadata?: { creationTime?: string };
 };
-type UserProfileCacheEntry = {
-  cachedAt: number;
-  data: DataRecord;
-};
 type HistoryEntry = {
   series?: string;
   title?: string;
@@ -120,9 +122,6 @@ type LegacyModalWindow = {
 };
 
 const HISTORY_KEY = "readingHistory";
-const USER_PROFILE_CACHE_KEY = "mikoroku:user-profile-cache:v1";
-const USER_PROFILE_CACHE_LIMIT = 100;
-const pendingUserProfileRequests = new Map<string, Promise<DataRecord>>();
 const DEFAULT_AVATAR =
   "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 const FALLBACK_COVER = "/assets/icons/favicon.ico";
@@ -500,47 +499,21 @@ function waitWithTimeout<T>(promise: Promise<T>, milliseconds: number, message: 
   });
 }
 
-function getUserProfileCacheData(data: DataRecord): DataRecord {
-  const cached: DataRecord = {};
-  for (const key of [
-    "displayName",
-    "username",
-    "avatar",
-    "bio",
-    "bioLink",
-    "commentCount",
-    "points",
-    "reputation",
-    "customBadges",
-    "customBadge",
-    "achievementBadges",
-    "readingStats",
-    "totalChaptersRead",
-    "gameRoles",
-  ]) {
-    if (data[key] !== undefined) cached[key] = data[key];
-  }
-  const joinedAt = timestampMillis(data.joinedAt || data.createdAt);
-  if (joinedAt) cached.joinedAt = joinedAt;
-  return cached;
-}
-
 function readUserProfileCache(uid: string, legacy: LegacyModalWindow): DataRecord | null {
+  const sharedCache = getCachedUserStatsProfile(uid);
+  if (sharedCache) {
+    legacy.userStatsCache ||= {};
+    legacy.userStatsCache[uid] = {
+      ...legacy.userStatsCache[uid],
+      ...sharedCache.data,
+    };
+    return sharedCache.data;
+  }
+
   const inMemory = legacy.userStatsCache?.[uid];
   if (inMemory && !inMemory._empty && Object.keys(inMemory).length > 0) return inMemory;
 
   try {
-    const raw = window.localStorage.getItem(USER_PROFILE_CACHE_KEY);
-    if (raw) {
-      const cache = asRecord(JSON.parse(raw));
-      const entry = asRecord(cache[uid]) as UserProfileCacheEntry;
-      if (entry.data && typeof entry.cachedAt === "number") {
-        legacy.userStatsCache ||= {};
-        legacy.userStatsCache[uid] = entry.data;
-        return entry.data;
-      }
-    }
-
     const legacyCache = asRecord(JSON.parse(window.localStorage.getItem("userStatsCache_v1") || "null"));
     const legacyEntry = asRecord(legacyCache[uid]);
     if (Object.keys(legacyEntry).length && !legacyEntry._empty) {
@@ -560,7 +533,7 @@ function readOwnProfilePreview(uid: string, legacy: LegacyModalWindow): DataReco
 
   try {
     const preview = asRecord(JSON.parse(window.localStorage.getItem("userSettingsPreview") || "null"));
-    return getUserProfileCacheData(preview);
+    return getSanitizedUserStatsProfile(preview);
   } catch (error) {
     console.warn("Local user profile preview could not be read.", error);
     return {};
@@ -568,35 +541,20 @@ function readOwnProfilePreview(uid: string, legacy: LegacyModalWindow): DataReco
 }
 
 function writeUserProfileCache(uid: string, data: DataRecord, legacy: LegacyModalWindow): void {
-  const cachedData = getUserProfileCacheData(data);
+  const cachedData = getSanitizedUserStatsProfile(data);
   legacy.userStatsCache ||= {};
   legacy.userStatsCache[uid] = { ...legacy.userStatsCache[uid], ...cachedData };
-  try {
-    const cache = asRecord(JSON.parse(window.localStorage.getItem(USER_PROFILE_CACHE_KEY) || "{}"));
-    cache[uid] = { cachedAt: Date.now(), data: cachedData } satisfies UserProfileCacheEntry;
-    const entries = Object.entries(cache)
-      .sort((left, right) => numberValue(asRecord(right[1]).cachedAt) - numberValue(asRecord(left[1]).cachedAt))
-      .slice(0, USER_PROFILE_CACHE_LIMIT);
-    window.localStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
-  } catch (error) {
-    console.warn("User profile cache could not be saved.", error);
-  }
+  notifyUserStatsProfileUpdated(uid, cachedData);
 }
 
 function loadUserProfile(
   firestore: CompatFirestore,
   uid: string,
 ): Promise<DataRecord> {
-  const pending = pendingUserProfileRequests.get(uid);
-  if (pending) return pending;
-  const request = firestore.collection("userStats").doc(uid).get()
-    .then((snapshot) => snapshot.exists ? asRecord(snapshot.data()) : {});
-  pendingUserProfileRequests.set(uid, request);
-  const clearPending = () => {
-    if (pendingUserProfileRequests.get(uid) === request) pendingUserProfileRequests.delete(uid);
-  };
-  void request.then(clearPending, clearPending);
-  return request;
+  return loadUserStatsProfile(uid, async () => {
+    const snapshot = await firestore.collection("userStats").doc(uid).get();
+    return snapshot.exists ? asRecord(snapshot.data()) : {};
+  });
 }
 
 function timestampMillis(value: unknown): number {

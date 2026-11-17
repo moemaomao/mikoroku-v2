@@ -1,4 +1,5 @@
 import { loadFollowerCount } from "./user-following";
+import { loadUserStatsProfile } from "./user-stats-cache";
 
 type StatsUser = {
   uid: string;
@@ -790,7 +791,10 @@ function parseProgressItem(value: unknown): ReadingProgressItem | null {
 export async function loadPublicReadingStats(uid: string): Promise<PublicReadingStats> {
   const firestore = await waitForFirestore();
   const userReference = firestore.collection("userStats").doc(uid);
-  const profileSnapshotPromise = userReference.get({ source: "server" });
+  const profilePromise = loadUserStatsProfile(uid, async () => {
+    const snapshot = await userReference.get();
+    return snapshot.exists ? snapshot.data() || {} : {};
+  });
   const commentSnapshotPromise = (async () => {
     try {
       if (typeof firestore.collectionGroup !== "function") {
@@ -835,13 +839,12 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
       return null;
     }
   })();
-  const [profileSnapshot, commentSnapshotResult, bookmarksCount, followersCount] = await Promise.all([
-    profileSnapshotPromise,
+  const [profile, commentSnapshotResult, bookmarksCount, followersCount] = await Promise.all([
+    profilePromise,
     commentSnapshotPromise,
     bookmarksCountPromise,
     followersCountPromise,
   ]);
-  const profile = profileSnapshot.exists ? profileSnapshot.data() || {} : {};
   const readingStats = asRecord(profile.readingStats);
   const progressBySlug = asRecord(readingStats.progress);
   const progress = Object.values(progressBySlug)
@@ -857,7 +860,9 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
     (total, day) => total + numberValue(asRecord(day).chapters),
     0,
   );
-  const historyTotal = Array.isArray(profile.readingHistory) ? profile.readingHistory.length : 0;
+  const historyTotal = Array.isArray(profile.readingHistory)
+    ? profile.readingHistory.length
+    : numberValue(profile.readingHistoryCount);
   const totalChaptersRead = Math.max(
     numberValue(readingStats.totalChaptersRead),
     activityTotal,

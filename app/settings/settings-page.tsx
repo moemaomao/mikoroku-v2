@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import SiteChrome from "../site-chrome";
 import { normalizeProfileLink } from "../lib/profile-link";
+import { cacheUserStatsProfile } from "../../lib/user-stats-cache";
 import styles from "./settings.module.css";
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -987,6 +988,7 @@ export default function SettingsPage() {
         ...next,
         totalChaptersRead: cacheChapterCount,
       };
+      cacheUserStatsProfile(account.uid, window.userStatsCache[account.uid]);
       try {
         const cachedStats = localStorage.getItem("userStatsCache_v1");
         const statsCache = cachedStats ? JSON.parse(cachedStats) as Record<string, unknown> : {};
