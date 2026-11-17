@@ -15,6 +15,13 @@ import {
 import SiteChrome from "../site-chrome";
 import { normalizeProfileLink } from "../lib/profile-link";
 import { cacheUserStatsProfile } from "../../lib/user-stats-cache";
+import {
+  clearPendingCommentBackground,
+  COMMENT_BACKGROUND_SYNCED_EVENT,
+  getPendingCommentBackground,
+  MAX_COMMENT_BACKGROUND_FILE_SIZE,
+  queueCommentBackground,
+} from "../../lib/comment-background-sync";
 import styles from "./settings.module.css";
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -478,61 +485,6 @@ async function getTopCommenterRank(uid: string): Promise<number | null> {
   }
 }
 
-const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
-const MAX_COMMENT_BACKGROUND_FILE_SIZE = 20 * 1024 * 1024;
-
-function compressCommentBackground(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    createImageBitmap(file).then((bitmap) => {
-      const scale = Math.min(1, 1600 / bitmap.width, 1600 / bitmap.height);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      const context = canvas.getContext("2d");
-      if (!context) {
-        bitmap.close();
-        reject(new Error("Browser image processing is unavailable."));
-        return;
-      }
-
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("The background image could not be compressed."));
-      }, "image/webp", 0.72);
-    }).catch((error: unknown) => {
-      reject(error instanceof Error ? error : new Error("The background image could not be processed."));
-    });
-  });
-}
-
-async function uploadCommentBackground(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Please choose an image file.");
-  }
-  if (file.size > MAX_COMMENT_BACKGROUND_FILE_SIZE) {
-    throw new Error("Background images must be 20 MB or smaller.");
-  }
-
-  const compressedImage = await compressCommentBackground(file);
-  const formData = new FormData();
-  formData.append("image", compressedImage, "comment-background.webp");
-  const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-    method: "POST",
-    body: formData,
-  });
-  const result: {
-    success?: boolean;
-    data?: { url?: string };
-    error?: { message?: string };
-  } = await response.json();
-  if (!response.ok || !result.success || !result.data?.url) {
-    throw new Error(result.error?.message || `Image upload failed (${response.status}).`);
-  }
-  return result.data.url;
-}
-
 function normalizeBadges(data: Partial<Settings> & { commentCount?: unknown }) {
   const saved = Array.isArray(data.customBadges)
     ? data.customBadges.map(String)
@@ -679,6 +631,7 @@ export default function SettingsPage() {
   const [customBgUploading, setCustomBgUploading] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
   const settingsContentRef = useRef<HTMLDivElement>(null);
+  const commentBgPreviewUrlRef = useRef("");
 
   useEffect(() => {
     let active = true;
@@ -687,6 +640,20 @@ export default function SettingsPage() {
 
     const applyUser = async (user: Account & { photoURL?: string | null }) => {
       setAccount(user);
+      let pendingCommentBgUrl = "";
+      try {
+        const pendingImage = await getPendingCommentBackground(user.uid);
+        if (active && pendingImage) {
+          pendingCommentBgUrl = URL.createObjectURL(pendingImage);
+          if (commentBgPreviewUrlRef.current) {
+            URL.revokeObjectURL(commentBgPreviewUrlRef.current);
+          }
+          commentBgPreviewUrlRef.current = pendingCommentBgUrl;
+        }
+      } catch (cacheError) {
+        console.warn("The pending comment background could not be loaded from IndexedDB.", cacheError);
+      }
+      if (!active) return;
       const cachedRank = getCachedTopCommenterRank(user.uid);
       setTopCommenterRank(cachedRank ?? null);
       setTopCommenterAccess(
@@ -716,6 +683,11 @@ export default function SettingsPage() {
           setSettings({
             ...initialSettings,
             ...parsed,
+            customCommentBg: pendingCommentBgUrl || (
+              String(parsed.customCommentBg || "").startsWith("blob:")
+                ? ""
+                : String(parsed.customCommentBg || "")
+            ),
             displayName: String(parsed.displayName || user.displayName || ""),
             bioLink: String(parsed.bioLink || ""),
             avatar: String(parsed.avatar || user.photoURL || anonymousAvatar),
@@ -761,7 +733,7 @@ export default function SettingsPage() {
           customFontStyle: String(data.customFontStyle || ""),
           customBorder: String(data.customBorder || ""),
           customShape: String(data.customShape || ""),
-          customCommentBg: String(data.customCommentBg || ""),
+          customCommentBg: pendingCommentBgUrl || String(data.customCommentBg || ""),
           gameRoles: Array.isArray(data.gameRoles) ? data.gameRoles.map(String) : [],
           topCommenterEffect: normalizeTopCommenterEffect(data.topCommenterEffect),
           disableAnimations: data.disableAnimations === true ||
@@ -823,14 +795,40 @@ export default function SettingsPage() {
         active = false;
         window.clearInterval(poll);
         unsubscribe?.();
+        if (commentBgPreviewUrlRef.current) {
+          URL.revokeObjectURL(commentBgPreviewUrlRef.current);
+          commentBgPreviewUrlRef.current = "";
+        }
       };
     }
 
     return () => {
       active = false;
       unsubscribe?.();
+      if (commentBgPreviewUrlRef.current) {
+        URL.revokeObjectURL(commentBgPreviewUrlRef.current);
+        commentBgPreviewUrlRef.current = "";
+      }
     };
   }, []);
+
+  useEffect(() => {
+    const onCommentBackgroundSynced = (event: Event) => {
+      const { uid, url } = (event as CustomEvent<{ uid: string; url: string }>).detail;
+      if (uid !== account?.uid || !url) return;
+      const previewUrl = commentBgPreviewUrlRef.current;
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        commentBgPreviewUrlRef.current = "";
+      }
+      setSettings((current) => {
+        if (!previewUrl || current.customCommentBg !== previewUrl) return current;
+        return { ...current, customCommentBg: url };
+      });
+    };
+    window.addEventListener(COMMENT_BACKGROUND_SYNCED_EVENT, onCommentBackgroundSynced);
+    return () => window.removeEventListener(COMMENT_BACKGROUND_SYNCED_EVENT, onCommentBackgroundSynced);
+  }, [account?.uid]);
 
   useEffect(() => {
     if (!message || status !== "ready" || customBgUploading) return;
@@ -845,6 +843,19 @@ export default function SettingsPage() {
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectCommentBackground(value: string) {
+    if (account) {
+      void clearPendingCommentBackground(account.uid).catch((error: unknown) => {
+        console.error("The queued comment background could not be cleared.", error);
+      });
+    }
+    if (commentBgPreviewUrlRef.current) {
+      URL.revokeObjectURL(commentBgPreviewUrlRef.current);
+      commentBgPreviewUrlRef.current = "";
+    }
+    update("customCommentBg", value);
   }
 
   function toggleRole(role: string) {
@@ -917,16 +928,39 @@ export default function SettingsPage() {
       setCustomBgError("Custom comment backgrounds unlock at level 120.");
       return;
     }
+    if (!file.type.startsWith("image/")) {
+      setCustomBgError("Please choose an image file.");
+      return;
+    }
+    if (file.size > MAX_COMMENT_BACKGROUND_FILE_SIZE) {
+      setCustomBgError("Background images must be 20 MB or smaller.");
+      return;
+    }
+    if (!account) {
+      setCustomBgError("Sign in to save a custom comment background.");
+      return;
+    }
 
     setCustomBgUploading(true);
-    showNotification("Compressing and uploading the background...", "info");
+    const previousBackground = settings.customCommentBg;
+    const previewUrl = URL.createObjectURL(file);
+    if (commentBgPreviewUrlRef.current) {
+      URL.revokeObjectURL(commentBgPreviewUrlRef.current);
+    }
+    commentBgPreviewUrlRef.current = previewUrl;
+    update("customCommentBg", previewUrl);
+    showNotification("Saving the background on this device...", "info");
     try {
-      const url = await uploadCommentBackground(file);
-      update("customCommentBg", url);
-      showNotification("Custom comment background uploaded. Save settings to apply it.", "success");
+      await queueCommentBackground(account.uid, file);
+      showNotification("Background saved on this device. Syncing in the background.", "success");
     } catch (error) {
-      console.error("Custom comment background upload failed.", error);
-      setCustomBgError(error instanceof Error ? error.message : "The background image could not be uploaded.");
+      console.error("Custom comment background could not be saved locally.", error);
+      URL.revokeObjectURL(previewUrl);
+      if (commentBgPreviewUrlRef.current === previewUrl) commentBgPreviewUrlRef.current = "";
+      update("customCommentBg", previousBackground);
+      setCustomBgError(error instanceof Error
+        ? error.message
+        : "The background image could not be saved on this device.");
       setMessage("");
     } finally {
       setCustomBgUploading(false);
@@ -965,17 +999,25 @@ export default function SettingsPage() {
       bio: settings.bio.trim(),
       bioLink,
     };
+    const settingsToPersist: Partial<Settings> = { ...next };
+    if (settingsToPersist.customCommentBg?.startsWith("blob:")) {
+      delete settingsToPersist.customCommentBg;
+    }
     try {
-      await window.firebase.firestore().collection("userStats").doc(account.uid).set(next, { merge: true });
+      await window.firebase.firestore().collection("userStats").doc(account.uid).set(settingsToPersist, { merge: true });
       localStorage.setItem("commentWidget_disableAnimations", next.disableAnimations ? "true" : "false");
       localStorage.setItem(
         "commentWidget_disableTopCommentFireflies",
         next.disableTopCommentFireflies ? "true" : "false",
       );
+      const previewSettings: Partial<Settings> = { ...next };
+      if (previewSettings.customCommentBg?.startsWith("blob:")) {
+        delete previewSettings.customCommentBg;
+      }
       localStorage.setItem(
         "userSettingsPreview",
         JSON.stringify({
-          ...next,
+          ...previewSettings,
           totalChaptersRead: readingChapterCount,
           commentCount: userCommentCount,
         }),
@@ -985,7 +1027,7 @@ export default function SettingsPage() {
       const cacheChapterCount = Math.max(readingChapterCount, getReadingChapterCount(currentStatsCache));
       window.userStatsCache[account.uid] = {
         ...currentStatsCache,
-        ...next,
+        ...settingsToPersist,
         totalChaptersRead: cacheChapterCount,
       };
       cacheUserStatsProfile(account.uid, window.userStatsCache[account.uid]);
@@ -997,7 +1039,7 @@ export default function SettingsPage() {
           : {};
         statsCache[account.uid] = {
           ...existing,
-          ...next,
+          ...settingsToPersist,
           totalChaptersRead: Math.max(readingChapterCount, getReadingChapterCount(existing)),
         };
         localStorage.setItem("userStatsCache_v1", JSON.stringify(statsCache));
@@ -1633,8 +1675,8 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             className={cx(styles['settings-bg-item'], styles['settings-bg-default'], (!settings.customCommentBg ? styles['is-selected'] : undefined))}
-                            disabled={userLevel < 110}
-                            onClick={() => update("customCommentBg", "")}
+                            disabled={userLevel < 110 || customBgUploading}
+                            onClick={() => selectCommentBackground("")}
                           >
                             <span>Default</span>
                           </button>
@@ -1645,9 +1687,9 @@ export default function SettingsPage() {
                                 type="button"
                                 key={url}
                                 className={cx(styles['settings-bg-item'], (settings.customCommentBg === url ? styles['is-selected'] : undefined))}
-                                disabled={userLevel < 110}
+                                disabled={userLevel < 110 || customBgUploading}
                                 style={{ backgroundImage: `url("${url}")` }}
-                                onClick={() => update("customCommentBg", url)}
+                                onClick={() => selectCommentBackground(url)}
                               >
                                 <span>BG {index + 1}</span>
                               </button>

@@ -60,6 +60,7 @@ function sanitizeProfile(data: UserStatsProfile): UserStatsProfile {
     "totalChaptersRead",
     "gameRoles",
     "profileBanner",
+    "customCommentBg",
     "hiddenStatsSections",
   ]) {
     if (data[key] !== undefined) cached[key] = data[key];

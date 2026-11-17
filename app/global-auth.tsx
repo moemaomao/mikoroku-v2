@@ -9,6 +9,12 @@ import {
   syncPendingProfileBanner,
   type ProfileBannerFirestore,
 } from "../lib/profile-banner-sync";
+import {
+  COMMENT_BACKGROUND_QUEUED_EVENT,
+  getPendingCommentBackgroundRetry,
+  syncPendingCommentBackground,
+  type CommentBackgroundFirestore,
+} from "../lib/comment-background-sync";
 
 type AuthProvider = {
   new (): unknown;
@@ -18,6 +24,8 @@ let profileBannerSyncUid = "";
 let profileBannerRetryTimer: number | undefined;
 let profileBannerSyncInProgress = false;
 let profileBannerListenersAttached = false;
+let commentBackgroundRetryTimer: number | undefined;
+let commentBackgroundSyncInProgress = false;
 
 export default function GlobalAuth() {
   useEffect(() => {
@@ -36,6 +44,61 @@ export default function GlobalAuth() {
         profileBannerRetryTimer = undefined;
         void syncProfileBanner(uid);
       }, Math.max(1000, nextAttemptAt - Date.now()));
+    };
+
+    const clearCommentBackgroundRetry = () => {
+      if (commentBackgroundRetryTimer !== undefined) {
+        window.clearTimeout(commentBackgroundRetryTimer);
+        commentBackgroundRetryTimer = undefined;
+      }
+    };
+
+    const scheduleCommentBackgroundSync = (uid: string, nextAttemptAt: number) => {
+      clearCommentBackgroundRetry();
+      commentBackgroundRetryTimer = window.setTimeout(() => {
+        commentBackgroundRetryTimer = undefined;
+        void syncCommentBackground(uid);
+      }, Math.max(1000, nextAttemptAt - Date.now()));
+    };
+
+    const syncCommentBackground = async (uid = profileBannerSyncUid) => {
+      if (!uid || uid !== profileBannerSyncUid || commentBackgroundSyncInProgress) return;
+      commentBackgroundSyncInProgress = true;
+      try {
+        const nextAttemptAt = await getPendingCommentBackgroundRetry(uid);
+        if (nextAttemptAt === null) {
+          clearCommentBackgroundRetry();
+          return;
+        }
+        if (!navigator.onLine) return;
+        if (nextAttemptAt > Date.now()) {
+          scheduleCommentBackgroundSync(uid, nextAttemptAt);
+          return;
+        }
+
+        const firebase = window.firebase as typeof window.firebase & {
+          auth?: () => { currentUser: { uid: string } | null };
+          firestore?: () => CommentBackgroundFirestore;
+        };
+        if (firebase?.auth?.().currentUser?.uid !== uid) return;
+        const firestore = firebase.firestore?.();
+        if (!firestore) return;
+
+        const retryAt = await syncPendingCommentBackground(uid, firestore);
+        if (uid !== profileBannerSyncUid) return;
+        if (retryAt !== null) scheduleCommentBackgroundSync(uid, retryAt);
+        else clearCommentBackgroundRetry();
+      } catch (error) {
+        console.warn("Queued comment background synchronization will retry later.", error);
+        if (uid === profileBannerSyncUid) {
+          scheduleCommentBackgroundSync(uid, Date.now() + 60_000);
+        }
+      } finally {
+        commentBackgroundSyncInProgress = false;
+        if (profileBannerSyncUid && profileBannerSyncUid !== uid) {
+          void syncCommentBackground(profileBannerSyncUid);
+        }
+      }
     };
 
     const syncProfileBanner = async (uid = profileBannerSyncUid) => {
@@ -124,6 +187,7 @@ export default function GlobalAuth() {
           window.currentUser = user;
           profileBannerSyncUid = user?.uid || "";
           clearProfileBannerRetry();
+          clearCommentBackgroundRetry();
           void window.updateHeaderAuth?.();
           if (user) {
             void syncReadingHistoryWithUser(user.uid).catch((error: unknown) => {
@@ -133,16 +197,23 @@ export default function GlobalAuth() {
               console.error("Could not sync local chapter reads for the signed-in user.", error);
             });
             void syncProfileBanner(user.uid);
+            void syncCommentBackground(user.uid);
           }
         });
       }
       if (!profileBannerListenersAttached) {
         profileBannerListenersAttached = true;
         const retryPendingBanner = () => { void syncProfileBanner(); };
+        const retryPendingCommentBackground = () => { void syncCommentBackground(); };
         window.addEventListener("online", retryPendingBanner);
         window.addEventListener(PROFILE_BANNER_QUEUED_EVENT, retryPendingBanner);
+        window.addEventListener("online", retryPendingCommentBackground);
+        window.addEventListener(COMMENT_BACKGROUND_QUEUED_EVENT, retryPendingCommentBackground);
         document.addEventListener("visibilitychange", () => {
-          if (document.visibilityState === "visible") retryPendingBanner();
+          if (document.visibilityState === "visible") {
+            retryPendingBanner();
+            retryPendingCommentBackground();
+          }
         });
       }
       window.dispatchEvent(new Event("firebaseCompatReady"));
