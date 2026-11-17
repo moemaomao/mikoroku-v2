@@ -18,6 +18,65 @@ type MedalCacheRecord = {
   updatedAt: number;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isCachedStatsData(value: unknown): value is PublicReadingStats {
+  if (!isRecord(value) || !isRecord(value.profile)) return false;
+  if (
+    !Array.isArray(value.progress) ||
+    !value.progress.every((item) =>
+      isRecord(item) &&
+      typeof item.slug === "string" &&
+      typeof item.title === "string" &&
+      typeof item.cover === "string" &&
+      (item.kind === "manga" || item.kind === "novel") &&
+      typeof item.chapter === "string" &&
+      typeof item.chapterTitle === "string" &&
+      isFiniteNumber(item.chapterProgress) &&
+      isFiniteNumber(item.seriesProgress) &&
+      isFiniteNumber(item.chapterPosition) &&
+      isFiniteNumber(item.chapterCount) &&
+      typeof item.source === "string" &&
+      isFiniteNumber(item.updatedAt),
+    )
+  ) return false;
+  if (
+    !Array.isArray(value.activity) ||
+    !value.activity.every((day) =>
+      isRecord(day) &&
+      typeof day.date === "string" &&
+      isFiniteNumber(day.chapters),
+    )
+  ) return false;
+  if (
+    !isFiniteNumber(value.totalChaptersRead) ||
+    !(value.bookmarksCount === null || isFiniteNumber(value.bookmarksCount)) ||
+    !(value.followersCount === null || isFiniteNumber(value.followersCount)) ||
+    typeof value.commentHistoryError !== "string" ||
+    typeof value.commentHistoryLimitReached !== "boolean" ||
+    !Array.isArray(value.commentHistory) ||
+    !value.commentHistory.every((comment) =>
+      isRecord(comment) &&
+      typeof comment.id === "string" &&
+      typeof comment.text === "string" &&
+      typeof comment.hasImage === "boolean" &&
+      typeof comment.imageUrl === "string" &&
+      isFiniteNumber(comment.createdAt) &&
+      typeof comment.isReply === "boolean" &&
+      typeof comment.linkTitle === "string" &&
+      typeof comment.threadUrl === "string",
+    )
+  ) return false;
+
+  return true;
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
@@ -56,9 +115,14 @@ export async function getCachedReadingStats(
     try {
       const tx = db.transaction(STORE_STATS, "readonly");
       const store = tx.objectStore(STORE_STATS);
-      const record = (await idbRequest(store.get(uid))) as StatsCacheRecord | undefined;
-      if (!record?.data) return null;
-      const age = Date.now() - (record.savedAt || 0);
+      const record: unknown = await idbRequest(store.get(uid));
+      if (
+        !isRecord(record) ||
+        record.uid !== uid ||
+        !isFiniteNumber(record.savedAt) ||
+        !isCachedStatsData(record.data)
+      ) return null;
+      const age = Date.now() - record.savedAt;
       return {
         data: record.data,
         savedAt: record.savedAt,
