@@ -1924,12 +1924,17 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       console.warn("Daftar bookmark lokal tidak valid dan akan diabaikan.", error);
     }
     setBookmarked(current.some((item) => normalizedKey(typeof item === "string" ? item : item.title || "") === normalizedKey(manga.title)));
-    try {
-      setReadChapters(JSON.parse(localStorage.getItem(`read_${manga.title}`) || "[]"));
-    } catch (error) {
-      console.warn("Riwayat chapter lokal tidak valid dan akan diabaikan.", error);
-      setReadChapters([]);
-    }
+    const refreshReadChapters = () => {
+      try {
+        setReadChapters(JSON.parse(localStorage.getItem(`read_${manga.title}`) || "[]"));
+      } catch (error) {
+        console.warn("Riwayat chapter lokal tidak valid dan akan diabaikan.", error);
+        setReadChapters([]);
+      }
+    };
+    refreshReadChapters();
+    window.addEventListener("mikoroku:chapter-read", refreshReadChapters);
+    return () => window.removeEventListener("mikoroku:chapter-read", refreshReadChapters);
   }, [manga]);
 
   const toggleBookmark = useCallback(() => {
@@ -2020,19 +2025,6 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     if (!manga) return;
     const isNovel = chapter.isNovel || isNovelSeries(manga);
     const chapterName = `Chapter ${chapter.num}`;
-    const readKey = `read_${manga.title}`;
-    let read: string[] = [];
-    try {
-      read = JSON.parse(localStorage.getItem(readKey) || "[]");
-    } catch (error) {
-      console.warn("Riwayat chapter lokal tidak valid dan akan diabaikan.", error);
-    }
-    const numeric = String(chapter.num).match(/(\d+(?:\.\d+)?)/)?.[0];
-    if (numeric && !read.includes(numeric)) {
-      read.push(numeric);
-      localStorage.setItem(readKey, JSON.stringify(read));
-      setReadChapters(read);
-    }
     const readerSource = chapter.source === "firestore" && source !== "firestore"
       ? source
       : chapter.source;

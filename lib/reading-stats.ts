@@ -1,6 +1,11 @@
 import { loadFollowerCount } from "./user-following";
 import { loadUserStatsProfile } from "./user-stats-cache";
 import { mergeReadingProgressFromHistory } from "./reading-history";
+import {
+  addCachedChapterReadMark,
+  getCachedChapterReadMarks,
+  saveCachedChapterReadMarks,
+} from "./chapter-read-marks-cache";
 
 type StatsUser = {
   uid: string;
@@ -55,8 +60,18 @@ type StatsTransaction = {
   ) => StatsTransaction;
 };
 
+type StatsWriteBatch = {
+  set: (
+    reference: StatsDocumentReference,
+    data: Record<string, unknown>,
+    options?: { merge?: boolean },
+  ) => void;
+  commit: () => Promise<void>;
+};
+
 type StatsFirestore = {
   collection: (name: string) => StatsCollection;
+  batch: () => StatsWriteBatch;
   collectionGroup?: (name: string) => StatsQuery;
   runTransaction?: <T>(
     updateFunction: (transaction: StatsTransaction) => Promise<T>,
@@ -66,7 +81,10 @@ type StatsFirestore = {
 type StatsFirebase = {
   auth?: () => { currentUser: StatsUser | null };
   firestore?: (() => StatsFirestore) & {
-    FieldValue?: { increment?: (value: number) => unknown };
+    FieldValue?: {
+      increment?: (value: number) => unknown;
+      arrayUnion?: (...values: unknown[]) => unknown;
+    };
   };
 };
 
@@ -141,18 +159,26 @@ const LOCAL_CHAPTER_ACTIVITY_SUFFIX = ":activity";
 const LOCAL_READING_PROGRESS_PREFIX = "mikoroku:reading-stats:progress:";
 const LOCAL_READING_PROGRESS_LIMIT = 200;
 const LOCAL_READER_STATS_QUEUE_PREFIX = "mikoroku:reading-stats:pending:";
-const READER_STATS_FLUSH_INTERVAL_MS = 2 * 60 * 1000;
+const READER_STATS_FLUSH_INTERVAL_MS = 10 * 60 * 1000;
+const CHAPTER_READ_MARKS_SYNC_DELAY_MS = 30 * 1000;
+const CHAPTER_READ_MARKS_CACHE_TTL_MS = 15 * 60 * 1000;
+const CHAPTER_READ_MARKS_REFRESH_RETRY_MS = 60 * 1000;
+const CHAPTER_READ_MARKS_COLLECTION = "chapterReadMarks";
+const MAX_CHAPTER_READ_MARK_SERIES_PER_BATCH = 450;
 const LOCAL_READ_MARK_SYNC_PREFIX = "mikoroku:reading-stats:read-mark-sync:";
 const LOCAL_READ_MARK_SYNC_RETRY_MS = 60 * 60 * 1000;
 const pendingReadMarkSyncs = new Map<string, Promise<void>>();
 type PendingReaderStatsQueue = {
   progress: Record<string, Record<string, unknown>>;
   activityCounts: Record<string, number>;
+  readMarks: Record<string, string[]>;
 };
 const pendingReaderStatsQueues = new Map<string, PendingReaderStatsQueue>();
 const pendingReaderStatsFlushTimers = new Map<string, number>();
+const pendingReaderStatsFlushDeadlines = new Map<string, number>();
 const pendingReaderStatsFlushes = new Map<string, Promise<void>>();
 const pendingReaderStatsRetryAttempts = new Map<string, number>();
+const pendingChapterReadMarksLoads = new Map<string, Promise<Set<string>>>();
 const pendingReaderStatsCallbacks = new Map<
   string,
   Map<string, (uid: string, activityDate: string) => void>
@@ -340,6 +366,147 @@ export function mergeLocalReadingProgress(
   return [...merged.values()].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
+function readLegacyChapterReadMarks(title: string): string[] {
+  if (!title) return [];
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(`read_${title}`) || "[]");
+    return Array.isArray(stored)
+      ? [...new Set(stored.map(String).filter(Boolean))]
+      : [];
+  } catch (error) {
+    console.warn("Legacy chapter read marks could not be read.", error);
+    return [];
+  }
+}
+
+function syncLegacyChapterReadMarks(title: string, chapters: Iterable<string>): void {
+  if (!title) return;
+  const existing = readLegacyChapterReadMarks(title);
+  const merged = [...new Set([...existing, ...chapters])];
+  if (merged.length === existing.length) return;
+  try {
+    localStorage.setItem(`read_${title}`, JSON.stringify(merged));
+    window.dispatchEvent(new Event("mikoroku:chapter-read"));
+  } catch (error) {
+    console.warn("Legacy chapter read marks could not be updated.", error);
+  }
+}
+
+function enqueueChapterReadMarks(uid: string, slug: string, chapters: string[]): void {
+  const newChapters = [...new Set(chapters.filter(Boolean))];
+  if (!newChapters.length) return;
+
+  const queue = readPendingReaderStatsQueue(uid);
+  queue.readMarks[slug] = [...new Set([
+    ...(queue.readMarks[slug] || []),
+    ...newChapters,
+  ])];
+  pendingReaderStatsQueues.set(uid, queue);
+  writePendingReaderStatsQueue(uid, queue);
+  schedulePendingReaderStatsFlush(uid, CHAPTER_READ_MARKS_SYNC_DELAY_MS);
+}
+
+function schedulePendingReaderStatsFlushIfNeeded(uid: string): void {
+  const queue = readPendingReaderStatsQueue(uid);
+  if (
+    Object.keys(queue.progress).length ||
+    Object.keys(queue.activityCounts).length ||
+    Object.keys(queue.readMarks).length
+  ) {
+    schedulePendingReaderStatsFlush(
+      uid,
+      Object.keys(queue.readMarks).length
+        ? CHAPTER_READ_MARKS_SYNC_DELAY_MS
+        : READER_STATS_FLUSH_INTERVAL_MS,
+    );
+  }
+}
+
+function readChapterMarkList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.map((chapter) => typeof chapter === "string" ? chapter : "").filter(Boolean))]
+    : [];
+}
+
+async function loadChapterReadMarks(
+  uid: string,
+  slug: string,
+  title: string,
+): Promise<Set<string>> {
+  const seriesKey = `${uid}:${slug}`;
+  const pending = pendingChapterReadMarksLoads.get(seriesKey);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const cached = await getCachedChapterReadMarks(uid, slug);
+    const chapters = new Set(cached?.chapters || []);
+    let fetchedAt = cached?.fetchedAt || 0;
+    let checkedAt = cached?.checkedAt || 0;
+    let remoteChapters: Set<string> | null = null;
+    const now = Date.now();
+    const cacheExpired = !cached || now - fetchedAt >= CHAPTER_READ_MARKS_CACHE_TTL_MS;
+    const retryReady = !checkedAt || now - checkedAt >= CHAPTER_READ_MARKS_REFRESH_RETRY_MS;
+    if (cacheExpired && retryReady) {
+      try {
+        const firestore = await waitForFirestore();
+        const reference = firestore
+          .collection("userStats")
+          .doc(uid)
+          .collection(CHAPTER_READ_MARKS_COLLECTION)
+          .doc(safeDocumentId(slug));
+        const snapshot = await reference.get({ source: "server" });
+        remoteChapters = new Set(readChapterMarkList(snapshot.data()?.chapters));
+        remoteChapters.forEach((chapter) => chapters.add(chapter));
+        fetchedAt = Date.now();
+        checkedAt = fetchedAt;
+      } catch (error) {
+        checkedAt = Date.now();
+        console.warn(`Chapter read marks for ${slug} could not be refreshed from Firestore.`, error);
+      }
+    }
+
+    const legacyMarks = readLegacyChapterReadMarks(title);
+    const unsyncedLegacyMarks = legacyMarks.filter((chapter) => !chapters.has(chapter));
+    unsyncedLegacyMarks.forEach((chapter) => chapters.add(chapter));
+    const unsyncedCachedMarks = remoteChapters
+      ? (cached?.chapters || []).filter((chapter) => !remoteChapters?.has(chapter))
+      : [];
+    enqueueChapterReadMarks(uid, slug, [...unsyncedLegacyMarks, ...unsyncedCachedMarks]);
+
+    const cachedResult = await saveCachedChapterReadMarks(
+      uid,
+      slug,
+      [...chapters],
+      remoteChapters ? fetchedAt : undefined,
+      checkedAt || undefined,
+    );
+    const result = new Set(cachedResult.chapters);
+    syncLegacyChapterReadMarks(title, result);
+    schedulePendingReaderStatsFlushIfNeeded(uid);
+    return result;
+  })();
+  pendingChapterReadMarksLoads.set(seriesKey, request);
+  try {
+    return await request;
+  } finally {
+    if (pendingChapterReadMarksLoads.get(seriesKey) === request) {
+      pendingChapterReadMarksLoads.delete(seriesKey);
+    }
+  }
+}
+
+async function markChapterReadOnce(uid: string, input: ReaderStatsInput): Promise<boolean> {
+  if (!input.chapter) return false;
+  const chapters = await loadChapterReadMarks(uid, input.slug, input.title);
+  if (chapters.has(input.chapter)) return false;
+
+  const result = await addCachedChapterReadMark(uid, input.slug, input.chapter);
+  if (!result.added) return false;
+  enqueueChapterReadMarks(uid, input.slug, [input.chapter]);
+  syncLegacyChapterReadMarks(input.title, result.cache.chapters);
+  return true;
+}
+
 function recordLocalReadingProgress(uid: string, input: ReaderStatsInput): void {
   const previousItem = readLocalReadingProgress(uid).find((item) => item.slug === input.slug);
   const chapterProgress = clampPercentage(input.chapterProgress);
@@ -366,6 +533,7 @@ export async function ensureSeriesTracked(
   uid: string,
   input: Pick<ReaderStatsInput, "slug" | "title" | "cover" | "kind" | "chapterCount">,
 ): Promise<void> {
+  await loadChapterReadMarks(uid, input.slug, input.title);
   const previousItem = readLocalReadingProgress(uid).find((item) => item.slug === input.slug);
   const trackedItem: ReadingProgressItem = previousItem
     ? previousItem.chapterPosition === 0 && input.chapterCount > previousItem.chapterCount
@@ -567,7 +735,7 @@ function readPendingReaderStatsQueue(uid: string): PendingReaderStatsQueue {
   const cached = pendingReaderStatsQueues.get(uid);
   if (cached) return cached;
 
-  let queue: PendingReaderStatsQueue = { progress: {}, activityCounts: {} };
+  let queue: PendingReaderStatsQueue = { progress: {}, activityCounts: {}, readMarks: {} };
   try {
     const stored: unknown = JSON.parse(
       localStorage.getItem(`${LOCAL_READER_STATS_QUEUE_PREFIX}${uid}`) || "{}",
@@ -591,6 +759,11 @@ function readPendingReaderStatsQueue(uid: string): PendingReaderStatsQueue {
             count > 0,
           ),
       ) as Record<string, number>,
+      readMarks: Object.fromEntries(
+        Object.entries(asRecord(data.readMarks))
+          .map(([slug, chapters]) => [slug, readChapterMarkList(chapters)] as const)
+          .filter(([, chapters]) => chapters.length > 0),
+      ),
     };
   } catch (error) {
     console.warn("Pending reading stats could not be read.", error);
@@ -602,9 +775,10 @@ function readPendingReaderStatsQueue(uid: string): PendingReaderStatsQueue {
 function writePendingReaderStatsQueue(uid: string, queue: PendingReaderStatsQueue): void {
   const hasProgress = Object.keys(queue.progress).length > 0;
   const hasActivity = Object.keys(queue.activityCounts).length > 0;
+  const hasReadMarks = Object.keys(queue.readMarks).length > 0;
   try {
     const key = `${LOCAL_READER_STATS_QUEUE_PREFIX}${uid}`;
-    if (!hasProgress && !hasActivity) {
+    if (!hasProgress && !hasActivity && !hasReadMarks) {
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, JSON.stringify(queue));
@@ -618,12 +792,20 @@ function schedulePendingReaderStatsFlush(
   uid: string,
   delay = READER_STATS_FLUSH_INTERVAL_MS,
 ): void {
-  if (pendingReaderStatsFlushTimers.has(uid)) return;
+  const deadline = Date.now() + delay;
+  const existingTimer = pendingReaderStatsFlushTimers.get(uid);
+  const existingDeadline = pendingReaderStatsFlushDeadlines.get(uid);
+  if (existingTimer !== undefined && existingDeadline !== undefined) {
+    if (existingDeadline <= deadline) return;
+    window.clearTimeout(existingTimer);
+  }
   const timer = window.setTimeout(() => {
     pendingReaderStatsFlushTimers.delete(uid);
+    pendingReaderStatsFlushDeadlines.delete(uid);
     void flushPendingReaderStats(uid);
   }, delay);
   pendingReaderStatsFlushTimers.set(uid, timer);
+  pendingReaderStatsFlushDeadlines.set(uid, deadline);
 }
 
 async function flushPendingReaderStats(uid: string): Promise<void> {
@@ -631,7 +813,11 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
   if (existing) return existing;
 
   const queue = readPendingReaderStatsQueue(uid);
-  if (!Object.keys(queue.progress).length && !Object.keys(queue.activityCounts).length) return;
+  if (
+    !Object.keys(queue.progress).length &&
+    !Object.keys(queue.activityCounts).length &&
+    !Object.keys(queue.readMarks).length
+  ) return;
 
   const sdk = getStatsWindow().firebase;
   const user = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
@@ -642,23 +828,32 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
 
   const queuedProgress = { ...queue.progress };
   const queuedActivityCounts = { ...queue.activityCounts };
+  const queuedReadMarks = Object.fromEntries(
+    Object.entries(queue.readMarks).slice(0, MAX_CHAPTER_READ_MARK_SERIES_PER_BATCH),
+  );
   const timer = pendingReaderStatsFlushTimers.get(uid);
   if (timer !== undefined) {
     window.clearTimeout(timer);
     pendingReaderStatsFlushTimers.delete(uid);
+    pendingReaderStatsFlushDeadlines.delete(uid);
   }
 
   const request = (async () => {
     try {
       const firestore = await waitForFirestore();
-      const activeUser = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
+      const activeSdk = getStatsWindow().firebase;
+      const activeUser = activeSdk?.auth?.().currentUser || getStatsWindow().currentUser;
       if (activeUser?.uid !== uid) return;
 
-      const increment = sdk?.firestore?.FieldValue?.increment;
+      const increment = activeSdk?.firestore?.FieldValue?.increment;
+      const arrayUnion = activeSdk?.firestore?.FieldValue?.arrayUnion;
       const activityTotal = Object.values(queuedActivityCounts)
         .reduce((total, count) => total + count, 0);
       if (activityTotal && typeof increment !== "function") {
         throw new Error("Firestore atomic increment is unavailable.");
+      }
+      if (Object.keys(queuedReadMarks).length && typeof arrayUnion !== "function") {
+        throw new Error("Firestore array union is unavailable for chapter read marks.");
       }
       const incrementValue = (count: number): unknown => {
         if (typeof increment !== "function") {
@@ -667,9 +862,10 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
         return increment(count);
       };
 
-      const readingStats: Record<string, unknown> = {
-        progress: queuedProgress,
-      };
+      const batch = firestore.batch();
+      const userReference = firestore.collection("userStats").doc(uid);
+      const readingStats: Record<string, unknown> = {};
+      if (Object.keys(queuedProgress).length) readingStats.progress = queuedProgress;
       if (activityTotal) {
         readingStats.activity = Object.fromEntries(
           Object.entries(queuedActivityCounts).map(([date, count]) => [
@@ -679,11 +875,31 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
         );
         readingStats.totalChaptersRead = incrementValue(activityTotal);
       }
-
-      await firestore.collection("userStats").doc(uid).set(
-        { readingStats },
-        { merge: true },
-      );
+      const readMarkEntries = Object.entries(queuedReadMarks)
+        .filter(([, chapters]) => chapters.length > 0);
+      if (readMarkEntries.length) {
+        if (typeof arrayUnion !== "function") {
+          throw new Error("Firestore array union is unavailable for chapter read marks.");
+        }
+      }
+      if (Object.keys(readingStats).length) {
+        batch.set(userReference, { readingStats }, { merge: true });
+      }
+      readMarkEntries.forEach(([slug, chapters]) => {
+        if (typeof arrayUnion !== "function") return;
+        const markReference = userReference
+          .collection(CHAPTER_READ_MARKS_COLLECTION)
+          .doc(safeDocumentId(slug));
+        batch.set(markReference, {
+          slug,
+          chapters: arrayUnion(...chapters),
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      });
+      await batch.commit();
+      await Promise.all(Object.entries(queuedReadMarks).map(([slug, chapters]) =>
+        saveCachedChapterReadMarks(uid, slug, chapters, Date.now()),
+      ));
 
       const currentQueue = readPendingReaderStatsQueue(uid);
       Object.entries(queuedProgress).forEach(([key, sent]) => {
@@ -695,6 +911,12 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
         const remaining = (currentQueue.activityCounts[date] || 0) - sentCount;
         if (remaining > 0) currentQueue.activityCounts[date] = remaining;
         else delete currentQueue.activityCounts[date];
+      });
+      Object.entries(queuedReadMarks).forEach(([slug, sentChapters]) => {
+        const remaining = (currentQueue.readMarks[slug] || [])
+          .filter((chapter) => !sentChapters.includes(chapter));
+        if (remaining.length) currentQueue.readMarks[slug] = remaining;
+        else delete currentQueue.readMarks[slug];
       });
       writePendingReaderStatsQueue(uid, currentQueue);
 
@@ -715,8 +937,17 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
 
       pendingReaderStatsRetryAttempts.delete(uid);
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
-      if (Object.keys(currentQueue.progress).length || Object.keys(currentQueue.activityCounts).length) {
-        schedulePendingReaderStatsFlush(uid);
+      if (
+        Object.keys(currentQueue.progress).length ||
+        Object.keys(currentQueue.activityCounts).length ||
+        Object.keys(currentQueue.readMarks).length
+      ) {
+        schedulePendingReaderStatsFlush(
+          uid,
+          Object.keys(currentQueue.readMarks).length
+            ? CHAPTER_READ_MARKS_SYNC_DELAY_MS
+            : READER_STATS_FLUSH_INTERVAL_MS,
+        );
       }
     } catch (error) {
       console.error("Reading stats remain queued locally and will retry synchronization.", error);
@@ -747,6 +978,7 @@ function flushCurrentUserReaderStats(): void {
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", flushCurrentUserReaderStats);
   window.addEventListener("online", flushCurrentUserReaderStats);
+  window.addEventListener("firebaseCompatReady", flushCurrentUserReaderStats);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushCurrentUserReaderStats();
   });
@@ -755,21 +987,26 @@ if (typeof window !== "undefined") {
 export async function saveReaderStats(
   input: ReaderStatsInput,
   recordChapterActivity: boolean,
-  onOptimisticUpdate?: (uid: string, activityDate: string) => void,
+  onOptimisticUpdate?: (uid: string, activityDate: string, recordChapterActivity: boolean) => void,
   onSynced?: (uid: string, activityDate: string) => void,
 ): Promise<boolean> {
   const sdk = getStatsWindow().firebase;
   const user = getStatsWindow().currentUser || sdk?.auth?.().currentUser;
-  if (!user?.uid) return false;
+  if (!user?.uid) {
+    syncLegacyChapterReadMarks(input.title, [input.chapter]);
+    return false;
+  }
   const activityDate = utcDateKey(new Date());
   recordLocalReadingProgress(user.uid, input);
-  onOptimisticUpdate?.(user.uid, activityDate);
-  if (!sdk) return false;
-
-  const increment = sdk.firestore?.FieldValue?.increment;
-  if (recordChapterActivity && typeof increment !== "function") {
+  const increment = sdk?.firestore?.FieldValue?.increment;
+  if (recordChapterActivity && sdk && typeof increment !== "function") {
     throw new Error("Firestore atomic increment is unavailable.");
   }
+  const shouldRecordChapterActivity = recordChapterActivity
+    ? await markChapterReadOnce(user.uid, input)
+    : false;
+  onOptimisticUpdate?.(user.uid, activityDate, shouldRecordChapterActivity);
+
   const localProgress = readLocalReadingProgress(user.uid)
     .find((item) => item.slug === input.slug);
   const chapterProgress = clampPercentage(input.chapterProgress);
@@ -792,7 +1029,7 @@ export async function saveReaderStats(
     updatedAt: new Date(localProgress?.updatedAt || Date.now()).toISOString(),
   };
 
-  if (recordChapterActivity) {
+  if (shouldRecordChapterActivity) {
     queue.activityCounts[activityDate] = (queue.activityCounts[activityDate] || 0) + 1;
     if (onSynced) {
       const callbacks = pendingReaderStatsCallbacks.get(user.uid) || new Map();
@@ -804,7 +1041,6 @@ export async function saveReaderStats(
   pendingReaderStatsQueues.set(user.uid, queue);
   writePendingReaderStatsQueue(user.uid, queue);
   schedulePendingReaderStatsFlush(user.uid);
-  if (recordChapterActivity) void flushPendingReaderStats(user.uid);
   window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
   return true;
 }

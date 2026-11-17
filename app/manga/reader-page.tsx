@@ -1608,17 +1608,6 @@ export default function ReaderPage({
         }).catch((historyError: unknown) => {
           console.error("Reading history could not be saved.", historyError);
         });
-        localStorage.setItem(`read_${result.title}`, JSON.stringify([
-          ...new Set([
-            ...(() => {
-              try {
-                const saved = JSON.parse(localStorage.getItem(`read_${result.title}`) || "[]") as string[];
-                return Array.isArray(saved) ? saved : [];
-              } catch { return []; }
-            })(),
-            result.chapter,
-          ]),
-        ]));
         window.dispatchEvent(new Event("mikoroku:chapter-read"));
       })
       .catch((loadError: unknown) => {
@@ -1652,9 +1641,9 @@ export default function ReaderPage({
     lastStatsChapterRef.current = chapterKey;
     lastStatsActivityRef.current = chapterKey;
 
-    void saveReaderStats(input, true, (uid, activityDate) => {
-      const localTotal = recordLocalChapterRead(uid, true, activityDate);
-      void updateCachedReaderStats(uid, input, true)
+    void saveReaderStats(input, true, (uid, activityDate, recordActivity) => {
+      const localTotal = recordLocalChapterRead(uid, recordActivity, activityDate);
+      void updateCachedReaderStats(uid, input, recordActivity)
         .then((cachedTotal) => setLocalChapterTotal(uid, Math.max(localTotal, cachedTotal || 0)))
         .catch((cacheError: unknown) => {
           console.warn("Reading stats could not be updated in the local cache.", cacheError);
@@ -1688,9 +1677,9 @@ export default function ReaderPage({
       if (!needsActivity && lastStatsProgressRef.current === progressKey) return;
       if (needsActivity) lastStatsActivityRef.current = chapterKey;
 
-      void saveReaderStats(input, needsActivity, (uid, activityDate) => {
-        const localTotal = recordLocalChapterRead(uid, needsActivity, activityDate);
-        void updateCachedReaderStats(uid, input, needsActivity)
+      void saveReaderStats(input, needsActivity, (uid, activityDate, recordActivity) => {
+        const localTotal = recordLocalChapterRead(uid, recordActivity, activityDate);
+        void updateCachedReaderStats(uid, input, recordActivity)
           .then((cachedTotal) => setLocalChapterTotal(uid, Math.max(localTotal, cachedTotal || 0)))
           .catch((cacheError: unknown) => {
             console.warn("Reading stats could not be updated in the local cache.", cacheError);

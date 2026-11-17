@@ -75,7 +75,7 @@ const HISTORY_STORE = "entries";
 const HISTORY_SYNC_COLLECTION = "userStats";
 const HISTORY_SYNC_ERROR_EVENT = "mikoroku:reading-history-sync-error";
 const HISTORY_SYNCED_EVENT = "mikoroku:reading-history-synced";
-const HISTORY_PROGRESS_SYNC_DELAY = 4000;
+const HISTORY_PROGRESS_SYNC_DELAY = 10 * 60 * 1000;
 const ACCOUNT_CHANGED_DURING_SYNC_ERROR =
   "The signed-in account changed during history synchronization.";
 
@@ -624,7 +624,7 @@ export async function upsertReadingHistoryEntry(entry: ReadingHistoryEntry): Pro
     ...existing.filter((item) => item.url !== entry.url),
   ].slice(0, HISTORY_LIMIT);
   await writeLocalHistory(updated);
-  scheduleProgressSync();
+  if (!previous) scheduleProgressSync();
 }
 
 export async function updateReadingHistoryProgress(url: string, progress: number): Promise<void> {
@@ -639,7 +639,6 @@ export async function updateReadingHistoryProgress(url: string, progress: number
         }
       : entry,
   ));
-  scheduleProgressSync();
 }
 
 export async function deleteReadingHistoryEntry(url: string): Promise<void> {
