@@ -1422,10 +1422,10 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
   const [bannerError, setBannerError] = useState("");
   const [statsSettingsOpen, setStatsSettingsOpen] = useState(false);
   const [hiddenStatsDraft, setHiddenStatsDraft] = useState<StatsSectionId[]>([]);
-  const [statsSettingsSaving, setStatsSettingsSaving] = useState(false);
   const [statsSettingsError, setStatsSettingsError] = useState("");
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const statsSettingsDialogRef = useRef<HTMLDivElement>(null);
+  const statsSettingsSaveIdRef = useRef(0);
   const lifetimeChapterHighWaterRef = useRef({ uid, total: 0 });
   const statsRef = useRef<PublicReadingStats | null>(stats);
   const lastHandledRetryRef = useRef(retry);
@@ -1718,9 +1718,8 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
     }
   }
 
-  async function saveStatsSettings() {
+  function saveStatsSettings() {
     setStatsSettingsError("");
-    setStatsSettingsSaving(true);
     try {
       const firebase = (window as ProfileBannerWindow).firebase;
       const user = firebase?.auth?.().currentUser;
@@ -1730,25 +1729,31 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
       }
 
       const hiddenStatsSections = getHiddenStatsSections(hiddenStatsDraft);
-      await firestore.collection("userStats").doc(uid).set({ hiddenStatsSections }, { merge: true });
-
-      if (stats) {
+      const saveId = ++statsSettingsSaveIdRef.current;
+      const savePromise = firestore.collection("userStats").doc(uid).set({ hiddenStatsSections }, { merge: true });
+      const currentStats = statsRef.current;
+      if (currentStats) {
         const updatedStats = {
-          ...stats,
-          profile: { ...stats.profile, hiddenStatsSections },
+          ...currentStats,
+          profile: { ...currentStats.profile, hiddenStatsSections },
         };
+        statsRef.current = updatedStats;
         setStats(updatedStats);
         void setCachedReadingStats(uid, updatedStats, false);
       }
       setStatsSettingsOpen(false);
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
+      void savePromise.catch((saveError: unknown) => {
+        console.error("Stats settings could not be synced to Firestore.", saveError);
+        if (saveId !== statsSettingsSaveIdRef.current) return;
+        const detail = saveError instanceof Error ? ` ${saveError.message}` : "";
+        setStatsSettingsError(`Settings were applied here but could not be synced to Firestore.${detail}`);
+      });
     } catch (saveError) {
       console.error("Stats settings could not be saved.", saveError);
       setStatsSettingsError(saveError instanceof Error
         ? saveError.message
         : "Stats settings could not be saved. Please try again.");
-    } finally {
-      setStatsSettingsSaving(false);
     }
   }
 
@@ -1931,6 +1936,22 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
             {isOwner && bannerError && !statsSettingsOpen && (
               <p role="alert" className="relative z-10 mt-3 rounded-lg bg-red-100/90 px-3 py-2 text-xs text-red-800 dark:bg-red-950/80 dark:text-red-100">
                 {bannerError}
+              </p>
+            )}
+            {isOwner && statsSettingsError && !statsSettingsOpen && (
+              <p role="alert" className="relative z-10 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red-100/90 px-3 py-2 text-xs text-red-800 dark:bg-red-950/80 dark:text-red-100">
+                <span>{statsSettingsError}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHiddenStatsDraft(getHiddenStatsSections(profile.hiddenStatsSections));
+                    setStatsSettingsError("");
+                    setStatsSettingsOpen(true);
+                  }}
+                  className="font-bold underline"
+                >
+                  Retry
+                </button>
               </p>
             )}
           </section>
@@ -2200,7 +2221,6 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
                           <input
                             type="checkbox"
                             checked={hidden}
-                            disabled={statsSettingsSaving}
                             onChange={(event) => {
                               setHiddenStatsDraft((current) => event.target.checked
                                 ? [...current, section.id]
@@ -2234,10 +2254,9 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
               <button
                 type="button"
                 onClick={() => void saveStatsSettings()}
-                disabled={statsSettingsSaving}
                 className="rounded-md bg-[var(--mikoroku-accent)] px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-70 sm:rounded-lg sm:px-3 sm:py-2 sm:text-[11px]"
               >
-                {statsSettingsSaving ? "Saving..." : "Save settings"}
+                Save settings
               </button>
             </div>
           </div>

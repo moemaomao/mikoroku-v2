@@ -38,6 +38,10 @@ type CompatDocumentReference = {
   delete: () => Promise<void>;
   update: (data: DataRecord) => Promise<void>;
 };
+type CompatTransaction = {
+  get: (reference: CompatDocumentReference) => Promise<CompatDocument>;
+  set: (reference: CompatDocumentReference, data: DataRecord, options?: { merge?: boolean }) => CompatTransaction;
+};
 type CompatQuery = {
   where: (field: string, operator: string, value: unknown) => CompatQuery;
   orderBy: (field: string, direction: "asc" | "desc") => CompatQuery;
@@ -50,6 +54,7 @@ type CompatCollection = CompatQuery & {
 };
 type CompatFirestore = {
   collection: (name: string) => CompatCollection;
+  runTransaction: <T>(updateFunction: (transaction: CompatTransaction) => Promise<T>) => Promise<T>;
 };
 type CompatAuth = {
   currentUser: CompatUser | null;
@@ -466,6 +471,17 @@ function stringValue(value: unknown, fallback = ""): string {
 
 function numberValue(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function getNotificationKey(notification: DataRecord, type: string): string {
+  return JSON.stringify([
+    type,
+    numberValue(notification.date),
+    stringValue(notification.parentId),
+    stringValue(notification.postId),
+    stringValue(notification.author),
+    stringValue(notification.text || notification.message),
+  ]);
 }
 
 function waitWithTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
@@ -1514,6 +1530,48 @@ function initializeUserModals(): () => void {
             card.appendChild(anchor);
           }
           list.appendChild(card);
+        });
+
+        const readKeys = new Set(
+          all
+            .filter((item) => item.read !== true)
+            .map((item) => getNotificationKey(item, item.notifType)),
+        );
+        if (!readKeys.size) return;
+        const keys = [...readKeys];
+        window.dispatchEvent(new CustomEvent("mikoroku:notifications-read", { detail: { keys } }));
+        const reference = firestore.collection("notifications").doc(user.uid);
+        void firestore.runTransaction(async (transaction) => {
+          const currentSnapshot = await transaction.get(reference);
+          if (!currentSnapshot.exists) return;
+          const currentData = asRecord(currentSnapshot.data());
+          const updates: DataRecord = {};
+          for (const [field, type] of [["replies", "reply"], ["mentions", "mention"]] as const) {
+            const notifications = currentData[field];
+            if (!Array.isArray(notifications)) continue;
+            updates[field] = notifications.map((notification) => {
+              const record = asRecord(notification);
+              return readKeys.has(getNotificationKey(record, type)) && record.read !== true
+                ? { ...record, read: true }
+                : record;
+            });
+          }
+          if (Object.keys(updates).length) {
+            transaction.set(reference, updates, { merge: true });
+          }
+        }).catch((markReadError: unknown) => {
+          console.error("Notifications could not be marked as read.", markReadError);
+          window.dispatchEvent(new CustomEvent("mikoroku:notifications-read-failed", { detail: { keys } }));
+          if (notificationModal.style.display === "flex") {
+            const warning = createElement(
+              "div",
+              undefined,
+              "Notifikasi terbuka, tetapi status dibaca belum tersimpan. Coba buka kembali.",
+            );
+            warning.setAttribute("role", "alert");
+            warning.style.cssText = "padding:10px;color:#fca5a5;text-align:center;font-size:.85rem";
+            list.prepend(warning);
+          }
         });
       })
       .catch((error: unknown) => {

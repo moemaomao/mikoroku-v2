@@ -908,6 +908,51 @@ function handleQuoteBtnClick(e) {
   }
 }
 
+    function getNotificationKey(notification, type) {
+  const date = typeof notification.date === 'number' && Number.isFinite(notification.date)
+    ? notification.date
+    : 0;
+  const text = typeof notification.text === 'string'
+    ? notification.text
+    : typeof notification.message === 'string'
+      ? notification.message
+      : '';
+  return JSON.stringify([
+    type,
+    date,
+    typeof notification.parentId === 'string' ? notification.parentId : '',
+    typeof notification.postId === 'string' ? notification.postId : '',
+    typeof notification.author === 'string' ? notification.author : '',
+    text
+  ]);
+}
+
+    window.addEventListener('mikoroku:notifications-read', event => {
+  const keys = new Set(event.detail && Array.isArray(event.detail.keys) ? event.detail.keys : []);
+  if (!keys.size) return;
+  replyNotifications = replyNotifications.map(notification => {
+    const type = notification.notifType === 'mention' ? 'mention' : 'reply';
+    return keys.has(getNotificationKey(notification, type))
+      ? { ...notification, read: true }
+      : notification;
+  });
+  unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
+  updateReplyBadge();
+});
+
+    window.addEventListener('mikoroku:notifications-read-failed', event => {
+  const keys = new Set(event.detail && Array.isArray(event.detail.keys) ? event.detail.keys : []);
+  if (!keys.size) return;
+  replyNotifications = replyNotifications.map(notification => {
+    const type = notification.notifType === 'mention' ? 'mention' : 'reply';
+    return keys.has(getNotificationKey(notification, type))
+      ? { ...notification, read: false }
+      : notification;
+  });
+  unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
+  updateReplyBadge();
+});
+
     function showReplyNotifications() {
       if (typeof window.openMikorokuNotifications !== 'function') {
         console.error('The shared notifications modal is unavailable.');
@@ -1496,7 +1541,7 @@ async function addMentionNotifications(text) {
         return (b.date || 0) - (a.date || 0);
       });
 
-      unreadReplies = replyNotifications.length;
+      unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
 
       updateReplyBadge();
 
@@ -3460,26 +3505,27 @@ function generateUsername(user, fallbackName = '') {
       const textLength = text.length;
       const reputationGain = Math.floor(textLength / 1);
 
-      await userRef.set({
+      void userRef.set({
         points: firebase.firestore.FieldValue.increment(isReply ? 2 : 1),
         reputation: firebase.firestore.FieldValue.increment(reputationGain),
         commentCount: firebase.firestore.FieldValue.increment(1)
-      }, { merge: true });
-
-      const earnedPoints = isReply ? 2 : 1;
-
-      if (!userStatsCache[currentUser.uid]) {
-        userStatsCache[currentUser.uid] = {};
-      }
-
-      userStatsCache[currentUser.uid].points = (userStatsCache[currentUser.uid].points || 0) + earnedPoints;
-      userStatsCache[currentUser.uid].reputation = (userStatsCache[currentUser.uid].reputation || 0) + reputationGain;
-      userStatsCache[currentUser.uid].commentCount = (userStatsCache[currentUser.uid].commentCount || 0) + 1;
-
-      console.log(`✅ User ${currentUser.uid} earned ${earnedPoints} points + ${reputationGain} reputation (${textLength} chars)`);
+      }, { merge: true }).then(() => {
+        const earnedPoints = isReply ? 2 : 1;
+        if (!userStatsCache[currentUser.uid]) {
+          userStatsCache[currentUser.uid] = {};
+        }
+        userStatsCache[currentUser.uid].points = (userStatsCache[currentUser.uid].points || 0) + earnedPoints;
+        userStatsCache[currentUser.uid].reputation = (userStatsCache[currentUser.uid].reputation || 0) + reputationGain;
+        userStatsCache[currentUser.uid].commentCount = (userStatsCache[currentUser.uid].commentCount || 0) + 1;
+        console.log(`✅ User ${currentUser.uid} earned ${earnedPoints} points + ${reputationGain} reputation (${textLength} chars)`);
+      }).catch((syncError) => {
+        console.error("Comment was posted, but its user stats could not be synchronized.", syncError);
+      });
     }
 
-    await addMentionNotifications(text);
+    void addMentionNotifications(text).catch((syncError) => {
+      console.error("Comment was posted, but mention notifications could not be synchronized.", syncError);
+    });
 
     setTimeout(() => {
       sortingLocked = false;
