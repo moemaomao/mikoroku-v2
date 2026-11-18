@@ -206,7 +206,16 @@ function readCachedMangaMetadata(): CachedMangaMetadata | null {
           Number.isFinite(timestamp),
       ),
     ) as Record<string, number>;
-    return { exportedAtMs: value.exportedAtMs, cursor: value.cursor, records, tombstones };
+    return {
+      exportedAtMs: value.exportedAtMs,
+      cursor: value.cursor,
+      sourceMode:
+        value.sourceMode === "effective" || value.sourceMode === "baseline"
+          ? value.sourceMode
+          : undefined,
+      records,
+      tombstones,
+    };
   } catch (error) {
     console.warn("Cached manga metadata is invalid and will be ignored.", error);
     localStorage.removeItem(MANGA_METADATA_CACHE_KEY);
@@ -264,7 +273,6 @@ export function loadFirestoreMangaCatalog(
       const cached = readCachedMangaMetadata();
       let cursor = catalog.exportedAtMs;
       if (
-        sourceMode === "effective" &&
         cached?.exportedAtMs === catalog.exportedAtMs &&
         cached.sourceMode === sourceMode
       ) {
@@ -286,10 +294,7 @@ export function loadFirestoreMangaCatalog(
         if (!record || metadataChangeTime(record) <= deletedAt) bySlug.delete(slug);
       }
 
-      if (
-        sourceMode === "effective" &&
-        catalog.firestoreDeltasIncluded !== true
-      ) {
+      if (catalog.firestoreDeltasIncluded !== true) {
         try {
           const { firestore } = initializeFirebaseClient();
           const mangaCollection = collection(firestore, "manga");
