@@ -865,11 +865,17 @@ function initializeUserModals(): () => void {
     });
 
     const items = rootRef.collection("items");
-    for (let offset = 0; offset < entries.length; offset += 450) {
+    for (let offset = 0; offset < entries.length; offset += 30) {
+      const group = entries.slice(offset, offset + 30);
+      const itemReferences = group.map(({ id, data }) => ({ reference: items.doc(id), data }));
+      const existingItems = await Promise.all(
+        itemReferences.map(({ reference }) => reference.get()),
+      );
+      const missingItems = itemReferences.filter((_, index) => !existingItems[index].exists);
+      if (!missingItems.length) continue;
+
       const batch = firestore.batch();
-      entries.slice(offset, offset + 450).forEach(({ id, data }) => {
-        batch.set(items.doc(id), data);
-      });
+      missingItems.forEach(({ reference, data }) => batch.set(reference, data));
       await batch.commit();
     }
 

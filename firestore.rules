@@ -99,7 +99,33 @@ service cloud.firestore {
     match /notifications/{uid} {
       allow read: if request.auth != null &&
                   request.auth.uid == uid;
-      allow create, update: if request.auth != null;
+
+      allow create: if request.auth != null &&
+                    (
+                      request.auth.uid == uid ||
+                      (
+                        request.resource.data.keys().hasOnly(['unreadCount']) &&
+                        request.resource.data.unreadCount == 1
+                      )
+                    );
+
+      allow update: if request.auth != null &&
+                    (
+                      request.auth.uid == uid ||
+                      (
+                        request.resource.data.diff(resource.data)
+                          .affectedKeys().hasOnly(['unreadCount']) &&
+                        request.resource.data.unreadCount is number &&
+                        (
+                          (!('unreadCount' in resource.data) &&
+                            request.resource.data.unreadCount == 1) ||
+                          (resource.data.unreadCount is number &&
+                            request.resource.data.unreadCount ==
+                              resource.data.unreadCount + 1)
+                        )
+                      )
+                    );
+
       allow delete: if request.auth != null &&
                     request.auth.uid == uid;
 
