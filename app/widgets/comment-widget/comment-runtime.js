@@ -153,6 +153,7 @@
     }
 
     const adminEmails = ['mikorokuscan@gmail.com', 'emailmod1@gmail.com'];
+    const topCommenterPreviewAdminEmails = ['mikorokuscan@gmail.com', 'moemaomao@gmail.com'];
     const vipEmails = ['moemaomao@gmail.com', 'emailvip2@gmail.com'];
 
     function isCurrentUserAdmin() {
@@ -162,6 +163,11 @@
 }
 
 window.isCurrentUserAdmin = isCurrentUserAdmin;
+
+function isTopCommenterPreviewAdmin(email) {
+  return typeof email === 'string' &&
+    topCommenterPreviewAdminEmails.includes(email.trim().toLowerCase());
+}
     
     let lastVisible = null;
     let isLoading = false;
@@ -3242,7 +3248,16 @@ function optimizeBase64Avatar(avatarUrl, maxDimension = 128, quality = 0.72) {
     const userId = comment.uid;
     const badgeId = `badge-${comment.id}`;
     const applyCommenterRank = rank => {
-      applyTopCommentRankBadge(div, rank, userStatsCache[userId]?.topCommenterEffect);
+      const hasTopSixRank = Number.isInteger(rank) && rank >= 1 && rank <= 6;
+      const adminPreview =
+        !hasTopSixRank &&
+        isTopCommenterPreviewAdmin(comment.email);
+      applyTopCommentRankBadge(
+        div,
+        adminPreview ? 1 : rank,
+        userStatsCache[userId]?.topCommenterEffect,
+        adminPreview
+      );
     };
     applyCommenterRank(getCachedCommentLeaderboardRank(userId));
     void getCommentLeaderboardRank(userId).then(rank => {
@@ -7226,12 +7241,13 @@ function startCommentSnowAnimation(layer) {
   });
 }
 
-function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'fireflies') {
+function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'fireflies', adminPreview = false) {
   let rankBadge = commentElement.querySelector('.top-comment-rank-badge');
-  if (!Number.isInteger(rank) || rank < 1 || rank > 6) {
+  if (!adminPreview && (!Number.isInteger(rank) || rank < 1 || rank > 6)) {
     rankBadge?.remove();
     commentElement.classList.remove(
       'top-commenter',
+      'top-commenter-preview',
       'top-commenter-rank-1',
       'top-commenter-rank-2',
       'top-commenter-rank-3',
@@ -7249,6 +7265,7 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
   if (!authorName) return;
 
   commentElement.classList.add('top-commenter');
+  commentElement.classList.toggle('top-commenter-preview', adminPreview);
   commentElement.classList.remove(
     'top-commenter-rank-1',
     'top-commenter-rank-2',
@@ -7323,10 +7340,17 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
   }
 
   if (!rankBadge) rankBadge = document.createElement('span');
-  rankBadge.className = `top-comment-rank-badge rank-${rank}`;
-  rankBadge.textContent = `TOP ${rank}`;
-  rankBadge.title = `Top commenter rank #${rank}`;
-  rankBadge.setAttribute('aria-label', `Top commenter rank ${rank}`);
+  if (adminPreview) {
+    rankBadge.className = 'top-comment-rank-badge top-comment-admin-preview';
+    rankBadge.textContent = 'ADMIN PREVIEW';
+    rankBadge.title = 'Admin preview of the Top Commenter background';
+    rankBadge.setAttribute('aria-label', 'Admin preview of the Top Commenter background');
+  } else {
+    rankBadge.className = `top-comment-rank-badge rank-${rank}`;
+    rankBadge.textContent = `TOP ${rank}`;
+    rankBadge.title = `Top commenter rank #${rank}`;
+    rankBadge.setAttribute('aria-label', `Top commenter rank ${rank}`);
+  }
   authorName.after(rankBadge);
 }
 

@@ -2774,7 +2774,7 @@ var Ls = `
 function Rs(e, t) {
   Yn(t, !1);
   let n = As(t, "pageId", 12, "home");
-  const r = "/widgets/comment-runtime.js?v=firestore-persistence-1", i = {
+  const r = "/widgets/comment-runtime.js?v=admin-top-comment-preview-1", i = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
     settings: "/widgets/comment-settings.css",

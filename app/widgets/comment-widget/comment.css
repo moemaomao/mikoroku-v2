@@ -2213,6 +2213,11 @@ html.no-animations .comment.transcendent,
   white-space: nowrap;
 }
 
+.top-comment-admin-preview {
+  color: #ffd58a;
+  background: rgba(245, 158, 11, .16);
+}
+
 .top-comment-rank-badge.rank-1 {
   color: #c4a0ff;
   background: rgba(139, 92, 246, .16);

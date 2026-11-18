@@ -17,7 +17,7 @@
 
   export let pageId = "home";
 
-  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=firestore-persistence-1";
+  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=admin-top-comment-preview-1";
   const featureStyleHrefs = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",

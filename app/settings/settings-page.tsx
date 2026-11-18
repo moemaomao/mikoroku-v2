@@ -13,6 +13,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import SiteChrome from "../site-chrome";
+import { hasAdminPanelAccess } from "../lib/admin-access";
 import { normalizeProfileLink } from "../lib/profile-link";
 import { cacheUserStatsProfile } from "../../lib/user-stats-cache";
 import {
@@ -80,7 +81,12 @@ type Settings = {
   disableTopCommentFireflies: boolean;
 };
 
-type Account = { uid: string; displayName?: string | null; photoURL?: string | null };
+type Account = {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+};
 
 const anonymousAvatar = "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 function normalizeTopCommenterEffect(value: unknown): Settings["topCommenterEffect"] {
@@ -595,6 +601,7 @@ const initialSettings: Settings = {
 
 export default function SettingsPage() {
   const [account, setAccount] = useState<Account | null>(null);
+  const isAdminPreview = hasAdminPanelAccess(account);
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [status, setStatus] = useState<"loading" | "guest" | "ready" | "error">("loading");
   const [topCommenterAccess, setTopCommenterAccess] = useState<"checking" | "allowed" | "denied" | "error">("checking");
@@ -621,6 +628,14 @@ export default function SettingsPage() {
 
     const applyUser = async (user: Account & { photoURL?: string | null }) => {
       setAccount(user);
+      const adminPreview = hasAdminPanelAccess(user);
+      if (adminPreview) {
+        setTopCommenterRank(null);
+        setTopCommenterAccess("allowed");
+      } else {
+        setTopCommenterRank(null);
+        setTopCommenterAccess("checking");
+      }
       let pendingCommentBgUrl = "";
       try {
         const pendingImage = await getPendingCommentBackground(user.uid);
@@ -635,23 +650,25 @@ export default function SettingsPage() {
         console.warn("The pending comment background could not be loaded from IndexedDB.", cacheError);
       }
       if (!active) return;
-      const cachedRank = getCachedTopCommenterRank(user.uid);
-      setTopCommenterRank(cachedRank ?? null);
-      setTopCommenterAccess(
-        cachedRank === undefined ? "checking" : cachedRank ? "allowed" : "denied",
-      );
-      void getTopCommenterRank(user.uid).then((rank) => {
-        if (!active) return;
-        setTopCommenterRank(rank);
-        setTopCommenterAccess(rank ? "allowed" : "denied");
-      }).catch((error: unknown) => {
-        console.error("Top commenter eligibility failed to load.", error);
-        if (active) {
-          setTopCommenterRank(null);
-          setTopCommenterAccess("error");
-          showNotification("Top commenter status could not be verified. This setting stays locked.", "error");
-        }
-      });
+      if (!adminPreview) {
+        const cachedRank = getCachedTopCommenterRank(user.uid);
+        setTopCommenterRank(cachedRank ?? null);
+        setTopCommenterAccess(
+          cachedRank === undefined ? "checking" : cachedRank ? "allowed" : "denied",
+        );
+        void getTopCommenterRank(user.uid).then((rank) => {
+          if (!active) return;
+          setTopCommenterRank(rank);
+          setTopCommenterAccess(rank ? "allowed" : "denied");
+        }).catch((error: unknown) => {
+          console.error("Top commenter eligibility failed to load.", error);
+          if (active) {
+            setTopCommenterRank(null);
+            setTopCommenterAccess("error");
+            showNotification("Top commenter status could not be verified. This setting stays locked.", "error");
+          }
+        });
+      }
 
       try {
         const cached = localStorage.getItem("userSettingsPreview");
@@ -726,7 +743,7 @@ export default function SettingsPage() {
       } catch (error) {
         console.error("User settings failed to load.", error);
         if (active) {
-          setTopCommenterAccess("error");
+          if (!adminPreview) setTopCommenterAccess("error");
           setStatus((prev) => {
             if (prev === "ready") return prev;
             setMessageType("error");
@@ -1301,7 +1318,9 @@ export default function SettingsPage() {
                             <div className={styles['settings-toggle-info']}>
                               <strong>Top Commenter Background</strong>
                               <span>
-                                {topCommenterAccess === "allowed"
+                                {isAdminPreview
+                                  ? "Admin debug preview · Effect selection is available without a Top 6 rank."
+                                  : topCommenterAccess === "allowed"
                                   ? `Rank #${topCommenterRank} · Choose a background effect for your comments.`
                                   : topCommenterAccess === "checking"
                                     ? "Preview available to everyone · Checking Top 6 selection access..."
@@ -1350,7 +1369,11 @@ export default function SettingsPage() {
                                 <span className={styles['settings-top-comment-effect-option-header']}>
                                   <strong>{getTopCommenterEffectName(effect)}</strong>
                                   <span>
-                                    {topCommenterAccess !== "allowed"
+                                    {isAdminPreview
+                                      ? settings.topCommenterEffect === effect
+                                        ? "Previewing"
+                                        : "Preview effect"
+                                      : topCommenterAccess !== "allowed"
                                       ? "Top 6 only"
                                       : settings.topCommenterEffect === effect
                                         ? "Selected"
@@ -1415,6 +1438,10 @@ export default function SettingsPage() {
                           <p className={styles['settings-hint-sm']}>
                             {settings.disableAnimations
                               ? "All previews are paused because all animations are disabled."
+                              : isAdminPreview
+                                ? settings.disableTopCommentFireflies
+                                  ? "Admin debug preview is on. The selected effect is disabled on comments but previews remain active."
+                                  : "Admin debug preview is on. Select an effect to preview it here; Top 6 eligibility for comments is unchanged."
                               : topCommenterAccess === "allowed"
                                 ? settings.disableTopCommentFireflies
                                   ? "The selected effect is disabled on comments; previews remain active."
