@@ -166,7 +166,6 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
     let commentsLoadGeneration = 0;
     const locallySubmittedCommentTimes = new Map();
     let unreadReplies = 0;
-    let replyNotifications = [];
     let pendingCommentSyncInProgress = false;
     let pendingCommentSyncTimer = null;
     let pendingCommentSyncListenersAttached = false;
@@ -625,7 +624,11 @@ window.isCurrentUserAdmin = isCurrentUserAdmin;
                 .doc(record.parentId).get()
                 .then(snapshot => {
                   if (snapshot.exists && currentUser && currentUser.uid === record.authUid) {
-                    addReplyNotification({ id: snapshot.id, ...snapshot.data() }, record.comment.text);
+                    addReplyNotification(
+                      { id: snapshot.id, ...snapshot.data() },
+                      record.comment.text,
+                      record.commentId
+                    );
                   }
                 })
                 .catch(error => console.error("Reply notification could not be synchronized.", error));
@@ -1411,68 +1414,49 @@ function handleQuoteBtnClick(e) {
   }
 }
 
-    function getNotificationKey(notification, type) {
-  const date = typeof notification.date === 'number' && Number.isFinite(notification.date)
-    ? notification.date
-    : 0;
-  const text = typeof notification.text === 'string'
-    ? notification.text
-    : typeof notification.message === 'string'
-      ? notification.message
-      : '';
-  return JSON.stringify([
-    type,
-    date,
-    typeof notification.parentId === 'string' ? notification.parentId : '',
-    typeof notification.postId === 'string' ? notification.postId : '',
-    typeof notification.author === 'string' ? notification.author : '',
-    text
-  ]);
-}
-
-function getLocallyReadNotificationKeys(uid) {
+    function getPendingNotificationReadCount(uid) {
   try {
-    const stored = JSON.parse(
-      localStorage.getItem(`mikoroku_notifications_v1:${uid}`) || "[]"
-    );
-    if (!Array.isArray(stored)) return new Set();
-    return new Set(stored
-      .filter(notification =>
-        notification &&
-        typeof notification === "object" &&
-        notification.read === true &&
-        (notification.notifType === "reply" || notification.notifType === "mention")
-      )
-      .map(notification => getNotificationKey(notification, notification.notifType)));
+    const raw = localStorage.getItem(`mikoroku_notification_read_queue_v1:${uid}`);
+    const keys = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(keys)) return 0;
+    return new Set(keys.filter(key => typeof key === 'string' && key.startsWith('item:'))).size;
   } catch (error) {
-    console.warn("Cached notification read states could not be loaded.", error);
-    return new Set();
+    console.warn("Pending notification reads could not be counted.", error);
+    return 0;
   }
 }
 
-    window.addEventListener('mikoroku:notifications-read', event => {
-  const keys = new Set(event.detail && Array.isArray(event.detail.keys) ? event.detail.keys : []);
-  if (!keys.size) return;
-  replyNotifications = replyNotifications.map(notification => {
-    const type = notification.notifType === 'mention' ? 'mention' : 'reply';
-    return keys.has(getNotificationKey(notification, type))
-      ? { ...notification, read: true }
-      : notification;
-  });
-  unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
+    const NOTIFICATION_UNREAD_CACHE_PREFIX = 'mikoroku_notifications_unread_v2:';
+    const NOTIFICATION_REFRESH_THROTTLE_MS = 15 * 60 * 1000;
+    let lastUserNotificationRefreshAt = 0;
+    window.addEventListener('mikoroku:notification-count-updated', event => {
+  const detail = event.detail || {};
+  if (currentUser?.uid !== detail.uid) return;
+  const count = Number(detail.unreadCount);
+  if (!Number.isFinite(count)) return;
+  unreadReplies = Math.max(0, Math.floor(count));
+  lastUserNotificationRefreshAt = Date.now();
+  try {
+    localStorage.setItem(
+      `${NOTIFICATION_UNREAD_CACHE_PREFIX}${currentUser.uid}`,
+      String(unreadReplies)
+    );
+  } catch (error) {
+    console.warn("Notification count cache could not be saved.", error);
+  }
   updateReplyBadge();
 });
 
-    window.addEventListener('mikoroku:notifications-read-failed', event => {
-  const keys = new Set(event.detail && Array.isArray(event.detail.keys) ? event.detail.keys : []);
-  if (!keys.size) return;
-  replyNotifications = replyNotifications.map(notification => {
-    const type = notification.notifType === 'mention' ? 'mention' : 'reply';
-    return keys.has(getNotificationKey(notification, type))
-      ? { ...notification, read: false }
-      : notification;
-  });
-  unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
+    window.addEventListener('mikoroku:notification-schema-ready', () => {
+  const uid = currentUser?.uid;
+  if (uid) void refreshUserNotifications(uid, true);
+});
+
+    window.addEventListener('storage', event => {
+  if (!currentUser || event.key !== `${NOTIFICATION_UNREAD_CACHE_PREFIX}${currentUser.uid}`) return;
+  const count = Number(event.newValue);
+  if (!Number.isFinite(count)) return;
+  unreadReplies = Math.max(0, Math.floor(count));
   updateReplyBadge();
 });
 
@@ -1893,6 +1877,32 @@ if (typeof window.updateHeaderAuth === "function") {
 
 
 
+    async function persistUserNotification(uid, type, notifData) {
+  if (!uid || !currentUser) return;
+
+  const rootRef = db.collection('notifications').doc(uid);
+  const itemRef = rootRef.collection('items').doc();
+  const batch = db.batch();
+  batch.set(itemRef, { ...notifData, type, read: false });
+  batch.set(rootRef, {
+    unreadCount: firebase.firestore.FieldValue.increment(1)
+  }, { merge: true });
+  await batch.commit();
+
+  if (currentUser.uid === uid) {
+    let cachedCount = unreadReplies;
+    try {
+      const savedCount = Number(localStorage.getItem(`mikoroku_notifications_unread_v2:${uid}`));
+      if (Number.isFinite(savedCount)) cachedCount = Math.max(0, savedCount);
+    } catch (error) {
+      console.warn("Notification count cache could not be read.", error);
+    }
+    window.dispatchEvent(new CustomEvent('mikoroku:notification-count-updated', {
+      detail: { uid, unreadCount: cachedCount + 1 }
+    }));
+  }
+}
+
     async function addReplyNotification(parentComment, replyText) {
 
   if (!parentComment.uid) return;
@@ -1904,26 +1914,17 @@ if (typeof window.updateHeaderAuth === "function") {
       : 'Anonymous',
     text: replyText || '',
     date: Date.now(),
-    read: false,
     postId: postId,
     postUrl: window.location.href,
     postTitle: document.title
   };
 
   try {
-
-    await db.collection('notifications')
-      .doc(parentComment.uid)
-      .set({
-        replies: firebase.firestore.FieldValue.arrayUnion(notifData)
-      }, { merge: true });
-
+    await persistUserNotification(parentComment.uid, 'reply', notifData);
     console.log("Reply notif terkirim");
 
   } catch (e) {
-
     console.error('Gagal update notif:', e);
-
   }
 }
 
@@ -1940,14 +1941,10 @@ async function sendTestNotification() {
     date: Date.now(),
     postId: postId,
     postTitle: document.title,
-    notifType: "reply"
+    postUrl: window.location.href
   };
 
-  await db.collection('notifications')
-    .doc(currentUser.uid)
-    .set({
-      replies: firebase.firestore.FieldValue.arrayUnion(notifData)
-    }, { merge: true });
+  await persistUserNotification(currentUser.uid, 'reply', notifData);
 
   console.log("TEST NOTIF SENT");
 }
@@ -2002,7 +1999,6 @@ async function addMentionNotifications(text) {
     }
 
     const notifData = {
-      notifType: 'mention',
       author: currentUser
         ? (currentUser.displayName || 'Someone')
         : 'Anonymous',
@@ -2015,9 +2011,7 @@ async function addMentionNotifications(text) {
 
     await Promise.all([...matchedUids].map(async uid => {
       try {
-        await db.collection('notifications').doc(uid).set({
-          mentions: firebase.firestore.FieldValue.arrayUnion(notifData)
-        }, { merge: true });
+        await persistUserNotification(uid, 'mention', notifData);
       } catch (err) {
         console.error('Gagal kirim mention notif:', err);
       }
@@ -2033,40 +2027,54 @@ async function addMentionNotifications(text) {
     let userDataRefreshUid = null;
     let userDataRefreshInFlight = false;
     let lastUserDataRefreshAt = 0;
+    let userNotificationRefreshInFlight = null;
 
     function applyUserNotifications(uid, snapshot) {
   if (currentUser?.uid !== uid) return;
-  if (!snapshot.exists) {
-    unreadReplies = 0;
-    replyNotifications = [];
-    updateReplyBadge();
-    return;
+  const data = snapshot.exists ? snapshot.data() || {} : {};
+  const count = Number(data.unreadCount);
+  if (!Number.isFinite(count)) return;
+  unreadReplies = Math.max(0, Math.floor(count) - getPendingNotificationReadCount(uid));
+  try {
+    localStorage.setItem(`${NOTIFICATION_UNREAD_CACHE_PREFIX}${uid}`, String(unreadReplies));
+  } catch (error) {
+    console.warn("Notification count cache could not be saved.", error);
   }
-
-  const data = snapshot.data() || {};
-  const replies = data.replies || [];
-  const mentions = data.mentions || [];
-  const locallyReadKeys = getLocallyReadNotificationKeys(uid);
-
-  replyNotifications = [
-    ...replies.map(r => ({ ...r, notifType: 'reply' })),
-    ...mentions.map(m => ({ ...m, notifType: 'mention' }))
-  ].map(notification => {
-    const type = notification.notifType === 'mention' ? 'mention' : 'reply';
-    return locallyReadKeys.has(getNotificationKey(notification, type))
-      ? { ...notification, read: true }
-      : notification;
-  });
-  replyNotifications.sort((a, b) => (b.date || 0) - (a.date || 0));
-  unreadReplies = replyNotifications.filter(notification => notification.read !== true).length;
   updateReplyBadge();
 }
 
-    function refreshUserNotifications(uid) {
+    function refreshUserNotifications(uid, force = false) {
   if (!navigator.onLine || currentUser?.uid !== uid) return Promise.resolve();
-  return db.collection('notifications').doc(uid).get()
-    .then(snapshot => applyUserNotifications(uid, snapshot))
-    .catch(error => console.error("Notifications could not be refreshed.", error));
+  if (
+    !force &&
+    Date.now() - lastUserNotificationRefreshAt < NOTIFICATION_REFRESH_THROTTLE_MS
+  ) return Promise.resolve();
+  if (userNotificationRefreshInFlight?.uid === uid) {
+    return userNotificationRefreshInFlight.promise;
+  }
+
+  lastUserNotificationRefreshAt = Date.now();
+  const ensureSchema = typeof window.ensureNotificationSchema === "function"
+    ? window.ensureNotificationSchema(uid).catch(error => {
+        console.warn("Legacy notifications could not be migrated yet.", error);
+      })
+    : Promise.resolve();
+  const refresh = ensureSchema
+    .then(() => {
+      if (currentUser?.uid !== uid) return null;
+      return db.collection('notifications').doc(uid).get();
+    })
+    .then(snapshot => {
+      if (snapshot) applyUserNotifications(uid, snapshot);
+    })
+    .catch(error => console.error("Notifications could not be refreshed.", error))
+    .finally(() => {
+      if (userNotificationRefreshInFlight?.promise === refresh) {
+        userNotificationRefreshInFlight = null;
+      }
+    });
+  userNotificationRefreshInFlight = { uid, promise: refresh };
+  return refresh;
 }
 
     function applyCurrentUserStats(uid, data) {
@@ -2103,20 +2111,18 @@ async function addMentionNotifications(text) {
   ) return;
   userDataRefreshInFlight = true;
   lastUserDataRefreshAt = Date.now();
-  Promise.all([
-    refreshCurrentUserStats(uid),
-    refreshUserNotifications(uid)
-  ]).finally(() => {
+  refreshCurrentUserStats(uid).finally(() => {
     userDataRefreshInFlight = false;
   });
 }
 
     function refreshUserDataOnVisibilityChange() {
-  if (
-    document.visibilityState === 'visible' &&
-    Date.now() - lastUserDataRefreshAt >= USER_DATA_REFRESH_INTERVAL_MS
-  ) {
+  if (document.visibilityState !== 'visible') return;
+  if (Date.now() - lastUserDataRefreshAt >= USER_DATA_REFRESH_INTERVAL_MS) {
     refreshUserData(userDataRefreshUid);
+  }
+  if (Date.now() - lastUserNotificationRefreshAt >= NOTIFICATION_REFRESH_THROTTLE_MS) {
+    void refreshUserNotifications(userDataRefreshUid);
   }
 }
 
@@ -2143,7 +2149,14 @@ async function addMentionNotifications(text) {
     function subscribeToUserNotifications() {
   if (!currentUser) return;
   const uid = currentUser.uid;
-  void refreshUserNotifications(uid);
+  try {
+    const cachedCount = Number(localStorage.getItem(`${NOTIFICATION_UNREAD_CACHE_PREFIX}${uid}`));
+    if (Number.isFinite(cachedCount)) unreadReplies = Math.max(0, Math.floor(cachedCount));
+  } catch (error) {
+    console.warn("Notification count cache could not be read.", error);
+  }
+  updateReplyBadge();
+  void refreshUserNotifications(uid, true);
   startUserDataRefresh(uid);
 }
 
@@ -4987,7 +5000,6 @@ if (user) {
     }
 
     unreadReplies = 0;
-    replyNotifications = [];
     if (typeof updateReplyBadge === 'function') updateReplyBadge();
 
     const gear = document.getElementById('transcendent-gear-auth');

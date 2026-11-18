@@ -22,7 +22,10 @@ import settingsStyles from "./settings/settings.module.css";
 import { normalizeProfileLink } from "./lib/profile-link";
 
 type DataRecord = Record<string, unknown>;
-type StoredNotification = DataRecord & { notifType: "reply" | "mention" };
+type StoredNotification = DataRecord & {
+  id?: string;
+  notifType: "reply" | "mention";
+};
 type CompatTimestamp = {
   toDate?: () => Date;
   toMillis?: () => number;
@@ -49,6 +52,10 @@ type CompatTransaction = {
   get: (reference: CompatDocumentReference) => Promise<CompatDocument>;
   set: (reference: CompatDocumentReference, data: DataRecord, options?: { merge?: boolean }) => CompatTransaction;
 };
+type CompatWriteBatch = {
+  set: (reference: CompatDocumentReference, data: DataRecord) => CompatWriteBatch;
+  commit: () => Promise<unknown>;
+};
 type CompatQuery = {
   where: (field: string, operator: string, value: unknown) => CompatQuery;
   orderBy: (field: string, direction: "asc" | "desc") => CompatQuery;
@@ -61,6 +68,7 @@ type CompatCollection = CompatQuery & {
 };
 type CompatFirestore = {
   collection: (name: string) => CompatCollection;
+  batch: () => CompatWriteBatch;
   runTransaction: <T>(updateFunction: (transaction: CompatTransaction) => Promise<T>) => Promise<T>;
 };
 type CompatAuth = {
@@ -69,7 +77,11 @@ type CompatAuth = {
 type CompatSdk = {
   auth?: () => CompatAuth;
   firestore?: (() => CompatFirestore) & {
-    FieldValue?: { serverTimestamp?: () => unknown };
+    FieldValue?: {
+      delete?: () => unknown;
+      increment?: (value: number) => unknown;
+      serverTimestamp?: () => unknown;
+    };
   };
 };
 type CompatUser = {
@@ -114,6 +126,7 @@ type LegacyModalWindow = {
   openMikorokuDmInbox?: () => Promise<void>;
   openMikorokuDmToUser?: (uid: string, name?: string, avatar?: string) => void;
   openMikorokuNotifications?: () => void;
+  ensureNotificationSchema?: (uid: string) => Promise<void>;
   loadDmInbox?: () => Promise<void>;
   openChat?: (uid: string) => Promise<void>;
   openDmToUser?: (uid: string, name?: string, avatar?: string) => void;
@@ -125,6 +138,8 @@ type LegacyModalWindow = {
 const HISTORY_KEY = "readingHistory";
 const NOTIFICATION_CACHE_PREFIX = "mikoroku_notifications_v1:";
 const NOTIFICATION_READ_QUEUE_PREFIX = "mikoroku_notification_read_queue_v1:";
+const NOTIFICATION_UNREAD_CACHE_PREFIX = "mikoroku_notifications_unread_v2:";
+const NOTIFICATION_CACHE_LIMIT = 100;
 const DEFAULT_AVATAR =
   "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 const FALLBACK_COVER = "/assets/icons/favicon.ico";
@@ -508,11 +523,35 @@ function writeStoredNotifications(uid: string, notifications: StoredNotification
   try {
     window.localStorage.setItem(
       `${NOTIFICATION_CACHE_PREFIX}${uid}`,
-      JSON.stringify(notifications),
+      JSON.stringify(notifications.slice(0, NOTIFICATION_CACHE_LIMIT)),
     );
   } catch (error) {
     console.warn("Notifications could not be cached locally.", error);
   }
+}
+
+function readCachedNotificationUnreadCount(uid: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(`${NOTIFICATION_UNREAD_CACHE_PREFIX}${uid}`);
+    if (raw === null) return null;
+    const count = Number(raw);
+    return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : null;
+  } catch (error) {
+    console.warn("Cached notification count could not be read.", error);
+    return null;
+  }
+}
+
+function publishNotificationUnreadCount(uid: string, unreadCount: number): void {
+  const count = Math.max(0, Math.floor(unreadCount));
+  try {
+    window.localStorage.setItem(`${NOTIFICATION_UNREAD_CACHE_PREFIX}${uid}`, String(count));
+  } catch (error) {
+    console.warn("Notification count could not be cached locally.", error);
+  }
+  window.dispatchEvent(new CustomEvent("mikoroku:notification-count-updated", {
+    detail: { uid, unreadCount: count },
+  }));
 }
 
 function readPendingNotificationReadKeys(uid: string): string[] {
@@ -692,6 +731,7 @@ function initializeUserModals(): () => void {
     openMikorokuDmInbox: legacy.openMikorokuDmInbox,
     openMikorokuDmToUser: legacy.openMikorokuDmToUser,
     openMikorokuNotifications: legacy.openMikorokuNotifications,
+    ensureNotificationSchema: legacy.ensureNotificationSchema,
     loadDmInbox: legacy.loadDmInbox,
     openChat: legacy.openChat,
     openDmToUser: legacy.openDmToUser,
@@ -767,10 +807,107 @@ function initializeUserModals(): () => void {
     if (!firestore) throw new Error("Firebase Firestore is unavailable after initialization.");
     return firestore;
   };
-  const notificationReadSyncs = new Set<string>();
+  const notificationReadSyncs = new Map<string, Promise<void>>();
   const notificationReadRetryTimers = new Map<string, number>();
   const notificationReadRetryAttempts = new Map<string, number>();
   let notificationLoadGeneration = 0;
+  const getNotificationFieldValue = () => legacy.firebase?.firestore?.FieldValue;
+  const legacyNotificationDocId = (
+    type: "reply" | "mention",
+    notification: DataRecord,
+    index: number,
+  ) => {
+    const key = getNotificationKey(notification, type);
+    let hash = 2166136261;
+    for (let position = 0; position < key.length; position += 1) {
+      hash = Math.imul(hash ^ key.charCodeAt(position), 16777619) >>> 0;
+    }
+    return `legacy_${type}_${index}_${hash.toString(36)}`;
+  };
+  const ensureNotificationSchema = async (uid: string): Promise<void> => {
+    if (legacy.currentUser?.uid !== uid) return;
+    const firestore = await waitForFirestore();
+    const rootRef = firestore.collection("notifications").doc(uid);
+    const rootSnapshot = await rootRef.get();
+    const rootData = rootSnapshot.exists ? asRecord(rootSnapshot.data()) : {};
+    if (numberValue(rootData.notificationSchemaVersion) >= 2) return;
+
+    const replies = Array.isArray(rootData.replies) ? rootData.replies : [];
+    const mentions = Array.isArray(rootData.mentions) ? rootData.mentions : [];
+    const originalLegacyPayload = JSON.stringify({ replies, mentions });
+    const localReadKeys = new Set([
+      ...(readStoredNotifications(uid) || [])
+        .filter((item) => item.read === true)
+        .map((item) => getNotificationKey(item, item.notifType)),
+      ...readPendingNotificationReadKeys(uid).filter((key) => !key.startsWith("item:")),
+    ]);
+    const entries = [
+      ...replies.map((item, index) => ({ item: asRecord(item), type: "reply" as const, index })),
+      ...mentions.map((item, index) => ({ item: asRecord(item), type: "mention" as const, index })),
+    ].map(({ item, type, index }) => {
+      const read = item.read === true || localReadKeys.has(getNotificationKey(item, type));
+      const parentId = stringValue(item.parentId);
+      const postTitle = stringValue(item.postTitle);
+      return {
+        id: legacyNotificationDocId(type, item, index),
+        data: {
+          type,
+          author: stringValue(item.author, "Someone"),
+          text: stringValue(item.text || item.message),
+          ...(parentId ? { parentId } : {}),
+          postId: stringValue(item.postId),
+          postUrl: stringValue(item.postUrl || item.commentLink || item.link),
+          ...(postTitle ? { postTitle } : {}),
+          date: numberValue(item.date),
+          read,
+        } satisfies DataRecord,
+      };
+    });
+
+    const items = rootRef.collection("items");
+    for (let offset = 0; offset < entries.length; offset += 450) {
+      const batch = firestore.batch();
+      entries.slice(offset, offset + 450).forEach(({ id, data }) => {
+        batch.set(items.doc(id), data);
+      });
+      await batch.commit();
+    }
+
+    const fieldValue = getNotificationFieldValue();
+    if (!fieldValue?.increment || !fieldValue.delete) {
+      throw new Error("Firestore FieldValue operations are unavailable for notification migration.");
+    }
+    const increment = fieldValue.increment;
+    const deleteField = fieldValue.delete;
+    const legacyUnreadCount = entries.filter(({ data }) => data.read !== true).length;
+    const migrationCommitted = await firestore.runTransaction(async (transaction) => {
+      const latestSnapshot = await transaction.get(rootRef);
+      const latestData = latestSnapshot.exists ? asRecord(latestSnapshot.data()) : {};
+      if (numberValue(latestData.notificationSchemaVersion) >= 2) return true;
+
+      const currentLegacyPayload = JSON.stringify({
+        replies: Array.isArray(latestData.replies) ? latestData.replies : [],
+        mentions: Array.isArray(latestData.mentions) ? latestData.mentions : [],
+      });
+      if (currentLegacyPayload !== originalLegacyPayload) return false;
+
+      transaction.set(rootRef, {
+        unreadCount: increment(legacyUnreadCount),
+        notificationSchemaVersion: 2,
+        replies: deleteField(),
+        mentions: deleteField(),
+      }, { merge: true });
+      return true;
+    });
+    if (!migrationCommitted) {
+      throw new Error("Legacy notifications changed during migration; retry on the next refresh.");
+    }
+
+    writePendingNotificationReadKeys(
+      uid,
+      readPendingNotificationReadKeys(uid).filter((key) => key.startsWith("item:")),
+    );
+  };
   const clearNotificationReadRetry = (uid: string) => {
     const timer = notificationReadRetryTimers.get(uid);
     if (timer !== undefined) {
@@ -790,60 +927,81 @@ function initializeUserModals(): () => void {
       if (firestore) void syncPendingNotificationReads(uid, firestore);
     }, delay));
   };
-  const syncPendingNotificationReads = async (uid: string, firestore: CompatFirestore) => {
-    if (
-      !navigator.onLine ||
-      notificationReadSyncs.has(uid) ||
-      notificationReadRetryTimers.has(uid)
-    ) return;
+  const syncPendingNotificationReads = (uid: string, firestore: CompatFirestore): Promise<void> => {
+    if (!navigator.onLine || notificationReadRetryTimers.has(uid)) return Promise.resolve();
+    const activeSync = notificationReadSyncs.get(uid);
+    if (activeSync) return activeSync;
+
     const pendingKeys = readPendingNotificationReadKeys(uid);
-    if (!pendingKeys.length) return;
-    notificationReadSyncs.add(uid);
-    const pendingKeySet = new Set(pendingKeys);
-    const reference = firestore.collection("notifications").doc(uid);
-    try {
-      const synchronizedKeys = await firestore.runTransaction(async (transaction) => {
-        const snapshot = await transaction.get(reference);
-        if (!snapshot.exists) return [...pendingKeySet];
-        const data = asRecord(snapshot.data());
-        const updates: DataRecord = {};
-        const matchedKeys = new Set<string>();
-        const seenKeys = new Set<string>();
-        let changed = false;
-        for (const [field, type] of [["replies", "reply"], ["mentions", "mention"]] as const) {
-          const notifications = data[field];
-          if (!Array.isArray(notifications)) continue;
-          updates[field] = notifications.map((notification) => {
-            const record = asRecord(notification);
-            const key = getNotificationKey(record, type);
-            seenKeys.add(key);
-            if (!pendingKeySet.has(key)) return notification;
-            matchedKeys.add(key);
-            if (record.read === true) return notification;
-            changed = true;
-            return { ...record, read: true };
+    const pendingIds = [...new Set(
+      pendingKeys
+        .filter((key) => key.startsWith("item:"))
+        .map((key) => key.slice("item:".length))
+        .filter(Boolean),
+    )];
+    if (!pendingIds.length) return Promise.resolve();
+
+    const rootRef = firestore.collection("notifications").doc(uid);
+    const sync = (async () => {
+      try {
+        const items = rootRef.collection("items");
+        const synchronizedIds = new Set<string>();
+        for (let offset = 0; offset < pendingIds.length; offset += 200) {
+          const group = pendingIds.slice(offset, offset + 200);
+          await firestore.runTransaction(async (transaction) => {
+            const references = group.map((id) => ({ id, reference: items.doc(id) }));
+            const [rootSnapshot, ...itemSnapshots] = await Promise.all([
+              transaction.get(rootRef),
+              ...references.map(({ reference }) => transaction.get(reference)),
+            ]);
+            const unreadItems = references.filter(
+              (_, index) =>
+                itemSnapshots[index].exists &&
+                asRecord(itemSnapshots[index].data()).read !== true,
+            );
+            if (unreadItems.length) {
+              const currentCount = numberValue(asRecord(rootSnapshot.data()).unreadCount);
+              unreadItems.forEach(({ reference }) => {
+                transaction.set(reference, { read: true }, { merge: true });
+              });
+              transaction.set(rootRef, {
+                unreadCount: Math.max(0, currentCount - unreadItems.length),
+                lastReadAt: Date.now(),
+              }, { merge: true });
+            }
           });
+          group.forEach((id) => synchronizedIds.add(id));
+          writePendingNotificationReadKeys(
+            uid,
+            readPendingNotificationReadKeys(uid).filter(
+              (key) => !key.startsWith("item:") || !synchronizedIds.has(key.slice("item:".length)),
+            ),
+          );
         }
-        if (changed) transaction.set(reference, updates, { merge: true });
-        return [...new Set([...matchedKeys, ...[...pendingKeySet].filter((key) => !seenKeys.has(key))])];
-      });
-      const synchronizedKeySet = new Set(synchronizedKeys);
-      const remainingKeys = readPendingNotificationReadKeys(uid)
-        .filter((key) => !synchronizedKeySet.has(key));
-      writePendingNotificationReadKeys(uid, remainingKeys);
-      notificationReadRetryAttempts.delete(uid);
-      if (!remainingKeys.length) {
-        clearNotificationReadRetry(uid);
-      } else if (remainingKeys.some((key) => !pendingKeySet.has(key))) {
-        window.setTimeout(() => void syncPendingNotificationReads(uid, firestore), 0);
+        const remainingKeys = readPendingNotificationReadKeys(uid)
+          .filter((key) => !key.startsWith("item:") || !synchronizedIds.has(key.slice("item:".length)));
+        writePendingNotificationReadKeys(uid, remainingKeys);
+        notificationReadRetryAttempts.delete(uid);
+        if (!remainingKeys.length) {
+          clearNotificationReadRetry(uid);
+        }
+      } catch (error) {
+        console.error("Notification read states could not be synchronized.", error);
+        notificationReadRetryAttempts.set(uid, (notificationReadRetryAttempts.get(uid) || 0) + 1);
+        scheduleNotificationReadRetry(uid);
       }
-    } catch (error) {
-      console.error("Notification read states could not be synchronized.", error);
-      notificationReadRetryAttempts.set(uid, (notificationReadRetryAttempts.get(uid) || 0) + 1);
-      scheduleNotificationReadRetry(uid);
-    } finally {
+    })();
+    notificationReadSyncs.set(uid, sync);
+    void sync.finally(() => {
+      if (notificationReadSyncs.get(uid) !== sync) return;
       notificationReadSyncs.delete(uid);
-    }
+      const hasPendingItems = readPendingNotificationReadKeys(uid)
+        .some((key) => key.startsWith("item:"));
+      if (hasPendingItems && legacy.currentUser?.uid === uid) {
+        void syncPendingNotificationReads(uid, firestore);
+      }
+    }).catch(() => undefined);
+    return sync;
   };
   const retryPendingNotificationReads = () => {
     const uid = legacy.currentUser?.uid;
@@ -859,25 +1017,34 @@ function initializeUserModals(): () => void {
     uid: string,
     notifications: StoredNotification[],
     firestore: CompatFirestore | null,
+    persistCache = true,
   ): StoredNotification[] => {
-    const unreadKeys = notifications
-      .filter((notification) => notification.read !== true)
-      .map((notification) => getNotificationKey(notification, notification.notifType));
-    const unreadKeySet = new Set(unreadKeys);
     const updated = notifications.map((notification) =>
-      unreadKeySet.has(getNotificationKey(notification, notification.notifType))
-        ? { ...notification, read: true }
-        : notification
+      notification.read === true ? notification : { ...notification, read: true }
     );
-    writeStoredNotifications(uid, updated);
-    if (!unreadKeys.length) return updated;
+    if (persistCache) writeStoredNotifications(uid, updated);
+
     const pendingKeys = readPendingNotificationReadKeys(uid);
-    const queuedKeys = [...new Set([...pendingKeys, ...unreadKeys])];
-    writePendingNotificationReadKeys(uid, queuedKeys);
-    window.dispatchEvent(new CustomEvent("mikoroku:notifications-read", {
-      detail: { keys: unreadKeys },
-    }));
-    if (firestore) void syncPendingNotificationReads(uid, firestore);
+    const pendingIds = new Set(pendingKeys
+      .filter((key) => key.startsWith("item:"))
+      .map((key) => key.slice("item:".length)));
+    const newlyRead = notifications
+      .filter((notification) => notification.read !== true)
+      .filter((notification) => !notification.id || !pendingIds.has(stringValue(notification.id)));
+    const unreadIds = [...new Set(newlyRead
+      .map((notification) => stringValue(notification.id))
+      .filter(Boolean))];
+    if (!newlyRead.length) return updated;
+
+    if (unreadIds.length) {
+      writePendingNotificationReadKeys(uid, [
+        ...pendingKeys,
+        ...unreadIds.map((id) => `item:${id}`),
+      ]);
+    }
+    const cachedCount = readCachedNotificationUnreadCount(uid) ?? 0;
+    publishNotificationUnreadCount(uid, Math.max(0, cachedCount - newlyRead.length));
+    if (firestore && unreadIds.length) void syncPendingNotificationReads(uid, firestore);
     return updated;
   };
   const renderNotifications = (list: HTMLDivElement, notifications: StoredNotification[]) => {
@@ -915,7 +1082,7 @@ function initializeUserModals(): () => void {
         time.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:8px";
         card.appendChild(time);
       }
-      const link = stringValue(item.commentLink || item.link);
+      const link = stringValue(item.postUrl || item.commentLink || item.link);
       if (link && link !== "#") {
         const anchor = createElement("a", undefined, "Lihat komentar →");
         anchor.href = link;
@@ -1642,52 +1809,79 @@ function initializeUserModals(): () => void {
     const list = byId<HTMLDivElement>("reply-notif-list");
     if (!list) return;
     const cached = readStoredNotifications(uid);
-    const firestore = db();
     if (cached === null) {
       list.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8">Loading notifications...</div>`;
     } else {
-      renderNotifications(list, markNotificationsRead(uid, cached, firestore));
+      renderNotifications(list, markNotificationsRead(uid, cached, null));
     }
 
-    void waitForFirestore()
-      .then((readyFirestore) => {
-        if (generation !== notificationLoadGeneration || legacy.currentUser?.uid !== uid) return null;
-        void syncPendingNotificationReads(uid, readyFirestore);
-        return readyFirestore.collection("notifications").doc(uid).get();
-      })
-      .then((snapshot) => {
-        if (!snapshot || generation !== notificationLoadGeneration || legacy.currentUser?.uid !== uid) return;
-        const data = snapshot.exists ? asRecord(snapshot.data()) : {};
-        const replies = Array.isArray(data.replies) ? data.replies : [];
-        const mentions = Array.isArray(data.mentions) ? data.mentions : [];
-        const locallyReadKeys = new Set([
+    void (async () => {
+      try {
+        const readyFirestore = await waitForFirestore();
+        await ensureNotificationSchema(uid);
+        await syncPendingNotificationReads(uid, readyFirestore);
+        if (generation !== notificationLoadGeneration || legacy.currentUser?.uid !== uid) return;
+
+        const rootRef = readyFirestore.collection("notifications").doc(uid);
+        const items = rootRef.collection("items");
+        const [rootSnapshot, unreadSnapshot, recentSnapshot] = await Promise.all([
+          rootRef.get(),
+          items.where("read", "==", false).get(),
+          items.orderBy("date", "desc").limit(NOTIFICATION_CACHE_LIMIT).get(),
+        ]);
+        if (generation !== notificationLoadGeneration || legacy.currentUser?.uid !== uid) return;
+
+        const rootData = rootSnapshot.exists ? asRecord(rootSnapshot.data()) : {};
+        const serverUnreadCount = numberValue(rootData.unreadCount);
+        const pendingIds = new Set(readPendingNotificationReadKeys(uid)
+          .filter((key) => key.startsWith("item:"))
+          .map((key) => key.slice("item:".length)));
+        const locallyReadIds = new Set([
           ...(readStoredNotifications(uid) || [])
             .filter((item) => item.read === true)
-            .map((item) => getNotificationKey(item, item.notifType)),
-          ...readPendingNotificationReadKeys(uid),
+            .map((item) => stringValue(item.id))
+            .filter(Boolean),
+          ...pendingIds,
         ]);
-        const notifications: StoredNotification[] = [
-          ...replies.map((item): StoredNotification => ({
-            ...asRecord(item),
-            notifType: "reply",
-          })),
-          ...mentions.map((item): StoredNotification => ({
-            ...asRecord(item),
-            notifType: "mention",
-          })),
-        ].map((item) =>
-          locallyReadKeys.has(getNotificationKey(item, item.notifType))
-            ? { ...item, read: true }
-            : item
-        ).sort((a, b) => numberValue(b.date) - numberValue(a.date));
-        renderNotifications(list, markNotificationsRead(uid, notifications, db()));
-      })
-      .catch((error: unknown) => {
+        const unreadNotifications = unreadSnapshot.docs.map((document): StoredNotification => ({
+          ...asRecord(document.data()),
+          id: document.id,
+          notifType: asRecord(document.data()).type === "mention" ? "mention" : "reply",
+        }));
+        const pendingUnreadCount = unreadNotifications
+          .filter((item) => locallyReadIds.has(stringValue(item.id))).length;
+        publishNotificationUnreadCount(uid, Math.max(0, serverUnreadCount - pendingUnreadCount));
+
+        const notifications: StoredNotification[] = recentSnapshot.docs
+          .map((document): StoredNotification => {
+            const data = asRecord(document.data());
+            const id = document.id;
+            return {
+              ...data,
+              id,
+              notifType: data.type === "mention" ? "mention" : "reply",
+              read: data.read === true || locallyReadIds.has(id),
+            };
+          })
+          .sort((a, b) => numberValue(b.date) - numberValue(a.date));
+
+        const toMarkRead = unreadNotifications.filter(
+          (item) => !locallyReadIds.has(stringValue(item.id)),
+        );
+        markNotificationsRead(uid, toMarkRead, readyFirestore, false);
+        const markedIds = new Set(toMarkRead.map((item) => stringValue(item.id)));
+        const displayNotifications = notifications.map((item) =>
+          markedIds.has(stringValue(item.id)) ? { ...item, read: true } : item
+        );
+        writeStoredNotifications(uid, displayNotifications);
+        renderNotifications(list, displayNotifications);
+      } catch (error) {
         console.error("Notifications could not be refreshed.", error);
         if (generation === notificationLoadGeneration && cached === null) {
           list.replaceChildren(createElement("div", undefined, "Notifikasi belum tersedia"));
         }
-      });
+      }
+    })();
   };
   const closeNotifications = () => {
     notificationModal.style.display = "none";
@@ -1753,12 +1947,14 @@ function initializeUserModals(): () => void {
     openMikorokuDmInbox: loadInbox,
     openMikorokuDmToUser: openDmToUser,
     openMikorokuNotifications: loadNotifications,
+    ensureNotificationSchema,
     loadDmInbox: loadInbox,
     openChat,
     openDmToUser,
     loadUserNotifications: loadNotifications,
     closeReplyNotifications: closeNotifications,
   });
+  window.dispatchEvent(new Event("mikoroku:notification-schema-ready"));
 
   const restoreApi = (key: keyof typeof previousApi) => {
     const current = legacy[key];
@@ -1774,6 +1970,7 @@ function initializeUserModals(): () => void {
       openMikorokuDmInbox: loadInbox,
       openMikorokuDmToUser: openDmToUser,
       openMikorokuNotifications: loadNotifications,
+      ensureNotificationSchema,
       loadDmInbox: loadInbox,
       openChat,
       openDmToUser,

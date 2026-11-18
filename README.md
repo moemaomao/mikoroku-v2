@@ -51,6 +51,19 @@ Built with **Next.js App Router** and deployed on **Cloudflare Workers** using `
 - Bookmark page
 - Commission form
 
+### Notifications
+
+Reply and mention notifications are stored as individual documents at
+`notifications/{uid}/items/{notifId}`. The parent document keeps an
+`unreadCount`; legacy `replies` and `mentions` arrays are migrated lazily when
+the user next logs in or opens notifications. The comment widget refreshes the
+counter on login and visibility changes (throttled to 15 minutes), while opening
+the notification modal loads the latest items and marks unread items as read.
+
+The matching item access rules are in `firestore.rules`. This repository does
+not configure Firebase Rules deployment, so review and merge that file with the
+active project rules before deploying it through Firebase.
+
 ### Admin Panel (`/admin`)
 - Firebase sign-in
 - Searchable manga catalogue (Firestore + GitHub)
