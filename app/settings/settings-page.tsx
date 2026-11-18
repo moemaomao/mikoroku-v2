@@ -263,41 +263,15 @@ function SnowPreview({ active, className }: { active: boolean; className: string
     if (!layer || !active) return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let visible = typeof IntersectionObserver === "undefined";
-    let interval: number | undefined;
+    let visible = true;
 
     const updateSnowDistance = () => {
-      layer.style.setProperty("--snow-drift-x", `-${Math.max(layer.clientHeight, 100)}px`);
-    };
-
-    const createSnowflake = () => {
-      if (layer.childElementCount >= 120) layer.firstElementChild?.remove();
-
-      const size = Math.floor(Math.random() * 31) + 2;
-      const duration = 3 / (size * 0.1);
-      const blur = Math.abs(size - 8);
-      const flake = document.createElement("span");
-      flake.className = styles['settings-snowflake'];
-      flake.style.width = `${size}px`;
-      flake.style.height = `${size}px`;
-      flake.style.left = `${Math.random() * 150}%`;
-      flake.style.filter = `blur(${blur < 4 ? 0 : blur}px)`;
-      flake.style.animationDuration = `${duration}s`;
-      flake.addEventListener("animationend", () => flake.remove(), { once: true });
-      layer.append(flake);
+      layer.style.setProperty("--settings-snow-fall-y", `${Math.max(layer.clientHeight, 100) + 100}px`);
     };
 
     const syncAnimation = () => {
       const shouldRun = visible && !document.hidden && !reducedMotion.matches;
       layer.classList.toggle("is-paused", !shouldRun);
-      if (shouldRun && interval === undefined) {
-        updateSnowDistance();
-        createSnowflake();
-        interval = window.setInterval(createSnowflake, 50);
-      } else if (!shouldRun && interval !== undefined) {
-        window.clearInterval(interval);
-        interval = undefined;
-      }
     };
 
     const visibilityObserver = typeof IntersectionObserver === "undefined"
@@ -312,6 +286,7 @@ function SnowPreview({ active, className }: { active: boolean; className: string
     const onVisibilityChange = () => syncAnimation();
     const onMotionChange = () => syncAnimation();
 
+    updateSnowDistance();
     visibilityObserver?.observe(layer);
     resizeObserver?.observe(layer);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -319,16 +294,22 @@ function SnowPreview({ active, className }: { active: boolean; className: string
     syncAnimation();
 
     return () => {
-      if (interval !== undefined) window.clearInterval(interval);
       visibilityObserver?.disconnect();
       resizeObserver?.disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
       reducedMotion.removeEventListener("change", onMotionChange);
-      layer.replaceChildren();
     };
   }, [active]);
 
-  return <div ref={layerRef} className={className} aria-hidden="true" />;
+  return (
+    <div ref={layerRef} className={cx(className, "is-paused")} aria-hidden="true">
+      {active
+        ? Array.from({ length: 20 }, (_, index) => (
+            <span key={index} className={styles["settings-snowflake"]} />
+          ))
+        : null}
+    </div>
+  );
 }
 
 const readingMedals = [

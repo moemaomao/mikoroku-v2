@@ -7078,14 +7078,12 @@ function drawCommentFireworks(timestamp) {
 
 const commentSnowStatesByLayer = new WeakMap();
 let commentSnowObserver = null;
+const SNOW_FLAKE_COUNT = 40;
 
 function stopCommentSnowAnimation(state) {
-  if (state.interval) {
-    window.clearInterval(state.interval);
-    state.interval = 0;
-  }
   document.removeEventListener('visibilitychange', state.onVisibilityChange);
   state.motionQuery?.removeEventListener('change', state.onVisibilityChange);
+  state.resizeObserver?.disconnect();
   commentSnowObserver?.unobserve(state.layer);
   commentSnowStatesByLayer.delete(state.layer);
 }
@@ -7099,28 +7097,48 @@ function removeCommentSnowLayer(commentElement) {
   layer.remove();
 }
 
-function createCommentSnowflake(state) {
-  const { layer } = state;
-  if (!layer.isConnected) {
-    stopCommentSnowAnimation(state);
-    return;
+function updateCommentSnowDistance(layer) {
+  const height = Math.max(layer.clientHeight, 100);
+  layer.style.setProperty('--snow-fall-y', `${height + 100}px`);
+  layer.style.setProperty('--snow-fall-mid-y', `${height / 2}px`);
+  layer.style.setProperty('--snow-drift-x', `-${height}px`);
+  layer.style.setProperty('--snow-drift-mid-x', `-${height * 0.45}px`);
+}
+
+function populateCommentSnowflakes(layer) {
+  if (layer.childElementCount > 0) return;
+
+  updateCommentSnowDistance(layer);
+  const fragment = document.createDocumentFragment();
+  for (let index = 0; index < SNOW_FLAKE_COUNT; index += 1) {
+    const depth = index < 2 ? 'foreground' : index < 22 ? 'midground' : 'background';
+    const size = depth === 'foreground'
+      ? 12 + Math.random() * 16
+      : depth === 'midground'
+        ? 4 + Math.random() * 12
+        : 2 + Math.random() * 6;
+    const duration = 3 / (size * 0.1);
+    const flake = document.createElement('span');
+    flake.className = `comment-snowflake comment-snowflake--${depth}`;
+    flake.style.width = `${size}px`;
+    flake.style.height = flake.style.width;
+    flake.style.left = `${Math.random() * 150}%`;
+    flake.style.animationDuration = `${duration}s`;
+    flake.style.animationDelay = `${Math.random() * -duration}s`;
+    const opacity = depth === 'foreground'
+      ? 0.35 + Math.random() * 0.3
+      : depth === 'midground'
+        ? 0.6 + Math.random() * 0.35
+        : 0.25 + Math.random() * 0.4;
+    flake.style.setProperty('--snow-opacity', `${opacity}`);
+    if (depth === 'foreground') {
+      flake.style.setProperty('--snow-depth-blur', `${5 + Math.random() * 3}px`);
+    } else if (size >= 9) {
+      flake.style.filter = `blur(${(0.8 + (size - 9) * 0.18).toFixed(1)}px)`;
+    }
+    fragment.append(flake);
   }
-
-  if (layer.childElementCount >= 120) layer.firstElementChild?.remove();
-
-  const size = Math.floor(Math.random() * 31) + 2;
-  const duration = 3 / (size * 0.1);
-  const blur = Math.abs(size - 8);
-  const flake = document.createElement('span');
-  layer.style.setProperty('--snow-drift-x', `-${Math.max(layer.clientHeight, 100)}px`);
-  flake.className = 'comment-snowflake';
-  flake.style.width = `${size}px`;
-  flake.style.height = `${size}px`;
-  flake.style.left = `${Math.random() * 150}%`;
-  flake.style.filter = `blur(${blur < 4 ? 0 : blur}px)`;
-  flake.style.animationDuration = `${duration}s`;
-  flake.addEventListener('animationend', () => flake.remove(), { once: true });
-  layer.append(flake);
+  layer.append(fragment);
 }
 
 function syncCommentSnowAnimation(state) {
@@ -7136,14 +7154,6 @@ function syncCommentSnowAnimation(state) {
     !document.documentElement.classList.contains('no-animations') &&
     !document.getElementById('comment-widget')?.classList.contains('no-animations');
   state.layer.classList.toggle('is-paused', !shouldRun);
-
-  if (shouldRun && !state.interval) {
-    createCommentSnowflake(state);
-    state.interval = window.setInterval(() => createCommentSnowflake(state), 50);
-  } else if (!shouldRun && state.interval) {
-    window.clearInterval(state.interval);
-    state.interval = 0;
-  }
 }
 
 function startCommentSnowAnimation(layer) {
@@ -7154,17 +7164,19 @@ function startCommentSnowAnimation(layer) {
     document.getElementById('comment-widget')?.classList.contains('no-animations')
   ) return;
 
-  // Assume visible initially so newly posted comments show snow right away.
-  // IntersectionObserver will correct the flag asynchronously if needed.
+  populateCommentSnowflakes(layer);
   const state = {
     layer,
     motionQuery,
     visible: true,
-    interval: 0,
     onVisibilityChange: null
   };
   state.onVisibilityChange = () => syncCommentSnowAnimation(state);
   commentSnowStatesByLayer.set(layer, state);
+  state.resizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver(() => updateCommentSnowDistance(layer));
+  state.resizeObserver?.observe(layer);
 
   if (typeof IntersectionObserver !== 'undefined') {
     if (!commentSnowObserver) {
@@ -7183,8 +7195,6 @@ function startCommentSnowAnimation(layer) {
   document.addEventListener('visibilitychange', state.onVisibilityChange);
   motionQuery?.addEventListener('change', state.onVisibilityChange);
 
-  // Kick the animation immediately for comments that are already in view
-  // (observer callback is async and often misses the first paint for newly inserted nodes)
   syncCommentSnowAnimation(state);
   requestAnimationFrame(() => {
     if (state.layer?.isConnected) syncCommentSnowAnimation(state);

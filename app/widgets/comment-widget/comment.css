@@ -2321,12 +2321,26 @@ html.no-animations .comment-snow,
 
 .comment-snowflake {
   position: absolute;
-  top: -100px;
+  top: 0;
   display: block;
   border-radius: 50%;
   background: #fff;
-  animation: comment-snow-falling linear forwards;
-  will-change: top, transform;
+  opacity: 0;
+  animation: comment-snow-falling linear infinite;
+  will-change: opacity, transform;
+}
+
+.comment-snowflake--background {
+  z-index: 1;
+}
+
+.comment-snowflake--midground {
+  z-index: 2;
+}
+
+.comment-snowflake--foreground {
+  z-index: 3;
+  filter: blur(var(--snow-depth-blur, 3px));
 }
 
 .comment-snow.is-paused .comment-snowflake {
@@ -2334,9 +2348,23 @@ html.no-animations .comment-snow,
 }
 
 @keyframes comment-snow-falling {
-  to {
-    top: calc(100% + 100px);
-    transform: translateX(var(--snow-drift-x));
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -100px, 0);
+  }
+
+  10%, 90% {
+    opacity: var(--snow-opacity, .8);
+  }
+
+  45% {
+    opacity: var(--snow-opacity, .8);
+    transform: translate3d(var(--snow-drift-mid-x, -45px), var(--snow-fall-mid-y, 50px), 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--snow-drift-x, 0px), var(--snow-fall-y, 200px), 0);
   }
 }
 
