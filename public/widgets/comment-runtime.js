@@ -1,5 +1,4 @@
-// ==================== OPTIMIZED FIREBASE + CACHE ====================
-    let userStatsCache = {};
+   let userStatsCache = {};
     try {
       const cached = localStorage.getItem('userStatsCache_v1');
       if (cached) Object.assign(userStatsCache, JSON.parse(cached));
@@ -88,7 +87,14 @@
             }
           });
         } catch (err) {
-          console.error('batchGetUserStats error:', err);
+          if (
+            err?.code === 'resource-exhausted' ||
+            (err?.message && (err.message.includes('Quota') || err.message.includes('Too Many Requests')))
+          ) {
+            console.warn('batchGetUserStats skipped because of Firebase quota.');
+          } else {
+            console.error('batchGetUserStats error:', err);
+          }
         }
       }));
 
@@ -150,8 +156,9 @@
     const vipEmails = ['moemaomao@gmail.com', 'emailvip2@gmail.com'];
 
     function isCurrentUserAdmin() {
-    if (!currentUser || !currentUser.email) return false;
-    return adminEmails.includes(currentUser.email.trim().toLowerCase());
+    const email = currentUser?.email;
+    if (!email || typeof email !== 'string') return false;
+    return adminEmails.includes(email.trim().toLowerCase());
 }
 
 window.isCurrentUserAdmin = isCurrentUserAdmin;
@@ -1273,7 +1280,7 @@ function getBestUsername(commentEl) {
   const authorEl = commentEl.querySelector('.author-name');
   if (authorEl) {
     let name = authorEl.textContent.trim();
-    if (name && name !== 'Anonymous') {
+    if (name && typeof name === 'string' && name !== 'Anonymous') {
       return name.toLowerCase().replace(/[^a-z0-9._-]/g, '');
     }
   }
@@ -1427,7 +1434,7 @@ function handleQuoteBtnClick(e) {
 }
 
     const NOTIFICATION_UNREAD_CACHE_PREFIX = 'mikoroku_notifications_unread_v2:';
-    const NOTIFICATION_REFRESH_THROTTLE_MS = 15 * 60 * 1000;
+    const NOTIFICATION_REFRESH_THROTTLE_MS = 10 * 60 * 1000; // 10 minutes
     let lastUserNotificationRefreshAt = 0;
     window.addEventListener('mikoroku:notification-count-updated', event => {
   const detail = event.detail || {};
@@ -1464,6 +1471,10 @@ function handleQuoteBtnClick(e) {
       if (typeof window.openMikorokuNotifications !== 'function') {
         console.error('The shared notifications modal is unavailable.');
         return;
+      }
+      // Fetch notifications only when user actually opens the panel
+      if (currentUser?.uid) {
+        void refreshUserNotifications(currentUser.uid, true);
       }
       window.openMikorokuNotifications();
     }
@@ -1825,7 +1836,7 @@ async function saveUserSettings() {
     customCommentBg: window.selectedCustomBg || "",
     customFontStyle: selectedFontClass || "",
     displayName: newDisplayName,
-    username: document.getElementById('custom-username-input').value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, ''),
+    username: (document.getElementById('custom-username-input')?.value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, ''),
     bio: document.getElementById('custom-bio-input').value.trim(),
     avatar: document.getElementById('settings-avatar-preview').src || currentUser.photoURL || ANONYMOUS_AVATAR,
     gameRoles: selectedRoles,
@@ -2054,12 +2065,12 @@ async function addMentionNotifications(text) {
   }
 
   lastUserNotificationRefreshAt = Date.now();
-  const ensureSchema = typeof window.ensureNotificationSchema === "function"
-    ? window.ensureNotificationSchema(uid).catch(error => {
-        console.warn("Legacy notifications could not be migrated yet.", error);
-      })
-    : Promise.resolve();
-  const refresh = ensureSchema
+
+  // NOTE: ensureNotificationSchema intentionally disabled.
+  // Notifications are not real-time and the legacy migration was causing
+  // heavy batchGet traffic + 429 quota errors.
+
+  const refresh = Promise.resolve()
     .then(() => {
       if (currentUser?.uid !== uid) return null;
       return db.collection('notifications').doc(uid).get();
@@ -2067,7 +2078,16 @@ async function addMentionNotifications(text) {
     .then(snapshot => {
       if (snapshot) applyUserNotifications(uid, snapshot);
     })
-    .catch(error => console.error("Notifications could not be refreshed.", error))
+    .catch(error => {
+      if (
+        error?.code === 'resource-exhausted' ||
+        (error?.message && (error.message.includes('Quota') || error.message.includes('Too Many Requests')))
+      ) {
+        console.warn("Notifications skipped because of Firebase quota.");
+      } else {
+        console.error("Notifications could not be refreshed.", error);
+      }
+    })
     .finally(() => {
       if (userNotificationRefreshInFlight?.promise === refresh) {
         userNotificationRefreshInFlight = null;
@@ -2156,7 +2176,12 @@ async function addMentionNotifications(text) {
     console.warn("Notification count cache could not be read.", error);
   }
   updateReplyBadge();
+
+  // Notifications are not real-time. Only fetch once on login / subscribe.
+  // Do not start aggressive polling just for notifications.
   void refreshUserNotifications(uid, true);
+
+  // Keep user stats refresh, but notifications themselves are on-demand only.
   startUserDataRefresh(uid);
 }
 
@@ -6279,7 +6304,7 @@ async function saveUserSettings() {
     customCommentBg: selectedCustomBg || "",
     customFontStyle: selectedFontClass || "",
     displayName: newDisplayName,
-    username: document.getElementById('custom-username-input').value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, ''),
+    username: (document.getElementById('custom-username-input')?.value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, ''),
     bio: document.getElementById('custom-bio-input').value.trim(),
     avatar: document.getElementById('settings-avatar-preview').src || currentUser.photoURL || ANONYMOUS_AVATAR,
     gameRoles: selectedRoles,
