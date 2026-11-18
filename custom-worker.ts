@@ -325,10 +325,15 @@ async function fetchAndCacheMangaCatalog(
   let payload: unknown;
   let token: string | null = null;
   try {
-    const baseline = await fetchUpstream(
-      new URL(MANGA_CATALOG_URL, requestUrl).toString(),
-      { headers: { Accept: "application/json" } },
-    );
+    const baselineUrl = new URL(MANGA_CATALOG_URL, requestUrl);
+    const baselineRequest = new Request(baselineUrl, {
+      headers: { Accept: "application/json" },
+    });
+    const baseline = env.ASSETS
+      ? await env.ASSETS.fetch(baselineRequest)
+      : await fetchUpstream(baselineUrl.toString(), {
+          headers: { Accept: "application/json" },
+        });
     if (!baseline.ok) {
       throw new Error(`metadata.json returned HTTP ${baseline.status}.`);
     }
