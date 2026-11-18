@@ -2068,8 +2068,12 @@ export default function DetailPageContent({ slug }: { slug: string }) {
         body: JSON.stringify({ sourceMode: nextSource }),
       });
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error || `Catalog source update returned HTTP ${response.status}.`);
+        const body = await response.json().catch(() => null) as {
+          error?: string;
+          detail?: string;
+        } | null;
+        const message = [body?.error, body?.detail].filter(Boolean).join(" ");
+        throw new Error(message || `Catalog source update returned HTTP ${response.status}.`);
       }
       const result = await response.json() as { sourceMode?: unknown };
       if (result.sourceMode !== nextSource) {

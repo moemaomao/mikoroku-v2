@@ -705,6 +705,20 @@ async function handleMangaCatalogSourceUpdate(
     }
 
     const previousMode = await getMangaCatalogSourceMode(kv);
+    if (previousMode === body.sourceMode) {
+      return new Response(JSON.stringify({
+        ok: true,
+        sourceMode: body.sourceMode,
+        unchanged: true,
+      }), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
+
     await kv.put(MANGA_CATALOG_SOURCE_KEY, body.sourceMode);
     try {
       const payload = await fetchAndCacheMangaCatalog(env, request.url, kv, body.sourceMode);
@@ -725,7 +739,10 @@ async function handleMangaCatalogSourceUpdate(
     }
   } catch (error) {
     console.error("[worker manga-catalog] source update failed", error);
-    return new Response(JSON.stringify({ error: "Catalog source could not be changed." }), {
+    return new Response(JSON.stringify({
+      error: "Catalog source could not be changed.",
+      detail: error instanceof Error ? error.message : "Unexpected Worker error.",
+    }), {
       status: 502,
       headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
     });
