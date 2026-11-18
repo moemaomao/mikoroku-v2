@@ -48,6 +48,7 @@ const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
 const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v5";
+const MANGA_CATALOG_SOURCE_KEY = "catalog:metadata:manga:source:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_CATALOG_URL = "/catalog/metadata.json";
@@ -64,6 +65,7 @@ type FirebaseAccessToken = {
   token: string;
   expiresAt: number;
 };
+type MangaCatalogSourceMode = "effective" | "baseline";
 
 let firebaseAccessToken: FirebaseAccessToken | null = null;
 let firebaseAccessTokenPromise: Promise<string> | null = null;
@@ -270,10 +272,55 @@ function catalogResponse(data: unknown, cacheStatus: string): Response {
   });
 }
 
+async function getMangaCatalogSourceMode(kv: KVNamespace): Promise<MangaCatalogSourceMode> {
+  const value = await kv.get(MANGA_CATALOG_SOURCE_KEY, "text");
+  return value === "baseline" ? "baseline" : "effective";
+}
+
+async function verifyMangaCatalogAdmin(request: Request): Promise<Response | null> {
+  const authorization = request.headers.get("authorization") || "";
+  const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!idToken) {
+    return new Response(JSON.stringify({ error: "Admin authentication is required." }), {
+      status: 401,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  const identityResponse = await fetchUpstream(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    },
+  );
+  if (!identityResponse.ok) {
+    return new Response(JSON.stringify({ error: "Admin authentication could not be verified." }), {
+      status: 401,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  const identity = await identityResponse.json() as { users?: Array<{ email?: unknown }> };
+  const email = identity.users?.[0]?.email;
+  if (
+    typeof email !== "string" ||
+    !["mikorokuscan@gmail.com", "moemaomao@gmail.com"].includes(email.toLowerCase())
+  ) {
+    return new Response(JSON.stringify({ error: "This account cannot change the manga catalog source." }), {
+      status: 403,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+  return null;
+}
+
 async function fetchAndCacheMangaCatalog(
   env: CloudflareEnv,
   requestUrl: string,
   kv: KVNamespace,
+  sourceMode: MangaCatalogSourceMode,
 ): Promise<Record<string, unknown>> {
   let payload: unknown;
   let token: string | null = null;
@@ -334,7 +381,6 @@ async function fetchAndCacheMangaCatalog(
     exportedAtMs: number;
     manga: unknown[];
   };
-  token ||= await createFirebaseAccessToken(env);
   const records = new Map<string, Record<string, unknown>>();
   for (const item of source.manga) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
@@ -344,7 +390,12 @@ async function fetchAndCacheMangaCatalog(
     }
   }
 
-  const changes = await fetchFirestoreMangaChanges(token, source.exportedAtMs);
+  const changes = sourceMode === "effective"
+    ? await fetchFirestoreMangaChanges(
+        token || (token = await createFirebaseAccessToken(env)),
+        source.exportedAtMs,
+      )
+    : [];
   const tombstones = new Map<string, number>();
   for (const change of changes) {
     const record = change.record;
@@ -384,7 +435,8 @@ async function fetchAndCacheMangaCatalog(
     ...source,
     sourceExportedAtMs: source.exportedAtMs,
     exportedAtMs: cachedAt,
-    firestoreDeltasIncluded: true,
+    catalogSourceMode: sourceMode,
+    firestoreDeltasIncluded: sourceMode === "effective",
     manga: [...records.values()],
   };
 
@@ -435,6 +487,42 @@ function mangaMetadataChangeTime(record: Record<string, unknown>): number {
   }, 0);
 }
 
+async function handleMangaCatalogSource(
+  request: Request,
+  env: CloudflareEnv,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/catalog/source") return null;
+  if (request.method !== "GET") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "content-type": "application/json; charset=utf-8", Allow: "GET" },
+    });
+  }
+  const kv = getCacheKv(env);
+  if (!kv) {
+    return new Response(JSON.stringify({ error: "Shared catalog cache is not configured." }), {
+      status: 503,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+  try {
+    return new Response(JSON.stringify({ sourceMode: await getMangaCatalogSourceMode(kv) }), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    console.error("[worker manga-catalog] source mode could not be read", error);
+    return new Response(JSON.stringify({ error: "Catalog source configuration is unavailable." }), {
+      status: 503,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+}
+
 async function handleMangaCatalogProxy(
   request: Request,
   env: CloudflareEnv,
@@ -461,6 +549,16 @@ async function handleMangaCatalogProxy(
       },
     });
   }
+  let sourceMode: MangaCatalogSourceMode;
+  try {
+    sourceMode = await getMangaCatalogSourceMode(kv);
+  } catch (error) {
+    console.error("[worker manga-catalog] source mode could not be read", error);
+    return new Response(JSON.stringify({ error: "Catalog source configuration is unavailable." }), {
+      status: 503,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
   let cached: { cachedAt?: number; data?: Record<string, unknown> } | null = null;
   try {
     cached = await kv.get(MANGA_CATALOG_CACHE_KEY, "json");
@@ -478,15 +576,29 @@ async function handleMangaCatalogProxy(
 
   if (cached) {
     const age = Date.now() - Number(cached.cachedAt || 0);
-    if (age <= MANGA_CATALOG_FRESH_TTL) {
+    if (cached.data.catalogSourceMode === sourceMode && age <= MANGA_CATALOG_FRESH_TTL) {
       const responseBody = url.pathname === "/api/catalog/manga"
         ? cached.data.manga
         : cached.data;
       return catalogResponse(responseBody, "HIT");
     }
 
+    if (cached.data.catalogSourceMode !== sourceMode) {
+      try {
+        const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode);
+        const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
+        return catalogResponse(responseBody, "MISS");
+      } catch (error) {
+        console.error("[worker manga-catalog] source change refresh failed", error);
+        return new Response(
+          JSON.stringify({ error: "Manga catalog could not be refreshed for the selected source." }),
+          { status: 502, headers: { "content-type": "application/json; charset=utf-8" } },
+        );
+      }
+    }
+
     ctx.waitUntil(
-      fetchAndCacheMangaCatalog(env, request.url, kv).catch((error: unknown) => {
+      fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode).catch((error: unknown) => {
         console.error("[worker manga-catalog] background refresh failed", error);
       }),
     );
@@ -497,7 +609,7 @@ async function handleMangaCatalogProxy(
   }
 
   try {
-    const data = await fetchAndCacheMangaCatalog(env, request.url, kv);
+    const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode);
     const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
     return catalogResponse(responseBody, "MISS");
   } catch (error) {
@@ -531,40 +643,55 @@ async function handleMangaCatalogCacheRefresh(
     });
   }
 
-  const authorization = request.headers.get("authorization") || "";
-  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!token) {
-    return new Response(JSON.stringify({ error: "Admin authentication is required." }), {
-      status: 401,
+  try {
+    const authError = await verifyMangaCatalogAdmin(request);
+    if (authError) return authError;
+
+    const kv = getCacheKv(env);
+    if (!kv) {
+      return new Response(JSON.stringify({ error: "Shared catalog cache is not configured." }), {
+        status: 503,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    const sourceMode = await getMangaCatalogSourceMode(kv);
+    const payload = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode);
+    return new Response(JSON.stringify({ ok: true, mangaCount: payload.manga.length }), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    console.error("[worker manga-catalog] authenticated cache refresh failed", error);
+    return new Response(JSON.stringify({ error: "Shared catalog cache could not be refreshed." }), {
+      status: 502,
       headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+}
+
+async function handleMangaCatalogSourceUpdate(
+  request: Request,
+  env: CloudflareEnv,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/admin/manga-catalog-source") return null;
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "content-type": "application/json; charset=utf-8", Allow: "POST" },
     });
   }
 
   try {
-    const identityResponse = await fetchUpstream(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ idToken: token }),
-      },
-    );
-    if (!identityResponse.ok) {
-      return new Response(JSON.stringify({ error: "Admin authentication could not be verified." }), {
-        status: 401,
-        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-      });
-    }
-    const identity = await identityResponse.json() as {
-      users?: Array<{ email?: unknown }>;
-    };
-    const email = identity.users?.[0]?.email;
-    if (
-      typeof email !== "string" ||
-      !["mikorokuscan@gmail.com", "moemaomao@gmail.com"].includes(email.toLowerCase())
-    ) {
-      return new Response(JSON.stringify({ error: "This account cannot refresh the manga catalog." }), {
-        status: 403,
+    const authError = await verifyMangaCatalogAdmin(request);
+    if (authError) return authError;
+    const body = await request.json() as { sourceMode?: unknown };
+    if (body.sourceMode !== "effective" && body.sourceMode !== "baseline") {
+      return new Response(JSON.stringify({ error: 'sourceMode must be "effective" or "baseline".' }), {
+        status: 400,
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
@@ -576,17 +703,29 @@ async function handleMangaCatalogCacheRefresh(
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
-    const payload = await fetchAndCacheMangaCatalog(env, request.url, kv);
-    return new Response(JSON.stringify({ ok: true, mangaCount: payload.manga.length }), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      },
-    });
+
+    const previousMode = await getMangaCatalogSourceMode(kv);
+    await kv.put(MANGA_CATALOG_SOURCE_KEY, body.sourceMode);
+    try {
+      const payload = await fetchAndCacheMangaCatalog(env, request.url, kv, body.sourceMode);
+      return new Response(JSON.stringify({
+        ok: true,
+        sourceMode: body.sourceMode,
+        mangaCount: payload.manga.length,
+      }), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    } catch (error) {
+      await kv.put(MANGA_CATALOG_SOURCE_KEY, previousMode);
+      throw error;
+    }
   } catch (error) {
-    console.error("[worker manga-catalog] authenticated cache refresh failed", error);
-    return new Response(JSON.stringify({ error: "Shared catalog cache could not be refreshed." }), {
+    console.error("[worker manga-catalog] source update failed", error);
+    return new Response(JSON.stringify({ error: "Catalog source could not be changed." }), {
       status: 502,
       headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
     });
@@ -1261,6 +1400,10 @@ export default {
 
     const catalogRefresh = await handleMangaCatalogCacheRefresh(request, env);
     if (catalogRefresh) return catalogRefresh;
+    const catalogSourceUpdate = await handleMangaCatalogSourceUpdate(request, env);
+    if (catalogSourceUpdate) return catalogSourceUpdate;
+    const catalogSource = await handleMangaCatalogSource(request, env);
+    if (catalogSource) return catalogSource;
     const catalog = await handleMangaCatalogProxy(request, env, ctx);
     if (catalog) return catalog;
     const mangaDetail = await handleMangaDetailProxy(request, env, ctx);

@@ -144,7 +144,9 @@ email addresses configured by the Worker.
 
 Admins can use the "Debug sumber manga" button on a series page to inspect
 which Firestore metadata sources were found and which one supplied the primary
-record.
+record. The source selector in that panel changes the shared catalog mode for
+all visitors: "Effective catalog" includes Firestore deltas, while "Catalog
+baseline" uses only the baseline catalog. Chapter server selection is separate.
 
 Untuk live preview widget komentar, jalankan:
 

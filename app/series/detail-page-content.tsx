@@ -3,6 +3,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { addDoc, collection, doc, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
@@ -34,7 +35,9 @@ import {
   fetchMangaMetadataPayload,
   MANGA_METADATA_CACHE_UPDATED_EVENT,
   MANGA_METADATA_UPDATED_EVENT,
+  notifyMangaMetadataUpdated,
 } from "../lib/manga-metadata";
+import { firebaseConfig } from "../../lib/firebase-config";
 import {
   compactChapterCache,
   mergeSharedChapterCache,
@@ -77,6 +80,7 @@ type Manga = {
   latestUpdate?: string | number;
   info?: Record<string, unknown>;
   debugSourceInfo?: string[];
+  catalogSourceMode?: "effective" | "baseline";
 };
 
 type Chapter = {
@@ -118,6 +122,7 @@ type SeriesBookmarkFirebase = {
 };
 
 const COMMENT_COUNT_FIREBASE_APP_NAME = "mikoroku-series-comment-count";
+const ADMIN_FIREBASE_APP_NAME = "mikoroku-admin";
 const COMMENT_COUNT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
   authDomain: "widget-comment.firebaseapp.com",
@@ -671,18 +676,24 @@ async function loadManga(
   }
 
   const responses = await Promise.allSettled([
-    fetchMangaMetadataPayload({ signal, force }).then(({ manga: items }) => {
-      const result = items.find((item) =>
+    fetchMangaMetadataPayload({ signal, force }).then((payload) => {
+      const result = payload.manga.find((item) =>
         asString(item.slug) === slug ||
         normalizedSlug(asString(item.title)) === slug ||
         normalizedKey(asString(item.title)) === normalizedKey(slug),
       );
-      return result ? normalizeManga(result, slug) : null;
+      return {
+        manga: result ? normalizeManga(result, slug) : null,
+        sourceMode: payload.catalogSourceMode === "baseline" ? "baseline" as const : "effective" as const,
+      };
     }),
     loadFirestoreMangaCatalog({ force }),
   ]);
 
-  const catalogManga = responses[0].status === "fulfilled" ? responses[0].value : null;
+  const catalogManga = responses[0].status === "fulfilled" ? responses[0].value.manga : null;
+  const catalogSourceMode = responses[0].status === "fulfilled"
+    ? responses[0].value.sourceMode
+    : undefined;
   const metadataRecords = responses[1].status === "fulfilled" ? responses[1].value : [];
   const metadataRecord = metadataRecords.find((record) => record.slug === slug);
   const metadataManga = metadataRecord
@@ -690,12 +701,12 @@ async function loadManga(
     : null;
   const firestoreDeltaFound =
     metadataRecord?.__catalogDebugSources?.includes("Firestore delta") === true;
-  const effectiveSource = firestoreDeltaFound
-    ? "Firestore catalog delta (catalog baseline)"
-    : metadataManga
-      ? "Catalog baseline"
-      : catalogManga
-        ? "Catalog baseline"
+  const effectiveSource = catalogSourceMode === "baseline"
+    ? "Catalog baseline (global)"
+    : firestoreDeltaFound
+      ? "Firestore catalog delta (catalog baseline)"
+      : metadataManga || catalogManga
+        ? "Effective catalog"
         : cachedManga || currentManga
           ? "browser detail cache"
           : "none";
@@ -708,7 +719,9 @@ async function loadManga(
           ? "changed record found"
           : "no newer change for this manga"
     }`,
-    "Firestore per-manga metadata read: skipped; using the full catalog baseline and change query",
+    catalogSourceMode === "baseline"
+      ? "Global source setting: Firestore catalog deltas are disabled."
+      : "Firestore per-manga metadata read: skipped; using the catalog baseline and change query",
     `Catalog primary record: ${catalogManga ? "found" : "not found"}`,
     `Effective source: ${effectiveSource}`,
   ];
@@ -759,7 +772,10 @@ async function loadManga(
             coverUpdatedAt: catalogManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
           }
         : cachedManga || currentManga;
-  if (manga) manga.debugSourceInfo = debugSourceInfo;
+  if (manga) {
+    manga.debugSourceInfo = debugSourceInfo;
+    if (catalogSourceMode) manga.catalogSourceMode = catalogSourceMode;
+  }
   if (manga) {
     manga.nsfw = metadataManga?.nsfw ??
       catalogManga?.nsfw ??
@@ -1203,11 +1219,15 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 export default function DetailPageContent({ slug }: { slug: string }) {
   const [manga, setManga] = useState<Manga | null>(null);
   const [showSourceDebug, setShowSourceDebug] = useState(false);
+  const [metadataDisplaySource, setMetadataDisplaySource] = useState<"effective" | "baseline">("effective");
+  const [metadataSourceSaving, setMetadataSourceSaving] = useState(false);
+  const [metadataSourceError, setMetadataSourceError] = useState("");
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [showNsfw] = useNsfwVisibility();
   const [selectedCoverUrl, setSelectedCoverUrl] = useState("");
   const [coverPreviewOpen, setCoverPreviewOpen] = useState(false);
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
+  const metadataSourceChangeRequestRef = useRef(0);
   const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
   const chapterCacheSlugRef = useRef(slug);
   const trackedSeriesRef = useRef(new Map<string, number>());
@@ -1470,6 +1490,10 @@ export default function DetailPageContent({ slug }: { slug: string }) {
   useEffect(() => {
     let controller = new AbortController();
     let requestId = 0;
+    const publishManga = (nextManga: Manga) => {
+      setManga(nextManga);
+      setMetadataDisplaySource(nextManga.catalogSourceMode || "effective");
+    };
     const loadCurrentManga = (force: boolean) => {
       controller.abort();
       controller = new AbortController();
@@ -1482,7 +1506,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       loadManga(slug, controller.signal, force, (availableManga) => {
         if (controller.signal.aborted || currentRequestId !== requestId) return;
         hasDisplayedManga = true;
-        setManga(availableManga);
+        publishManga(availableManga);
         setState("ready");
       }).then((result) => {
         if (controller.signal.aborted || currentRequestId !== requestId) return;
@@ -1490,7 +1514,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
           setState("not-found");
           return;
         }
-        setManga(result);
+        publishManga(result);
         setState("ready");
       }).catch((error: unknown) => {
         if (controller.signal.aborted || currentRequestId !== requestId) return;
@@ -2022,6 +2046,50 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     }
   }
 
+  const selectGlobalCatalogSource = async (nextSource: "effective" | "baseline") => {
+    if (!isAdminUser || metadataSourceSaving) return;
+    const requestId = ++metadataSourceChangeRequestRef.current;
+    setMetadataSourceSaving(true);
+    setMetadataSourceError("");
+    try {
+      const adminApp = getApps().find((candidate) => candidate.name === ADMIN_FIREBASE_APP_NAME) ??
+        initializeApp(firebaseConfig, ADMIN_FIREBASE_APP_NAME);
+      const auth = getAuth(adminApp);
+      await auth.authStateReady();
+      const user = auth.currentUser;
+      if (!user) throw new Error("Sign in as an admin before changing the catalog source.");
+
+      const response = await fetch("/api/admin/manga-catalog-source", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${await user.getIdToken()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sourceMode: nextSource }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error || `Catalog source update returned HTTP ${response.status}.`);
+      }
+      const result = await response.json() as { sourceMode?: unknown };
+      if (result.sourceMode !== nextSource) {
+        throw new Error("The server did not confirm the requested catalog source.");
+      }
+      if (metadataSourceChangeRequestRef.current !== requestId) return;
+      setMetadataDisplaySource(nextSource);
+      notifyMangaMetadataUpdated();
+    } catch (error) {
+      console.error("Global catalog source could not be changed.", error);
+      setMetadataSourceError(
+        error instanceof Error ? error.message : "Catalog source could not be changed.",
+      );
+    } finally {
+      if (metadataSourceChangeRequestRef.current === requestId) {
+        setMetadataSourceSaving(false);
+      }
+    }
+  };
+
   const openChapter = useCallback(async (chapter: Chapter) => {
     if (!manga) return;
     const isNovel = chapter.isNovel || isNovelSeries(manga);
@@ -2250,6 +2318,46 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     data-testid="manga-source-debug"
                   >
                     <strong>Metadata source debug</strong>
+                    <p className="mt-1">Choose the catalog source for all visitors:</p>
+                    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Choose global catalog source">
+                      <button
+                        type="button"
+                        className={`rounded border px-2 py-1 font-semibold transition ${
+                          metadataDisplaySource === "effective"
+                            ? "border-amber-300 bg-amber-300/20 text-amber-100"
+                            : "border-white/30 text-white/75 hover:bg-white/10"
+                        }`}
+                        aria-pressed={metadataDisplaySource === "effective"}
+                        disabled={metadataSourceSaving}
+                        onClick={() => void selectGlobalCatalogSource("effective")}
+                      >
+                        {metadataSourceSaving
+                          ? "Applying..."
+                          : metadataDisplaySource === "effective"
+                            ? "Effective catalog (global)"
+                            : "Effective catalog"}
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded border px-2 py-1 font-semibold transition ${
+                          metadataDisplaySource === "baseline"
+                            ? "border-amber-300 bg-amber-300/20 text-amber-100"
+                            : "border-white/30 text-white/75 hover:bg-white/10"
+                        }`}
+                        aria-pressed={metadataDisplaySource === "baseline"}
+                        disabled={metadataSourceSaving}
+                        onClick={() => void selectGlobalCatalogSource("baseline")}
+                      >
+                        {metadataSourceSaving
+                          ? "Applying..."
+                          : metadataDisplaySource === "baseline"
+                            ? "Catalog baseline (global)"
+                            : "Catalog baseline"}
+                      </button>
+                    </div>
+                    {metadataSourceError && (
+                      <p className="mt-2 text-red-300" role="alert">{metadataSourceError}</p>
+                    )}
                     <ul className="mt-1 list-inside list-disc">
                       {(manga.debugSourceInfo || ["Source details unavailable."]).map((item) => (
                         <li key={item}>{item}</li>

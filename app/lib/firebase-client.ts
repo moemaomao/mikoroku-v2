@@ -29,6 +29,7 @@ import type { Firestore } from "firebase/firestore";
 import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
 import {
   MANGA_METADATA_CACHE_UPDATED_EVENT,
+  fetchMangaCatalogSourceMode,
   fetchMangaMetadataPayload,
   MANGA_METADATA_UPDATED_EVENT,
   type MangaMetadataPayload,
@@ -45,6 +46,7 @@ export type FirestoreMangaMetadata = Record<string, unknown> & {
 type CachedMangaMetadata = {
   exportedAtMs: number;
   cursor: number;
+  sourceMode?: "effective" | "baseline";
   records: FirestoreMangaMetadata[];
   tombstones: Record<string, number>;
 };
@@ -55,12 +57,14 @@ let mangaCatalogData: FirestoreMangaMetadata[] | undefined;
 let mangaCatalogLoadedAt = 0;
 let mangaCatalogPromise: Promise<FirestoreMangaMetadata[]> | undefined;
 let mangaCatalogGeneration = 0;
+let mangaCatalogSourceMode: "effective" | "baseline" | undefined;
 let persistentCacheEnabled = false;
 
 function invalidateMangaCatalogCache(): void {
   mangaCatalogGeneration += 1;
   mangaCatalogData = undefined;
   mangaCatalogLoadedAt = 0;
+  mangaCatalogSourceMode = undefined;
   mangaCatalogPromise = undefined;
   try {
     localStorage.removeItem(MANGA_METADATA_CACHE_KEY);
@@ -224,12 +228,25 @@ export function loadFirestoreMangaCatalog(
     mangaCatalogData &&
     Date.now() - mangaCatalogLoadedAt < MANGA_METADATA_MEMORY_TTL
   ) {
-    return Promise.resolve(mangaCatalogData);
+    return fetchMangaCatalogSourceMode()
+      .then((sourceMode) => {
+        if (!sourceMode || sourceMode === mangaCatalogSourceMode) {
+          return mangaCatalogData!;
+        }
+        invalidateMangaCatalogCache();
+        return loadFirestoreMangaCatalog({ force: true });
+      })
+      .catch((error: unknown) => {
+        console.warn("Global catalog source check failed; using the in-memory catalog.", error);
+        return mangaCatalogData!;
+      });
   }
   if (!mangaCatalogPromise) {
     const requestGeneration = mangaCatalogGeneration;
     const request = (async () => {
       const catalog = payload ?? await fetchMangaMetadataPayload({ force });
+      const sourceMode: "effective" | "baseline" =
+        catalog.catalogSourceMode === "baseline" ? "baseline" : "effective";
       const bySlug = new Map<string, FirestoreMangaMetadata>();
       const tombstones: Record<string, number> = {};
       for (const value of catalog.manga) {
@@ -246,7 +263,11 @@ export function loadFirestoreMangaCatalog(
 
       const cached = readCachedMangaMetadata();
       let cursor = catalog.exportedAtMs;
-      if (cached?.exportedAtMs === catalog.exportedAtMs) {
+      if (
+        sourceMode === "effective" &&
+        cached?.exportedAtMs === catalog.exportedAtMs &&
+        cached.sourceMode === sourceMode
+      ) {
         cursor = Math.max(cursor, cached.cursor);
         for (const record of cached.records) {
           const sources = new Set(record.__catalogDebugSources || []);
@@ -265,7 +286,10 @@ export function loadFirestoreMangaCatalog(
         if (!record || metadataChangeTime(record) <= deletedAt) bySlug.delete(slug);
       }
 
-      if (catalog.firestoreDeltasIncluded !== true) {
+      if (
+        sourceMode === "effective" &&
+        catalog.firestoreDeltasIncluded !== true
+      ) {
         try {
           const { firestore } = initializeFirebaseClient();
           const mangaCollection = collection(firestore, "manga");
@@ -336,6 +360,7 @@ export function loadFirestoreMangaCatalog(
             JSON.stringify({
               exportedAtMs: catalog.exportedAtMs,
               cursor,
+              sourceMode,
               records,
               tombstones,
             } satisfies CachedMangaMetadata),
@@ -345,6 +370,7 @@ export function loadFirestoreMangaCatalog(
         }
         mangaCatalogData = records;
         mangaCatalogLoadedAt = Date.now();
+        mangaCatalogSourceMode = sourceMode;
       }
       return records;
     })();
