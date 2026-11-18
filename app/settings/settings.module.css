@@ -878,13 +878,191 @@
 .settings-fireflies-particles span:nth-child(9) { left: 28%; top: 54%; animation-delay: -4s; }
 .settings-fireflies-particles span:nth-child(10) { left: 76%; top: 46%; animation-delay: -2.2s; }
 
-.settings-fireworks-canvas {
+.settings-fireworks-layer {
   position: absolute;
+  z-index: 0;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  overflow: hidden;
   pointer-events: none;
   mix-blend-mode: screen;
+}
+
+.settings-firework-burst {
+  --settings-firework-duration: 4s;
+  --settings-firework-delay: 0s;
+  --settings-spark-color: #ffd166;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  transform: rotate(var(--settings-firework-rotation, 0deg));
+  transform-origin: 0 0;
+}
+
+.settings-firework-burst::before {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--settings-spark-color) 38%, transparent 72%);
+  box-shadow: 0 0 12px 4px color-mix(in srgb, var(--settings-spark-color) 60%, transparent);
+  content: "";
+  opacity: 0;
+  animation: settings-firework-flash var(--settings-firework-duration) ease-out infinite;
+  animation-delay: var(--settings-firework-delay);
+}
+
+.settings-firework-burst::after {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  width: 30px;
+  height: 30px;
+  background:
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 50% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 43% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 57% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 50% 43% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 50% 57% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 44% 44% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 56% 44% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 44% 56% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 56% 56% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 50% 25% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 75% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 50% 75% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 25% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 32% 32% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 68% 32% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 68% 68% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.2px, transparent 1.7px) 32% 68% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 50% 0% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 85% 15% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 100% 50% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 85% 85% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 50% 100% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 15% 85% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 0% 50% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--settings-spark-color) 0 1.3px, transparent 1.8px) 15% 15% / 4px 4px no-repeat;
+  content: "";
+  filter: drop-shadow(0 0 3px var(--settings-spark-color));
+  opacity: 0;
+  animation: settings-firework-core var(--settings-firework-duration) ease-out infinite;
+  animation-delay: var(--settings-firework-delay);
+}
+
+.settings-firework-spark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--settings-spark-size, 3px);
+  height: var(--settings-spark-size, 3px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--settings-spark-color) 55%, transparent 100%);
+  box-shadow:
+    0 0 4px 1px var(--settings-spark-color),
+    0 0 10px 2px color-mix(in srgb, var(--settings-spark-color) 70%, transparent);
+  opacity: 0;
+  animation: settings-firework-spark var(--settings-firework-duration) linear infinite;
+  animation-delay: calc(var(--settings-firework-delay) + var(--settings-spark-delay, 0s));
+}
+
+.settings-firework-burst:nth-child(1) { left: 12%; top: 28%; --settings-spark-color: #ffd166; --settings-firework-duration: 4.2s; --settings-firework-delay: .1s; --settings-firework-rotation: -6deg; }
+.settings-firework-burst:nth-child(2) { left: 31%; top: 68%; --settings-spark-color: #ff5f6d; --settings-firework-duration: 3.8s; --settings-firework-delay: .65s; --settings-firework-rotation: 13deg; }
+.settings-firework-burst:nth-child(3) { left: 50%; top: 37%; --settings-spark-color: #74b9ff; --settings-firework-duration: 4.8s; --settings-firework-delay: 1.25s; --settings-firework-rotation: -9deg; }
+.settings-firework-burst:nth-child(4) { left: 70%; top: 72%; --settings-spark-color: #c77dff; --settings-firework-duration: 3.9s; --settings-firework-delay: 2s; --settings-firework-rotation: 7deg; }
+.settings-firework-burst:nth-child(5) { left: 88%; top: 25%; --settings-spark-color: #4de0c1; --settings-firework-duration: 5.2s; --settings-firework-delay: 2.8s; --settings-firework-rotation: -14deg; }
+.settings-firework-burst:nth-child(6) { left: 57%; top: 76%; --settings-spark-color: #ff9f1c; --settings-firework-duration: 4.3s; --settings-firework-delay: 3.6s; --settings-firework-rotation: 11deg; }
+
+.settings-firework-spark:nth-child(3n + 1) { --settings-spark-delay: 0s; }
+.settings-firework-spark:nth-child(3n + 2) { --settings-spark-delay: .04s; }
+.settings-firework-spark:nth-child(3n) { --settings-spark-delay: .08s; }
+.settings-firework-spark:nth-child(5n + 1) { --settings-spark-size: 2.5px; }
+.settings-firework-spark:nth-child(5n + 2) { --settings-spark-size: 3.5px; }
+.settings-firework-spark:nth-child(5n + 3) { --settings-spark-size: 2.8px; }
+.settings-firework-spark:nth-child(5n + 4) { --settings-spark-size: 4.2px; }
+.settings-firework-spark:nth-child(5n) { --settings-spark-size: 2.2px; }
+.settings-firework-spark:nth-child(1) { --settings-spark-mid-x: 0px; --settings-spark-mid-y: -28px; --settings-spark-end-x: 0px; --settings-spark-end-y: -48px; }
+.settings-firework-spark:nth-child(2) { --settings-spark-mid-x: 12px; --settings-spark-mid-y: -31px; --settings-spark-end-x: 24px; --settings-spark-end-y: -53px; }
+.settings-firework-spark:nth-child(3) { --settings-spark-mid-x: 25px; --settings-spark-mid-y: -24px; --settings-spark-end-x: 42px; --settings-spark-end-y: -43px; }
+.settings-firework-spark:nth-child(4) { --settings-spark-mid-x: 34px; --settings-spark-mid-y: -12px; --settings-spark-end-x: 57px; --settings-spark-end-y: -27px; }
+.settings-firework-spark:nth-child(5) { --settings-spark-mid-x: 36px; --settings-spark-mid-y: 5px; --settings-spark-end-x: 62px; --settings-spark-end-y: 8px; }
+.settings-firework-spark:nth-child(6) { --settings-spark-mid-x: 34px; --settings-spark-mid-y: 8px; --settings-spark-end-x: 57px; --settings-spark-end-y: 17px; }
+.settings-firework-spark:nth-child(7) { --settings-spark-mid-x: 28px; --settings-spark-mid-y: 21px; --settings-spark-end-x: 45px; --settings-spark-end-y: 37px; }
+.settings-firework-spark:nth-child(8) { --settings-spark-mid-x: 16px; --settings-spark-mid-y: 30px; --settings-spark-end-x: 28px; --settings-spark-end-y: 55px; }
+.settings-firework-spark:nth-child(9) { --settings-spark-mid-x: 2px; --settings-spark-mid-y: 36px; --settings-spark-end-x: 4px; --settings-spark-end-y: 63px; }
+.settings-firework-spark:nth-child(10) { --settings-spark-mid-x: -13px; --settings-spark-mid-y: 31px; --settings-spark-end-x: -25px; --settings-spark-end-y: 54px; }
+.settings-firework-spark:nth-child(11) { --settings-spark-mid-x: -27px; --settings-spark-mid-y: 22px; --settings-spark-end-x: -46px; --settings-spark-end-y: 37px; }
+.settings-firework-spark:nth-child(12) { --settings-spark-mid-x: -36px; --settings-spark-mid-y: 9px; --settings-spark-end-x: -61px; --settings-spark-end-y: 17px; }
+.settings-firework-spark:nth-child(13) { --settings-spark-mid-x: -37px; --settings-spark-mid-y: -6px; --settings-spark-end-x: -63px; --settings-spark-end-y: -11px; }
+.settings-firework-spark:nth-child(14) { --settings-spark-mid-x: -30px; --settings-spark-mid-y: -20px; --settings-spark-end-x: -52px; --settings-spark-end-y: -34px; }
+.settings-firework-spark:nth-child(15) { --settings-spark-mid-x: -18px; --settings-spark-mid-y: -29px; --settings-spark-end-x: -31px; --settings-spark-end-y: -51px; }
+.settings-firework-spark:nth-child(16) { --settings-spark-mid-x: -5px; --settings-spark-mid-y: -36px; --settings-spark-end-x: -9px; --settings-spark-end-y: -61px; }
+.settings-firework-spark:nth-child(17) { --settings-spark-mid-x: 9px; --settings-spark-mid-y: -30px; --settings-spark-end-x: 17px; --settings-spark-end-y: -50px; }
+.settings-firework-spark:nth-child(18) { --settings-spark-mid-x: 31px; --settings-spark-mid-y: 16px; --settings-spark-end-x: 53px; --settings-spark-end-y: 29px; }
+.settings-firework-spark:nth-child(19) { --settings-spark-mid-x: 0px; --settings-spark-mid-y: -10px; --settings-spark-end-x: 0px; --settings-spark-end-y: -18px; }
+.settings-firework-spark:nth-child(20) { --settings-spark-mid-x: 5px; --settings-spark-mid-y: -8px; --settings-spark-end-x: 10px; --settings-spark-end-y: -15px; }
+.settings-firework-spark:nth-child(21) { --settings-spark-mid-x: 9px; --settings-spark-mid-y: -6px; --settings-spark-end-x: 17px; --settings-spark-end-y: -11px; }
+.settings-firework-spark:nth-child(22) { --settings-spark-mid-x: 12px; --settings-spark-mid-y: -2px; --settings-spark-end-x: 22px; --settings-spark-end-y: -4px; }
+.settings-firework-spark:nth-child(23) { --settings-spark-mid-x: 10px; --settings-spark-mid-y: 4px; --settings-spark-end-x: 19px; --settings-spark-end-y: 8px; }
+.settings-firework-spark:nth-child(24) { --settings-spark-mid-x: 6px; --settings-spark-mid-y: 8px; --settings-spark-end-x: 11px; --settings-spark-end-y: 15px; }
+.settings-firework-spark:nth-child(25) { --settings-spark-mid-x: 0px; --settings-spark-mid-y: 11px; --settings-spark-end-x: 0px; --settings-spark-end-y: 20px; }
+.settings-firework-spark:nth-child(26) { --settings-spark-mid-x: -5px; --settings-spark-mid-y: 9px; --settings-spark-end-x: -10px; --settings-spark-end-y: 16px; }
+.settings-firework-spark:nth-child(27) { --settings-spark-mid-x: -10px; --settings-spark-mid-y: 6px; --settings-spark-end-x: -18px; --settings-spark-end-y: 11px; }
+.settings-firework-spark:nth-child(28) { --settings-spark-mid-x: -12px; --settings-spark-mid-y: 1px; --settings-spark-end-x: -22px; --settings-spark-end-y: 2px; }
+.settings-firework-spark:nth-child(29) { --settings-spark-mid-x: -9px; --settings-spark-mid-y: -5px; --settings-spark-end-x: -17px; --settings-spark-end-y: -9px; }
+.settings-firework-spark:nth-child(30) { --settings-spark-mid-x: -5px; --settings-spark-mid-y: -9px; --settings-spark-end-x: -9px; --settings-spark-end-y: -16px; }
+.settings-firework-spark:nth-child(31) { --settings-spark-mid-x: 3px; --settings-spark-mid-y: -12px; --settings-spark-end-x: 5px; --settings-spark-end-y: -21px; }
+.settings-firework-spark:nth-child(32) { --settings-spark-mid-x: 11px; --settings-spark-mid-y: -10px; --settings-spark-end-x: 20px; --settings-spark-end-y: -17px; }
+.settings-firework-spark:nth-child(33) { --settings-spark-mid-x: 13px; --settings-spark-mid-y: 5px; --settings-spark-end-x: 23px; --settings-spark-end-y: 9px; }
+.settings-firework-spark:nth-child(34) { --settings-spark-mid-x: 8px; --settings-spark-mid-y: 12px; --settings-spark-end-x: 14px; --settings-spark-end-y: 22px; }
+.settings-firework-spark:nth-child(35) { --settings-spark-mid-x: -3px; --settings-spark-mid-y: 12px; --settings-spark-end-x: -5px; --settings-spark-end-y: 21px; }
+.settings-firework-spark:nth-child(36) { --settings-spark-mid-x: -13px; --settings-spark-mid-y: 4px; --settings-spark-end-x: -24px; --settings-spark-end-y: 7px; }
+
+@keyframes settings-firework-spark {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(.15);
+    animation-timing-function: cubic-bezier(.06, .78, .24, 1);
+  }
+
+  6% {
+    opacity: 1;
+    transform: translate3d(var(--settings-spark-mid-x), var(--settings-spark-mid-y), 0) scale(1);
+    animation-timing-function: cubic-bezier(.2, .5, .4, 1);
+  }
+
+  42% {
+    opacity: .9;
+    transform: translate3d(var(--settings-spark-end-x), var(--settings-spark-end-y), 0) scale(.72);
+    animation-timing-function: linear;
+  }
+
+  72% {
+    opacity: .55;
+    transform: translate3d(calc(var(--settings-spark-end-x) + 4px), calc(var(--settings-spark-end-y) + 18px), 0) scale(.48);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--settings-spark-end-x) + 8px), calc(var(--settings-spark-end-y) + 40px), 0) scale(.1);
+  }
+}
+
+@keyframes settings-firework-flash {
+  0%, 4% { opacity: 0; transform: scale(.1); }
+  10% { opacity: .95; transform: scale(1); }
+  28% { opacity: .35; transform: scale(2.2); }
+  40%, 100% { opacity: 0; transform: scale(2.8); }
+}
+
+@keyframes settings-firework-core {
+  0%, 3% { opacity: 0; transform: scale(.25) rotate(0deg); }
+  10% { opacity: .9; transform: scale(.7) rotate(10deg); }
+  45% { opacity: .85; transform: scale(1.15) rotate(28deg); }
+  76% { opacity: .35; transform: scale(1.7) rotate(48deg); }
+  100% { opacity: 0; transform: scale(2) rotate(60deg); }
 }
 
 .settings-snow-layer {
@@ -957,7 +1135,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-snowflake {
+  .settings-snowflake,
+  .settings-firework-burst,
+  .settings-firework-spark {
     display: none;
   }
 }

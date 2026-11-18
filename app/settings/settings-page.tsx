@@ -99,166 +99,20 @@ function getTopCommenterEffectName(effect: Settings["topCommenterEffect"]) {
   return "Snow";
 }
 
-function FireworkPreviewCanvas({ active, className }: { active: boolean; className: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context || !active) return;
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reducedMotion.matches) return;
-
-    type Dot = {
-      px: number;
-      py: number;
-      vx: number;
-      vy: number;
-      angle: number;
-      life: number;
-      color: string;
-      dead: boolean;
-    };
-    type Flock = { x: number; y: number; dots: Dot[] };
-    const flocks: Flock[] = [];
-    const burstDelays = [400, 700, 2000];
-    const colors = ["white", "#ffd166", "#ff5f6d", "#74b9ff", "#c77dff", "#4de0c1", "#ff9f1c"];
-    let width = 0;
-    let height = 0;
-    let dpr = 1;
-    let startedAt = 0;
-    let lastFrameAt = 0;
-    let nextBurst = 0;
-    let animationFrame = 0;
-    let visible = typeof IntersectionObserver === "undefined";
-    let initialized = false;
-
-    const resize = () => {
-      const bounds = canvas.getBoundingClientRect();
-      const nextWidth = bounds.width;
-      const nextHeight = bounds.height;
-      const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (!nextWidth || !nextHeight) return;
-      if (nextWidth === width && nextHeight === height && nextDpr === dpr) return;
-
-      width = nextWidth;
-      height = nextHeight;
-      dpr = nextDpr;
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-
-    const createFlock = (): Flock => ({
-      x: width * Math.random(),
-      y: height * Math.random(),
-      dots: Array.from({ length: 150 }, (): Dot => ({
-        px: 0,
-        py: 0,
-        vx: Math.random() * 4,
-        vy: Math.random() * 4,
-        angle: Math.random() * Math.PI * 2,
-        life: 0.5 + Math.random(),
-        color: Math.random() > 0.3 ? colors[1 + Math.floor(Math.random() * (colors.length - 1))] : colors[0],
-        dead: false,
-      })),
-    });
-
-    const schedule = () => {
-      if (!animationFrame && visible && !document.hidden && !reducedMotion.matches) {
-        animationFrame = window.requestAnimationFrame(draw);
-      }
-    };
-
-    const draw = (timestamp: number) => {
-      animationFrame = 0;
-      if (!visible || document.hidden || reducedMotion.matches) return;
-
-      resize();
-      if (!width || !height) return;
-      if (!initialized) {
-        startedAt = timestamp;
-        lastFrameAt = timestamp;
-        flocks.push(createFlock());
-        initialized = true;
-      }
-
-      const delta = Math.min(2, Math.max(0.5, (timestamp - lastFrameAt) / 16.67));
-      lastFrameAt = timestamp;
-      context.clearRect(0, 0, width, height);
-
-      while (nextBurst < burstDelays.length && timestamp - startedAt >= burstDelays[nextBurst]) {
-        flocks.push(createFlock());
-        nextBurst += 1;
-      }
-
-      for (let flockIndex = 0; flockIndex < flocks.length; flockIndex += 1) {
-        const flock = flocks[flockIndex];
-        let allDead = true;
-        for (const dot of flock.dots) {
-          if (dot.dead) continue;
-
-          dot.px += dot.vx * Math.cos(dot.angle) * delta;
-          dot.py += dot.vy * Math.sin(dot.angle) * delta;
-          dot.vx *= Math.pow(0.98, delta);
-          dot.vy = dot.vy * Math.pow(0.98, delta) + (dot.angle > Math.PI ? -0.025 : 0.02) * delta;
-          dot.life -= 0.009 * delta;
-          if (dot.life < 0) {
-            dot.dead = true;
-            continue;
-          }
-
-          allDead = false;
-          if (Math.random() > 0.95) continue;
-          context.globalAlpha = Math.min(1, dot.life);
-          context.fillStyle = dot.color;
-          context.shadowColor = dot.color;
-          context.shadowBlur = 10;
-          context.beginPath();
-          context.arc(flock.x + dot.px, flock.y + dot.py, Math.max(0.35, 0.55 + 1.1 * dot.life - dot.vy * 0.03), 0, Math.PI * 2);
-          context.fill();
-        }
-
-        if (allDead) flocks[flockIndex] = createFlock();
-      }
-
-      context.globalAlpha = 1;
-      context.shadowBlur = 0;
-      schedule();
-    };
-
-    const visibilityObserver = typeof IntersectionObserver === "undefined"
-      ? null
-      : new IntersectionObserver((entries) => {
-          visible = entries.some((entry) => entry.isIntersecting);
-          schedule();
-        });
-    const resizeObserver = typeof ResizeObserver === "undefined"
-      ? null
-      : new ResizeObserver(() => {
-          resize();
-          schedule();
-        });
-    const onVisibilityChange = () => schedule();
-    const onMotionChange = () => schedule();
-
-    visibilityObserver?.observe(canvas);
-    resizeObserver?.observe(canvas);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    reducedMotion.addEventListener("change", onMotionChange);
-    if (visible) schedule();
-
-    return () => {
-      if (animationFrame) window.cancelAnimationFrame(animationFrame);
-      visibilityObserver?.disconnect();
-      resizeObserver?.disconnect();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      reducedMotion.removeEventListener("change", onMotionChange);
-    };
-  }, [active]);
-
-  return <canvas ref={canvasRef} className={className} aria-hidden="true" />;
+function FireworkPreview({ active, className }: { active: boolean; className: string }) {
+  return (
+    <div className={className} aria-hidden="true">
+      {active
+        ? Array.from({ length: 6 }, (_, burstIndex) => (
+            <span className={styles["settings-firework-burst"]} key={burstIndex}>
+              {Array.from({ length: 36 }, (_, sparkIndex) => (
+                <span className={styles["settings-firework-spark"]} key={sparkIndex} />
+              ))}
+            </span>
+          ))
+        : null}
+    </div>
+  );
 }
 
 function SnowPreview({ active, className }: { active: boolean; className: string }) {
@@ -1401,9 +1255,9 @@ export default function SettingsPage() {
                                     ) : null
                                   ) : (
                                     effect === "firework" ? (
-                                      <FireworkPreviewCanvas
+                                      <FireworkPreview
                                         active={topCommenterPreviewEnabled && settings.topCommenterEffect === effect}
-                                        className={styles['settings-fireworks-canvas']}
+                                        className={styles['settings-fireworks-layer']}
                                       />
                                     ) : (
                                       <SnowPreview

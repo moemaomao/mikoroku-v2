@@ -6921,199 +6921,92 @@ function getCachedCommentLeaderboardRank(uid) {
   return index >= 0 ? index + 1 : null;
 }
 
-const activeCommentFireworkStates = new Set();
-const commentFireworkStatesByCanvas = new WeakMap();
+const commentFireworkStatesByLayer = new WeakMap();
 let commentFireworkObserver = null;
-let commentFireworkFrame = 0;
 
 function createCommentFireworkLayer() {
-  const canvas = document.createElement('canvas');
-  canvas.className = 'comment-fireworks';
-  canvas.setAttribute('aria-hidden', 'true');
-  return canvas;
+  const layer = document.createElement('div');
+  layer.className = 'comment-fireworks';
+  layer.setAttribute('aria-hidden', 'true');
+  const fragment = document.createDocumentFragment();
+
+  for (let burstIndex = 0; burstIndex < 6; burstIndex += 1) {
+    const burst = document.createElement('span');
+    burst.className = 'comment-firework-burst';
+    for (let sparkIndex = 0; sparkIndex < 36; sparkIndex += 1) {
+      const spark = document.createElement('span');
+      spark.className = 'comment-firework-spark';
+      burst.append(spark);
+    }
+    fragment.append(burst);
+  }
+
+  layer.append(fragment);
+  return layer;
+}
+
+function stopCommentFireworkAnimation(state) {
+  document.removeEventListener('visibilitychange', state.onVisibilityChange);
+  state.motionQuery?.removeEventListener('change', state.onVisibilityChange);
+  commentFireworkObserver?.unobserve(state.layer);
+  commentFireworkStatesByLayer.delete(state.layer);
 }
 
 function removeCommentFireworkLayer(commentElement) {
-  const canvas = commentElement.querySelector('.comment-fireworks');
-  if (!canvas) return;
+  const layer = commentElement.querySelector('.comment-fireworks');
+  if (!layer) return;
 
-  const state = commentFireworkStatesByCanvas.get(canvas);
-  if (state) {
-    state.visible = false;
-    activeCommentFireworkStates.delete(state);
-    commentFireworkObserver?.unobserve(canvas);
-  }
-  canvas.remove();
+  const state = commentFireworkStatesByLayer.get(layer);
+  if (state) stopCommentFireworkAnimation(state);
+  layer.remove();
 }
 
-function scheduleCommentFireworkFrame() {
-  if (commentFireworkFrame) return;
-  for (const state of activeCommentFireworkStates) {
-    if (state.visible) {
-      commentFireworkFrame = window.requestAnimationFrame(drawCommentFireworks);
-      return;
-    }
+function syncCommentFireworkAnimation(state) {
+  if (!state.layer.isConnected) {
+    stopCommentFireworkAnimation(state);
+    return;
   }
+
+  const shouldRun =
+    state.visible &&
+    !document.hidden &&
+    !state.motionQuery?.matches &&
+    !document.documentElement.classList.contains('no-animations') &&
+    !document.getElementById('comment-widget')?.classList.contains('no-animations');
+  state.layer.classList.toggle('is-paused', !shouldRun);
 }
 
-function observeCommentFireworkLayer(canvas, state) {
+function startCommentFireworkAnimation(layer) {
+  const state = {
+    layer,
+    motionQuery: window.matchMedia?.('(prefers-reduced-motion: reduce)'),
+    visible: typeof IntersectionObserver === 'undefined',
+    onVisibilityChange: null
+  };
+  state.onVisibilityChange = () => syncCommentFireworkAnimation(state);
+  commentFireworkStatesByLayer.set(layer, state);
+
   if (typeof IntersectionObserver === 'undefined') {
-    state.visible = true;
-    scheduleCommentFireworkFrame();
+    document.addEventListener('visibilitychange', state.onVisibilityChange);
+    state.motionQuery?.addEventListener('change', state.onVisibilityChange);
+    syncCommentFireworkAnimation(state);
     return;
   }
 
   if (!commentFireworkObserver) {
     commentFireworkObserver = new IntersectionObserver(entries => {
       entries.forEach(entry => {
-        const observedState = commentFireworkStatesByCanvas.get(entry.target);
+        const observedState = commentFireworkStatesByLayer.get(entry.target);
         if (!observedState) return;
-        if (!observedState.canvas.isConnected) {
-          activeCommentFireworkStates.delete(observedState);
-          commentFireworkObserver.unobserve(observedState.canvas);
-          return;
-        }
         observedState.visible = entry.isIntersecting;
+        syncCommentFireworkAnimation(observedState);
       });
-      scheduleCommentFireworkFrame();
-    });
+    }, { threshold: 0, rootMargin: '80px' });
   }
-
-  commentFireworkObserver.observe(canvas);
-}
-
-function startCommentFireworkAnimation(canvas) {
-  if (
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
-    document.documentElement.classList.contains('no-animations') ||
-    document.getElementById('comment-widget')?.classList.contains('no-animations')
-  ) return;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    console.warn('Canvas fireworks are unavailable for this comment.');
-    return;
-  }
-
-  const state = {
-    canvas,
-    context,
-    width: 0,
-    height: 0,
-    dpr: 1,
-    visible: false,
-    initialized: false,
-    startedAt: 0,
-    lastFrameAt: 0,
-    nextBurst: 0,
-    flocks: []
-  };
-  commentFireworkStatesByCanvas.set(canvas, state);
-  activeCommentFireworkStates.add(state);
-  observeCommentFireworkLayer(canvas, state);
-}
-
-function createCommentFireworkFlock(state) {
-  return {
-    x: Math.random() * state.width,
-    y: Math.random() * state.height,
-    dots: Array.from({ length: 150 }, () => ({
-      px: 0,
-      py: 0,
-      vx: Math.random() * 4,
-      vy: Math.random() * 4,
-      angle: Math.random() * Math.PI * 2,
-      life: 0.5 + Math.random(),
-      color: Math.random() > 0.3
-        ? ['#ffd166', '#ff5f6d', '#74b9ff', '#c77dff', '#4de0c1', '#ff9f1c'][Math.floor(Math.random() * 6)]
-        : 'white',
-      dead: false
-    }))
-  };
-}
-
-function drawCommentFireworks(timestamp) {
-  commentFireworkFrame = 0;
-  let hasVisibleCanvas = false;
-
-  for (const state of activeCommentFireworkStates) {
-    const { canvas, context } = state;
-    if (!canvas.isConnected) {
-      activeCommentFireworkStates.delete(state);
-      commentFireworkObserver?.unobserve(canvas);
-      continue;
-    }
-    if (!state.visible) continue;
-
-    hasVisibleCanvas = true;
-    const bounds = canvas.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) continue;
-    const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (bounds.width !== state.width || bounds.height !== state.height || nextDpr !== state.dpr) {
-      state.width = bounds.width;
-      state.height = bounds.height;
-      state.dpr = nextDpr;
-      canvas.width = Math.round(state.width * state.dpr);
-      canvas.height = Math.round(state.height * state.dpr);
-      context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-    }
-
-    if (!state.initialized) {
-      state.initialized = true;
-      state.startedAt = timestamp;
-      state.lastFrameAt = timestamp;
-      state.flocks.push(createCommentFireworkFlock(state));
-    }
-
-    const delta = Math.min(2, Math.max(0.5, (timestamp - state.lastFrameAt) / 16.67));
-    state.lastFrameAt = timestamp;
-    context.clearRect(0, 0, state.width, state.height);
-
-    const burstDelays = [400, 700, 2000];
-    while (
-      state.nextBurst < burstDelays.length &&
-      timestamp - state.startedAt >= burstDelays[state.nextBurst]
-    ) {
-      state.flocks.push(createCommentFireworkFlock(state));
-      state.nextBurst += 1;
-    }
-
-    for (let flockIndex = 0; flockIndex < state.flocks.length; flockIndex += 1) {
-      const flock = state.flocks[flockIndex];
-      let allDead = true;
-      for (const dot of flock.dots) {
-        if (dot.dead) continue;
-
-        dot.px += dot.vx * Math.cos(dot.angle) * delta;
-        dot.py += dot.vy * Math.sin(dot.angle) * delta;
-        dot.vx *= Math.pow(0.98, delta);
-        dot.vy = dot.vy * Math.pow(0.98, delta) + (dot.angle > Math.PI ? -0.025 : 0.02) * delta;
-        dot.life -= 0.009 * delta;
-        if (dot.life < 0) {
-          dot.dead = true;
-          continue;
-        }
-
-        allDead = false;
-        if (Math.random() > 0.95) continue;
-        context.globalAlpha = Math.min(1, dot.life);
-        context.fillStyle = dot.color;
-        context.shadowColor = dot.color;
-        context.shadowBlur = 10;
-        context.beginPath();
-        context.arc(flock.x + dot.px, flock.y + dot.py, Math.max(0.35, 0.55 + 1.1 * dot.life - dot.vy * 0.03), 0, Math.PI * 2);
-        context.fill();
-      }
-
-      if (allDead) state.flocks[flockIndex] = createCommentFireworkFlock(state);
-    }
-    context.globalAlpha = 1;
-    context.shadowBlur = 0;
-  }
-
-  if (hasVisibleCanvas) {
-    commentFireworkFrame = window.requestAnimationFrame(drawCommentFireworks);
-  }
+  commentFireworkObserver.observe(layer);
+  document.addEventListener('visibilitychange', state.onVisibilityChange);
+  state.motionQuery?.addEventListener('change', state.onVisibilityChange);
+  syncCommentFireworkAnimation(state);
 }
 
 const commentSnowStatesByLayer = new WeakMap();

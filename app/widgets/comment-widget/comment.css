@@ -2314,9 +2314,191 @@ html.no-animations .comment-snow,
 }
 
 .comment-fireworks {
-  width: 100%;
-  height: 100%;
   mix-blend-mode: screen;
+}
+
+.comment-firework-burst {
+  --firework-duration: 4s;
+  --firework-delay: 0s;
+  --firework-color: #ffd166;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  transform: rotate(var(--firework-rotation, 0deg));
+  transform-origin: 0 0;
+}
+
+.comment-firework-burst::before {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--firework-color) 38%, transparent 72%);
+  box-shadow: 0 0 12px 4px color-mix(in srgb, var(--firework-color) 60%, transparent);
+  content: "";
+  opacity: 0;
+  animation: comment-firework-flash var(--firework-duration) ease-out infinite;
+  animation-delay: var(--firework-delay);
+}
+
+.comment-firework-burst::after {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  width: 30px;
+  height: 30px;
+  background:
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 50% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 43% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 57% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 50% 43% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 50% 57% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 44% 44% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 56% 44% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 44% 56% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 56% 56% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 50% 25% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 75% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 50% 75% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 25% 50% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 32% 32% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 68% 32% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 68% 68% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.2px, transparent 1.7px) 32% 68% / 3px 3px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 50% 0% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 85% 15% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 100% 50% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 85% 85% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 50% 100% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 15% 85% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 0% 50% / 4px 4px no-repeat,
+    radial-gradient(circle, var(--firework-color) 0 1.3px, transparent 1.8px) 15% 15% / 4px 4px no-repeat;
+  content: "";
+  filter: drop-shadow(0 0 3px var(--firework-color));
+  opacity: 0;
+  animation: comment-firework-core var(--firework-duration) ease-out infinite;
+  animation-delay: var(--firework-delay);
+}
+
+.comment-firework-spark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--firework-spark-size, 3px);
+  height: var(--firework-spark-size, 3px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--firework-color) 55%, transparent 100%);
+  box-shadow:
+    0 0 4px 1px var(--firework-color),
+    0 0 10px 2px color-mix(in srgb, var(--firework-color) 70%, transparent);
+  opacity: 0;
+  animation: comment-firework-spark var(--firework-duration) linear infinite;
+  animation-delay: calc(var(--firework-delay) + var(--firework-spark-delay, 0s));
+}
+
+.comment-firework-burst:nth-child(1) { left: 12%; top: 28%; --firework-color: #ffd166; --firework-duration: 4.2s; --firework-delay: .1s; --firework-rotation: -6deg; }
+.comment-firework-burst:nth-child(2) { left: 31%; top: 68%; --firework-color: #ff5f6d; --firework-duration: 3.8s; --firework-delay: .65s; --firework-rotation: 13deg; }
+.comment-firework-burst:nth-child(3) { left: 50%; top: 37%; --firework-color: #74b9ff; --firework-duration: 4.8s; --firework-delay: 1.25s; --firework-rotation: -9deg; }
+.comment-firework-burst:nth-child(4) { left: 70%; top: 72%; --firework-color: #c77dff; --firework-duration: 3.9s; --firework-delay: 2s; --firework-rotation: 7deg; }
+.comment-firework-burst:nth-child(5) { left: 88%; top: 25%; --firework-color: #4de0c1; --firework-duration: 5.2s; --firework-delay: 2.8s; --firework-rotation: -14deg; }
+.comment-firework-burst:nth-child(6) { left: 57%; top: 76%; --firework-color: #ff9f1c; --firework-duration: 4.3s; --firework-delay: 3.6s; --firework-rotation: 11deg; }
+
+.comment-firework-spark:nth-child(3n + 1) { --firework-spark-delay: 0s; }
+.comment-firework-spark:nth-child(3n + 2) { --firework-spark-delay: .04s; }
+.comment-firework-spark:nth-child(3n) { --firework-spark-delay: .08s; }
+.comment-firework-spark:nth-child(5n + 1) { --firework-spark-size: 2.5px; }
+.comment-firework-spark:nth-child(5n + 2) { --firework-spark-size: 3.5px; }
+.comment-firework-spark:nth-child(5n + 3) { --firework-spark-size: 2.8px; }
+.comment-firework-spark:nth-child(5n + 4) { --firework-spark-size: 4.2px; }
+.comment-firework-spark:nth-child(5n) { --firework-spark-size: 2.2px; }
+.comment-firework-spark:nth-child(1) { --firework-mid-x: 0px; --firework-mid-y: -28px; --firework-end-x: 0px; --firework-end-y: -48px; }
+.comment-firework-spark:nth-child(2) { --firework-mid-x: 12px; --firework-mid-y: -31px; --firework-end-x: 24px; --firework-end-y: -53px; }
+.comment-firework-spark:nth-child(3) { --firework-mid-x: 25px; --firework-mid-y: -24px; --firework-end-x: 42px; --firework-end-y: -43px; }
+.comment-firework-spark:nth-child(4) { --firework-mid-x: 34px; --firework-mid-y: -12px; --firework-end-x: 57px; --firework-end-y: -27px; }
+.comment-firework-spark:nth-child(5) { --firework-mid-x: 36px; --firework-mid-y: 5px; --firework-end-x: 62px; --firework-end-y: 8px; }
+.comment-firework-spark:nth-child(6) { --firework-mid-x: 34px; --firework-mid-y: 8px; --firework-end-x: 57px; --firework-end-y: 17px; }
+.comment-firework-spark:nth-child(7) { --firework-mid-x: 28px; --firework-mid-y: 21px; --firework-end-x: 45px; --firework-end-y: 37px; }
+.comment-firework-spark:nth-child(8) { --firework-mid-x: 16px; --firework-mid-y: 30px; --firework-end-x: 28px; --firework-end-y: 55px; }
+.comment-firework-spark:nth-child(9) { --firework-mid-x: 2px; --firework-mid-y: 36px; --firework-end-x: 4px; --firework-end-y: 63px; }
+.comment-firework-spark:nth-child(10) { --firework-mid-x: -13px; --firework-mid-y: 31px; --firework-end-x: -25px; --firework-end-y: 54px; }
+.comment-firework-spark:nth-child(11) { --firework-mid-x: -27px; --firework-mid-y: 22px; --firework-end-x: -46px; --firework-end-y: 37px; }
+.comment-firework-spark:nth-child(12) { --firework-mid-x: -36px; --firework-mid-y: 9px; --firework-end-x: -61px; --firework-end-y: 17px; }
+.comment-firework-spark:nth-child(13) { --firework-mid-x: -37px; --firework-mid-y: -6px; --firework-end-x: -63px; --firework-end-y: -11px; }
+.comment-firework-spark:nth-child(14) { --firework-mid-x: -30px; --firework-mid-y: -20px; --firework-end-x: -52px; --firework-end-y: -34px; }
+.comment-firework-spark:nth-child(15) { --firework-mid-x: -18px; --firework-mid-y: -29px; --firework-end-x: -31px; --firework-end-y: -51px; }
+.comment-firework-spark:nth-child(16) { --firework-mid-x: -5px; --firework-mid-y: -36px; --firework-end-x: -9px; --firework-end-y: -61px; }
+.comment-firework-spark:nth-child(17) { --firework-mid-x: 9px; --firework-mid-y: -30px; --firework-end-x: 17px; --firework-end-y: -50px; }
+.comment-firework-spark:nth-child(18) { --firework-mid-x: 31px; --firework-mid-y: 16px; --firework-end-x: 53px; --firework-end-y: 29px; }
+.comment-firework-spark:nth-child(19) { --firework-mid-x: 0px; --firework-mid-y: -10px; --firework-end-x: 0px; --firework-end-y: -18px; }
+.comment-firework-spark:nth-child(20) { --firework-mid-x: 5px; --firework-mid-y: -8px; --firework-end-x: 10px; --firework-end-y: -15px; }
+.comment-firework-spark:nth-child(21) { --firework-mid-x: 9px; --firework-mid-y: -6px; --firework-end-x: 17px; --firework-end-y: -11px; }
+.comment-firework-spark:nth-child(22) { --firework-mid-x: 12px; --firework-mid-y: -2px; --firework-end-x: 22px; --firework-end-y: -4px; }
+.comment-firework-spark:nth-child(23) { --firework-mid-x: 10px; --firework-mid-y: 4px; --firework-end-x: 19px; --firework-end-y: 8px; }
+.comment-firework-spark:nth-child(24) { --firework-mid-x: 6px; --firework-mid-y: 8px; --firework-end-x: 11px; --firework-end-y: 15px; }
+.comment-firework-spark:nth-child(25) { --firework-mid-x: 0px; --firework-mid-y: 11px; --firework-end-x: 0px; --firework-end-y: 20px; }
+.comment-firework-spark:nth-child(26) { --firework-mid-x: -5px; --firework-mid-y: 9px; --firework-end-x: -10px; --firework-end-y: 16px; }
+.comment-firework-spark:nth-child(27) { --firework-mid-x: -10px; --firework-mid-y: 6px; --firework-end-x: -18px; --firework-end-y: 11px; }
+.comment-firework-spark:nth-child(28) { --firework-mid-x: -12px; --firework-mid-y: 1px; --firework-end-x: -22px; --firework-end-y: 2px; }
+.comment-firework-spark:nth-child(29) { --firework-mid-x: -9px; --firework-mid-y: -5px; --firework-end-x: -17px; --firework-end-y: -9px; }
+.comment-firework-spark:nth-child(30) { --firework-mid-x: -5px; --firework-mid-y: -9px; --firework-end-x: -9px; --firework-end-y: -16px; }
+.comment-firework-spark:nth-child(31) { --firework-mid-x: 3px; --firework-mid-y: -12px; --firework-end-x: 5px; --firework-end-y: -21px; }
+.comment-firework-spark:nth-child(32) { --firework-mid-x: 11px; --firework-mid-y: -10px; --firework-end-x: 20px; --firework-end-y: -17px; }
+.comment-firework-spark:nth-child(33) { --firework-mid-x: 13px; --firework-mid-y: 5px; --firework-end-x: 23px; --firework-end-y: 9px; }
+.comment-firework-spark:nth-child(34) { --firework-mid-x: 8px; --firework-mid-y: 12px; --firework-end-x: 14px; --firework-end-y: 22px; }
+.comment-firework-spark:nth-child(35) { --firework-mid-x: -3px; --firework-mid-y: 12px; --firework-end-x: -5px; --firework-end-y: 21px; }
+.comment-firework-spark:nth-child(36) { --firework-mid-x: -13px; --firework-mid-y: 4px; --firework-end-x: -24px; --firework-end-y: 7px; }
+
+.comment-fireworks.is-paused .comment-firework-burst::before,
+.comment-fireworks.is-paused .comment-firework-burst::after,
+.comment-fireworks.is-paused .comment-firework-spark {
+  animation-play-state: paused;
+}
+
+@keyframes comment-firework-spark {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(.15);
+    animation-timing-function: cubic-bezier(.06, .78, .24, 1);
+  }
+
+  6% {
+    opacity: 1;
+    transform: translate3d(var(--firework-mid-x), var(--firework-mid-y), 0) scale(1);
+    animation-timing-function: cubic-bezier(.2, .5, .4, 1);
+  }
+
+  42% {
+    opacity: .9;
+    transform: translate3d(var(--firework-end-x), var(--firework-end-y), 0) scale(.72);
+    animation-timing-function: linear;
+  }
+
+  72% {
+    opacity: .55;
+    transform: translate3d(calc(var(--firework-end-x) + 4px), calc(var(--firework-end-y) + 18px), 0) scale(.48);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--firework-end-x) + 8px), calc(var(--firework-end-y) + 40px), 0) scale(.1);
+  }
+}
+
+@keyframes comment-firework-flash {
+  0%, 4% { opacity: 0; transform: scale(.1); }
+  10% { opacity: .95; transform: scale(1); }
+  28% { opacity: .35; transform: scale(2.2); }
+  40%, 100% { opacity: 0; transform: scale(2.8); }
+}
+
+@keyframes comment-firework-core {
+  0%, 3% { opacity: 0; transform: scale(.25) rotate(0deg); }
+  10% { opacity: .9; transform: scale(.7) rotate(10deg); }
+  45% { opacity: .85; transform: scale(1.15) rotate(28deg); }
+  76% { opacity: .35; transform: scale(1.7) rotate(48deg); }
+  100% { opacity: 0; transform: scale(2) rotate(60deg); }
 }
 
 .comment-snow {
@@ -2412,6 +2594,10 @@ html.no-animations .comment-snow,
   .comment-firefly {
     animation: none;
     opacity: .65;
+  }
+
+  .comment-fireworks {
+    display: none;
   }
 }
 
