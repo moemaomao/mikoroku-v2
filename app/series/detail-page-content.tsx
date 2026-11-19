@@ -27,6 +27,7 @@ import {
   loadFirestoreMangaCatalog,
 } from "../lib/firebase-client";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
+import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import {
   ensureSeriesTracked,
   markLocalBookmarksUpdated,
@@ -629,13 +630,13 @@ function cacheLegacyMangaDetail(slug: string, manga: Manga): void {
   }
 
   try {
-    localStorage.setItem("currentManga", JSON.stringify(manga));
+    setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
   } catch (error) {
     console.warn("Detail manga dimuat, tetapi cache saat ini tidak dapat disimpan.", error);
   }
 
   try {
-    localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data: manga }));
+    setLocalStorageCacheItem(cacheKey, JSON.stringify({ time: Date.now(), data: manga }));
   } catch (error) {
     console.warn(`Detail manga ${slug} dimuat, tetapi cache-nya tidak dapat disimpan.`, error);
   }
@@ -652,7 +653,7 @@ async function cacheMangaDetail(slug: string, manga: Manga): Promise<void> {
   }
 
   try {
-    localStorage.setItem("currentManga", JSON.stringify(manga));
+    setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
   } catch (error) {
     console.warn("Detail manga dimuat, tetapi cache saat ini tidak dapat disimpan.", error);
   }
@@ -1058,26 +1059,7 @@ function cacheChapterList(slug: string, chapters: Chapter[]): void {
   const data = compactChapterCache(chapters);
   const value = JSON.stringify({ time: Date.now(), data });
 
-  try {
-    localStorage.removeItem(key);
-    localStorage.setItem(key, value);
-  } catch (error) {
-    if (!(error instanceof DOMException) || error.name !== "QuotaExceededError") {
-      console.warn(`Cache chapter tidak dapat disimpan untuk ${slug}.`, error);
-      return;
-    }
-
-    try {
-      for (const cachedKey of Object.keys(localStorage)) {
-        if (cachedKey.startsWith("chapters_") && cachedKey !== key) {
-          localStorage.removeItem(cachedKey);
-        }
-      }
-      localStorage.setItem(key, value);
-    } catch (retryError) {
-      console.warn(`Cache chapter tidak dapat disimpan karena kuota penyimpanan browser penuh untuk ${slug}.`, retryError);
-    }
-  }
+  setLocalStorageCacheItem(key, value);
 }
 
 function parseDateValue(value?: string | number): Date | null {

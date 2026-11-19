@@ -1,4 +1,5 @@
 import { normalizeChapterNumber } from "../../lib/chapter-number";
+import { setLocalStorageCacheItem } from "./local-storage-cache";
 
 const CHAPTER_CACHE_PREFIX = "chapters_";
 const CHAPTER_CACHE_TTL = 5 * 60 * 1000;
@@ -236,7 +237,7 @@ export function pruneStoredChapterCaches(): void {
     for (const entry of entries) {
       if (retainedBytes + entry.bytes > MAX_TOTAL_CHAPTER_CACHE_BYTES) continue;
       try {
-        localStorage.setItem(entry.key, entry.compacted);
+        if (!setLocalStorageCacheItem(entry.key, entry.compacted)) break;
         retainedBytes += entry.bytes;
       } catch (error) {
         console.warn("The browser quota prevented restoring a compacted chapter cache.", error);

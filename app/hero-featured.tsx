@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, type CSSProperties } from "react";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import { CoverImage } from "./lib/cover-image";
+import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 import styles from "./hero-featured.module.css";
 
@@ -353,15 +354,11 @@ export default function HeroFeatured() {
                     typeof value === "object" &&
                     (value as Record<string, unknown>).slug === item.slug,
                   );
-                  try {
-                    localStorage.setItem("currentManga", JSON.stringify(
-                      record && typeof record === "object"
-                        ? record
-                        : { slug: item.slug, title: item.title, cover: item.cover, img: item.cover },
-                    ));
-                  } catch (error) {
-                    console.warn("Data manga tidak dapat disimpan sebelum navigasi.", error);
-                  }
+                  setLocalStorageCacheItem("currentManga", JSON.stringify(
+                    record && typeof record === "object"
+                      ? record
+                      : { slug: item.slug, title: item.title, cover: item.cover, img: item.cover },
+                  ));
                   preloadDetailPageContent();
                   router.push(seriesHref(item.slug));
                 } else {

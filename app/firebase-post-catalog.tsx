@@ -34,6 +34,7 @@ import {
   upBadgeClass,
 } from "./lib/homepage-classes";
 import { getSeriesCoverPreference } from "./lib/series-cover-preferences";
+import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 
 type MangaRecord = Record<string, unknown> & {
@@ -164,11 +165,7 @@ function cacheRecords(records: Record<string, MangaRecord>) {
       ];
     }),
   );
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data }));
-  } catch (error) {
-    console.warn("Firestore manga cache could not be saved.", error);
-  }
+  setLocalStorageCacheItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data }));
 }
 
 async function fetchRecords(): Promise<Record<string, MangaRecord>> {
@@ -212,11 +209,7 @@ function CatalogCard({
       onFocus={preloadDetailPageContent}
       onTouchStart={preloadDetailPageContent}
       onClick={() => {
-        try {
-          localStorage.setItem("currentManga", JSON.stringify(record));
-        } catch (error) {
-          console.warn("Data manga tidak dapat disimpan sebelum navigasi.", error);
-        }
+        setLocalStorageCacheItem("currentManga", JSON.stringify(record));
       }}
     >
       <div className={cardCoverClass}>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
+import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
 import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import GlobalAuth from "../global-auth";
@@ -462,7 +463,7 @@ export default function BookmarkPage() {
   }, [bookmarks]);
 
   const openBookmark = useCallback((bookmark: Bookmark) => {
-    localStorage.setItem("currentManga", JSON.stringify({
+    setLocalStorageCacheItem("currentManga", JSON.stringify({
       title: bookmark.title,
       img: bookmark.img,
       cover: bookmark.img,

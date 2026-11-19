@@ -6,6 +6,7 @@ import {
   readSharedChapterCache,
   type SharedChapterSource,
 } from "./chapter-cache";
+import { setLocalStorageCacheItem } from "./local-storage-cache";
 
 export type GlobalAppearanceSettings = {
   hideHero: boolean;
@@ -285,11 +286,8 @@ async function cacheListChapterRecords(slug: string, chapters: ListChapterRecord
   const lightweight = sharedChapters.map(toHomepageChapterRecord);
   const retainedLight = retained.map(toHomepageChapterRecord);
   const data = compactChapterCache([...lightweight, ...retainedLight]);
-  try {
-    localStorage.setItem(`chapters_${slug}`, JSON.stringify({ time: Date.now(), data }));
+  if (setLocalStorageCacheItem(`chapters_${slug}`, JSON.stringify({ time: Date.now(), data }))) {
     window.dispatchEvent(new Event("mikoroku:chapters-updated"));
-  } catch (error) {
-    console.warn(`Chapter list for ${slug} could not be cached.`, error);
   }
 }
 

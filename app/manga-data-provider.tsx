@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
+import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import {
   fetchMangaMetadataPayload,
   MANGA_METADATA_CACHE_UPDATED_EVENT,
@@ -106,11 +107,7 @@ async function loadMetadataData(force = false) {
   const { manga } = await fetchMangaMetadataPayload({ force });
   window.mangaData = {};
   applyMangaList(manga);
-  try {
-    localStorage.setItem(MANGA_CACHE_KEY, JSON.stringify({ time: Date.now(), data: manga }));
-  } catch (error) {
-    console.warn("Manga dataset cache could not be saved.", error);
-  }
+  setLocalStorageCacheItem(MANGA_CACHE_KEY, JSON.stringify({ time: Date.now(), data: manga }));
 }
 
 async function loadFirestoreData(force = false): Promise<void> {

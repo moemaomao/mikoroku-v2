@@ -31,6 +31,7 @@ import {
 } from "./lib/series-cover-preferences";
 import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
+import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 
 type MangaItem = Record<string, unknown> & {
@@ -172,13 +173,7 @@ function safeGet<T>(key: string, fallback: T): T {
 }
 
 function safeSet(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    localStorage.removeItem(MANGA_CACHE_KEY);
-    localStorage.removeItem("mangaFsMetaCache");
-    localStorage.removeItem(MANGA_LIGHT_CACHE_KEY);
-  }
+  setLocalStorageCacheItem(key, JSON.stringify(value));
 }
 
 function rememberItems(list: MangaItem[]) {
@@ -568,7 +563,7 @@ function MangaCard({
       onFocus={preloadDetailPageContent}
       onTouchStart={preloadDetailPageContent}
       onClick={() => {
-        try { localStorage.setItem("currentManga", JSON.stringify(manga)); } catch { /* ignore */ }
+        setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
       }}
       style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}
     >

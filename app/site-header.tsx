@@ -9,6 +9,7 @@ import {
 import { AUTH_USER_CHANGE_EVENT, hasAdminPanelAccess } from "./lib/admin-access";
 import { Icon, SiteSidebar } from "./site-header-parts";
 import { CoverImage } from "./lib/cover-image";
+import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { isNsfwManga, useNsfwVisibility } from "./lib/nsfw";
 
 type MangaEntry = {
@@ -189,17 +190,12 @@ function navigateToManga(title: string): void {
   const manga = mangaData.find((item) => normalizeTitle(item.title) === key) ||
     mangaData.find((item) => item.title.trim().toLowerCase() === cleanTitle.toLowerCase());
   if (manga) {
-    try {
-      localStorage.setItem("currentManga", JSON.stringify(manga));
-    } catch (error) {
-      console.warn("Data manga tidak dapat disimpan sebelum navigasi.", error);
-    }
+    setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
   } else {
-    try {
-      localStorage.setItem("currentManga", JSON.stringify({ title: cleanTitle, slug: slugify(cleanTitle) }));
-    } catch (error) {
-      console.warn("Judul manga tidak dapat disimpan sebelum navigasi.", error);
-    }
+    setLocalStorageCacheItem(
+      "currentManga",
+      JSON.stringify({ title: cleanTitle, slug: slugify(cleanTitle) }),
+    );
   }
   const slug = manga?.slug || slugify(cleanTitle);
   window.location.href = `/series/${encodeURIComponent(slug)}`;

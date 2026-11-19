@@ -27,6 +27,7 @@ import {
 } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
 import { ensureLocalStorageHeadroom, pruneStoredChapterCaches } from "./chapter-cache";
+import { setLocalStorageCacheItem } from "./local-storage-cache";
 import {
   MANGA_METADATA_CACHE_UPDATED_EVENT,
   fetchMangaCatalogSourceMode,
@@ -366,20 +367,16 @@ export function loadFirestoreMangaCatalog(
 
       const records = [...bySlug.values()];
       if (requestGeneration === mangaCatalogGeneration) {
-        try {
-          localStorage.setItem(
-            MANGA_METADATA_CACHE_KEY,
-            JSON.stringify({
-              exportedAtMs: catalogVersion,
-              cursor,
-              sourceMode,
-              records,
-              tombstones,
-            } satisfies CachedMangaMetadata),
-          );
-        } catch (error) {
-          console.warn("Manga metadata cache could not be saved.", error);
-        }
+        setLocalStorageCacheItem(
+          MANGA_METADATA_CACHE_KEY,
+          JSON.stringify({
+            exportedAtMs: catalogVersion,
+            cursor,
+            sourceMode,
+            records,
+            tombstones,
+          } satisfies CachedMangaMetadata),
+        );
         mangaCatalogData = records;
         mangaCatalogLoadedAt = Date.now();
         mangaCatalogSourceMode = sourceMode;

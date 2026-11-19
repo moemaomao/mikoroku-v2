@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { CoverImage } from "../lib/cover-image";
 import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
+import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import { useNsfwVisibility } from "../lib/nsfw";
 
 type CurrentManga = {
@@ -224,26 +225,10 @@ function saveCache(items: Recommendation[]): void {
     source: item.source,
     updatedAt: item.updatedAt,
   }));
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), data: compact }));
-  } catch {
-    try {
-      Object.keys(localStorage)
-        .filter((key) => key.startsWith("mk_rec") || key.startsWith("manga_cache"))
-        .slice(0, 12)
-        .forEach((key) => {
-          try {
-            localStorage.removeItem(key);
-          } catch {
-            /* ignore */
-          }
-        });
-      localStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({ time: Date.now(), data: compact.slice(0, 40) }),
-      );
-    } catch {
-    }
+  const cacheValue = (items: typeof compact) =>
+    JSON.stringify({ time: Date.now(), data: items });
+  if (!setLocalStorageCacheItem(CACHE_KEY, cacheValue(compact))) {
+    setLocalStorageCacheItem(CACHE_KEY, cacheValue(compact.slice(0, 40)));
   }
 }
 
@@ -525,11 +510,7 @@ export default function RecommendationSidebar({
                 key={`${item.slug}-${item.title}`}
                 title={item.title}
                 onClick={() => {
-                  try {
-                    localStorage.setItem("currentManga", JSON.stringify(recommendationPayload(item)));
-                  } catch (error) {
-                    console.warn("Manga rekomendasi tidak dapat disimpan sebelum navigasi.", error);
-                  }
+                  setLocalStorageCacheItem("currentManga", JSON.stringify(recommendationPayload(item)));
                 }}
                 className={`relative flex h-[78px] min-h-[78px] w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-xl border border-black/[0.06] p-1.5 text-inherit no-underline transition hover:border-violet-400/40 hover:brightness-[1.03] dark:border-white/[0.08]${index >= 5 ? " max-[767px]:hidden" : ""}`}
               >
