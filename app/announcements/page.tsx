@@ -5,6 +5,7 @@ import AnnouncementsPage from "./announcements-page";
 export const metadata: Metadata = {
   title: "Announcements - Mikoroku",
   description: "The latest updates and announcements from Mikoroku.",
+  alternates: { canonical: "https://mikoroku.com/announcements" },
 };
 
 export default function AnnouncementsRoute() {

@@ -44,6 +44,7 @@ Built with **Next.js App Router** and deployed on **Cloudflare Workers** using `
 - Series detail page
 - Search
 - Announcements
+- Search engine sitemap at `/sitemap.xml`, referenced by `/robots.txt`
 
 ### User
 - Login (Firebase Auth)

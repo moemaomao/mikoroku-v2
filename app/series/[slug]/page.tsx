@@ -16,7 +16,7 @@ export async function generateMetadata({
   const description = series.description || `Baca ${title} di Mikoroku.`;
   const imagePath = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
   const pageTitle = `${title} - Mikoroku`;
-  const url = `https://mikoroku.top/series/${encodeURIComponent(slug)}`;
+  const url = `https://mikoroku.com/series/${encodeURIComponent(slug)}`;
 
   return {
     title: pageTitle,

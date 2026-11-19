@@ -4,7 +4,7 @@ import "./globals.css";
 import { AdvertisementManager } from "./advertisement-manager";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://mikoroku.top"),
+  metadataBase: new URL("https://mikoroku.com"),
   title: "Mikoroku - Borderline H scans",
   description: "Mikoroku - Platform baca manga bahasa Indonesia.",
   keywords: [
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     title: "Mikoroku - Baca Manga Gratis",
     description: "Platform baca manga bahasa Indonesia terlengkap",
     type: "website",
-    url: "https://mikoroku.top/",
+    url: "https://mikoroku.com/",
     siteName: "Mikoroku",
     images: [
       {
