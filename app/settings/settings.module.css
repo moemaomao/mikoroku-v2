@@ -1159,11 +1159,11 @@
 }
 
 @keyframes settings-magic-circle-color-glow {
-  0% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(0deg); }
-  25% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(90deg); }
-  50% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(180deg); }
-  75% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(270deg); }
-  100% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(360deg); }
+  0% { filter: drop-shadow(0 0 6px currentColor) hue-rotate(0deg); }
+  25% { filter: drop-shadow(0 0 6px currentColor) hue-rotate(90deg); }
+  50% { filter: drop-shadow(0 0 6px currentColor) hue-rotate(180deg); }
+  75% { filter: drop-shadow(0 0 6px currentColor) hue-rotate(270deg); }
+  100% { filter: drop-shadow(0 0 6px currentColor) hue-rotate(360deg); }
 }
 
 .settings-snow-layer {
