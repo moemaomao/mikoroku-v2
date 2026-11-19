@@ -8,10 +8,13 @@ export default function CenteredLoadingSpinner({ label }: CenteredLoadingSpinner
       role="status"
       aria-label={label}
       style={{
-        display: "grid",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
         minHeight: "calc(100vh - 56px)",
-        placeItems: "center",
-        color: "var(--mikoroku-accent, #9d1018)",
+        color: "#bb3239",
       }}
     >
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -34,6 +37,9 @@ export default function CenteredLoadingSpinner({ label }: CenteredLoadingSpinner
           />
         </circle>
       </svg>
+      <span style={{ color: "var(--mk-route-text, #e5e7eb)", fontSize: 14, fontWeight: 600 }}>
+        Loading...
+      </span>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, type CSSProperties } from "react";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
+import { markHomepageSeriesNavigation } from "./lib/home-navigation";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 import styles from "./hero-featured.module.css";
 
@@ -333,6 +334,10 @@ export default function HeroFeatured() {
           const isMainB = dual && offset === 1;
           const isMain = isMainA || isMainB;
           const x = cardX(offset, metrics);
+          const prefetchSeries = () => {
+            const href = seriesHref(item.slug);
+            if (href !== "#") router.prefetch(href);
+          };
 
           return (
             <button
@@ -347,8 +352,13 @@ export default function HeroFeatured() {
                   zIndex: isMain ? 50 : 40 - abs,
                 } as CSSProperties
               }
-              onClick={() => {
+              onMouseEnter={prefetchSeries}
+              onFocus={prefetchSeries}
+              onTouchStart={prefetchSeries}
+              onClick={(event) => {
                 if (isMain) {
+                  const href = seriesHref(item.slug);
+                  if (href !== "#") markHomepageSeriesNavigation(href, event);
                   const record = Object.values(window.mangaData || {}).find((value) =>
                     value &&
                     typeof value === "object" &&

@@ -12,6 +12,7 @@ import { Icon, SiteSidebar } from "./site-header-parts";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { isNsfwManga, useNsfwVisibility } from "./lib/nsfw";
+import { returnToHomepageIfPossible } from "./lib/home-navigation";
 
 type MangaEntry = {
   title: string;
@@ -850,6 +851,7 @@ function HeaderContents() {
             id="headerLogo"
             href="/"
             aria-label="Mikoroku home"
+            onClick={returnToHomepageIfPossible}
             className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-9 max-w-[120px] shrink-0 items-center sm:h-10 sm:max-w-none`}
           >
             <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto max-w-full object-contain" />

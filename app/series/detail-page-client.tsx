@@ -4,18 +4,12 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useLayoutEffect } from "react";
 import { BannerAdSlot } from "../advertisement-manager";
+import CenteredLoadingSpinner from "../centered-loading-spinner";
 import SiteHeader from "../site-header";
 
 const DetailPageContent = dynamic(() => import("./detail-page-content"), {
   ssr: false,
-  loading: () => (
-    <main className="grid min-h-screen place-items-center" role="status" aria-label="Memuat detail manga">
-      <span
-        className="h-[42px] w-[42px] animate-spin rounded-full border-4 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
-        aria-hidden="true"
-      />
-    </main>
-  ),
+  loading: () => <CenteredLoadingSpinner label="Memuat detail manga" />,
 });
 
 export function preloadDetailPageContent(): void {

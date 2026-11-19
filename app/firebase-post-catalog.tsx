@@ -35,6 +35,7 @@ import {
 } from "./lib/homepage-classes";
 import { getSeriesCoverPreference } from "./lib/series-cover-preferences";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
+import { markHomepageSeriesNavigation } from "./lib/home-navigation";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 
 type MangaRecord = Record<string, unknown> & {
@@ -204,12 +205,12 @@ function CatalogCard({
       data-slug={record.slug}
       data-section={section}
       href={`/series/${encodeURIComponent(record.slug)}`}
-      prefetch={false}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
       onTouchStart={preloadDetailPageContent}
-      onClick={() => {
+      onClick={(event) => {
         setLocalStorageCacheItem("currentManga", JSON.stringify(record));
+        markHomepageSeriesNavigation(`/series/${encodeURIComponent(record.slug)}`, event);
       }}
     >
       <div className={cardCoverClass}>

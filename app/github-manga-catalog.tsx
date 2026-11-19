@@ -32,6 +32,7 @@ import {
 import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
+import { markHomepageSeriesNavigation } from "./lib/home-navigation";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 
 type MangaItem = Record<string, unknown> & {
@@ -555,15 +556,15 @@ function MangaCard({
   return (
     <Link
       href={`/series/${encodeURIComponent(slug)}`}
-      prefetch={false}
       className={animate ? cardClass : cardClassStatic}
       data-key={normalize(item.title)}
       data-slug={slug}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
       onTouchStart={preloadDetailPageContent}
-      onClick={() => {
+      onClick={(event) => {
         setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
+        markHomepageSeriesNavigation(`/series/${encodeURIComponent(slug)}`, event);
       }}
       style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}
     >
@@ -653,6 +654,7 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
   metadataRef.current = metadata;
 
   useEffect(() => {
+    preloadDetailPageContent();
     setHasMounted(true);
     const cached = readCachedItems();
     const cachedMeta = readCachedMetadata();
