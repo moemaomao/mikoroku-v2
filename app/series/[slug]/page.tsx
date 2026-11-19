@@ -12,14 +12,22 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
 
-  const series = await getSeriesSeoData(slug);
-  const title = series.title;
-  const description = series.description || `Baca ${title} di Mikoroku.`;
+  const catalogRecord = catalog.manga.find((record) =>
+    record.slug === slug || record.id === slug,
+  );
+  const series = catalogRecord
+    ? null
+    : await getSeriesSeoData(slug);
+  const title = String(catalogRecord?.title || series?.title || slug);
+  const description = String(
+    catalogRecord?.desc ||
+    catalogRecord?.metadata?.desc ||
+    series?.description ||
+    `Baca ${title} di Mikoroku.`,
+  );
   const imagePath = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
   const pageTitle = `${title} - Mikoroku`;
-  const isHybrid = catalog.manga.some((record) =>
-    (record.slug === slug || record.id === slug) && record.source === "hybrid",
-  );
+  const isHybrid = catalogRecord?.source === "hybrid";
   const siteUrl = isHybrid ? "https://mikoroku.top" : "https://mikoroku.com";
   const url = `${siteUrl}/series/${encodeURIComponent(slug)}`;
 
