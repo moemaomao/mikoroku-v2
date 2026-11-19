@@ -2455,7 +2455,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                 const { accent, lightText } = genreAccentColors[index % genreAccentColors.length];
                 return (
                   <a
-                    className="genre transition-[background,border-color,transform] duration-200 hover:-translate-y-px hover:brightness-110"
+                    className="genre capitalize transition-[background,border-color,transform] duration-200 hover:-translate-y-px hover:brightness-110"
                     href={`/genre-list?genre=${encodeURIComponent(genre.toLowerCase())}`}
                     key={genre}
                     style={{
@@ -2477,7 +2477,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     <h2 className="detail-tag-label"><i className="fas fa-venus" aria-hidden="true" />Female</h2>
                     <div className="detail-tag-list">
                       {femaleTags.map((tag) => (
-                        <a className="detail-gender-tag female-tag" href={`/genre-list?genre=${encodeURIComponent(tag.toLowerCase())}`} title={`View ${formatTagLabel(tag)} tag`} key={`female-${tag}`}>
+                        <a className="detail-gender-tag female-tag capitalize" href={`/genre-list?genre=${encodeURIComponent(tag.toLowerCase())}`} title={`View ${formatTagLabel(tag)} tag`} key={`female-${tag}`}>
                           {formatTagLabel(tag)}
                         </a>
                       ))}
@@ -2489,7 +2489,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
                     <h2 className="detail-tag-label"><i className="fas fa-mars" aria-hidden="true" />Male</h2>
                     <div className="detail-tag-list">
                       {maleTags.map((tag) => (
-                        <a className="detail-gender-tag male-tag" href={`/genre-list?genre=${encodeURIComponent(tag.toLowerCase())}`} title={`View ${formatTagLabel(tag)} tag`} key={`male-${tag}`}>
+                        <a className="detail-gender-tag male-tag capitalize" href={`/genre-list?genre=${encodeURIComponent(tag.toLowerCase())}`} title={`View ${formatTagLabel(tag)} tag`} key={`male-${tag}`}>
                           {formatTagLabel(tag)}
                         </a>
                       ))}

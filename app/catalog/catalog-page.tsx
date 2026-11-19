@@ -284,9 +284,9 @@ export default function CatalogPage({ kind, title }: { kind: CatalogKind; title:
                   All
                 </button>
                 {genreCounts.map(([genre, count]) => (
-                  <button type="button" key={genre} className={activeGenre === genre ? "active" : ""}
+                  <button type="button" key={genre} className={`capitalize${activeGenre === genre ? " active" : ""}`}
                     onClick={() => setActiveGenre(genre)}>
-                    {genre} <span>{count}</span>
+                    {genre.replace(/_/g, " ")} <span>{count}</span>
                   </button>
                 ))}
               </div>
