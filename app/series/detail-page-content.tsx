@@ -1217,7 +1217,7 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
 }
 
 export default function DetailPageContent({ slug }: { slug: string }) {
-  const [manga, setManga] = useState<Manga | null>(null);
+  const [manga, setManga] = useState<Manga | null>(() => getCurrentMangaForSlug(slug));
   const [showSourceDebug, setShowSourceDebug] = useState(false);
   const [metadataDisplaySource, setMetadataDisplaySource] = useState<"effective" | "baseline">("effective");
   const [metadataSourceSaving, setMetadataSourceSaving] = useState(false);
@@ -1265,7 +1265,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [coverPreviewOpen]);
-  const [state, setState] = useState<DetailState>("loading");
+  const [state, setState] = useState<DetailState>(() => manga ? "ready" : "loading");
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(false);
@@ -1499,7 +1499,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       controller = new AbortController();
       const currentRequestId = ++requestId;
       let hasDisplayedManga = false;
-      if (!force) {
+      if (!force && !manga) {
         setManga(null);
         setState("loading");
       }

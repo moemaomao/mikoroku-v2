@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import { latestChapterFromRecord } from "../lib/latest-chapter";
@@ -33,6 +34,7 @@ import {
   upBadgeClass,
 } from "./lib/homepage-classes";
 import { getSeriesCoverPreference } from "./lib/series-cover-preferences";
+import { preloadDetailPageContent } from "./series/detail-page-client";
 
 type MangaRecord = Record<string, unknown> & {
   slug: string;
@@ -200,11 +202,21 @@ function CatalogCard({
   const updatedAt = Number(record.updatedAt || 0);
 
   return (
-    <a
+    <Link
       className={cardClass}
       data-slug={record.slug}
       data-section={section}
       href={`/series/${encodeURIComponent(record.slug)}`}
+      onMouseEnter={preloadDetailPageContent}
+      onFocus={preloadDetailPageContent}
+      onTouchStart={preloadDetailPageContent}
+      onClick={() => {
+        try {
+          localStorage.setItem("currentManga", JSON.stringify(record));
+        } catch (error) {
+          console.warn("Data manga tidak dapat disimpan sebelum navigasi.", error);
+        }
+      }}
     >
       <div className={cardCoverClass}>
         {chapter !== null && (
@@ -255,7 +267,7 @@ function CatalogCard({
           <div className={cardTitleClass}>{record.title}</div>
         </div>
       </div>
-    </a>
+    </Link>
   );
 }
 

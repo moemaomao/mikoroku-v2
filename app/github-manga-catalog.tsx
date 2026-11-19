@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import { splitHomepageMangaSections } from "./lib/homepage-manga-sections";
@@ -30,6 +31,7 @@ import {
 } from "./lib/series-cover-preferences";
 import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
+import { preloadDetailPageContent } from "./series/detail-page-client";
 
 type MangaItem = Record<string, unknown> & {
   title: string;
@@ -556,11 +558,14 @@ function MangaCard({
   manga.rating = meta?.rating ?? item.rating ?? "-";
 
   return (
-    <a
+    <Link
       href={`/series/${encodeURIComponent(slug)}`}
       className={animate ? cardClass : cardClassStatic}
       data-key={normalize(item.title)}
       data-slug={slug}
+      onMouseEnter={preloadDetailPageContent}
+      onFocus={preloadDetailPageContent}
+      onTouchStart={preloadDetailPageContent}
       onClick={() => {
         try { localStorage.setItem("currentManga", JSON.stringify(manga)); } catch { /* ignore */ }
       }}
@@ -613,7 +618,7 @@ function MangaCard({
           <div className={cardTitleClass}>{item.title}</div>
         </div>
       </div>
-    </a>
+    </Link>
   );
 }
 

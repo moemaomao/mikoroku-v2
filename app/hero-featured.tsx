@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, type CSSProperties } from "react";
 import { readGlobalAppearance } from "./lib/global-appearance";
 import { CoverImage } from "./lib/cover-image";
+import { preloadDetailPageContent } from "./series/detail-page-client";
 import styles from "./hero-featured.module.css";
 
 type HeroCover = {
@@ -183,6 +185,7 @@ function cardX(offset: number, m: ReturnType<typeof layoutMetrics>): number {
 }
 
 export default function HeroFeatured() {
+  const router = useRouter();
   const [covers, setCovers] = useState<HeroCover[]>(FALLBACK_COVERS);
   const [active, setActive] = useState(0);
   const [hidden, setHidden] = useState(false);
@@ -345,7 +348,22 @@ export default function HeroFeatured() {
               }
               onClick={() => {
                 if (isMain) {
-                  window.location.href = seriesHref(item.slug);
+                  const record = Object.values(window.mangaData || {}).find((value) =>
+                    value &&
+                    typeof value === "object" &&
+                    (value as Record<string, unknown>).slug === item.slug,
+                  );
+                  try {
+                    localStorage.setItem("currentManga", JSON.stringify(
+                      record && typeof record === "object"
+                        ? record
+                        : { slug: item.slug, title: item.title, cover: item.cover, img: item.cover },
+                    ));
+                  } catch (error) {
+                    console.warn("Data manga tidak dapat disimpan sebelum navigasi.", error);
+                  }
+                  preloadDetailPageContent();
+                  router.push(seriesHref(item.slug));
                 } else {
                   goTo(index);
                 }

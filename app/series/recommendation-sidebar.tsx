@@ -247,13 +247,12 @@ function saveCache(items: Recommendation[]): void {
   }
 }
 
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
+function stableRecommendationRank(seed: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = Math.imul(hash ^ seed.charCodeAt(index), 16777619);
   }
-  return result;
+  return hash >>> 0;
 }
 
 function recommendationPayload(item: Recommendation): Recommendation {
@@ -435,14 +434,21 @@ export default function RecommendationSidebar({
       ...asStringList(manga.info?.genres),
     ].map((genre) => genre.toLowerCase().trim()).filter(Boolean);
 
-    if (!currentGenres.length) return shuffle(pool).slice(0, 12);
-    const scored = pool.map((item) => ({
-      item,
-      score: item.genres.filter((genre) => currentGenres.includes(genre.toLowerCase())).length,
-    })).sort((left, right) => right.score - left.score);
-    const matching = shuffle(scored.filter(({ score }) => score > 0).map(({ item }) => item));
-    const remaining = shuffle(scored.filter(({ score }) => score === 0).map(({ item }) => item));
-    return [...matching, ...remaining].slice(0, 12);
+    return pool
+      .map((item) => ({
+        item,
+        score: currentGenres.length
+          ? item.genres.filter((genre) => currentGenres.includes(genre.toLowerCase())).length
+          : 0,
+        rank: stableRecommendationRank(`${currentSlug}:${item.slug || item.title}`),
+      }))
+      .sort((left, right) =>
+        right.score - left.score ||
+        left.rank - right.rank ||
+        left.item.slug.localeCompare(right.item.slug),
+      )
+      .slice(0, 12)
+      .map(({ item }) => item);
   }, [catalogue, manga.genres, manga.info, manga.slug, manga.title]);
 
   const toggleVisibility = () => {
