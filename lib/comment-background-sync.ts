@@ -141,7 +141,7 @@ export async function clearPendingCommentBackground(uid: string): Promise<void> 
 function compressCommentBackground(image: Blob): Promise<Blob> {
   return new Promise((resolve, reject) => {
     createImageBitmap(image).then((bitmap) => {
-      const scale = Math.min(1, 1600 / bitmap.width, 1600 / bitmap.height);
+      const scale = Math.min(1, 1200 / bitmap.width, 1200 / bitmap.height);
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));

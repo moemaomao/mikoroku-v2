@@ -1697,7 +1697,7 @@ export default function SettingsPage() {
 
                         {userLevel >= 120 ? (
                           <p className={styles['settings-hint-sm']}>
-                            Level 120+ · Images are resized ≤1600px and compressed to WebP.
+                            Level 120+ · Images are resized ≤1200px and compressed to WebP.
                           </p>
                         ) : (
                           <p className={styles['settings-hint-sm']}>
