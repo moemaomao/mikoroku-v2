@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   applyGlobalAppearance,
@@ -845,14 +846,14 @@ function HeaderContents() {
               <path className={`origin-center transition-transform duration-300 ${sidebarOpen ? "translate-y-[7px]" : ""}`} d="M8 42h48c0 6-10 10-24 10S8 48 8 42z" />
             </svg>
           </button>
-          <a
+          <Link
             id="headerLogo"
             href="/"
             aria-label="Mikoroku home"
             className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-9 max-w-[120px] shrink-0 items-center sm:h-10 sm:max-w-none`}
           >
             <img src={LOGO_URL} alt="Mikoroku" className="h-full w-auto max-w-full object-contain" />
-          </a>
+          </Link>
         </div>
 
         <div

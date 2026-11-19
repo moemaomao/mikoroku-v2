@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export function Icon({ name, className = "h-6 w-6" }: { name: string; className?: string }) {
   const common = {
@@ -76,7 +77,7 @@ export function SiteSidebar({
           style={{ backgroundColor: "var(--mikoroku-accent-border, color-mix(in srgb, var(--mikoroku-accent, #9d1018) 40%, transparent))" }}
         />
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5 pb-[33px] pt-1">
-          <a href="/" aria-label="Mikoroku home" onClick={closeOnMobile} className="flex h-[42px] shrink-0 items-center"><img src={logoUrl} alt="Mikoroku" className="h-full w-auto object-contain" /></a>
+          <Link href="/" aria-label="Mikoroku home" onClick={closeOnMobile} className="flex h-[42px] shrink-0 items-center"><img src={logoUrl} alt="Mikoroku" className="h-full w-auto object-contain" /></Link>
           <button type="button" id="sidebarClose" aria-label="Close menu" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.04] text-slate-800 transition hover:border-[var(--mikoroku-accent)]/40 hover:bg-[var(--mikoroku-accent-soft)] hover:text-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/[0.06] dark:text-indigo-50 dark:hover:text-[var(--mikoroku-accent)]"><Icon name="close" className="h-[22px] w-[22px]" /></button>
         </div>
         <nav className="flex flex-col gap-1">

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { initializeFirebaseClient } from "./lib/firebase-client";
 import {
@@ -72,7 +72,44 @@ function bannerDocument(code: string): string {
 
 export function AdvertisementManager({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [advertisements, setAdvertisements] = useState<Advertisement[] | null>(null);
+
+  useEffect(() => {
+    const handleInternalNavigation = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      const link = target instanceof Element
+        ? target.closest<HTMLAnchorElement>("a[href]")
+        : null;
+      if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) {
+        return;
+      }
+
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const href = `${destination.pathname}${destination.search}${destination.hash}`;
+      if (href !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+        router.push(href);
+      }
+    };
+
+    window.addEventListener("click", handleInternalNavigation, true);
+    return () => window.removeEventListener("click", handleInternalNavigation, true);
+  }, [router]);
 
   useEffect(() => {
     if (pathname.startsWith("/admin")) return;
