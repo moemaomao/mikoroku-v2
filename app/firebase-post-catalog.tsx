@@ -23,6 +23,9 @@ import {
   commissionCoverGradientClass,
   homepageLoadMoreClass,
   homepageSectionHeadingClass,
+  skeletonListCardClass,
+  skeletonListContentClass,
+  skeletonListCoverClass,
   statusBadgeClass,
   statusBadgeColors,
   typeBadgeClass,
@@ -41,6 +44,24 @@ type MangaRecord = Record<string, unknown> & {
 const CACHE_KEY = "manga_cache_v5";
 const CACHE_TIME = 60 * 60 * 1000;
 const PAGE_SIZE = 12;
+const staticCardClass = cardClass.replace("animate-fade-in-up", "").replace(/  +/g, " ").trim();
+
+function CatalogSkeleton() {
+  return (
+    <div
+      aria-hidden="true"
+      className={`${staticCardClass} skeleton-card overflow-hidden rounded-lg ${skeletonListCardClass}`}
+    >
+      <div className={`${cardCoverClass} skeleton-thumb animate-pulse bg-gradient-to-r from-[#1a1a1a] via-[#242424] to-[#1a1a1a] ${skeletonListCoverClass}`} />
+      <div className={`hidden flex-1 flex-col justify-center gap-2 p-3 ${skeletonListContentClass}`}>
+        <div className="h-3 w-3/4 animate-pulse rounded bg-[#2a2a2a]" />
+        <div className="h-4 w-full animate-pulse rounded bg-[#222]" />
+        <div className="h-4 w-5/6 animate-pulse rounded bg-[#222]" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-[#222]" />
+      </div>
+    </div>
+  );
+}
 
 function updatedAtMillis(record: MangaRecord): number {
   const updatedAt = value(record, "updatedAt", value(record, "latestUpdate", 0));
@@ -92,6 +113,19 @@ function readCache(): { data: Record<string, MangaRecord>; expired: boolean } | 
     localStorage.removeItem(CACHE_KEY);
     return null;
   }
+}
+
+function readSharedRecords(): MangaRecord[] {
+  const shared = (window as Window & { githubMangaList?: unknown }).githubMangaList;
+  if (!Array.isArray(shared)) return [];
+  return shared.filter((record): record is MangaRecord =>
+    Boolean(record) &&
+    typeof record === "object" &&
+    !Array.isArray(record) &&
+    typeof record.slug === "string" &&
+    typeof record.title === "string" &&
+    record.title.trim().length > 0,
+  );
 }
 
 function cacheRecords(records: Record<string, MangaRecord>) {
@@ -229,6 +263,7 @@ export default function FirebasePostCatalog() {
   const [records, setRecords] = useState<MangaRecord[]>([]);
   const [randomManga, setRandomManga] = useState<MangaRecord[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   const applyRecords = useCallback((list: MangaRecord[]) => {
@@ -240,6 +275,8 @@ export default function FirebasePostCatalog() {
       updatedAtMillis(right) - updatedAtMillis(left) ||
       left.slug.localeCompare(right.slug),
     ));
+    setIsLoading(false);
+    setLoadError("");
   }, []);
 
   const refresh = useCallback(
@@ -254,24 +291,33 @@ export default function FirebasePostCatalog() {
         if (signal?.aborted) return;
         console.error("Firestore catalog could not be loaded.", error);
         setLoadError("Katalog Firestore gagal dimuat.");
+        setIsLoading(false);
       }
     },
     [applyRecords],
   );
 
   useEffect(() => {
+    const syncSharedCatalog = () => {
+      const shared = readSharedRecords();
+      if (shared.length) applyRecords(shared);
+    };
+
     const cache = readCache();
     if (cache) {
       applyRecords(
         Object.values(cache.data).filter((record) => record && record.title),
       );
     }
+    syncSharedCatalog();
+    window.addEventListener("mangaDataReady", syncSharedCatalog);
     const controller = new AbortController();
     void refresh(controller.signal);
     const interval = window.setInterval(() => void refresh(), 10 * 60 * 1000);
     return () => {
       controller.abort();
       window.clearInterval(interval);
+      window.removeEventListener("mangaDataReady", syncSharedCatalog);
     };
   }, [refresh, applyRecords]);
 
@@ -288,14 +334,16 @@ export default function FirebasePostCatalog() {
       <h2 className={homepageSectionHeadingClass}>
         <span>Random Doujin dan sejenisnya</span>
       </h2>
-      <div id="firebaseManga" className={catalogGridClass}>
-        {randomManga.slice(0, visibleCount).map((record) => (
+      <div id="firebaseManga" className={catalogGridClass} aria-busy={isLoading && randomManga.length === 0}>
+        {randomManga.length > 0 ? randomManga.slice(0, visibleCount).map((record) => (
           <CatalogCard
             key={`random-${record.slug}`}
             section="random"
             record={record}
           />
-        ))}
+        )) : isLoading ? Array.from({ length: PAGE_SIZE }, (_, index) => (
+          <CatalogSkeleton key={`random-skeleton-${index}`} />
+        )) : null}
       </div>
       <button
         id="loadMoreFirebase"
@@ -310,14 +358,16 @@ export default function FirebasePostCatalog() {
       <h2 className={homepageSectionHeadingClass}>
         <span>Latest Novel</span>
       </h2>
-      <div id="firebaseNovel" className={catalogGridClass}>
-        {novels.slice(0, visibleCount).map((record) => (
+      <div id="firebaseNovel" className={catalogGridClass} aria-busy={isLoading && novels.length === 0}>
+        {novels.length > 0 ? novels.slice(0, visibleCount).map((record) => (
           <CatalogCard
             key={`novel-${record.slug}`}
             section="novel"
             record={record}
           />
-        ))}
+        )) : isLoading ? Array.from({ length: PAGE_SIZE }, (_, index) => (
+          <CatalogSkeleton key={`novel-skeleton-${index}`} />
+        )) : null}
       </div>
       {loadError && records.length === 0 && <p role="alert">{loadError}</p>}
     </>
