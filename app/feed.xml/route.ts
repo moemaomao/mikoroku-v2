@@ -1,4 +1,3 @@
-import { firebaseConfig } from "../../lib/firebase-config";
 import { kvGet, kvSet } from "../../lib/kv-cache";
 import { latestChapterFromRecord } from "../../lib/latest-chapter";
 import { isNovelSeries } from "../../lib/reader-kind";
@@ -7,9 +6,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FEED_URL = "https://mikoroku.top/feed.xml";
-const FEED_CACHE_KEY = "feed:latest-chapters:v4";
-const FEED_STALE_CACHE_KEY = "feed:latest-chapters:stale:v1";
-const PREVIOUS_FEED_CACHE_KEY = "feed:latest-chapters:v3";
+const FEED_CACHE_KEY = "feed:latest-chapters:v5";
+const FEED_STALE_CACHE_KEY = "feed:latest-chapters:stale:v2";
+const PREVIOUS_FEED_CACHE_KEYS = [
+  "feed:latest-chapters:stale:v1",
+  "feed:latest-chapters:v4",
+  "feed:latest-chapters:v3",
+];
 const FEED_CACHE_TTL = 15 * 60;
 const FEED_STALE_CACHE_TTL = 7 * 24 * 60 * 60;
 const MAX_FEED_ITEMS = 50;
@@ -21,50 +24,6 @@ type FeedItem = {
   updatedAt: number;
   categories: string[];
 };
-
-type FirestoreValue = {
-  stringValue?: string;
-  integerValue?: string;
-  doubleValue?: number;
-  booleanValue?: boolean;
-  timestampValue?: string;
-  nullValue?: null | string;
-  arrayValue?: { values?: FirestoreValue[] };
-  mapValue?: { fields?: Record<string, FirestoreValue> };
-  referenceValue?: string;
-  bytesValue?: string;
-  geoPointValue?: { latitude?: number; longitude?: number };
-};
-
-function decodeFirestoreValue(value: FirestoreValue): unknown {
-  if ("stringValue" in value) return value.stringValue;
-  if ("integerValue" in value) return Number(value.integerValue);
-  if ("doubleValue" in value) return value.doubleValue;
-  if ("booleanValue" in value) return value.booleanValue;
-  if ("timestampValue" in value) return value.timestampValue;
-  if ("nullValue" in value) return null;
-  if ("arrayValue" in value) {
-    return (value.arrayValue?.values ?? []).map(decodeFirestoreValue);
-  }
-  if ("mapValue" in value) {
-    return Object.fromEntries(
-      Object.entries(value.mapValue?.fields ?? {}).map(([key, field]) => [
-        key,
-        decodeFirestoreValue(field),
-      ]),
-    );
-  }
-  if ("referenceValue" in value) return value.referenceValue;
-  if ("bytesValue" in value) return value.bytesValue;
-  if ("geoPointValue" in value) return value.geoPointValue;
-  return undefined;
-}
-
-function decodeFirestoreFields(fields: Record<string, FirestoreValue>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(fields).map(([key, value]) => [key, decodeFirestoreValue(value)]),
-  );
-}
 
 function xmlEscape(value: string): string {
   return value
@@ -95,56 +54,43 @@ function timestampMillis(value: unknown): number {
   return 0;
 }
 
-async function buildFeedItems(): Promise<FeedItem[]> {
-  const endpoint = new URL(
-    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/(default)/documents:runQuery`,
-  );
-  endpoint.searchParams.set("key", firebaseConfig.apiKey);
-
+async function buildFeedItems(requestUrl: string): Promise<FeedItem[]> {
+  const endpoint = new URL("/api/catalog/feed", requestUrl);
   const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: "manga" }],
-        orderBy: [{ field: { fieldPath: "updatedAt" }, direction: "DESCENDING" }],
-        limit: MAX_FEED_ITEMS,
-      },
-    }),
+    headers: { Accept: "application/json" },
+    cache: "no-store",
   });
   if (!response.ok) {
-    throw new Error(`Firestore query returned HTTP ${response.status}.`);
+    throw new Error(`Shared manga catalog returned HTTP ${response.status}.`);
   }
 
-  const results: unknown = await response.json();
-  if (!Array.isArray(results)) {
-    throw new Error("Firestore query returned an invalid response.");
+  const payload: unknown = await response.json();
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !Array.isArray((payload as { manga?: unknown }).manga)
+  ) {
+    throw new Error("Shared manga catalog returned an invalid response.");
   }
 
   const items: FeedItem[] = [];
 
-  results.forEach((result: unknown) => {
-    if (!result || typeof result !== "object") return;
-    const row = result as {
-      document?: { name?: unknown; fields?: unknown };
-    };
-    const name = row.document?.name;
-    const fields = row.document?.fields;
-    if (typeof name !== "string" || !fields || typeof fields !== "object") return;
-
-    const id = name.slice(name.lastIndexOf("/") + 1);
-    const record = decodeFirestoreFields(fields as Record<string, FirestoreValue>);
-    if (record.isDraft === true || typeof record.title !== "string") return;
+  (payload as { manga: unknown[] }).manga.forEach((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return;
+    const record = item as Record<string, unknown>;
+    const slug = typeof record.slug === "string"
+      ? record.slug
+      : typeof record.id === "string"
+        ? record.id
+        : "";
+    if (!slug || record.isDraft === true || typeof record.title !== "string") return;
 
     const chapter = latestChapterFromRecord(record);
     if (!chapter) return;
 
-    const updatedAt = timestampMillis(record.updatedAt ?? record.latestUpdate);
+    const updatedAt = timestampMillis(record.updatedAt) || timestampMillis(record.latestUpdate);
     const kind = isNovelSeries(record) ? "novel" : "manga";
-    const link = `https://mikoroku.top/${kind}/${encodeURIComponent(id)}/${encodeURIComponent(chapter)}`;
+    const link = `https://mikoroku.top/${kind}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
     const title = `${record.title} Chapter ${chapter}`;
     const categories = Array.isArray(record.genres)
       ? record.genres.filter((genre): genre is string => typeof genre === "string")
@@ -213,12 +159,12 @@ function feedResponse(xml: string, cache: "HIT" | "MISS" | "STALE") {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const cached = await kvGet<string>(FEED_CACHE_KEY, "text");
   if (cached) return feedResponse(cached, "HIT");
 
   try {
-    const xml = renderFeed(await buildFeedItems());
+    const xml = renderFeed(await buildFeedItems(request.url));
     try {
       await kvSet(FEED_CACHE_KEY, xml, FEED_CACHE_TTL);
     } catch (error) {
@@ -231,9 +177,12 @@ export async function GET() {
     }
     return feedResponse(xml, "MISS");
   } catch (error) {
-    console.error("[feed.xml] Could not load chapters from Firestore.", error);
-    const stale = await kvGet<string>(FEED_STALE_CACHE_KEY, "text") ??
-      await kvGet<string>(PREVIOUS_FEED_CACHE_KEY, "text");
+    console.error("[feed.xml] Could not load chapters from the shared catalog.", error);
+    let stale = await kvGet<string>(FEED_STALE_CACHE_KEY, "text");
+    for (const key of PREVIOUS_FEED_CACHE_KEYS) {
+      if (stale) break;
+      stale = await kvGet<string>(key, "text");
+    }
     if (stale) return feedResponse(stale, "STALE");
 
     return new Response("RSS feed is temporarily unavailable.", {

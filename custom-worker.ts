@@ -48,9 +48,11 @@ const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
 const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v5";
+const MANGA_CATALOG_FEED_CACHE_KEY = "catalog:metadata:manga:feed:v1";
 const MANGA_CATALOG_SOURCE_KEY = "catalog:metadata:manga:source:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
+const MANGA_CATALOG_FEED_FRESH_TTL = 5 * 60 * 1000;
 const MANGA_CATALOG_URL = "/catalog/metadata.json";
 const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
 const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
@@ -321,6 +323,7 @@ async function fetchAndCacheMangaCatalog(
   requestUrl: string,
   kv: KVNamespace,
   sourceMode: MangaCatalogSourceMode,
+  cacheKey = MANGA_CATALOG_CACHE_KEY,
 ): Promise<Record<string, unknown>> {
   let payload: unknown;
   let token: string | null = null;
@@ -447,7 +450,7 @@ async function fetchAndCacheMangaCatalog(
 
   try {
     await kv.put(
-      MANGA_CATALOG_CACHE_KEY,
+      cacheKey,
       JSON.stringify({ cachedAt, data }),
       { expirationTtl: MANGA_CATALOG_CACHE_TTL },
     );
@@ -534,7 +537,12 @@ async function handleMangaCatalogProxy(
   ctx: ExecutionContext,
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  if (url.pathname !== "/api/catalog/manga" && url.pathname !== "/api/catalog/metadata") {
+  const isFeedCatalogRequest = url.pathname === "/api/catalog/feed";
+  if (
+    !isFeedCatalogRequest &&
+    url.pathname !== "/api/catalog/manga" &&
+    url.pathname !== "/api/catalog/metadata"
+  ) {
     return null;
   }
   if (request.method !== "GET") {
@@ -554,19 +562,25 @@ async function handleMangaCatalogProxy(
       },
     });
   }
-  let sourceMode: MangaCatalogSourceMode;
-  try {
-    sourceMode = await getMangaCatalogSourceMode(kv);
-  } catch (error) {
-    console.error("[worker manga-catalog] source mode could not be read", error);
-    return new Response(JSON.stringify({ error: "Catalog source configuration is unavailable." }), {
-      status: 503,
-      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-    });
+  let sourceMode: MangaCatalogSourceMode = "effective";
+  if (!isFeedCatalogRequest) {
+    try {
+      sourceMode = await getMangaCatalogSourceMode(kv);
+    } catch (error) {
+      console.error("[worker manga-catalog] source mode could not be read", error);
+      return new Response(JSON.stringify({ error: "Catalog source configuration is unavailable." }), {
+        status: 503,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
   }
+  const cacheKey = isFeedCatalogRequest ? MANGA_CATALOG_FEED_CACHE_KEY : MANGA_CATALOG_CACHE_KEY;
+  const freshnessTtl = isFeedCatalogRequest
+    ? MANGA_CATALOG_FEED_FRESH_TTL
+    : MANGA_CATALOG_FRESH_TTL;
   let cached: { cachedAt?: number; data?: Record<string, unknown> } | null = null;
   try {
-    cached = await kv.get(MANGA_CATALOG_CACHE_KEY, "json");
+    cached = await kv.get(cacheKey, "json");
     if (!Array.isArray(cached?.data?.manga)) cached = null;
   } catch (error) {
     console.warn("[worker manga-catalog] KV get failed", error);
@@ -581,7 +595,7 @@ async function handleMangaCatalogProxy(
 
   if (cached) {
     const age = Date.now() - Number(cached.cachedAt || 0);
-    if (cached.data.catalogSourceMode === sourceMode && age <= MANGA_CATALOG_FRESH_TTL) {
+    if (cached.data.catalogSourceMode === sourceMode && age <= freshnessTtl) {
       const responseBody = url.pathname === "/api/catalog/manga"
         ? cached.data.manga
         : cached.data;
@@ -590,7 +604,7 @@ async function handleMangaCatalogProxy(
 
     if (cached.data.catalogSourceMode !== sourceMode) {
       try {
-        const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode);
+        const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode, cacheKey);
         const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
         return catalogResponse(responseBody, "MISS");
       } catch (error) {
@@ -603,7 +617,7 @@ async function handleMangaCatalogProxy(
     }
 
     ctx.waitUntil(
-      fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode).catch((error: unknown) => {
+      fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode, cacheKey).catch((error: unknown) => {
         console.error("[worker manga-catalog] background refresh failed", error);
       }),
     );
@@ -614,7 +628,7 @@ async function handleMangaCatalogProxy(
   }
 
   try {
-    const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode);
+    const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode, cacheKey);
     const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
     return catalogResponse(responseBody, "MISS");
   } catch (error) {
