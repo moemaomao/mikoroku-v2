@@ -560,6 +560,7 @@ function MangaCard({
   return (
     <Link
       href={`/series/${encodeURIComponent(slug)}`}
+      prefetch={false}
       className={animate ? cardClass : cardClassStatic}
       data-key={normalize(item.title)}
       data-slug={slug}

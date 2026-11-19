@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
+import { useLayoutEffect } from "react";
 import { BannerAdSlot } from "../advertisement-manager";
 import SiteHeader from "../site-header";
 
@@ -23,6 +25,12 @@ export function preloadDetailPageContent(): void {
 }
 
 export default function DetailPageClient({ slug }: { slug: string }) {
+  const pathname = usePathname();
+
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
   return (
     <>
       <SiteHeader />

@@ -207,6 +207,7 @@ function CatalogCard({
       data-slug={record.slug}
       data-section={section}
       href={`/series/${encodeURIComponent(record.slug)}`}
+      prefetch={false}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
       onTouchStart={preloadDetailPageContent}
