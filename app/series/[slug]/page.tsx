@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import DetailPageClient from "../detail-page-client";
-import { getSeriesSeoData } from "../../../lib/seo-metadata";
 import catalog from "../../../public/catalog/metadata.json";
 
 export const revalidate = 600;
@@ -15,14 +14,13 @@ export async function generateMetadata({
   const catalogRecord = catalog.manga.find((record) =>
     record.slug === slug || record.id === slug,
   );
-  const series = catalogRecord
-    ? null
-    : await getSeriesSeoData(slug);
-  const title = String(catalogRecord?.title || series?.title || slug);
+  const title = String(
+    catalogRecord?.title ||
+    slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
+  );
   const description = String(
     catalogRecord?.desc ||
     catalogRecord?.metadata?.desc ||
-    series?.description ||
     `Baca ${title} di Mikoroku.`,
   );
   const imagePath = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;

@@ -39,7 +39,7 @@ export default function SeriesShellClient() {
     return (
       <main className="grid min-h-screen place-items-center" role="status" aria-label="Memuat detail manga">
         <span
-          className="h-[42px] w-[42px] animate-spin rounded-full border-4 border-[rgba(128,128,128,0.25)] border-t-current"
+          className="h-[42px] w-[42px] animate-spin rounded-full border-4 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
           aria-hidden="true"
         />
       </main>
