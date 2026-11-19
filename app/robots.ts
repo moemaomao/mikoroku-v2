@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 const SITE_URL = "https://mikoroku.com";
+const HYBRID_SITE_URL = "https://mikoroku.top";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -19,7 +20,9 @@ export default function robots(): MetadataRoute.Robots {
         "/stats",
       ],
     },
-    sitemap: `${SITE_URL}/sitemap.xml`,
-    host: SITE_URL,
+    sitemap: [
+      `${SITE_URL}/sitemap.xml`,
+      `${HYBRID_SITE_URL}/sitemap.xml`,
+    ],
   };
 }

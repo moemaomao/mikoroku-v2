@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import catalog from "../public/catalog/metadata.json";
 
 const SITE_URL = "https://mikoroku.com";
+const HYBRID_SITE_URL = "https://mikoroku.top";
 
 const publicPages: MetadataRoute.Sitemap = [
   { url: SITE_URL, priority: 1 },
@@ -43,8 +44,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
     if (!slug || record.isDraft === true || metadata.isDraft === true) return [];
 
+    const seriesSiteUrl = record.source === "hybrid" ? HYBRID_SITE_URL : SITE_URL;
     return [{
-      url: `${SITE_URL}/series/${encodeURIComponent(slug)}`,
+      url: `${seriesSiteUrl}/series/${encodeURIComponent(slug)}`,
       lastModified: lastModified(record.updatedAt ?? record.latestUpdate),
       priority: 0.6,
     }];

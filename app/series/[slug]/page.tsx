@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import DetailPageClient from "../detail-page-client";
 import { getSeriesSeoData } from "../../../lib/seo-metadata";
+import catalog from "../../../public/catalog/metadata.json";
 
 export const revalidate = 600;
 
@@ -16,7 +17,11 @@ export async function generateMetadata({
   const description = series.description || `Baca ${title} di Mikoroku.`;
   const imagePath = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
   const pageTitle = `${title} - Mikoroku`;
-  const url = `https://mikoroku.com/series/${encodeURIComponent(slug)}`;
+  const isHybrid = catalog.manga.some((record) =>
+    (record.slug === slug || record.id === slug) && record.source === "hybrid",
+  );
+  const siteUrl = isHybrid ? "https://mikoroku.top" : "https://mikoroku.com";
+  const url = `${siteUrl}/series/${encodeURIComponent(slug)}`;
 
   return {
     title: pageTitle,
