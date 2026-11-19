@@ -256,6 +256,13 @@ export function loadFirestoreMangaCatalog(
       const catalog = payload ?? await fetchMangaMetadataPayload({ force });
       const sourceMode: "effective" | "baseline" =
         catalog.catalogSourceMode === "baseline" ? "baseline" : "effective";
+      const catalogVersion =
+        catalog.firestoreDeltasIncluded === true
+          ? catalog.exportedAtMs
+          : typeof catalog.sourceExportedAtMs === "number" &&
+              Number.isFinite(catalog.sourceExportedAtMs)
+            ? catalog.sourceExportedAtMs
+            : catalog.exportedAtMs;
       const bySlug = new Map<string, FirestoreMangaMetadata>();
       const tombstones: Record<string, number> = {};
       for (const value of catalog.manga) {
@@ -271,9 +278,9 @@ export function loadFirestoreMangaCatalog(
       }
 
       const cached = readCachedMangaMetadata();
-      let cursor = catalog.exportedAtMs;
+      let cursor = catalogVersion;
       if (
-        cached?.exportedAtMs === catalog.exportedAtMs &&
+        cached?.exportedAtMs === catalogVersion &&
         cached.sourceMode === sourceMode
       ) {
         cursor = Math.max(cursor, cached.cursor);
@@ -363,7 +370,7 @@ export function loadFirestoreMangaCatalog(
           localStorage.setItem(
             MANGA_METADATA_CACHE_KEY,
             JSON.stringify({
-              exportedAtMs: catalog.exportedAtMs,
+              exportedAtMs: catalogVersion,
               cursor,
               sourceMode,
               records,
