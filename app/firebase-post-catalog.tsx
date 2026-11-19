@@ -205,11 +205,15 @@ function CatalogCard({
       data-slug={record.slug}
       data-section={section}
       href={`/series/${encodeURIComponent(record.slug)}`}
+      prefetch={false}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
-      onTouchStart={preloadDetailPageContent}
       onClick={(event) => {
-        setLocalStorageCacheItem("currentManga", JSON.stringify(record));
+        try {
+          localStorage.setItem("currentManga", JSON.stringify(record));
+        } catch {
+          setLocalStorageCacheItem("currentManga", JSON.stringify(record));
+        }
         markHomepageSeriesNavigation(`/series/${encodeURIComponent(record.slug)}`, event);
       }}
     >

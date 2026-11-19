@@ -4,12 +4,13 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useLayoutEffect } from "react";
 import { BannerAdSlot } from "../advertisement-manager";
-import CenteredLoadingSpinner from "../centered-loading-spinner";
 import SiteHeader from "../site-header";
 
+// Keep chunk split, but do NOT show a full-page spinner here.
+// Instant metadata comes from currentManga / caches inside detail-page-content.
 const DetailPageContent = dynamic(() => import("./detail-page-content"), {
   ssr: false,
-  loading: () => <CenteredLoadingSpinner label="Memuat detail manga" />,
+  loading: () => null,
 });
 
 export function preloadDetailPageContent(): void {

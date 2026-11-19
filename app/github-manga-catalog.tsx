@@ -556,14 +556,19 @@ function MangaCard({
   return (
     <Link
       href={`/series/${encodeURIComponent(slug)}`}
+      prefetch={false}
       className={animate ? cardClass : cardClassStatic}
       data-key={normalize(item.title)}
       data-slug={slug}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
-      onTouchStart={preloadDetailPageContent}
       onClick={(event) => {
-        setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
+        // Sync write so detail page can read currentManga immediately.
+        try {
+          localStorage.setItem("currentManga", JSON.stringify(manga));
+        } catch {
+          setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
+        }
         markHomepageSeriesNavigation(`/series/${encodeURIComponent(slug)}`, event);
       }}
       style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}

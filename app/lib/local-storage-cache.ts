@@ -69,18 +69,18 @@ function oldestRebuildableCaches(): CacheEntry[] {
   );
 }
 
-export function setLocalStorageCacheItem(key: string, value: string): boolean {
-  if (typeof window === "undefined") return false;
+function trySetItem(key: string, value: string): "ok" | "quota" | "error" {
   try {
     window.localStorage.setItem(key, value);
-    return true;
+    return "ok";
   } catch (error) {
-    if (!isQuotaError(error)) {
-      console.warn(`Browser cache "${key}" could not be saved.`, error);
-      return false;
-    }
+    if (isQuotaError(error)) return "quota";
+    console.warn(`Browser cache "${key}" could not be saved.`, error);
+    return "error";
   }
+}
 
+function reclaimQuotaAndSet(key: string, value: string): boolean {
   let removed = 0;
   try {
     for (const entry of oldestRebuildableCaches()) {
@@ -92,16 +92,12 @@ export function setLocalStorageCacheItem(key: string, value: string): boolean {
         continue;
       }
 
-      try {
-        window.localStorage.setItem(key, value);
+      const result = trySetItem(key, value);
+      if (result === "ok") {
         console.warn(`Browser storage was full; removed ${removed} old rebuildable cache(s).`);
         return true;
-      } catch (error) {
-        if (!isQuotaError(error)) {
-          console.warn(`Browser cache "${key}" could not be saved after cleanup.`, error);
-          return false;
-        }
       }
+      if (result === "error") return false;
     }
   } catch (error) {
     console.warn("Old browser caches could not be inspected for cleanup.", error);
@@ -112,4 +108,36 @@ export function setLocalStorageCacheItem(key: string, value: string): boolean {
     `Browser cache "${key}" could not be saved; storage is still full after removing ${removed} rebuildable cache(s).`,
   );
   return false;
+}
+
+/**
+ * Fast localStorage write. Quota cleanup runs deferred so click/navigation
+ * is not blocked on main-thread scans of every cache key.
+ */
+export function setLocalStorageCacheItem(key: string, value: string): boolean {
+  if (typeof window === "undefined") return false;
+
+  const result = trySetItem(key, value);
+  if (result === "ok") return true;
+  if (result === "error") return false;
+
+  // Quota exceeded: defer heavy cleanup so UI click stays snappy.
+  const run = () => {
+    reclaimQuotaAndSet(key, value);
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(run, { timeout: 800 });
+  } else {
+    window.setTimeout(run, 0);
+  }
+  return false;
+}
+
+/** Synchronous write used when the value must be available before navigation. */
+export function setLocalStorageCacheItemSync(key: string, value: string): boolean {
+  if (typeof window === "undefined") return false;
+  const result = trySetItem(key, value);
+  if (result === "ok") return true;
+  if (result === "error") return false;
+  return reclaimQuotaAndSet(key, value);
 }

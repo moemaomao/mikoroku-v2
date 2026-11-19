@@ -334,9 +334,8 @@ export default function HeroFeatured() {
           const isMainB = dual && offset === 1;
           const isMain = isMainA || isMainB;
           const x = cardX(offset, metrics);
-          const prefetchSeries = () => {
-            const href = seriesHref(item.slug);
-            if (href !== "#") router.prefetch(href);
+          const warmDetailChunk = () => {
+            preloadDetailPageContent();
           };
 
           return (
@@ -352,9 +351,8 @@ export default function HeroFeatured() {
                   zIndex: isMain ? 50 : 40 - abs,
                 } as CSSProperties
               }
-              onMouseEnter={prefetchSeries}
-              onFocus={prefetchSeries}
-              onTouchStart={prefetchSeries}
+              onMouseEnter={warmDetailChunk}
+              onFocus={warmDetailChunk}
               onClick={(event) => {
                 if (isMain) {
                   const href = seriesHref(item.slug);
@@ -364,13 +362,18 @@ export default function HeroFeatured() {
                     typeof value === "object" &&
                     (value as Record<string, unknown>).slug === item.slug,
                   );
-                  setLocalStorageCacheItem("currentManga", JSON.stringify(
+                  const payload = JSON.stringify(
                     record && typeof record === "object"
                       ? record
                       : { slug: item.slug, title: item.title, cover: item.cover, img: item.cover },
-                  ));
+                  );
+                  try {
+                    localStorage.setItem("currentManga", payload);
+                  } catch {
+                    setLocalStorageCacheItem("currentManga", payload);
+                  }
                   preloadDetailPageContent();
-                  router.push(seriesHref(item.slug));
+                  router.push(href !== "#" ? href : seriesHref(item.slug));
                 } else {
                   goTo(index);
                 }
