@@ -165,8 +165,10 @@
 window.isCurrentUserAdmin = isCurrentUserAdmin;
 
 function isTopCommenterPreviewAdmin(email) {
-  return typeof email === 'string' &&
-    topCommenterPreviewAdminEmails.includes(email.trim().toLowerCase());
+  if (typeof email !== 'string') return false;
+  const normalizedEmail = email.trim().toLowerCase();
+  return adminEmails.includes(normalizedEmail) ||
+    topCommenterPreviewAdminEmails.includes(normalizedEmail);
 }
     
     let lastVisible = null;
@@ -7134,6 +7136,151 @@ function startCommentSnowAnimation(layer) {
   });
 }
 
+const commentMagicCircleStatesByLayer = new WeakMap();
+let commentMagicCircleObserver = null;
+
+function createCommentMagicCircleLayer() {
+  const layer = document.createElement('div');
+  layer.className = 'comment-magic-circle';
+  layer.setAttribute('aria-hidden', 'true');
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 800 800');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  const createGroup = (className) => {
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('class', className);
+    svg.append(group);
+    return group;
+  };
+  const createShape = (parent, name, attributes) => {
+    const shape = document.createElementNS('http://www.w3.org/2000/svg', name);
+    Object.entries(attributes).forEach(([key, value]) => {
+      shape.setAttribute(key, String(value));
+    });
+    parent.append(shape);
+    return shape;
+  };
+  const addCircle = (parent, cx, cy, r, className = '') => {
+    createShape(parent, 'circle', {
+      cx,
+      cy,
+      r,
+      ...(className ? { class: className } : {})
+    });
+  };
+
+  const frame = createGroup('comment-magic-circle-frame');
+  [386, 377, 350].forEach(radius => addCircle(frame, 400, 400, radius));
+
+  const outer = createGroup('comment-magic-circle-outer');
+  [342, 312, 306].forEach(radius => addCircle(outer, 400, 400, radius));
+  addCircle(outer, 400, 400, 342, 'comment-magic-circle-dashes');
+  [
+    [643, 157, 'α'],
+    [643, 643, 'ν'],
+    [157, 643, 'γ'],
+    [157, 157, 'ϕ']
+  ].forEach(([x, y, symbol]) => {
+    addCircle(outer, x, y, 27);
+    const text = createShape(outer, 'text', {
+      x,
+      y,
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central'
+    });
+    text.textContent = symbol;
+  });
+
+  const octagram = createGroup('comment-magic-circle-octagram');
+  addCircle(octagram, 400, 400, 228);
+  addCircle(octagram, 400, 400, 218);
+  createShape(octagram, 'polygon', { points: '400,18 782,400 400,782 18,400' });
+  createShape(octagram, 'polygon', { points: '670,130 670,670 130,670 130,130' });
+  [
+    [400, 122], [597, 203], [678, 400], [597, 597],
+    [400, 678], [203, 597], [122, 400], [203, 203]
+  ].forEach(([x, y]) => addCircle(octagram, x, y, 17));
+
+  const inner = createGroup('comment-magic-circle-inner');
+  addCircle(inner, 400, 400, 196);
+  addCircle(inner, 400, 400, 190, 'comment-magic-circle-dashes');
+  addCircle(inner, 400, 400, 164);
+
+  const core = createGroup('comment-magic-circle-core');
+  [154, 145].forEach(radius => addCircle(core, 400, 400, radius));
+  createShape(core, 'polygon', { points: '400,258 523,471 277,471' });
+  createShape(core, 'polygon', { points: '400,542 277,329 523,329' });
+  createShape(core, 'polygon', { points: '400,280 504,460 296,460' });
+  createShape(core, 'polygon', { points: '400,520 296,340 504,340' });
+  [102, 76, 56, 12].forEach(radius => addCircle(core, 400, 400, radius));
+  addCircle(core, 400, 400, 5, 'comment-magic-circle-center');
+
+  layer.append(svg);
+  return layer;
+}
+
+function stopCommentMagicCircleAnimation(state) {
+  document.removeEventListener('visibilitychange', state.onVisibilityChange);
+  state.motionQuery?.removeEventListener('change', state.onVisibilityChange);
+  commentMagicCircleObserver?.unobserve(state.layer);
+  commentMagicCircleStatesByLayer.delete(state.layer);
+}
+
+function removeCommentMagicCircleLayer(commentElement) {
+  const layer = commentElement.querySelector('.comment-magic-circle');
+  if (!layer) return;
+
+  const state = commentMagicCircleStatesByLayer.get(layer);
+  if (state) stopCommentMagicCircleAnimation(state);
+  layer.remove();
+}
+
+function syncCommentMagicCircleAnimation(state) {
+  if (!state.layer.isConnected) {
+    stopCommentMagicCircleAnimation(state);
+    return;
+  }
+
+  const shouldRun =
+    state.visible &&
+    !document.hidden &&
+    !state.motionQuery?.matches &&
+    !document.documentElement.classList.contains('no-animations') &&
+    !document.getElementById('comment-widget')?.classList.contains('no-animations');
+  state.layer.classList.toggle('is-paused', !shouldRun);
+}
+
+function startCommentMagicCircleAnimation(layer) {
+  const state = {
+    layer,
+    motionQuery: window.matchMedia?.('(prefers-reduced-motion: reduce)'),
+    visible: typeof IntersectionObserver === 'undefined',
+    onVisibilityChange: null
+  };
+  state.onVisibilityChange = () => syncCommentMagicCircleAnimation(state);
+  commentMagicCircleStatesByLayer.set(layer, state);
+
+  if (typeof IntersectionObserver !== 'undefined') {
+    if (!commentMagicCircleObserver) {
+      commentMagicCircleObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          const observedState = commentMagicCircleStatesByLayer.get(entry.target);
+          if (!observedState) return;
+          observedState.visible = entry.isIntersecting;
+          syncCommentMagicCircleAnimation(observedState);
+        });
+      }, { threshold: 0, rootMargin: '80px' });
+    }
+    commentMagicCircleObserver.observe(layer);
+  }
+
+  document.addEventListener('visibilitychange', state.onVisibilityChange);
+  state.motionQuery?.addEventListener('change', state.onVisibilityChange);
+  syncCommentMagicCircleAnimation(state);
+}
+
 function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'fireflies', adminPreview = false) {
   let rankBadge = commentElement.querySelector('.top-comment-rank-badge');
   if (!adminPreview && (!Number.isInteger(rank) || rank < 1 || rank > 6)) {
@@ -7152,6 +7299,7 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
     commentElement.querySelector('.comment-fireflies')?.remove();
     removeCommentFireworkLayer(commentElement);
     removeCommentSnowLayer(commentElement);
+    removeCommentMagicCircleLayer(commentElement);
     return;
   }
   const authorName = commentElement.querySelector('.author-name');
@@ -7169,7 +7317,9 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
   );
   commentElement.classList.add(`top-commenter-rank-${rank}`);
 
-  const effect = selectedEffect === 'firework' || selectedEffect === 'snow'
+  const effect = selectedEffect === 'firework' ||
+      selectedEffect === 'snow' ||
+      selectedEffect === 'magic-circle'
     ? selectedEffect
     : 'fireflies';
   commentElement.classList.toggle('top-commenter-firework', effect === 'firework');
@@ -7177,7 +7327,9 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
     ? '.comment-fireworks'
     : effect === 'snow'
       ? '.comment-snow'
-      : '.comment-fireflies';
+      : effect === 'magic-circle'
+        ? '.comment-magic-circle'
+        : '.comment-fireflies';
   let effectLayer = commentElement.querySelector(effectSelector);
   const effectDisabled =
     localStorage.getItem('commentWidget_disableTopCommentFireflies') === 'true' ||
@@ -7187,11 +7339,13 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
     removeCommentFireworkLayer(commentElement);
   }
   if (effect !== 'snow') removeCommentSnowLayer(commentElement);
+  if (effect !== 'magic-circle') removeCommentMagicCircleLayer(commentElement);
   if (effect !== 'fireflies') commentElement.querySelector('.comment-fireflies')?.remove();
 
   if (effectDisabled) {
     if (effect === 'firework') removeCommentFireworkLayer(commentElement);
     else if (effect === 'snow') removeCommentSnowLayer(commentElement);
+    else if (effect === 'magic-circle') removeCommentMagicCircleLayer(commentElement);
     else effectLayer?.remove();
   } else if (!effectLayer) {
     if (effect === 'firework') {
@@ -7200,6 +7354,8 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
       effectLayer = document.createElement('div');
       effectLayer.className = 'comment-snow';
       effectLayer.setAttribute('aria-hidden', 'true');
+    } else if (effect === 'magic-circle') {
+      effectLayer = createCommentMagicCircleLayer();
     } else {
       effectLayer = document.createElement('div');
       effectLayer.className = 'comment-fireflies';
@@ -7230,6 +7386,7 @@ function applyTopCommentRankBadge(commentElement, rank, selectedEffect = 'firefl
     commentElement.prepend(effectLayer);
     if (effect === 'firework') startCommentFireworkAnimation(effectLayer);
     else if (effect === 'snow') startCommentSnowAnimation(effectLayer);
+    else if (effect === 'magic-circle') startCommentMagicCircleAnimation(effectLayer);
   }
 
   if (!rankBadge) rankBadge = document.createElement('span');

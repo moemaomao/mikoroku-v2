@@ -2274,7 +2274,8 @@ html.no-animations .comment.transcendent,
 
 .comment-fireflies,
 .comment-fireworks,
-.comment-snow {
+.comment-snow,
+.comment-magic-circle {
   position: absolute;
   z-index: 2;
   inset: 0;
@@ -2285,7 +2286,8 @@ html.no-animations .comment.transcendent,
 
 .comment.top-commenter > .comment-fireflies,
 .comment.top-commenter > .comment-fireworks,
-.comment.top-commenter > .comment-snow {
+.comment.top-commenter > .comment-snow,
+.comment.top-commenter > .comment-magic-circle {
   position: absolute;
   z-index: 2;
 }
@@ -2293,12 +2295,15 @@ html.no-animations .comment.transcendent,
 html.disable-top-comment-fireflies .comment-fireflies,
 html.disable-top-comment-fireflies .comment-fireworks,
 html.disable-top-comment-fireflies .comment-snow,
+html.disable-top-comment-fireflies .comment-magic-circle,
 html.no-animations .comment-fireflies,
 html.no-animations .comment-fireworks,
 html.no-animations .comment-snow,
+html.no-animations .comment-magic-circle,
 #comment-widget.no-animations .comment-fireflies,
 #comment-widget.no-animations .comment-fireworks,
-#comment-widget.no-animations .comment-snow {
+#comment-widget.no-animations .comment-snow,
+#comment-widget.no-animations .comment-magic-circle {
   display: none !important;
 }
 
@@ -2530,8 +2535,103 @@ html.no-animations .comment-snow,
   filter: blur(var(--snow-depth-blur, 3px));
 }
 
+.comment-magic-circle {
+  mix-blend-mode: screen;
+}
+
+.comment-magic-circle svg {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  display: block;
+  width: auto;
+  height: 280%;
+  overflow: visible;
+  color: rgb(var(--comment-firefly-color) / 78%);
+  opacity: .75;
+  animation: comment-magic-circle-color-glow 16s linear infinite;
+  transform: translate(-50%, -50%);
+}
+
+.comment-magic-circle circle,
+.comment-magic-circle polygon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.comment-magic-circle text {
+  fill: currentColor;
+  font-family: Georgia, serif;
+  font-size: 34px;
+  font-style: italic;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.comment-magic-circle-frame { opacity: .58; }
+.comment-magic-circle-outer { opacity: .58; }
+.comment-magic-circle-octagram { opacity: .72; }
+.comment-magic-circle-inner { opacity: .66; }
+.comment-magic-circle-core { opacity: .72; }
+.comment-magic-circle .comment-magic-circle-dashes { stroke-dasharray: 2 11; }
+.comment-magic-circle .comment-magic-circle-center {
+  fill: currentColor;
+  stroke: none;
+}
+
+.comment-magic-circle-outer,
+.comment-magic-circle-inner,
+.comment-magic-circle-octagram,
+.comment-magic-circle-core {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+.comment-magic-circle-outer {
+  animation: comment-magic-circle-rotate 60s linear infinite;
+}
+
+.comment-magic-circle-octagram {
+  animation: comment-magic-circle-rotate-reverse 45s linear infinite;
+}
+
+.comment-magic-circle-inner {
+  animation: comment-magic-circle-rotate-fast 30s linear infinite;
+}
+
+.comment-magic-circle-core {
+  animation: comment-magic-circle-rotate 60s linear infinite;
+}
+
+.comment-magic-circle.is-paused svg,
+.comment-magic-circle.is-paused g {
+  animation-play-state: paused;
+}
+
 .comment-snow.is-paused .comment-snowflake {
   animation-play-state: paused;
+}
+
+@keyframes comment-magic-circle-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes comment-magic-circle-rotate-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes comment-magic-circle-rotate-fast {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes comment-magic-circle-color-glow {
+  0% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(0deg); }
+  25% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(90deg); }
+  50% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(180deg); }
+  75% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(270deg); }
+  100% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(360deg); }
 }
 
 @keyframes comment-snow-falling {
@@ -2555,7 +2655,7 @@ html.no-animations .comment-snow,
   }
 }
 
-.comment.top-commenter > :not(.comment-fireflies):not(.comment-fireworks):not(.comment-snow) {
+.comment.top-commenter > :not(.comment-fireflies):not(.comment-fireworks):not(.comment-snow):not(.comment-magic-circle) {
   position: relative;
   z-index: 3;
 }
@@ -2598,6 +2698,11 @@ html.no-animations .comment-snow,
 
   .comment-fireworks {
     display: none;
+  }
+
+  .comment-magic-circle svg,
+  .comment-magic-circle g {
+    animation-play-state: paused;
   }
 }
 

@@ -1065,6 +1065,107 @@
   100% { opacity: 0; transform: scale(2) rotate(60deg); }
 }
 
+.settings-magic-circle-layer {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.settings-magic-circle-svg {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: auto;
+  height: 280%;
+  overflow: visible;
+  color: rgb(var(--settings-firefly-color) / 78%);
+  opacity: .75;
+  animation: settings-magic-circle-color-glow 16s linear infinite;
+  transform: translate(-50%, -50%);
+}
+
+.settings-magic-circle-svg circle,
+.settings-magic-circle-svg polygon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.settings-magic-circle-svg text {
+  fill: currentColor;
+  font-family: Georgia, serif;
+  font-size: 34px;
+  font-style: italic;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.settings-magic-circle-frame { opacity: .58; }
+.settings-magic-circle-outer { opacity: .58; }
+.settings-magic-circle-octagram { opacity: .72; }
+.settings-magic-circle-inner { opacity: .66; }
+.settings-magic-circle-core { opacity: .72; }
+.settings-magic-circle-svg .settings-magic-circle-dashes { stroke-dasharray: 2 11; }
+.settings-magic-circle-svg .settings-magic-circle-center {
+  fill: currentColor;
+  stroke: none;
+}
+
+.settings-magic-circle-outer,
+.settings-magic-circle-inner {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+.settings-magic-circle-outer {
+  animation: settings-magic-circle-rotate 60s linear infinite;
+}
+
+.settings-magic-circle-octagram {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: settings-magic-circle-rotate-reverse 45s linear infinite;
+}
+
+.settings-magic-circle-inner {
+  animation: settings-magic-circle-rotate-fast 30s linear infinite;
+}
+
+.settings-magic-circle-core {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: settings-magic-circle-rotate 60s linear infinite;
+}
+
+.settings-magic-circle-layer.is-paused .settings-magic-circle-svg,
+.settings-magic-circle-layer.is-paused .settings-magic-circle-svg g {
+  animation-play-state: paused;
+}
+
+@keyframes settings-magic-circle-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes settings-magic-circle-rotate-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes settings-magic-circle-rotate-fast {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes settings-magic-circle-color-glow {
+  0% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(0deg); }
+  25% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(90deg); }
+  50% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(180deg); }
+  75% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(270deg); }
+  100% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 6px currentColor) hue-rotate(360deg); }
+}
+
 .settings-snow-layer {
   position: absolute;
   inset: 0;
@@ -1139,6 +1240,11 @@
   .settings-firework-burst,
   .settings-firework-spark {
     display: none;
+  }
+
+  .settings-magic-circle-layer .settings-magic-circle-svg,
+  .settings-magic-circle-layer .settings-magic-circle-svg g {
+    animation-play-state: paused;
   }
 }
 

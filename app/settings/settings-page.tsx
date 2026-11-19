@@ -76,7 +76,7 @@ type Settings = {
   customShape: string;
   customCommentBg: string;
   gameRoles: string[];
-  topCommenterEffect: "fireflies" | "firework" | "snow";
+  topCommenterEffect: "fireflies" | "firework" | "snow" | "magic-circle";
   disableAnimations: boolean;
   disableTopCommentFireflies: boolean;
 };
@@ -90,13 +90,16 @@ type Account = {
 
 const anonymousAvatar = "https://ui-avatars.com/api/?name=User&background=7c3aed&color=fff";
 function normalizeTopCommenterEffect(value: unknown): Settings["topCommenterEffect"] {
-  return value === "firework" || value === "snow" ? value : "fireflies";
+  return value === "firework" || value === "snow" || value === "magic-circle"
+    ? value
+    : "fireflies";
 }
 
 function getTopCommenterEffectName(effect: Settings["topCommenterEffect"]) {
   if (effect === "fireflies") return "Fireflies";
   if (effect === "firework") return "Firework";
-  return "Snow";
+  if (effect === "snow") return "Snow";
+  return "Magic Circle";
 }
 
 function FireworkPreview({ active, className }: { active: boolean; className: string }) {
@@ -168,6 +171,109 @@ function SnowPreview({ active, className }: { active: boolean; className: string
             <span key={index} className={styles["settings-snowflake"]} />
           ))
         : null}
+    </div>
+  );
+}
+
+function MagicCircleLogo({ className }: { className: string }) {
+  return (
+    <svg className={className} viewBox="0 0 800 800" aria-hidden="true">
+      <g className={styles["settings-magic-circle-frame"]}>
+        <circle cx="400" cy="400" r="386" />
+        <circle cx="400" cy="400" r="377" />
+        <circle cx="400" cy="400" r="350" />
+      </g>
+      <g className={styles["settings-magic-circle-outer"]}>
+        <circle cx="400" cy="400" r="342" />
+        <circle cx="400" cy="400" r="312" />
+        <circle cx="400" cy="400" r="306" />
+        <circle cx="400" cy="400" r="342" className={styles["settings-magic-circle-dashes"]} />
+        <circle cx="643" cy="157" r="27" />
+        <circle cx="643" cy="643" r="27" />
+        <circle cx="157" cy="643" r="27" />
+        <circle cx="157" cy="157" r="27" />
+        <text x="643" y="157">α</text>
+        <text x="643" y="643">ν</text>
+        <text x="157" y="643">γ</text>
+        <text x="157" y="157">ϕ</text>
+      </g>
+      <g className={styles["settings-magic-circle-octagram"]}>
+        <circle cx="400" cy="400" r="228" />
+        <circle cx="400" cy="400" r="218" />
+        <polygon points="400,18 782,400 400,782 18,400" />
+        <polygon points="670,130 670,670 130,670 130,130" />
+        <circle cx="400" cy="122" r="17" />
+        <circle cx="597" cy="203" r="17" />
+        <circle cx="678" cy="400" r="17" />
+        <circle cx="597" cy="597" r="17" />
+        <circle cx="400" cy="678" r="17" />
+        <circle cx="203" cy="597" r="17" />
+        <circle cx="122" cy="400" r="17" />
+        <circle cx="203" cy="203" r="17" />
+      </g>
+      <g className={styles["settings-magic-circle-inner"]}>
+        <circle cx="400" cy="400" r="196" />
+        <circle cx="400" cy="400" r="190" className={styles["settings-magic-circle-dashes"]} />
+        <circle cx="400" cy="400" r="164" />
+      </g>
+      <g className={styles["settings-magic-circle-core"]}>
+        <circle cx="400" cy="400" r="154" />
+        <circle cx="400" cy="400" r="145" />
+        <polygon points="400,258 523,471 277,471" />
+        <polygon points="400,542 277,329 523,329" />
+        <polygon points="400,280 504,460 296,460" />
+        <polygon points="400,520 296,340 504,340" />
+        <circle cx="400" cy="400" r="102" />
+        <circle cx="400" cy="400" r="76" />
+        <circle cx="400" cy="400" r="56" />
+        <circle cx="400" cy="400" r="12" />
+        <circle cx="400" cy="400" r="5" className={styles["settings-magic-circle-center"]} />
+      </g>
+    </svg>
+  );
+}
+
+function MagicCirclePreview({ active, className }: { active: boolean; className: string }) {
+  const layerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || !active) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let visible = typeof IntersectionObserver === "undefined";
+    const syncAnimation = () => {
+      layer.classList.toggle(
+        "is-paused",
+        !visible || document.hidden || reducedMotion.matches,
+      );
+    };
+    const visibilityObserver = typeof IntersectionObserver === "undefined"
+      ? null
+      : new IntersectionObserver((entries) => {
+          visible = entries.some((entry) => entry.isIntersecting);
+          syncAnimation();
+        });
+    const onVisibilityChange = () => syncAnimation();
+    const onMotionChange = () => syncAnimation();
+
+    visibilityObserver?.observe(layer);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    reducedMotion.addEventListener("change", onMotionChange);
+    syncAnimation();
+
+    return () => {
+      visibilityObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      reducedMotion.removeEventListener("change", onMotionChange);
+    };
+  }, [active]);
+
+  return (
+    <div ref={layerRef} className={cx(className, "is-paused")} aria-hidden="true">
+      {active ? (
+        <MagicCircleLogo className={styles["settings-magic-circle-svg"]} />
+      ) : null}
     </div>
   );
 }
@@ -749,7 +855,7 @@ export default function SettingsPage() {
   }
 
   function toggleTopCommentFireflies() {
-    if (topCommenterAccess !== "allowed") return;
+    if (topCommenterAccess !== "allowed" && !isAdminPreview) return;
     update("disableTopCommentFireflies", !settings.disableTopCommentFireflies);
   }
 
@@ -840,10 +946,10 @@ export default function SettingsPage() {
         readingChapterCount,
         userCommentCount,
       ),
-      disableTopCommentFireflies: topCommenterAccess === "denied"
+      disableTopCommentFireflies: topCommenterAccess === "denied" && !isAdminPreview
         ? false
         : settings.disableTopCommentFireflies,
-      topCommenterEffect: topCommenterAccess === "denied"
+      topCommenterEffect: topCommenterAccess === "denied" && !isAdminPreview
         ? "fireflies"
         : settings.topCommenterEffect,
       displayName: settings.displayName.trim() || "Anonymous",
@@ -1186,14 +1292,14 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               className={styles['settings-fireflies-toggle']}
-                              disabled={topCommenterAccess !== "allowed"}
-                              aria-label={topCommenterAccess === "allowed"
+                              disabled={topCommenterAccess !== "allowed" && !isAdminPreview}
+                              aria-label={topCommenterAccess === "allowed" || isAdminPreview
                                 ? `${settings.disableTopCommentFireflies ? "Show" : "Disable"} background effect`
                                 : "Background effect locked to Top 6 commenters"}
-                              aria-pressed={topCommenterAccess === "allowed" && !settings.disableTopCommentFireflies}
+                              aria-pressed={(topCommenterAccess === "allowed" || isAdminPreview) && !settings.disableTopCommentFireflies}
                               onClick={toggleTopCommentFireflies}
                             >
-                              {topCommenterAccess !== "allowed"
+                              {topCommenterAccess !== "allowed" && !isAdminPreview
                                 ? "Locked"
                                 : settings.disableTopCommentFireflies
                                   ? "Show"
@@ -1205,7 +1311,7 @@ export default function SettingsPage() {
                             role="group"
                             aria-label="Top Commenter background effect"
                           >
-                            {(["fireflies", "firework", "snow"] as const).map((effect) => (
+                            {(["fireflies", "firework", "snow", "magic-circle"] as const).map((effect) => (
                               <button
                                 type="button"
                                 key={effect}
@@ -1213,11 +1319,11 @@ export default function SettingsPage() {
                                   styles['settings-top-comment-effect-option'],
                                   settings.topCommenterEffect === effect && styles['is-selected'],
                                 )}
-                                aria-label={topCommenterAccess === "allowed"
+                                aria-label={topCommenterAccess === "allowed" || isAdminPreview
                                   ? `Select ${getTopCommenterEffectName(effect)} background effect`
                                   : `${getTopCommenterEffectName(effect)} preview; selection is limited to Top 6 commenters`}
                                 aria-pressed={settings.topCommenterEffect === effect}
-                                disabled={topCommenterAccess !== "allowed"}
+                                disabled={topCommenterAccess !== "allowed" && !isAdminPreview}
                                 onClick={() => update("topCommenterEffect", effect)}
                               >
                                 <span className={styles['settings-top-comment-effect-option-header']}>
@@ -1227,7 +1333,7 @@ export default function SettingsPage() {
                                       ? settings.topCommenterEffect === effect
                                         ? "Previewing"
                                         : "Preview effect"
-                                      : topCommenterAccess !== "allowed"
+                                      : topCommenterAccess !== "allowed" && !isAdminPreview
                                       ? "Top 6 only"
                                       : settings.topCommenterEffect === effect
                                         ? "Selected"
@@ -1259,10 +1365,15 @@ export default function SettingsPage() {
                                         active={topCommenterPreviewEnabled && settings.topCommenterEffect === effect}
                                         className={styles['settings-fireworks-layer']}
                                       />
-                                    ) : (
+                                    ) : effect === "snow" ? (
                                       <SnowPreview
                                         active={topCommenterPreviewEnabled && settings.topCommenterEffect === effect}
                                         className={styles['settings-snow-layer']}
+                                      />
+                                    ) : (
+                                      <MagicCirclePreview
+                                        active={topCommenterPreviewEnabled && settings.topCommenterEffect === effect}
+                                        className={styles['settings-magic-circle-layer']}
                                       />
                                     )
                                   )}
@@ -1275,14 +1386,18 @@ export default function SettingsPage() {
                                         ? "Fireflies preview"
                                         : effect === "firework"
                                           ? "Firework preview"
-                                          : "Snow preview"}
+                                          : effect === "snow"
+                                            ? "Snow preview"
+                                            : "Magic Circle preview"}
                                     </strong>
                                     <span>
                                       {effect === "fireflies"
                                         ? "Fireflies glow behind Top Commenter comments."
                                         : effect === "firework"
                                           ? "Firework bursts sparkle behind Top Commenter comments."
-                                          : "Snow falls gently behind Top Commenter comments."}
+                                          : effect === "snow"
+                                            ? "Snow falls gently behind Top Commenter comments."
+                                            : "An animated magic circle glows behind Top Commenter comments."}
                                     </span>
                                   </div>
                                 </div>
@@ -1300,7 +1415,7 @@ export default function SettingsPage() {
                                 ? settings.disableTopCommentFireflies
                                   ? "The selected effect is disabled on comments; previews remain active."
                                   : "Select an effect, then save Settings to apply it to your comments."
-                                : "All three effects are previewed here; only Top 6 commenters can choose or disable them."}
+                                : "All four effects are previewed here; only Top 6 commenters can choose or disable them."}
                           </p>
                         </div>
                       </div>
