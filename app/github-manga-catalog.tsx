@@ -34,6 +34,7 @@ import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { markHomepageSeriesNavigation } from "./lib/home-navigation";
 import { preloadDetailPageContent } from "./series/detail-page-client";
+import SeriesCardPrefetch from "./series/series-card-prefetch";
 
 type MangaItem = Record<string, unknown> & {
   title: string;
@@ -553,74 +554,102 @@ function MangaCard({
   ].reduce<number>((latest, value) => Math.max(latest, toMilliseconds(value)), 0);
   manga.rating = meta?.rating ?? item.rating ?? "-";
 
-  return (
-    <Link
-      href={`/series/${encodeURIComponent(slug)}`}
-      prefetch={false}
+    return (
+    <SeriesCardPrefetch
+      slug={slug}
       className={animate ? cardClass : cardClassStatic}
-      data-key={normalize(item.title)}
-      data-slug={slug}
-      onMouseEnter={preloadDetailPageContent}
-      onFocus={preloadDetailPageContent}
-      onClick={(event) => {
-        // Sync write so detail page can read currentManga immediately.
-        try {
-          localStorage.setItem("currentManga", JSON.stringify(manga));
-        } catch {
-          setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
-        }
-        markHomepageSeriesNavigation(`/series/${encodeURIComponent(slug)}`, event);
-      }}
-      style={animate ? { animationDelay: `${Math.min(index, 24) * 0.04}s` } : undefined}
+      prefetchOnHover={true}
+      prefetchOnVisible={false}
     >
-      <div className={cardCoverClass}>
-        {(Boolean(item.isUp) || isRecentUpdate(updatedAt)) && (
-          <div className={upBadgeClass}>UP</div>
-        )}
-        {chapter >= 0 && <div className={chapterBadgeClass}>Ch. {chapter}</div>}
-        {commissionEnabled && <div className={commissionBadgeClass}>COMMISSION</div>}
-        {(type || status) && (
-          <div className={bottomBadgeBarClass}>
-            {type ? (
-              <div className={`${typeBadgeClass} ${typeBadgeColors[type.replace(/\s+/g, "-")] || typeBadgeColors.default}`}>
-                {type.toUpperCase()}
-              </div>
-            ) : (
-              <div className={`${typeBadgeClass} text-[#bdbdbd]`} />
-            )}
-            {status ? (
-              <div className={`${statusBadgeClass} ${statusBadgeColors[status] || "text-[#bdbdbd]"}`}>
-                {status.toUpperCase()}
-              </div>
-            ) : (
-              <div className={`${statusBadgeClass} text-[#bdbdbd]`} />
-            )}
+      <div
+        data-key={normalize(item.title)}
+        data-slug={slug}
+        onClick={(event) => {
+          try {
+            localStorage.setItem("currentManga", JSON.stringify(manga));
+          } catch {
+            setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
+          }
+          markHomepageSeriesNavigation(
+            `/series/${encodeURIComponent(slug)}`,
+            event,
+          );
+        }}
+        style={
+          animate
+            ? { animationDelay: `${Math.min(index, 24) * 0.04}s` }
+            : undefined
+        }
+      >
+        <div className={cardCoverClass}>
+          {(Boolean(item.isUp) || isRecentUpdate(updatedAt)) && (
+            <div className={upBadgeClass}>UP</div>
+          )}
+          {chapter >= 0 && (
+            <div className={chapterBadgeClass}>Ch. {chapter}</div>
+          )}
+          {commissionEnabled && (
+            <div className={commissionBadgeClass}>COMMISSION</div>
+          )}
+          {(type || status) && (
+            <div className={bottomBadgeBarClass}>
+              {type ? (
+                <div
+                  className={`${typeBadgeClass} ${
+                    typeBadgeColors[type.replace(/\s+/g, "-")] ||
+                    typeBadgeColors.default
+                  }`}
+                >
+                  {type.toUpperCase()}
+                </div>
+              ) : (
+                <div className={`${typeBadgeClass} text-[#bdbdbd]`} />
+              )}
+              {status ? (
+                <div
+                  className={`${statusBadgeClass} ${
+                    statusBadgeColors[status] || "text-[#bdbdbd]"
+                  }`}
+                >
+                  {status.toUpperCase()}
+                </div>
+              ) : (
+                <div className={`${statusBadgeClass} text-[#bdbdbd]`} />
+              )}
+            </div>
+          )}
+          {image && !coverFailed ? (
+            <CoverImage
+              className={cardImageClass}
+              src={cover}
+              alt={item.title}
+              width="150"
+              height="225"
+              decoding="async"
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : "auto"}
+              nsfw={manga.nsfw === true}
+              onError={() => setCoverFailed(true)}
+            />
+          ) : (
+            <div className="flex aspect-[2/3] w-full items-center justify-center bg-[#1a1a1a] p-2.5 text-center text-[11px] font-semibold text-[#888] dark:bg-[#111]">
+              Cover Not Found
+            </div>
+          )}
+          {commissionEnabled && (
+            <div className={commissionCoverGradientClass} />
+          )}
+          <div
+            className={cardOverlayClass}
+            style={
+              commissionEnabled ? { paddingBottom: "3rem" } : undefined
+            }
+          >
+            <div className={cardTitleClass}>{item.title}</div>
           </div>
-        )}
-        {image && !coverFailed ? (
-          <CoverImage
-            className={cardImageClass}
-            src={cover}
-            alt={item.title}
-            width="150"
-            height="225"
-            decoding="async"
-            loading={priority ? "eager" : "lazy"}
-            fetchPriority={priority ? "high" : "auto"}
-            nsfw={manga.nsfw === true}
-            onError={() => setCoverFailed(true)}
-          />
-        ) : (
-          <div className="flex aspect-[2/3] w-full items-center justify-center bg-[#1a1a1a] p-2.5 text-center text-[11px] font-semibold text-[#888] dark:bg-[#111]">
-            Cover Not Found
-          </div>
-        )}
-        {commissionEnabled && <div className={commissionCoverGradientClass} />}
-        <div className={cardOverlayClass} style={commissionEnabled ? { paddingBottom: "3rem" } : undefined}>
-          <div className={cardTitleClass}>{item.title}</div>
         </div>
       </div>
-    </Link>
+    </SeriesCardPrefetch>
   );
 }
 
