@@ -17,7 +17,7 @@
 
   export let pageId = "home";
 
-  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=admin-top-comment-preview-1";
+  const legacyRuntimeSrc = "/widgets/comment-runtime.js?v=comment-login-route-1";
   const featureStyleHrefs = {
     dm: "/widgets/comment-dm.css",
     report: "/widgets/comment-report.css",
@@ -161,6 +161,9 @@
   onMount(() => {
     loadCommentStyles("/widgets/comment-widget.css?v=reply-buttons-6");
     window.loadCommentFeatureStyles = loadFeatureStyles;
+    const commentForm = document.getElementById("comment-form");
+    const preventNativeCommentSubmit = (event: Event) => event.preventDefault();
+    commentForm?.addEventListener("submit", preventNativeCommentSubmit, true);
     const idle = "requestIdleCallback" in window
       ? window.requestIdleCallback(() => loadFeatureStyles("effects"), { timeout: 2500 })
       : window.setTimeout(() => loadFeatureStyles("effects"), 2500);
@@ -170,6 +173,7 @@
 
     return () => {
       if (typeof idle === "number") window.clearTimeout(idle);
+      commentForm?.removeEventListener("submit", preventNativeCommentSubmit, true);
       if (window.loadCommentFeatureStyles === loadFeatureStyles) {
         delete window.loadCommentFeatureStyles;
       }

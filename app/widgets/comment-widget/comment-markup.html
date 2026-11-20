@@ -38,95 +38,9 @@
   </span>
 </div>
 
-<!-- EMAIL AUTH MODAL -->
-<div id="email-auth-modal" class="email-modal">
-  <div class="email-modal-card">
-    <div class="email-modal-header">
-
-      <h2 id="modal-title">
-        Sign In
-      </h2>
-
-      <p>
-        Sign in or create a new account
-      </p>
-
-    </div>
-
-    <input
-  type="email"
-  id="email-input"
-  placeholder="Email Address"
-  autocomplete="username">
-
-    <div class="password-wrapper">
-
-      <input
-        type="password"
-        id="password-input"
-        placeholder="Password">
-
-       <button
-    type="button"
-    id="toggle-password"
-    aria-label="Toggle password visibility">
-
-    <svg id="eye-closed"
-         xmlns="http://www.w3.org/2000/svg"
-         width="20"
-         height="20"
-         viewBox="0 0 24 24"
-         fill="none"
-         stroke="currentColor"
-         stroke-width="2"
-         stroke-linecap="round"
-         stroke-linejoin="round"
-         style="display:none;">
-
-      <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12"></path>
-      <circle cx="12" cy="12" r="3"></circle>
-
-    </svg>
-
-    <svg id="eye-open"
-         xmlns="http://www.w3.org/2000/svg"
-         width="20"
-         height="20"
-         viewBox="0 0 24 24"
-         fill="none"
-         stroke="currentColor"
-         stroke-width="2"
-         stroke-linecap="round"
-         stroke-linejoin="round">
-
-      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C5 20 1 12 1 12A21.83 21.83 0 0 1 6.06 6.06"></path>
-      <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4C19 4 23 12 23 12A21.82 21.82 0 0 1 20.77 15.13"></path>
-      <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"></path>
-      <line x1="1" y1="1" x2="23" y2="23"></line>
-    </svg>
-  </button>
-    </div>
-
-    <div id="email-error"></div>
-    <button id="email-auth-submit">
-      Sign In
-    </button>
-
-    <button id="toggle-auth-mode">
-      Don't have an account? Sign Up
-    </button>
-
-    <button
-      class="email-cancel-btn"
-      onclick="closeEmailModal()">
-      Close
-    </button>
-  </div>
-</div>
-
     <div id='auth-section'>
       <button id="email-login-btn" 
-              onclick="openEmailAuthModal()"
+              onclick="if (typeof window.triggerLogin === 'function') window.triggerLogin('email'); else window.location.assign('/login?returnTo=' + encodeURIComponent(location.pathname + location.search + location.hash))"
               title="Sign in with Email"
               style="background: transparent; border: none; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;">
         

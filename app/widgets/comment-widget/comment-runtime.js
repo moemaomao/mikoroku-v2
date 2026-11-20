@@ -174,7 +174,7 @@ function isTopCommenterPreviewAdmin(email) {
     let lastVisible = null;
     let isLoading = false;
     let noMoreData = false;
-    let currentUser = null;
+    let currentUser = auth.currentUser || window.currentUser || null;
     let unsubscribeComments = null;
     let commentLoadingTimeout = null;
     let loadMoreError = false;
@@ -883,121 +883,6 @@ async function uploadToImgBB(base64) {
       }
     }
 
-
-    // ==================== EMAIL AUTH FUNCTIONS ====================
-
-let isLoginMode = true;
-
-function openEmailAuthModal() {
-  document.getElementById('email-auth-modal').style.display = 'flex';
-  resetEmailModal();
-}
-
-window.openEmailLogin = openEmailAuthModal;
-
-function closeEmailModal() {
-  document.getElementById('email-auth-modal').style.display = 'none';
-  resetEmailModal();
-}
-
-function resetEmailModal() {
-  document.getElementById('email-input').value = '';
-  document.getElementById('password-input').value = '';
-  document.getElementById('email-error').textContent = '';
-  document.getElementById('modal-title').textContent =
-    isLoginMode
-      ? 'Sign In'
-      : 'Create Account';
-}
-
-document.getElementById('toggle-auth-mode').addEventListener('click', () => {
-  isLoginMode = !isLoginMode;
-  document.getElementById('modal-title').textContent =
-    isLoginMode
-      ? 'Sign In'
-      : 'Create Account';
-  document.getElementById('toggle-auth-mode').textContent =
-    isLoginMode
-      ? "Don't have an account? Sign Up"
-      : 'Already have an account? Sign In';
-
-});
-
-document.getElementById('email-auth-submit').addEventListener('click', async () => {
-  const email = document.getElementById('email-input').value.trim();
-  const password = document.getElementById('password-input').value.trim();
-  const errorEl = document.getElementById('email-error');
-
-  if (!email || !password) {
-    errorEl.textContent = 'Please enter your email and password';
-    return;
-  }
-
-  try {
-    errorEl.textContent = 'Processing...';
-    
-    if (isLoginMode) {
-      await auth.signInWithEmailAndPassword(email, password);
-      alert('✅ Login berhasil!');
-    } else {
-      await auth.createUserWithEmailAndPassword(email, password);
-      alert('✅ Akun berhasil dibuat!');
-    }
-    
-    closeEmailModal();
-    
-  } catch (error) {
-    console.error(error);
-
-    let message = 'An error occurred';
-
-    if (error.code === 'auth/invalid-email')
-        message = 'Invalid email address';
-    else if (error.code === 'auth/user-not-found')
-        message = 'No account found with this email';
-    else if (error.code === 'auth/wrong-password')
-        message = 'Incorrect password';
-    else if (error.code === 'auth/email-already-in-use')
-        message = 'This email is already registered';
-    else if (error.code === 'auth/weak-password')
-        message = 'Password must be at least 6 characters long';
-    
-    errorEl.textContent = message;
-  }
-});
-
-const passwordInput =
-  document.getElementById('password-input');
-
-const togglePassword =
-  document.getElementById('toggle-password');
-
-const eyeOpen =
-  document.getElementById('eye-open');
-
-const eyeClosed =
-  document.getElementById('eye-closed');
-
-togglePassword.addEventListener('click', () => {
-
-  const isHidden = passwordInput.type === 'password';
-
-  if (isHidden) {
-
-    passwordInput.type = 'text';
-
-    eyeOpen.style.display = 'none';
-    eyeClosed.style.display = 'block';
-
-  } else {
-
-    passwordInput.type = 'password';
-
-    eyeOpen.style.display = 'block';
-    eyeClosed.style.display = 'none';
-
-  }
-});
 
     function signInWithGoogle() {
       const provider = new firebase.auth.GoogleAuthProvider();
@@ -4912,6 +4797,17 @@ if (commentFileInput) {
 }
 
 startRealtimeListener();
+
+window.addEventListener('mikoroku:header-auth-changed', () => {
+  const nextUser = window.currentUser !== undefined
+    ? window.currentUser
+    : auth.currentUser;
+  if (nextUser?.uid === currentUser?.uid) return;
+
+  currentUser = nextUser || null;
+  updateUI();
+  resetAllReplyAuthorFields();
+});
 
     auth.onAuthStateChanged(user => {
       stopUserDataRefresh();

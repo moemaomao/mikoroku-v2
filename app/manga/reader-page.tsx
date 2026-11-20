@@ -2535,7 +2535,11 @@ export default function ReaderPage({
             aria-label={`Loading chapter ${chapter || ""}`}
           >
             <span
-              className="size-10 animate-spin rounded-full border-[3px] border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
+              className="size-10 animate-spin rounded-full border-[3px]"
+              style={{
+                borderColor: "color-mix(in srgb, var(--mikoroku-reader-accent, #e8798f) 25%, transparent)",
+                borderTopColor: "var(--mikoroku-reader-accent, #e8798f)",
+              }}
               aria-hidden="true"
             />
             <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Loading series...</span>

@@ -26,7 +26,7 @@ type CommunityWidgetRuntime = {
   emojiElement: (HTMLElement & { pageId?: string }) | null;
 };
 
-const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=firestore-persistence-1";
+const COMMENT_SCRIPT_SRC = "/widgets/comment-widget.js?v=comment-login-route-1";
 const EMOJI_SCRIPT_SRC = "/widgets/emoji-reaction.js?v=firestore-persistence-1";
 
 function getCommunityRuntime(): CommunityWidgetRuntime {

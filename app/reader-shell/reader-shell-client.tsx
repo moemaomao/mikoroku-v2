@@ -69,7 +69,11 @@ export default function ReaderShellClient() {
       <main className="grid min-h-screen place-items-center" role="status" aria-label="Loading reader">
         <div className="flex flex-col items-center gap-3">
           <span
-            className="size-10 animate-spin rounded-full border-[3px] border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
+            className="size-10 animate-spin rounded-full border-[3px]"
+            style={{
+              borderColor: "color-mix(in srgb, var(--mikoroku-reader-accent, var(--mikoroku-accent, #9d1018)) 25%, transparent)",
+              borderTopColor: "var(--mikoroku-reader-accent, var(--mikoroku-accent, #9d1018))",
+            }}
             aria-hidden="true"
           />
           <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Loading series...</span>
