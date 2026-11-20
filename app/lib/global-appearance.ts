@@ -61,8 +61,8 @@ const cardDetailsElements = [".global-card-details"];
 const cardModeScopeSelector = cardContainers.join(",");
 const cardModeClasses = {
   list: {
-    container: ["!grid-cols-1", "!gap-1", "!p-1", "md:!grid-cols-4", "md:!gap-2", "md:!p-2"],
-    card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-hidden", "!rounded-xl", "!border", "!border-black/10", "!bg-white", "!p-0", "dark:!border-white/10", "dark:!bg-[#191a20]"],
+    container: ["!grid-cols-1", "!gap-1", "!p-1", "md:!grid-cols-3", "md:!gap-2", "md:!p-2"],
+    card: ["!flex", "!flex-row", "!items-stretch", "!gap-0", "!overflow-hidden", "!rounded-xl", "!border", "!border-gray-400/60", "!bg-transparent", "!p-0", "dark:!border-gray-500/60"],
     cover: ["!h-auto", "!w-[72px]", "!min-w-[72px]", "!max-w-[72px]", "!shrink-0", "!aspect-square", "!rounded-[8px]", "md:!w-[96px]", "md:!min-w-[96px]", "md:!max-w-[96px]", "md:!aspect-square"],
     overlay: ["!static", "!order-2", "!w-full", "!bg-none", "!p-0", "!pb-0", "!text-left"],
     title: [
@@ -724,6 +724,7 @@ function clearListInlineStyles(el: HTMLElement): void {
   el.style.removeProperty("order");
   el.style.removeProperty("position");
   el.style.removeProperty("background");
+  el.style.removeProperty("background-color");
   el.style.removeProperty("padding");
   el.style.removeProperty("text-align");
   el.style.removeProperty("border-radius");
@@ -762,6 +763,9 @@ function updateListCardStructure(root: ParentNode, isList: boolean): void {
         badgesRow = document.createElement("div");
         badgesRow.className = "global-card-badges";
       }
+
+      card.style.setProperty("background-color", "transparent", "important");
+      card.style.setProperty("background", "transparent", "important");
   
       badgesRow.style.display = "flex";
       badgesRow.style.flexWrap = "wrap";
