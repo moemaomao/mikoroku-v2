@@ -44,9 +44,10 @@
 }
 
 .detail-route {
-  --detail-rec-space: calc(var(--sidebar-width) + 40px);
+  --detail-rec-gap: 24px;
+  --detail-rec-space: calc(var(--sidebar-width) + var(--detail-rec-gap));
   --detail-content-width: min(var(--detail-max-width), calc(100% - var(--detail-rec-space) - (var(--detail-gutter) * 2)));
-  --detail-content-left: max(var(--detail-gutter), calc((100% - var(--detail-rec-space) - var(--detail-max-width)) / 2));
+  --detail-content-left: max(var(--detail-gutter), calc((100% - var(--detail-content-width) - var(--detail-rec-space)) / 2));
 }
 
 html[data-recommendations-hidden="true"] .detail-route {
@@ -62,7 +63,7 @@ html[data-recommendations-hidden="true"] .detail-route .container {
 
 html[data-site-sidebar-open="true"] .detail-route {
   --detail-content-width: min(var(--detail-max-width), calc(100% - var(--sidebar-width) - var(--detail-rec-space) - (var(--detail-gutter) * 2)));
-  --detail-content-left: calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-rec-space) - var(--detail-max-width)) / 2)));
+  --detail-content-left: calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-content-width) - var(--detail-rec-space)) / 2)));
 }
 
 html[data-site-sidebar-open="true"][data-recommendations-hidden="true"] .detail-route {
@@ -73,6 +74,13 @@ html[data-site-sidebar-open="true"][data-recommendations-hidden="true"] .detail-
 html[data-site-sidebar-open="true"][data-recommendations-hidden="true"] .detail-route .container {
   margin-left: calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2))) !important;
   margin-right: 0 !important;
+}
+
+@media (min-width: 64rem) {
+  .detail-route #rec-sidebar-root {
+    left: calc(var(--detail-content-left) + var(--detail-content-width) + var(--detail-rec-gap));
+    right: auto;
+  }
 }
 
 .profile-custom-badge,
