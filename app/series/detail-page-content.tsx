@@ -2756,7 +2756,7 @@ export default function DetailPageContent({
                     <button
                     className={`chapter-item relative aspect-square w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] border-0 bg-[rgba(0,0,0,0.25)] p-0 transition-[transform,box-shadow,filter] duration-200 hover:z-[2] hover:scale-105 active:scale-[0.97]${isRead ? " read" : ""} ${
                       view === "list"
-                        ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(80,78,78,0.04)] ![aspect-ratio:unset] dark:!bg-[rgba(156,7,7,0.06)]${isRead ? " !bg-[rgba(0,0,0,0.5)] dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
+                        ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(255,255,255,0.1)] ![aspect-ratio:unset]${isRead ? " !bg-[rgba(0,0,0,0.24)] dark:!bg-[rgba(0,0,0,0.3)]" : ""}`
                         : view === "text-grid"
                           ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(156,7,7,0.06)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
                           : ""
@@ -2784,7 +2784,7 @@ export default function DetailPageContent({
                       return thumbSrc ? (
                         <img
                           key={thumbSrc}
-                          className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 opacity-0 transition-opacity duration-150 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? "brightness-[0.65]" : ""}`}
+                          className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 opacity-0 transition-opacity duration-150 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? (view === "list" ? "brightness-[0.82]" : "brightness-[0.65]") : ""}`}
                           style={{ opacity: 0 }}
                           alt=""
                           loading={index < 12 ? "eager" : "lazy"}
@@ -2817,7 +2817,7 @@ export default function DetailPageContent({
                     })()}
                     {isRead && (
                       <span
-                        className="pointer-events-none absolute inset-0 z-[1] bg-[rgba(0,0,0,0.22)]"
+                        className={`pointer-events-none absolute inset-0 z-[1] ${view === "list" ? "bg-[rgba(0,0,0,0.08)]" : "bg-[rgba(0,0,0,0.22)]"}`}
                         aria-hidden="true"
                       />
                     )}
