@@ -733,11 +733,9 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
         refreshChapterTimestamps();
       }
     };
-    window.addEventListener("mikoroku:chapters-updated", refreshChapterTimestamps);
     window.addEventListener("pageshow", refreshChapterTimestamps);
     window.addEventListener("storage", handleStorage);
     return () => {
-      window.removeEventListener("mikoroku:chapters-updated", refreshChapterTimestamps);
       window.removeEventListener("pageshow", refreshChapterTimestamps);
       window.removeEventListener("storage", handleStorage);
       chapterUpdateTimestampsRef.current.clear();

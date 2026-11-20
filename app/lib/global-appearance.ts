@@ -331,7 +331,7 @@ function prefetchChapterSummary(slug: string, title: string): void {
       ];
       const cached = setLocalStorageCacheItem(
         `chapters_${slug}`,
-        JSON.stringify({ time: Date.now(), data }),
+        JSON.stringify({ time: Date.now(), summaryOnlySource: source, data }),
       );
       if (!cached) {
         console.warn(`Latest chapter summary for ${slug} could not be saved to browser cache.`);

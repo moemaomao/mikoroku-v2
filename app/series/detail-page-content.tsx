@@ -1602,16 +1602,29 @@ export default function DetailPageContent({
     let cachedSelectedChapters: Chapter[] = [];
     let cachedFirestoreChapters: Chapter[] = [];
     let cacheAge = Number.POSITIVE_INFINITY;
+    let summaryOnlySource: ChapterSource | null = null;
     const cached = localStorage.getItem(`chapters_${slug}`);
     if (cached) {
       try {
-        const parsed = JSON.parse(cached) as { time?: number; data?: Chapter[] };
+        const parsed = JSON.parse(cached) as {
+          time?: number;
+          data?: Chapter[];
+          summaryOnlySource?: ChapterSource;
+        };
         cacheAge = Date.now() - (parsed.time || 0);
+        summaryOnlySource = parsed.summaryOnlySource || null;
         const valid = cacheAge >= 0 && cacheAge < CHAPTER_CACHE_DURATION_MS
           ? parsed.data || []
           : [];
-        cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
-        cachedFirestoreChapters = valid.filter((chapter) => chapter.source === "firestore");
+        cachedSelectedChapters = valid.filter(
+          (chapter) => chapter.source === source && summaryOnlySource !== source,
+        );
+        cachedFirestoreChapters = valid.filter(
+          (chapter) => chapter.source === "firestore" && summaryOnlySource !== "firestore",
+        );
+        if (chaptersNeedEmergencyFill(cachedSelectedChapters)) {
+          cachedSelectedChapters = [];
+        }
         cachedChapters = cachedSelectedChapters;
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
