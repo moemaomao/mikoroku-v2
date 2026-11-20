@@ -742,8 +742,12 @@ async function loadManga(
     : null;
   const firestoreDeltaFound =
     metadataRecord?.__catalogDebugSources?.includes("Firestore delta") === true;
+  const firestoreChapterUpdateFound =
+    metadataRecord?.__catalogDebugSources?.includes("Firestore chapter update") === true;
   const effectiveSource = catalogSourceMode === "baseline"
-    ? "Catalog baseline (global)"
+    ? firestoreChapterUpdateFound
+      ? "Catalog baseline (global) + chapter update"
+      : "Catalog baseline (global)"
     : firestoreDeltaFound
       ? "Firestore catalog delta (catalog baseline)"
       : metadataManga || catalogManga
@@ -760,8 +764,15 @@ async function loadManga(
           ? "changed record found"
           : "no newer change for this manga"
     }`,
+    `Firestore chapter update: ${
+      responses[1].status === "rejected"
+        ? "request failed"
+        : firestoreChapterUpdateFound
+          ? "chapter progress found"
+          : "no chapter update for this manga"
+    }`,
     catalogSourceMode === "baseline"
-      ? `${process.env.NODE_ENV === "development" ? "Local" : "Global"} source setting: Firestore catalog deltas are disabled.`
+      ? `${process.env.NODE_ENV === "development" ? "Local" : "Global"} source setting: full Firestore catalog deltas are disabled; chapter-only updates are included.`
       : "Firestore per-manga metadata read: skipped; using the catalog baseline and change query",
     `Catalog primary record: ${catalogManga ? "found" : "not found"}`,
     `Effective source: ${effectiveSource}`,

@@ -399,12 +399,11 @@ async function fetchAndCacheMangaCatalog(
     }
   }
 
-  const changes = sourceMode === "effective"
-    ? await fetchFirestoreMangaChanges(
-        token || (token = await createFirebaseAccessToken(env)),
-        source.exportedAtMs,
-      )
-    : [];
+  const changes = await fetchFirestoreMangaChanges(
+    token || (token = await createFirebaseAccessToken(env)),
+    source.exportedAtMs,
+    sourceMode === "baseline" ? ["chapterUpdatedAt"] : undefined,
+  );
   const tombstones = new Map<string, number>();
   for (const change of changes) {
     const record = change.record;
@@ -421,10 +420,42 @@ async function fetchAndCacheMangaCatalog(
     const normalizedRecord = normalizeMangaCatalogRecord(record, change.id);
     if (!normalizedRecord) continue;
     const slug = normalizedRecord.slug as string;
+    const previous = records.get(slug);
+    if (sourceMode === "baseline") {
+      const chapterUpdatedAt = mangaMetadataChangeTime({
+        chapterUpdatedAt: normalizedRecord.chapterUpdatedAt,
+      });
+      if (!previous || chapterUpdatedAt <= source.exportedAtMs) continue;
+
+      const sources = new Set(
+        Array.isArray(previous.__catalogDebugSources)
+          ? previous.__catalogDebugSources as string[]
+          : ["Catalog baseline"],
+      );
+      sources.add("Firestore chapter update");
+      records.set(slug, {
+        ...previous,
+        ...(typeof normalizedRecord.chapterCount === "number"
+          ? { chapterCount: normalizedRecord.chapterCount }
+          : {}),
+        ...(normalizedRecord.lastChapter != null
+          ? { lastChapter: normalizedRecord.lastChapter }
+          : {}),
+        ...(normalizedRecord.lastChapterUpdated != null
+          ? { lastChapterUpdated: normalizedRecord.lastChapterUpdated }
+          : {}),
+        chapterUpdatedAt,
+        latestUpdate: chapterUpdatedAt,
+        updatedAt: chapterUpdatedAt,
+        firestore: true,
+        __catalogDebugSources: [...sources],
+      });
+      continue;
+    }
+
     const deletedAt = tombstones.get(slug) || 0;
     if (mangaMetadataChangeTime(normalizedRecord) <= deletedAt) continue;
 
-    const previous = records.get(slug);
     const sources = new Set(
       Array.isArray(previous?.__catalogDebugSources)
         ? previous.__catalogDebugSources as string[]
@@ -501,7 +532,12 @@ function normalizeMangaCatalogRecord(
 }
 
 function mangaMetadataChangeTime(record: Record<string, unknown>): number {
-  const values = [record.metadataUpdatedAt, record.updatedAt, record.deletedAt];
+  const values = [
+    record.metadataUpdatedAt,
+    record.updatedAt,
+    record.deletedAt,
+    record.chapterUpdatedAt,
+  ];
   return values.reduce((latest, value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return Math.max(latest, value);
@@ -979,6 +1015,7 @@ function decodeFirestoreRestValue(value: FirestoreRestValue): unknown {
 async function fetchFirestoreMangaChanges(
   token: string,
   cursor: number,
+  queryFields = ["updatedAt", "metadataUpdatedAt"],
 ): Promise<Array<{ id: string; record: Record<string, unknown> }>> {
   const queryField = async (fieldPath: string) => {
     const response = await fetchUpstream(`${FIRESTORE_DOCUMENTS_URL}:runQuery`, {
@@ -1030,10 +1067,7 @@ async function fetchFirestoreMangaChanges(
     });
   };
 
-  const results = await Promise.all([
-    queryField("updatedAt"),
-    queryField("metadataUpdatedAt"),
-  ]);
+  const results = await Promise.all(queryFields.map(queryField));
   return results.flat();
 }
 
