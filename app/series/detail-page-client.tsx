@@ -5,18 +5,11 @@ import { usePathname } from "next/navigation";
 import { useLayoutEffect } from "react";
 import { BannerAdSlot } from "../advertisement-manager";
 import SiteHeader from "../site-header";
+import SeriesLoadingContent from "./series-loading-content";
 import type { SeriesChapterSummary, SeriesManga } from "../../lib/series-data";
 
 const DetailPageContent = dynamic(() => import("./detail-page-content"), {
-  loading: () => (
-    <div
-      className="detail-route-loading grid min-h-[60vh] place-items-center"
-      role="status"
-      aria-label="Memuat detail"
-    >
-      <span className="detail-route-spinner h-10 w-10 animate-spin rounded-full border-4 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />
-    </div>
-  ),
+  loading: () => <SeriesLoadingContent />,
 });
 
 export function preloadDetailPageContent(): void {

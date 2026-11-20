@@ -21,6 +21,7 @@ import {
 import RecommendationSidebar from "./recommendation-sidebar";
 import ReaderServerNotice from "./reader-server-notice";
 import SiteFooter from "../site-footer";
+import SeriesLoadingContent from "./series-loading-content";
 import GlobalAuth from "../global-auth";
 import {
   initializeFirebaseClient,
@@ -2206,11 +2207,7 @@ export default function DetailPageContent({
   if (state === "loading") {
     return (
       <>
-        <main className={`detail-route ${detailPageClasses}`}>
-          <div className="detail-route-loading" role="status" aria-label="Memuat detail manga">
-            <span className="detail-route-spinner" aria-hidden="true" />
-          </div>
-        </main>
+        <SeriesLoadingContent />
         <SiteFooter backgroundColor="transparent" removeTopGap />
         <RouteIntegrations />
       </>
