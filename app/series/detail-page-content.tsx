@@ -1197,8 +1197,22 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
   );
 }
 
-export default function DetailPageContent({ slug }: { slug: string }) {
-  const [manga, setManga] = useState<Manga | null>(() => getCurrentMangaForSlug(slug));
+type DetailPageContentProps = {
+  slug: string;
+  initialManga?: Manga | null;
+  initialChapters?: Chapter[];
+  initialChapterSource?: ChapterSource | "cache";
+};
+
+export default function DetailPageContent({
+  slug,
+  initialManga = null,
+  initialChapters = [],
+  initialChapterSource = "cache",
+}: DetailPageContentProps) {
+  const [manga, setManga] = useState<Manga | null>(() =>
+    initialManga ?? getCurrentMangaForSlug(slug),
+  );
   const [showSourceDebug, setShowSourceDebug] = useState(false);
   const [metadataDisplaySource, setMetadataDisplaySource] = useState<"effective" | "baseline">("effective");
   const [metadataSourceSaving, setMetadataSourceSaving] = useState(false);
@@ -1246,15 +1260,21 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [coverPreviewOpen]);
-  const [state, setState] = useState<DetailState>(() => manga ? "ready" : "loading");
+    const [state, setState] = useState<DetailState>(() =>
+    manga || initialManga ? "ready" : "loading",
+  );
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(false);
-  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>(() => initialChapters ?? []);
   const [commentCount, setCommentCount] = useState<number | null>(null);
-  const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
+  const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">(
+    () => (initialChapters.length > 0 ? "ready" : "loading"),
+  );
   const [chapterError, setChapterError] = useState("");
-  const [source, setSource] = useState<ChapterSource>("blogger");
+  const [source, setSource] = useState<ChapterSource>(() =>
+    initialChapterSource === "cache" ? "blogger" : (initialChapterSource as ChapterSource) || "blogger",
+  );
   const [chapterRetry, setChapterRetry] = useState(0);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("text-grid");
@@ -1480,7 +1500,7 @@ export default function DetailPageContent({ slug }: { slug: string }) {
       controller = new AbortController();
       const currentRequestId = ++requestId;
       let hasDisplayedManga = false;
-      if (!force && !manga) {
+      if (!force && !manga && !initialManga) {
         setManga(null);
         setState("loading");
       }
@@ -1519,6 +1539,11 @@ export default function DetailPageContent({ slug }: { slug: string }) {
     const hasLocalCache = Boolean(
       typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
     );
+
+    if (initialChapters.length > 0 && chapters.length === 0) {
+      setChapters(initialChapters);
+      setChapterState("ready");
+    }
 
     if (!mangaTitle && !hasLocalCache) return;
     const controller = new AbortController();

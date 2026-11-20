@@ -1,27 +1,23 @@
 import type { Metadata } from "next";
 import DetailPageClient from "../detail-page-client";
-import catalog from "../../../public/catalog/metadata.json";
+import { getSeriesInitialData, getMangaFromCatalog } from "../../../lib/series-data";
 
 export const revalidate = 600;
 
-export async function generateMetadata({
-  params,
-}: {
+type PageProps = {
   params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
+};
 
-  const catalogRecord = catalog.manga.find((record) =>
-    record.slug === slug || record.id === slug,
-  );
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const catalogRecord = getMangaFromCatalog(slug);
+
   const title = String(
     catalogRecord?.title ||
-    slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
+      slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
   );
   const description = String(
-    catalogRecord?.desc ||
-    catalogRecord?.metadata?.desc ||
-    `Baca ${title} di Mikoroku.`,
+    catalogRecord?.desc || `Baca ${title} di Mikoroku.`,
   );
   const imagePath = `https://mikoroku.top/og/series/${encodeURIComponent(slug)}`;
   const pageTitle = `${title} - Mikoroku`;
@@ -59,11 +55,16 @@ export async function generateMetadata({
   };
 }
 
-export default async function DetailRoute({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function DetailRoute({ params }: PageProps) {
   const { slug } = await params;
-  return <DetailPageClient slug={slug} />;
+  const initial = await getSeriesInitialData(slug);
+
+  return (
+    <DetailPageClient
+      slug={slug}
+      initialManga={initial.manga}
+      initialChapters={initial.chapters}
+      initialChapterSource={initial.chapterSource}
+    />
+  );
 }
