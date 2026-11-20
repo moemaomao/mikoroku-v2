@@ -64,6 +64,13 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
               var isDark=true;
               try{isDark=localStorage.getItem("darkMode")!=="false"}catch(e){}
               var root=document.documentElement;
+              try{
+                root.dataset.recommendationsHidden=localStorage.getItem("mk_rec_sidebar_hidden")==="true"?"true":"false";
+                root.dataset.siteSidebarOpen=window.matchMedia("(min-width:769px)").matches&&localStorage.getItem("mk_sidebar_open")!=="0"?"true":"false";
+              }catch(e){
+                root.dataset.recommendationsHidden="false";
+                root.dataset.siteSidebarOpen=window.matchMedia("(min-width:769px)").matches?"true":"false";
+              }
               root.classList.toggle("dark",isDark);
               root.classList.toggle("light",!isDark);
               root.style.backgroundColor=isDark?"#0b0b0b":"#f8f9fa";

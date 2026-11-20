@@ -1344,12 +1344,6 @@ export default function DetailPageContent({
   const [sendingReport, setSendingReport] = useState(false);
   const reportTypeDropdownRef = useRef<HTMLDivElement>(null);
   const [readChapters, setReadChapters] = useState<string[]>([]);
-  const [recommendationsHidden, setRecommendationsHidden] = useState(false);
-  const handleRecommendationVisibilityChange = useCallback(
-    (visible: boolean) => setRecommendationsHidden(!visible),
-    [],
-  );
-  const [siteSidebarOpen, setSiteSidebarOpen] = useState(false);
   const mangaSlug = manga?.slug;
   const mangaTitle = manga?.title;
 
@@ -1481,35 +1475,9 @@ export default function DetailPageContent({
     };
   }, [mangaSlug, coverUpdatedAt]);
 
-  useEffect(() => {
-    const updateSidebarState = () => setSiteSidebarOpen(document.body.classList.contains("sidebar-open"));
-    const observer = new MutationObserver(updateSidebarState);
-    updateSidebarState();
-    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
-  const detailRecSpace = recommendationsHidden ? "0px" : "calc(var(--sidebar-width) + 40px)";
-  const detailContentWidth = recommendationsHidden
-    ? siteSidebarOpen
-      ? "min(var(--detail-max-width), calc(100% - var(--sidebar-width) - (var(--detail-gutter) * 2)))"
-      : "min(var(--detail-max-width), calc(100% - (var(--detail-gutter) * 2)))"
-    : siteSidebarOpen
-      ? "min(var(--detail-max-width), calc(100% - var(--sidebar-width) - var(--detail-rec-space) - (var(--detail-gutter) * 2)))"
-      : "min(var(--detail-max-width), calc(100% - var(--detail-rec-space) - (var(--detail-gutter) * 2)))";
-  const detailContentLeft = recommendationsHidden
-    ? siteSidebarOpen
-      ? "calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-max-width)) / 2)))"
-      : "max(var(--detail-gutter), calc((100% - var(--detail-max-width)) / 2))"
-    : siteSidebarOpen
-      ? "calc(var(--sidebar-width) + max(var(--detail-gutter), calc((100% - var(--sidebar-width) - var(--detail-rec-space) - var(--detail-max-width)) / 2)))"
-      : "max(var(--detail-gutter), calc((100% - var(--detail-rec-space) - var(--detail-max-width)) / 2))";
   const detailLayoutStyle = {
     "--detail-gutter": "32px",
     "--detail-max-width": "1250px",
-    "--detail-rec-space": detailRecSpace,
-    "--detail-content-width": detailContentWidth,
-    "--detail-content-left": detailContentLeft,
   } as CSSProperties;
 
   useEffect(() => {
@@ -2922,7 +2890,7 @@ export default function DetailPageContent({
             </>}
           </div>
         </div>
-        <RecommendationSidebar manga={manga} onVisibilityChange={handleRecommendationVisibilityChange} />
+        <RecommendationSidebar manga={manga} />
       </main>
       {reportOpen && (
         <div

@@ -253,10 +253,8 @@ function recommendationPayload(item: Recommendation): Recommendation {
 
 export default function RecommendationSidebar({
   manga,
-  onVisibilityChange,
 }: {
   manga: CurrentManga;
-  onVisibilityChange: (visible: boolean) => void;
 }) {
   const [showNsfw] = useNsfwVisibility();
   const [catalogue, setCatalogue] = useState<Recommendation[]>([]);
@@ -264,10 +262,7 @@ export default function RecommendationSidebar({
   const [visible, setVisible] = useState(readVisibility);
 
   useEffect(() => {
-    onVisibilityChange(visible);
-  }, [onVisibilityChange, visible]);
-
-  useEffect(() => {
+    if (!visible) return;
     let active = true;
     const controller = new AbortController();
     const items = new Map<string, Recommendation>();
@@ -406,7 +401,7 @@ export default function RecommendationSidebar({
       if (mangaDataTimeout !== undefined) window.clearTimeout(mangaDataTimeout);
       window.removeEventListener("mangaDataReady", handleMangaDataReady);
     };
-  }, []);
+  }, [visible]);
 
   const recommendations = useMemo(() => {
     const currentKey = normalizeKey(manga.title || manga.slug);
@@ -439,6 +434,7 @@ export default function RecommendationSidebar({
   const toggleVisibility = () => {
     const nextVisible = !visible;
     setVisible(nextVisible);
+    document.documentElement.dataset.recommendationsHidden = String(!nextVisible);
     try {
       localStorage.setItem(VISIBILITY_KEY, String(!nextVisible));
     } catch (error) {
@@ -451,11 +447,12 @@ export default function RecommendationSidebar({
 
   return (
     <>
-      <aside
-        id="rec-sidebar-root"
-        aria-label="Manga recommendations"
-        className={`relative z-10 mx-auto mb-2 mt-6 w-[calc(100%-24px)] max-w-[720px] overflow-visible font-[Kodchasan,sans-serif] text-zinc-900 lg:absolute lg:right-5 lg:top-[30px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[var(--sidebar-width,280px)] lg:max-w-none dark:text-white${visible ? "" : " hidden"}`}
-      >
+      {visible && (
+        <aside
+          id="rec-sidebar-root"
+          aria-label="Manga recommendations"
+          className="relative z-10 mx-auto mb-2 mt-6 w-[calc(100%-24px)] max-w-[720px] overflow-visible font-[Kodchasan,sans-serif] text-zinc-900 lg:absolute lg:right-5 lg:top-[30px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[var(--sidebar-width,280px)] lg:max-w-none dark:text-white"
+        >
         <div className="overflow-hidden py-[14px] lg:flex lg:h-full lg:flex-col lg:py-0">
           <h2 className="mb-3 flex items-center justify-between gap-2 px-[14px] text-[15px] font-bold lg:px-0 lg:text-base">
             <span className="flex items-center gap-2">
@@ -552,7 +549,8 @@ export default function RecommendationSidebar({
             })}
           </div>
         </div>
-      </aside>
+        </aside>
+      )}
       {!visible && (
         <button
           id="rec-sidebar-show-button"

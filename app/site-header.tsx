@@ -301,6 +301,7 @@ function HeaderContents() {
         setSidebarOpen(false);
         document.body.classList.remove("sidebar-open");
         document.body.style.overflow = "";
+        document.documentElement.dataset.siteSidebarOpen = "false";
         return;
       }
       let preferOpen = true;
@@ -315,6 +316,7 @@ function HeaderContents() {
       setSidebarOpen(preferOpen);
       document.body.classList.toggle("sidebar-open", preferOpen);
       document.body.classList.toggle("left-sidebar-closed", !preferOpen);
+      document.documentElement.dataset.siteSidebarOpen = String(preferOpen);
     };
     applySidebarPreference();
     query.addEventListener("change", applySidebarPreference);
@@ -337,6 +339,7 @@ function HeaderContents() {
           desktopSidebarPreference = false;
           document.body.classList.add("left-sidebar-closed");
           document.body.classList.remove("sidebar-open");
+          document.documentElement.dataset.siteSidebarOpen = "false";
           try {
             localStorage.setItem(SIDEBAR_PREF_KEY, "0");
           } catch (error) {
@@ -406,6 +409,7 @@ function HeaderContents() {
     if (isDesktop()) {
       desktopSidebarPreference = true;
       document.body.classList.add("sidebar-open");
+      document.documentElement.dataset.siteSidebarOpen = "true";
       document.body.style.overflow = "";
       try {
         localStorage.setItem(SIDEBAR_PREF_KEY, "1");
@@ -439,6 +443,7 @@ function HeaderContents() {
       desktopSidebarPreference = false;
       document.body.classList.add("left-sidebar-closed");
       document.body.classList.remove("sidebar-open");
+      document.documentElement.dataset.siteSidebarOpen = "false";
       try {
         localStorage.setItem(SIDEBAR_PREF_KEY, "0");
       } catch (error) {
@@ -1082,7 +1087,16 @@ function HeaderContents() {
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]"><Icon name="user" className="h-4 w-4" /></span>
                         View Profile
                       </button>
-                      <a href={`/stats/${encodeURIComponent(user.uid)}`} onClick={closeAuth} className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
+                      <a
+                        href={`/stats/${encodeURIComponent(user.uid)}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          const href = event.currentTarget.href;
+                          closeAuth();
+                          window.location.assign(href);
+                        }}
+                        className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-inherit no-underline transition hover:bg-black/5 dark:hover:bg-white/[0.07]"
+                      >
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-rose-500/10 text-rose-500"><Icon name="trophy" className="h-4 w-4" /></span>
                         My Stats
                       </a>
