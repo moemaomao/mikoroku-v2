@@ -54,6 +54,7 @@ export default function SeriesCardPrefetch({
       ref={setNode}
       href={targetHref}
       className={className}
+      data-slug={slug}
       onMouseEnter={onMouseEnter}
       onPointerDown={warm}
       prefetch={false}
