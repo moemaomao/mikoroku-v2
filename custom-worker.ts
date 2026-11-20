@@ -518,7 +518,7 @@ async function handleMangaCatalogSource(
     return new Response(JSON.stringify({ sourceMode: await getMangaCatalogSourceMode(kv) }), {
       headers: {
         "content-type": "application/json; charset=utf-8",
-        "cache-control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+        "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },
     });

@@ -34,10 +34,12 @@ import {
   markLocalBookmarksUpdated,
 } from "../../lib/reading-stats";
 import {
+  fetchMangaCatalogSourceMode,
   fetchMangaMetadataPayload,
   MANGA_METADATA_CACHE_UPDATED_EVENT,
   MANGA_METADATA_UPDATED_EVENT,
   notifyMangaMetadataUpdated,
+  setDevelopmentMangaCatalogSourceMode,
 } from "../lib/manga-metadata";
 import { firebaseConfig } from "../../lib/firebase-config";
 import {
@@ -759,7 +761,7 @@ async function loadManga(
           : "no newer change for this manga"
     }`,
     catalogSourceMode === "baseline"
-      ? "Global source setting: Firestore catalog deltas are disabled."
+      ? `${process.env.NODE_ENV === "development" ? "Local" : "Global"} source setting: Firestore catalog deltas are disabled.`
       : "Firestore per-manga metadata read: skipped; using the catalog baseline and change query",
     `Catalog primary record: ${catalogManga ? "found" : "not found"}`,
     `Effective source: ${effectiveSource}`,
@@ -1502,6 +1504,10 @@ export default function DetailPageContent({
       setMetadataDisplaySource(nextManga.catalogSourceMode || "effective");
     };
     const loadCurrentManga = (force: boolean) => {
+      controller.abort();
+      controller = new AbortController();
+      const requestSignal = controller.signal;
+      const currentRequestId = ++requestId;
       if (!force) {
         const availableManga = manga || initialManga;
         const browserManga = getCurrentMangaForSlug(slug);
@@ -1513,24 +1519,33 @@ export default function DetailPageContent({
           publishManga(cachedManga);
           setState("ready");
           void cacheMangaDetail(slug, cachedManga);
-          if (hasCachedDetailMetadata(cachedManga)) return;
+          if (hasCachedDetailMetadata(cachedManga)) {
+            void fetchMangaCatalogSourceMode(requestSignal).then((sourceMode) => {
+              if (!sourceMode || requestSignal.aborted || currentRequestId !== requestId) return;
+              setMetadataDisplaySource(sourceMode);
+              if (sourceMode !== (cachedManga.catalogSourceMode || "effective")) {
+                loadCurrentManga(true);
+              }
+            }).catch((error: unknown) => {
+              if (requestSignal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
+              console.warn("Could not verify the catalog source for cached series metadata.", error);
+            });
+            return;
+          }
         }
       }
-      controller.abort();
-      controller = new AbortController();
-      const currentRequestId = ++requestId;
       let hasDisplayedManga = false;
       if (!force && !manga && !initialManga) {
         setManga(null);
         setState("loading");
       }
-      loadManga(slug, controller.signal, force, (availableManga) => {
-        if (controller.signal.aborted || currentRequestId !== requestId) return;
+      loadManga(slug, requestSignal, force, (availableManga) => {
+        if (requestSignal.aborted || currentRequestId !== requestId) return;
         hasDisplayedManga = true;
         publishManga(availableManga);
         setState("ready");
       }).then((result) => {
-        if (controller.signal.aborted || currentRequestId !== requestId) return;
+        if (requestSignal.aborted || currentRequestId !== requestId) return;
         if (!result) {
           setState("not-found");
           return;
@@ -1538,7 +1553,7 @@ export default function DetailPageContent({
         publishManga(result);
         setState("ready");
       }).catch((error: unknown) => {
-        if (controller.signal.aborted || currentRequestId !== requestId) return;
+        if (requestSignal.aborted || currentRequestId !== requestId) return;
         console.error("Detail manga gagal dimuat.", error);
         if (!force && !hasDisplayedManga) setState("error");
       });
@@ -2101,6 +2116,13 @@ export default function DetailPageContent({
     setMetadataSourceSaving(true);
     setMetadataSourceError("");
     try {
+      if (process.env.NODE_ENV === "development") {
+        setDevelopmentMangaCatalogSourceMode(nextSource);
+        setMetadataDisplaySource(nextSource);
+        notifyMangaMetadataUpdated();
+        return;
+      }
+
       const adminApp = getApps().find((candidate) => candidate.name === ADMIN_FIREBASE_APP_NAME) ??
         initializeApp(firebaseConfig, ADMIN_FIREBASE_APP_NAME);
       const auth = getAuth(adminApp);
@@ -2367,7 +2389,9 @@ export default function DetailPageContent({
                     data-testid="manga-source-debug"
                   >
                     <strong>Metadata source debug</strong>
-                    <p className="mt-1">Choose the catalog source for all visitors:</p>
+                    <p className="mt-1">
+                      Choose the catalog source for {process.env.NODE_ENV === "development" ? "this browser" : "all visitors"}:
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Choose global catalog source">
                       <button
                         type="button"
@@ -2383,7 +2407,7 @@ export default function DetailPageContent({
                         {metadataSourceSaving
                           ? "Applying..."
                           : metadataDisplaySource === "effective"
-                            ? "Effective catalog (global)"
+                            ? `Effective catalog (${process.env.NODE_ENV === "development" ? "local" : "global"})`
                             : "Effective catalog"}
                       </button>
                       <button
@@ -2400,7 +2424,7 @@ export default function DetailPageContent({
                         {metadataSourceSaving
                           ? "Applying..."
                           : metadataDisplaySource === "baseline"
-                            ? "Catalog baseline (global)"
+                            ? `Catalog baseline (${process.env.NODE_ENV === "development" ? "local" : "global"})`
                             : "Catalog baseline"}
                       </button>
                     </div>

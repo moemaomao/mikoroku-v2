@@ -19,6 +19,7 @@ const FIRESTORE_METADATA_MEMORY_TTL = 60 * 1000;
 const MANGA_METADATA_CACHE_DB = "mikoroku-manga-metadata-cache";
 const MANGA_METADATA_CACHE_STORE = "payloads";
 const MANGA_METADATA_CACHE_KEY = "active";
+const DEVELOPMENT_MANGA_CATALOG_SOURCE_KEY = "mikoroku_dev_manga_catalog_source";
 const MANGA_METADATA_REVALIDATE_AFTER = 10 * 60 * 1000;
 const MANGA_CATALOG_SOURCE_CACHE_TTL = 5 * 1000;
 type MangaCatalogSourceMode = "effective" | "baseline";
@@ -43,6 +44,31 @@ let mangaCatalogSourceCache: {
   mode: MangaCatalogSourceMode;
   checkedAt: number;
 } | null = null;
+
+function getDevelopmentMangaCatalogSourceMode(): MangaCatalogSourceMode | null {
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(DEVELOPMENT_MANGA_CATALOG_SOURCE_KEY) === "baseline"
+      ? "baseline"
+      : "effective";
+  } catch (error) {
+    console.warn("Local catalog source preference could not be read.", error);
+    return "effective";
+  }
+}
+
+export function setDevelopmentMangaCatalogSourceMode(mode: MangaCatalogSourceMode): void {
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") {
+    throw new Error("Local catalog source selection is only available in development.");
+  }
+  try {
+    window.localStorage.setItem(DEVELOPMENT_MANGA_CATALOG_SOURCE_KEY, mode);
+    mangaCatalogSourceCache = { mode, checkedAt: Date.now() };
+  } catch (error) {
+    console.warn("Local catalog source preference could not be saved.", error);
+    throw error;
+  }
+}
 
 function openMangaMetadataCache(): Promise<IDBDatabase> {
   if (typeof window === "undefined" || !("indexedDB" in window)) {
@@ -193,6 +219,8 @@ export async function fetchMangaCatalogSourceMode(
   signal?: AbortSignal,
   force = false,
 ): Promise<MangaCatalogSourceMode | null> {
+  const developmentMode = getDevelopmentMangaCatalogSourceMode();
+  if (developmentMode) return developmentMode;
   if (
     !force &&
     mangaCatalogSourceCache &&
@@ -207,7 +235,7 @@ export async function fetchMangaCatalogSourceMode(
   const request = (async () => {
     const response = await fetch("/api/catalog/source", {
       signal,
-      cache: force ? "no-store" : "default",
+      cache: "no-store",
     });
     if (response.status === 404 || response.status === 405) return null;
     if (!response.ok) {
