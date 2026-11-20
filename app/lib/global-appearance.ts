@@ -109,7 +109,15 @@ function chapterNumber(value: unknown): number {
 }
 
 function dateValueToMillis(value: unknown): number {
-  if (typeof value === "number") return value < 1e12 ? value * 1000 : value;
+  const numeric = typeof value === "number"
+    ? value
+    : typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value.trim())
+      ? Number(value)
+      : Number.NaN;
+  if (Number.isFinite(numeric)) {
+    if (numeric < 1e8) return 0;
+    return numeric < 1e11 ? numeric * 1000 : numeric;
+  }
   if (typeof value === "string") {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -117,12 +125,12 @@ function dateValueToMillis(value: unknown): number {
   if (value && typeof value === "object") {
     const timestamp = value as { toMillis?: () => number; seconds?: number };
     if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
-    if (typeof timestamp.seconds === "number") return timestamp.seconds * 1000;
+    if (typeof timestamp.seconds === "number") return dateValueToMillis(timestamp.seconds);
   }
   return 0;
 }
 
-function updateTimeFor(slug: string, chapter: string): number {
+function updateTimeFor(slug: string, chapter: string, useMangaFallback = true): number {
   try {
     const cached: unknown = JSON.parse(localStorage.getItem(`chapters_${slug}`) || "null");
     const records = Array.isArray(cached)
@@ -146,10 +154,12 @@ function updateTimeFor(slug: string, chapter: string): number {
     console.warn(`Chapter update date for ${slug} could not be read.`, error);
   }
 
+  if (!useMangaFallback) return 0;
   const mangaData = (window as Window & {
     mangaData?: Record<string, Record<string, unknown>>;
   }).mangaData;
-  const manga = mangaData?.[slug];
+  const manga = mangaData?.[slug] ||
+    Object.values(mangaData || {}).find((item) => item.slug === slug);
   if (!manga) return 0;
   for (const value of [
     manga.lastChapterUpdated,
@@ -213,6 +223,12 @@ function getLatestChapters(slug: string, fallbackChapter: string, forceFirestore
 
   const fallback = normalizeChapterNumber(fallbackChapter);
   return fallback && chapterNumber(fallback) > 0 ? [fallback] : [];
+}
+
+export function getLatestChapterUpdateTimestamp(slug: string, fallbackChapter: string): number {
+  if (typeof window === "undefined") return 0;
+  const latestChapter = getLatestChapters(slug, fallbackChapter)[0];
+  return latestChapter ? updateTimeFor(slug, latestChapter) : 0;
 }
 
 function readCachedChapterRecords(slug: string): Record<string, unknown>[] {

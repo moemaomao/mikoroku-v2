@@ -33,7 +33,10 @@ import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { markHomepageSeriesNavigation } from "./lib/home-navigation";
-import { refreshGlobalAppearance } from "./lib/global-appearance";
+import {
+  getLatestChapterUpdateTimestamp,
+  refreshGlobalAppearance,
+} from "./lib/global-appearance";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 import SeriesCardPrefetch from "./series/series-card-prefetch";
 import { latestChapterFromRecord } from "../lib/latest-chapter";
@@ -59,7 +62,7 @@ type FirestoreMeta = {
   updatedAt: number;
   latestUpdate: number;
   lastChapter: string;
-  lastChapterUpdated: string;
+  lastChapterUpdated: number;
   chapterCount: number;
   managedByAdmin: boolean;
   source: string;
@@ -155,14 +158,20 @@ function getTimestamp(item: Record<string, unknown>): number {
 
 function toMilliseconds(value: unknown): number {
   if (value == null || value === "") return 0;
-  if (typeof value === "number" && Number.isFinite(value)) return value < 1e12 ? value * 1000 : value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value < 1e8) return 0;
+    return value < 1e11 ? value * 1000 : value;
+  }
   if (typeof value === "object" && value) {
     const timestamp = value as { toMillis?: () => number; seconds?: number };
     if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
     if (typeof timestamp.seconds === "number") return timestamp.seconds * 1000;
   }
   const numeric = Number(value);
-  if (!Number.isNaN(numeric) && numeric > 0) return numeric < 1e12 ? numeric * 1000 : numeric;
+  if (!Number.isNaN(numeric) && numeric > 0) {
+    if (numeric < 1e8) return 0;
+    return numeric < 1e11 ? numeric * 1000 : numeric;
+  }
   const parsed = Date.parse(String(value));
   return Number.isNaN(parsed) ? 0 : parsed;
 }
@@ -315,7 +324,7 @@ function metadataFromData(slug: string, data: Record<string, unknown>): Firestor
     updatedAt,
     latestUpdate: toMilliseconds(data.latestUpdate) || updatedAt,
     lastChapter: data.lastChapter == null ? "" : String(data.lastChapter),
-    lastChapterUpdated: data.lastChapterUpdated == null ? "" : String(data.lastChapterUpdated),
+    lastChapterUpdated: toMilliseconds(data.lastChapterUpdated),
     chapterCount: typeof data.chapterCount === "number" ? data.chapterCount : 0,
     managedByAdmin: Boolean(data.managedByAdmin),
     source: String(data.source || ""),
@@ -357,6 +366,14 @@ function getMetadata(item: MangaItem, metadata: Record<string, FirestoreMeta>): 
     metadata[String(item.githubSlug || "")] ||
     Object.values(metadata).find((entry) => entry && !entry.isDraft && normalize(entry.title) === title)
   );
+}
+
+function displayedUpdateTimestamp(item: MangaItem, meta?: FirestoreMeta): number {
+  return [
+    meta?.updatedAt,
+    item.updatedAt,
+    item.latestUpdate,
+  ].reduce<number>((latest, value) => Math.max(latest, toMilliseconds(value)), 0);
 }
 
 function isManaged(metadata?: FirestoreMeta): boolean {
@@ -418,6 +435,8 @@ function mangaForMetadata(item: MangaItem, metadata?: FirestoreMeta): Record<str
     author: item.author || "-",
     artist: item.artist || "-",
     updatedAt: metadata?.updatedAt || 0,
+    latestUpdate: metadata?.latestUpdate || item.latestUpdate,
+    lastChapterUpdated: metadata?.lastChapterUpdated || item.lastChapterUpdated || "",
     lastChapter: chapter >= 0 ? chapter : "",
     managedByAdmin: Boolean(metadata?.managedByAdmin),
     info: item,
@@ -523,6 +542,8 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
       author: item.author || "-",
       artist: item.artist || "-",
       updatedAt: meta?.updatedAt || 0,
+      latestUpdate: meta?.latestUpdate || item.latestUpdate,
+      lastChapterUpdated: meta?.lastChapterUpdated || item.lastChapterUpdated || "",
       lastChapter: meta?.lastChapter || "",
       managedByAdmin: Boolean(meta?.managedByAdmin),
       source: meta?.source || "",
@@ -551,12 +572,7 @@ function MangaCard({
   const type = String(manga.type || "manga").toLowerCase();
   const commissionEnabled = manga.commissionEnabled === true;
   const chapter = chapterNumber(item, meta);
-  const updatedAt = [
-    meta?.updatedAt,
-    item.updatedAt,
-    (item as MangaItem & { latestUpdate?: unknown }).latestUpdate,
-    manga.updatedAt,
-  ].reduce<number>((latest, value) => Math.max(latest, toMilliseconds(value)), 0);
+  const updatedAt = displayedUpdateTimestamp(item, meta);
   manga.rating = meta?.rating ?? item.rating ?? "-";
 
     return (
@@ -684,10 +700,12 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
   const [heroVisibleCount, setHeroVisibleCount] = useState(3);
   const [playEntrance, setPlayEntrance] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [chapterUpdateRevision, setChapterUpdateRevision] = useState(0);
 
   const itemsRef = useRef(items);
   const metadataRef = useRef(metadata);
   const listSigRef = useRef("");
+  const chapterUpdateTimestampsRef = useRef(new Map<string, number>());
   const refreshRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
   itemsRef.current = items;
   metadataRef.current = metadata;
@@ -706,6 +724,24 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
       if (!homeCatalogMemory.entrancePlayed) setPlayEntrance(true);
     }
     if (cachedHero.length) setHeroItems(cachedHero);
+    const refreshChapterTimestamps = () => {
+      chapterUpdateTimestampsRef.current.clear();
+      setChapterUpdateRevision((revision) => revision + 1);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "chapterSourceMode" || event.key?.startsWith("chapters_")) {
+        refreshChapterTimestamps();
+      }
+    };
+    window.addEventListener("mikoroku:chapters-updated", refreshChapterTimestamps);
+    window.addEventListener("pageshow", refreshChapterTimestamps);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("mikoroku:chapters-updated", refreshChapterTimestamps);
+      window.removeEventListener("pageshow", refreshChapterTimestamps);
+      window.removeEventListener("storage", handleStorage);
+      chapterUpdateTimestampsRef.current.clear();
+    };
   }, []);
 
   useEffect(() => {
@@ -897,22 +933,50 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
   }, [visibleCount]);
 
   const sortedItems = useMemo(() => {
+    let sourceMode = "";
+    if (typeof window !== "undefined") {
+      try {
+        sourceMode = window.localStorage.getItem("chapterSourceMode") || "";
+      } catch (error) {
+        console.warn("Chapter source preference could not be read for homepage sorting.", error);
+      }
+    }
     const timeOf = (item: MangaItem) => {
       const meta = getMetadata(item, metadata);
-      const candidates = [meta?.updatedAt, item.updatedAt, (item as MangaItem & { latestUpdate?: number }).latestUpdate];
-      let best = 0;
-      for (const value of candidates) {
-        const n = typeof value === "number" ? value : Number(value);
-        if (Number.isFinite(n) && n > best) best = n < 1e12 ? n * 1000 : n;
+      const slug = meta?.slug || item.slug || slugify(item.title);
+      const chapter = chapterNumber(item, meta);
+      const fallbackChapter = chapter >= 0 ? String(chapter) : "";
+      const cacheKey = `${slug}:${fallbackChapter}:${sourceMode}`;
+      if (typeof window !== "undefined" && !chapterUpdateTimestampsRef.current.has(cacheKey)) {
+        chapterUpdateTimestampsRef.current.set(
+          cacheKey,
+          getLatestChapterUpdateTimestamp(slug, fallbackChapter),
+        );
       }
-      return best;
+      const cachedChapterUpdate = typeof window !== "undefined"
+        ? chapterUpdateTimestampsRef.current.get(cacheKey) || 0
+        : 0;
+      if (cachedChapterUpdate > 0) return cachedChapterUpdate;
+
+      for (const value of [
+        meta?.lastChapterUpdated,
+        item.lastChapterUpdated,
+        meta?.latestUpdate,
+        item.latestUpdate,
+        meta?.updatedAt,
+        item.updatedAt,
+      ]) {
+        const timestamp = toMilliseconds(value);
+        if (timestamp > 0) return timestamp;
+      }
+      return 0;
     };
     return splitHomepageMangaSections(items).latest.sort((left, right) => {
       const diff = timeOf(right) - timeOf(left);
       if (diff !== 0) return diff;
       return normalize(left.title).localeCompare(normalize(right.title));
     });
-  }, [items, metadata]);
+  }, [items, metadata, chapterUpdateRevision]);
 
   const visibleItems = sortedItems.slice(0, visibleCount);
   const maxHeroPage = Math.max(0, Math.ceil(heroItems.length / heroVisibleCount) - 1);

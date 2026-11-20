@@ -442,7 +442,7 @@ async function fetchAndCacheMangaCatalog(
   const data: Record<string, unknown> = {
     ...source,
     sourceExportedAtMs: source.exportedAtMs,
-    exportedAtMs: cachedAt,
+    exportedAtMs: sourceMode === "baseline" ? source.exportedAtMs : cachedAt,
     catalogSourceMode: sourceMode,
     firestoreDeltasIncluded: sourceMode === "effective",
     manga: [...records.values()],
