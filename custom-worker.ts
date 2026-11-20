@@ -51,8 +51,8 @@ const MANGA_CATALOG_CACHE_KEY = "catalog:metadata:manga:v5";
 const MANGA_CATALOG_FEED_CACHE_KEY = "catalog:metadata:manga:feed:v1";
 const MANGA_CATALOG_SOURCE_KEY = "catalog:metadata:manga:source:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
-const MANGA_CATALOG_FRESH_TTL = 10 * 60 * 1000;
-const MANGA_CATALOG_FEED_FRESH_TTL = 5 * 60 * 1000;
+const MANGA_CATALOG_FRESH_TTL = 60 * 60 * 1000;
+const MANGA_CATALOG_FEED_FRESH_TTL = 60 * 60 * 1000;
 const MANGA_CATALOG_URL = "/catalog/metadata.json";
 const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
 const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
@@ -71,6 +71,7 @@ type MangaCatalogSourceMode = "effective" | "baseline";
 
 let firebaseAccessToken: FirebaseAccessToken | null = null;
 let firebaseAccessTokenPromise: Promise<string> | null = null;
+const mangaCatalogRefreshes = new Map<string, Promise<Record<string, unknown>>>();
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -461,6 +462,28 @@ async function fetchAndCacheMangaCatalog(
   return data;
 }
 
+function refreshMangaCatalogOnce(
+  env: CloudflareEnv,
+  requestUrl: string,
+  kv: KVNamespace,
+  sourceMode: MangaCatalogSourceMode,
+  cacheKey = MANGA_CATALOG_CACHE_KEY,
+): Promise<Record<string, unknown>> {
+  const refreshKey = `${cacheKey}:${sourceMode}`;
+  const existing = mangaCatalogRefreshes.get(refreshKey);
+  if (existing) return existing;
+
+  const refresh = fetchAndCacheMangaCatalog(env, requestUrl, kv, sourceMode, cacheKey);
+  mangaCatalogRefreshes.set(refreshKey, refresh);
+  const clearRefresh = () => {
+    if (mangaCatalogRefreshes.get(refreshKey) === refresh) {
+      mangaCatalogRefreshes.delete(refreshKey);
+    }
+  };
+  void refresh.then(clearRefresh, clearRefresh);
+  return refresh;
+}
+
 function normalizeMangaCatalogRecord(
   value: Record<string, unknown>,
   fallbackSlug?: string,
@@ -604,7 +627,7 @@ async function handleMangaCatalogProxy(
 
     if (cached.data.catalogSourceMode !== sourceMode) {
       try {
-        const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode, cacheKey);
+        const data = await refreshMangaCatalogOnce(env, request.url, kv, sourceMode, cacheKey);
         const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
         return catalogResponse(responseBody, "MISS");
       } catch (error) {
@@ -617,7 +640,7 @@ async function handleMangaCatalogProxy(
     }
 
     ctx.waitUntil(
-      fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode, cacheKey).catch((error: unknown) => {
+      refreshMangaCatalogOnce(env, request.url, kv, sourceMode, cacheKey).catch((error: unknown) => {
         console.error("[worker manga-catalog] background refresh failed", error);
       }),
     );
@@ -628,7 +651,7 @@ async function handleMangaCatalogProxy(
   }
 
   try {
-    const data = await fetchAndCacheMangaCatalog(env, request.url, kv, sourceMode, cacheKey);
+    const data = await refreshMangaCatalogOnce(env, request.url, kv, sourceMode, cacheKey);
     const responseBody = url.pathname === "/api/catalog/manga" ? data.manga : data;
     return catalogResponse(responseBody, "MISS");
   } catch (error) {
@@ -677,7 +700,7 @@ async function handleMangaCatalogCacheRefresh(
     const sourceMode = await getMangaCatalogSourceMode(kv);
     const cachedAt = Date.now();
 
-    const payload = await fetchAndCacheMangaCatalog(
+    const payload = await refreshMangaCatalogOnce(
       env,
       request.url,
       kv,
@@ -688,7 +711,7 @@ async function handleMangaCatalogCacheRefresh(
     let feedMangaCount: number | null = null;
     let feedError: string | null = null;
     try {
-      const feedPayload = await fetchAndCacheMangaCatalog(
+      const feedPayload = await refreshMangaCatalogOnce(
         env,
         request.url,
         kv,
@@ -790,18 +813,7 @@ async function handleMangaCatalogSourceUpdate(
 
     await kv.put(MANGA_CATALOG_SOURCE_KEY, body.sourceMode);
     try {
-      const payload = await fetchAndCacheMangaCatalog(env, request.url, kv, body.sourceMode);
-      try {
-        await fetchAndCacheMangaCatalog(
-          env,
-          request.url,
-          kv,
-          "effective",
-          MANGA_CATALOG_FEED_CACHE_KEY,
-        );
-      } catch (feedError) {
-        console.error("[worker manga-catalog] feed cache refresh after source change failed", feedError);
-      }
+      const payload = await refreshMangaCatalogOnce(env, request.url, kv, body.sourceMode);
 
       return new Response(
         JSON.stringify({
