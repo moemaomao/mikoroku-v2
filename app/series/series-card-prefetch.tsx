@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useRef } from "react";
-import { prefetchSeriesRoute, warmDetailChunk } from "../../lib/prefetch-budget";
 import { preloadDetailPageContent } from "./detail-page-client";
 
 type SeriesCardPrefetchProps = {
@@ -10,16 +9,10 @@ type SeriesCardPrefetchProps = {
   href?: string;
   className?: string;
   children: React.ReactNode;
-  /** Prefetch on hover (default true) */
   prefetchOnHover?: boolean;
-  /** Prefetch when card enters viewport (default false — safer for quota) */
   prefetchOnVisible?: boolean;
 };
 
-/**
- * Drop-in wrapper for manga cards on the homepage / lists.
- * Uses a hard budget so scrolling the catalog cannot open hundreds of Worker requests.
- */
 export default function SeriesCardPrefetch({
   slug,
   href,
@@ -34,14 +27,10 @@ export default function SeriesCardPrefetch({
   const warm = useCallback(() => {
     if (warmedRef.current) return;
     warmedRef.current = true;
-    warmDetailChunk(() => import("./detail-page-content"));
     preloadDetailPageContent();
-    prefetchSeriesRoute(slug);
-  }, [slug]);
+  }, []);
 
   const onMouseEnter = prefetchOnHover ? warm : undefined;
-
-  // Optional: IntersectionObserver for visible cards only
   const setNode = useCallback(
     (node: HTMLAnchorElement | null) => {
       if (!node || !prefetchOnVisible) return;
@@ -66,8 +55,8 @@ export default function SeriesCardPrefetch({
       href={targetHref}
       className={className}
       onMouseEnter={onMouseEnter}
-      // Let Next prefetch the route when the link is in viewport (built-in, limited)
-      prefetch={true}
+      onPointerDown={warm}
+      prefetch={false}
     >
       {children}
     </Link>

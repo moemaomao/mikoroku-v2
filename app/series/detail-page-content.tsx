@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -462,6 +462,7 @@ function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source
 
 const SERIES_DETAIL_CACHE_DB = "mikoroku-series-detail-cache";
 const SERIES_DETAIL_CACHE_STORE = "details";
+const CHAPTER_CACHE_DURATION_MS = 30 * 60 * 1000;
 const seriesDetailMemoryCache = new Map<string, Manga>();
 
 type SeriesDetailCacheEntry = {
@@ -1496,6 +1497,10 @@ export default function DetailPageContent({
       setMetadataDisplaySource(nextManga.catalogSourceMode || "effective");
     };
     const loadCurrentManga = (force: boolean) => {
+      if (!force && (manga || initialManga)) {
+        setState("ready");
+        return;
+      }
       controller.abort();
       controller = new AbortController();
       const currentRequestId = ++requestId;
@@ -1535,7 +1540,7 @@ export default function DetailPageContent({
     };
   }, [slug]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const hasLocalCache = Boolean(
       typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
     );
@@ -1555,11 +1560,13 @@ export default function DetailPageContent({
     let cachedChapters: Chapter[] = [];
     let cachedSelectedChapters: Chapter[] = [];
     let cachedFirestoreChapters: Chapter[] = [];
+    let cacheAge = Number.POSITIVE_INFINITY;
     const cached = localStorage.getItem(`chapters_${slug}`);
     if (cached) {
       try {
         const parsed = JSON.parse(cached) as { time?: number; data?: Chapter[] };
-        const valid = Date.now() - (parsed.time || 0) < 5 * 60 * 1000
+        cacheAge = Date.now() - (parsed.time || 0);
+        const valid = cacheAge >= 0 && cacheAge < CHAPTER_CACHE_DURATION_MS
           ? parsed.data || []
           : [];
         cachedSelectedChapters = valid.filter((chapter) => chapter.source === source);
@@ -1569,6 +1576,27 @@ export default function DetailPageContent({
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
         localStorage.removeItem(`chapters_${slug}`);
       }
+    }
+    if (
+      cachedChapters.length > 0 &&
+      cacheAge >= 0 &&
+      cacheAge < CHAPTER_CACHE_DURATION_MS
+    ) {
+      if (source === "firestore" || chaptersHaveThumbnails(cachedChapters)) {
+        chapterSourceCacheRef.current.set(
+          chapterSourceCacheKey(slug, source),
+          cachedChapters,
+        );
+      }
+      if (cachedFirestoreChapters.length) {
+        chapterSourceCacheRef.current.set(
+          chapterSourceCacheKey(slug, "firestore"),
+          cachedFirestoreChapters,
+        );
+      }
+      setChapters(cachedChapters);
+      setChapterState("ready");
+      return () => controller.abort();
     }
     const immediatelyAvailable = cachedChapterListForSource(
       chapterSourceCacheRef.current,

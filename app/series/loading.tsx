@@ -1,9 +1,5 @@
 import SiteHeader from "../site-header";
 
-/**
- * Skeleton that matches the real detail layout.
- * Feels instant even while the client chunk / remaining data loads.
- */
 export default function LoadingSeries() {
   return (
     <>
