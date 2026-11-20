@@ -21,6 +21,15 @@ export type SeriesManga = {
   altTitle?: string;
   author?: string;
   artist?: string;
+  publication?: string;
+  serialization?: string;
+  demographic?: string | string[];
+  series?: string;
+  characters?: string | string[];
+  group?: string;
+  circle?: string;
+  femaleTags?: string | string[];
+  maleTags?: string | string[];
   nsfw?: boolean;
   updatedAt?: string | number;
   latestUpdate?: string | number;
@@ -75,9 +84,23 @@ export function getMangaFromCatalog(slug: string): SeriesManga | null {
 
   if (!found) return null;
 
+  const metadata =
+    found.metadata && typeof found.metadata === "object" && !Array.isArray(found.metadata)
+      ? found.metadata as Record<string, unknown>
+      : {};
   const cover = asString(
-    found.img || found.cover || found.image || found.thumbnail || (found.metadata as any)?.cover,
+    found.img || found.cover || found.image || found.thumbnail || metadata.cover,
   );
+  const publication = asString(
+    found.publication || metadata.publication || found.year || metadata.year,
+  );
+  const serialization = asString(found.serialization || metadata.serialization);
+  const series = asString(found.series || metadata.series);
+  const characters = found.characters ?? metadata.characters;
+  const group = asString(found.group || metadata.group);
+  const circle = asString(found.circle || metadata.circle);
+  const femaleTags = found.femaleTags ?? metadata.femaleTags;
+  const maleTags = found.maleTags ?? metadata.maleTags;
 
   return {
     slug: asString(found.slug || found.id, slug),
@@ -86,8 +109,8 @@ export function getMangaFromCatalog(slug: string): SeriesManga | null {
     cover,
     desc: asString(
       found.desc ||
-        (found.metadata as any)?.desc ||
-        (found.metadata as any)?.description ||
+        metadata.desc ||
+        metadata.description ||
         found.description,
     ),
     genres: Array.isArray(found.genres)
@@ -96,13 +119,23 @@ export function getMangaFromCatalog(slug: string): SeriesManga | null {
           .split(",")
           .map((g) => g.trim())
           .filter(Boolean),
-    status: asString(found.status || (found.metadata as any)?.status, "UNKNOWN"),
-    type: asString(found.type || (found.metadata as any)?.type, "Manga"),
-    rating: (found.rating ?? (found.metadata as any)?.rating) as number | string | null,
-    altTitle: asString(found.altTitle || (found.metadata as any)?.altTitle),
-    author: asString(found.author || (found.metadata as any)?.author, "-"),
-    artist: asString(found.artist || (found.metadata as any)?.artist, "-"),
-    nsfw: Boolean(found.nsfw ?? (found.metadata as any)?.nsfw),
+    status: asString(found.status || metadata.status, "UNKNOWN"),
+    type: asString(found.type || metadata.type, "Manga"),
+    rating: (found.rating ?? metadata.rating) as number | string | null,
+    altTitle: asString(found.altTitle || metadata.altTitle),
+    author: asString(found.author || metadata.author, "-"),
+    artist: asString(found.artist || metadata.artist, "-"),
+    publication,
+    serialization,
+    demographic: (found.demographic ?? metadata.demographic) as string | string[] | undefined,
+    series,
+    characters: characters as string | string[] | undefined,
+    group,
+    circle,
+    femaleTags: femaleTags as string | string[] | undefined,
+    maleTags: maleTags as string | string[] | undefined,
+    info: { publication, serialization, series, characters, group, circle },
+    nsfw: Boolean(found.nsfw ?? metadata.nsfw),
     updatedAt: (found.updatedAt ?? found.latestUpdate) as string | number | undefined,
     latestUpdate: (found.latestUpdate ?? found.updatedAt) as string | number | undefined,
     source: asString(found.source),

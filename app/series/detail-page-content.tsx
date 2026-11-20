@@ -375,6 +375,42 @@ function preferMetadata<T>(preferred: T | undefined, fallback: T | undefined): T
   return hasMetadataValue(preferred) ? preferred : fallback;
 }
 
+const DETAIL_METADATA_FIELDS = [
+  "publication",
+  "serialization",
+  "series",
+  "characters",
+  "group",
+  "circle",
+] as const;
+
+function hasCachedDetailMetadata(manga: Manga): boolean {
+  const info = manga.info || {};
+  const hasInfoFields = DETAIL_METADATA_FIELDS.every((field) =>
+    Object.prototype.hasOwnProperty.call(info, field),
+  );
+  return hasInfoFields || (
+    Object.keys(info).length === 0 &&
+    DETAIL_METADATA_FIELDS.every((field) =>
+      Object.prototype.hasOwnProperty.call(manga, field),
+    )
+  );
+}
+
+function mergeCachedManga(cached: Manga, fallback: Manga): Manga {
+  return {
+    ...fallback,
+    ...cached,
+    publication: preferMetadata(cached.publication, fallback.publication),
+    serialization: preferMetadata(cached.serialization, fallback.serialization),
+    series: preferMetadata(cached.series, fallback.series),
+    characters: preferMetadata(cached.characters, fallback.characters),
+    group: preferMetadata(cached.group, fallback.group),
+    circle: preferMetadata(cached.circle, fallback.circle),
+    info: { ...fallback.info, ...cached.info },
+  };
+}
+
 const SERIES_COVER_PREFERENCE_DB = "mikoroku-series-cover-preferences";
 const SERIES_COVER_PREFERENCE_STORE = "selections";
 type SeriesCoverPreference = { slug: string; url: string };
@@ -1497,9 +1533,19 @@ export default function DetailPageContent({
       setMetadataDisplaySource(nextManga.catalogSourceMode || "effective");
     };
     const loadCurrentManga = (force: boolean) => {
-      if (!force && (manga || initialManga)) {
-        setState("ready");
-        return;
+      if (!force) {
+        const availableManga = manga || initialManga;
+        const browserManga = getCurrentMangaForSlug(slug);
+        const cachedManga =
+          browserManga && availableManga
+            ? mergeCachedManga(browserManga, availableManga)
+            : browserManga || availableManga;
+        if (cachedManga) {
+          publishManga(cachedManga);
+          setState("ready");
+          void cacheMangaDetail(slug, cachedManga);
+          if (hasCachedDetailMetadata(cachedManga)) return;
+        }
       }
       controller.abort();
       controller = new AbortController();
