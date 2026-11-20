@@ -267,7 +267,7 @@ function catalogResponse(data: unknown, cacheStatus: string): Response {
   return new Response(JSON.stringify(data), {
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
+      "cache-control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
       "x-cache": cacheStatus,
       "x-content-type-options": "nosniff",
     },
@@ -518,7 +518,7 @@ async function handleMangaCatalogSource(
     return new Response(JSON.stringify({ sourceMode: await getMangaCatalogSourceMode(kv) }), {
       headers: {
         "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store",
+        "cache-control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
         "x-content-type-options": "nosniff",
       },
     });

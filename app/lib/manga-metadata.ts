@@ -36,6 +36,8 @@ let firestoreMetadataCache: {
 let mangaMetadataCache: CachedMangaMetadataPayload | null = null;
 let mangaMetadataDatabase: Promise<IDBDatabase> | null = null;
 let mangaMetadataRefresh: Promise<void> | null = null;
+let mangaMetadataPayloadRequest: Promise<MangaMetadataPayload> | null = null;
+let mangaCatalogSourceRequest: Promise<MangaCatalogSourceMode | null> | null = null;
 let mangaMetadataCacheGeneration = 0;
 let mangaCatalogSourceCache: {
   mode: MangaCatalogSourceMode;
@@ -159,6 +161,7 @@ if (typeof window !== "undefined") {
     if (event.key !== MANGA_METADATA_UPDATED_STORAGE_KEY) return;
     firestoreMetadataCache = null;
     mangaMetadataCache = null;
+    mangaCatalogSourceCache = null;
     mangaMetadataCacheGeneration += 1;
     window.dispatchEvent(new Event(MANGA_METADATA_UPDATED_EVENT));
   });
@@ -188,27 +191,43 @@ export function parseMangaMetadataPayload(value: unknown): MangaMetadataPayload 
 
 export async function fetchMangaCatalogSourceMode(
   signal?: AbortSignal,
+  force = false,
 ): Promise<MangaCatalogSourceMode | null> {
   if (
+    !force &&
     mangaCatalogSourceCache &&
     Date.now() - mangaCatalogSourceCache.checkedAt < MANGA_CATALOG_SOURCE_CACHE_TTL
   ) {
     return mangaCatalogSourceCache.mode;
   }
-  const response = await fetch("/api/catalog/source", {
-    signal,
-    cache: "no-store",
-  });
-  if (response.status === 404 || response.status === 405) return null;
-  if (!response.ok) {
-    throw new Error(`Catalog source endpoint returned HTTP ${response.status}.`);
+  if (!force && !signal && mangaCatalogSourceRequest) {
+    return mangaCatalogSourceRequest;
   }
-  const result = await response.json() as { sourceMode?: unknown };
-  if (result.sourceMode !== "effective" && result.sourceMode !== "baseline") {
-    throw new Error("Catalog source endpoint returned an invalid source mode.");
+
+  const request = (async () => {
+    const response = await fetch("/api/catalog/source", {
+      signal,
+      cache: force ? "no-store" : "default",
+    });
+    if (response.status === 404 || response.status === 405) return null;
+    if (!response.ok) {
+      throw new Error(`Catalog source endpoint returned HTTP ${response.status}.`);
+    }
+    const result = await response.json() as { sourceMode?: unknown };
+    if (result.sourceMode !== "effective" && result.sourceMode !== "baseline") {
+      throw new Error("Catalog source endpoint returned an invalid source mode.");
+    }
+    mangaCatalogSourceCache = { mode: result.sourceMode, checkedAt: Date.now() };
+    return result.sourceMode;
+  })();
+
+  if (!force && !signal) {
+    mangaCatalogSourceRequest = request;
+    void request.finally(() => {
+      if (mangaCatalogSourceRequest === request) mangaCatalogSourceRequest = null;
+    }).catch(() => undefined);
   }
-  mangaCatalogSourceCache = { mode: result.sourceMode, checkedAt: Date.now() };
-  return result.sourceMode;
+  return request;
 }
 
 async function fetchFirestoreMetadataPayload(
@@ -247,10 +266,28 @@ async function fetchFirestoreMetadataPayload(
   return payload;
 }
 
-export async function fetchMangaMetadataPayload({
+export function fetchMangaMetadataPayload(
+  options: FetchMangaMetadataOptions = {},
+): Promise<MangaMetadataPayload> {
+  const canShareRequest = !options.force && !options.signal;
+  if (canShareRequest && mangaMetadataPayloadRequest) {
+    return mangaMetadataPayloadRequest;
+  }
+
+  const request = loadMangaMetadataPayload(options);
+  if (!canShareRequest) return request;
+
+  mangaMetadataPayloadRequest = request;
+  void request.finally(() => {
+    if (mangaMetadataPayloadRequest === request) mangaMetadataPayloadRequest = null;
+  }).catch(() => undefined);
+  return request;
+}
+
+async function loadMangaMetadataPayload({
   signal,
   force = false,
-}: FetchMangaMetadataOptions = {}): Promise<MangaMetadataPayload> {
+}: FetchMangaMetadataOptions): Promise<MangaMetadataPayload> {
   if (signal?.aborted) {
     throw new DOMException("The operation was aborted.", "AbortError");
   }
@@ -258,7 +295,7 @@ export async function fetchMangaMetadataPayload({
   let sourceMode: MangaCatalogSourceMode | null = null;
   let sourceCheckFailed = false;
   try {
-    sourceMode = await fetchMangaCatalogSourceMode(signal);
+    sourceMode = await fetchMangaCatalogSourceMode(signal, force);
   } catch (error) {
     if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
       throw error;
@@ -341,7 +378,7 @@ async function fetchLatestMangaMetadataPayload({
   try {
     const response = await fetch(SHARED_MANGA_METADATA_URL, {
       signal,
-      cache: force ? "no-store" : "no-cache",
+      cache: force ? "no-store" : "default",
     });
     if (response.ok) {
       const payload: unknown = await response.json();
@@ -363,13 +400,13 @@ async function fetchLatestMangaMetadataPayload({
   let staticError: unknown;
   try {
     const url = force ? `${MANGA_METADATA_URL}?t=${Date.now()}` : MANGA_METADATA_URL;
-    const response = await fetch(url, { signal, cache: force ? "no-store" : "no-cache" });
+    const response = await fetch(url, { signal, cache: force ? "no-store" : "default" });
     if (response.ok) {
       const payload: unknown = await response.json();
       const parsed = parseMangaMetadataPayload(payload);
       return {
         ...parsed,
-        catalogSourceMode: (await fetchMangaCatalogSourceMode(signal)) || "effective",
+        catalogSourceMode: (await fetchMangaCatalogSourceMode(signal, force)) || "effective",
         firestoreDeltasIncluded: false,
       };
     }

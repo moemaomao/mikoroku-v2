@@ -821,7 +821,6 @@ async function loadBloggerChapterSource(
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
     signal,
-    cache: "no-store",
     headers: { Accept: "application/json" },
   });
 

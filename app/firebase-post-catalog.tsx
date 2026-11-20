@@ -324,7 +324,9 @@ export default function FirebasePostCatalog() {
     window.addEventListener("mangaDataReady", syncSharedCatalog);
     const controller = new AbortController();
     void refresh(controller.signal);
-    const interval = window.setInterval(() => void refresh(), 10 * 60 * 1000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 30 * 60 * 1000);
     return () => {
       controller.abort();
       window.clearInterval(interval);
