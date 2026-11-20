@@ -33,8 +33,10 @@ import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { markHomepageSeriesNavigation } from "./lib/home-navigation";
+import { refreshGlobalAppearance } from "./lib/global-appearance";
 import { preloadDetailPageContent } from "./series/detail-page-client";
 import SeriesCardPrefetch from "./series/series-card-prefetch";
+import { latestChapterFromRecord } from "../lib/latest-chapter";
 
 type MangaItem = Record<string, unknown> & {
   title: string;
@@ -370,8 +372,11 @@ function isManaged(metadata?: FirestoreMeta): boolean {
 
 function chapterNumber(item: MangaItem, metadata?: FirestoreMeta): number {
   const candidates = [
-    metadata?.lastChapter, metadata?.lastChapterUpdated,
-    item.lastChapter, item.lastChapterUpdated, item.chapters, item.chapter,
+    latestChapterFromRecord({
+      ...item,
+      lastChapter: metadata?.lastChapter || item.lastChapter,
+      lastChapterUpdated: metadata?.lastChapterUpdated || item.lastChapterUpdated,
+    }),
     item.total_chapter, item.totalChapter,
   ];
   let maximum = -1;
@@ -884,6 +889,12 @@ export default function GithubMangaCatalog({ children }: { children?: ReactNode 
     }, 5000);
     return () => window.clearInterval(timer);
   }, [heroItems.length, heroVisibleCount]);
+
+  useEffect(() => {
+    if (visibleCount <= PAGE_SIZE) return;
+    const frame = window.requestAnimationFrame(() => refreshGlobalAppearance());
+    return () => window.cancelAnimationFrame(frame);
+  }, [visibleCount]);
 
   const sortedItems = useMemo(() => {
     const timeOf = (item: MangaItem) => {

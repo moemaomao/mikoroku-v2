@@ -47,19 +47,12 @@ export function schedulePrefetch(slug: string, task: PrefetchTask): void {
   );
 }
 
-/**
- * Prefetch the Next.js route (RSC payload) only — cheap.
- */
 export function prefetchSeriesRoute(slug: string): void {
   if (typeof window === "undefined") return;
 
   schedulePrefetch(slug, () => {
-    // Use Next.js router when available
     try {
-      // dynamic import to avoid SSR issues
       return import("next/navigation").then(() => {
-        // App Router does not expose router.prefetch the same way as Pages.
-        // Prefer <Link prefetch={true}> on visible cards, or:
         const link = document.createElement("link");
         link.rel = "prefetch";
         link.href = `/series/${encodeURIComponent(slug)}`;
@@ -75,10 +68,6 @@ export function prefetchSeriesRoute(slug: string): void {
   });
 }
 
-/**
- * Optional: warm the JS chunk for detail content (not data).
- * Call rarely (e.g. first hover on any card).
- */
 let detailChunkWarmed = false;
 export function warmDetailChunk(importFn: () => Promise<unknown>): void {
   if (detailChunkWarmed || typeof window === "undefined") return;
