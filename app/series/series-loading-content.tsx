@@ -1,9 +1,17 @@
 "use client";
 
+import type { CSSProperties } from "react";
+
 export default function SeriesLoadingContent() {
+  const detailLayoutStyle = {
+    "--detail-gutter": "32px",
+    "--detail-max-width": "1250px",
+  } as CSSProperties;
+
   return (
     <main
       className="detail-route route-page-background relative isolate z-[2] min-h-screen bg-transparent text-[#050000] dark:text-white"
+      style={detailLayoutStyle}
       aria-busy="true"
       aria-label="Memuat detail manga"
     >
@@ -34,7 +42,11 @@ export default function SeriesLoadingContent() {
                   <div key={index} className="flex h-[14px] items-center gap-1">
                     <div className="h-2.5 w-3 shrink-0 animate-pulse rounded bg-white/10" />
                     <div className="h-2.5 w-12 animate-pulse rounded bg-white/10" />
-                    <div className={`h-2.5 animate-pulse rounded bg-white/10 ${index % 2 ? "w-2/5" : "w-1/2"}`} />
+                    <div
+                      className={`h-2.5 animate-pulse rounded bg-white/10 ${
+                        index % 2 ? "w-2/5" : "w-1/2"
+                      }`}
+                    />
                   </div>
                 ))}
               </div>
@@ -43,7 +55,10 @@ export default function SeriesLoadingContent() {
 
           <div className="genres grid grid-cols-4 gap-2 rounded-[14px] px-[14px] py-[15px] md:col-start-2 md:mx-0 md:w-auto md:grid-cols-[repeat(auto-fit,minmax(110px,1fr))] md:gap-[10px] md:px-0 md:py-2">
             {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-[27px] animate-pulse rounded-lg bg-white/10" />
+              <div
+                key={index}
+                className="h-[27px] animate-pulse rounded-lg bg-white/10"
+              />
             ))}
           </div>
 
@@ -62,7 +77,10 @@ export default function SeriesLoadingContent() {
           <div className="mb-3 flex items-center justify-between px-3 md:col-start-2 md:px-0">
             <div className="flex gap-2">
               {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className="h-8 w-8 animate-pulse rounded-lg bg-white/10" />
+                <div
+                  key={index}
+                  className="h-8 w-8 animate-pulse rounded-lg bg-white/10"
+                />
               ))}
             </div>
             <div className="flex gap-1">
@@ -79,19 +97,30 @@ export default function SeriesLoadingContent() {
 
           <div className="chapter-grid grid grid-cols-4 gap-2 px-4 pb-[30px] md:col-start-2 md:grid-cols-6 md:gap-[10px] md:px-0 md:pb-10 lg:grid-cols-8 lg:pb-[50px]">
             {Array.from({ length: 12 }, (_, index) => (
-              <div key={index} className="h-11 animate-pulse rounded-md bg-white/10" />
+              <div
+                key={index}
+                className="h-11 animate-pulse rounded-md bg-white/10"
+              />
             ))}
           </div>
         </div>
       </div>
+
       <aside
         className="pointer-events-none fixed hidden w-[220px] animate-pulse lg:block"
-        style={{ left: "calc(var(--detail-content-left) + var(--detail-content-width) + var(--detail-rec-gap))", top: 30 }}
+        style={{
+          left:
+            "calc(var(--detail-content-left) + var(--detail-content-width) + var(--detail-rec-gap))",
+          top: 30,
+        }}
         aria-hidden="true"
       >
         <div className="mb-3 h-8 rounded-lg bg-black/10 dark:bg-white/[0.08]" />
         {Array.from({ length: 7 }, (_, index) => (
-          <div key={index} className="mb-2 flex h-[72px] items-center gap-2 rounded-lg border border-white/10 bg-black/10 p-2 dark:bg-black/25">
+          <div
+            key={index}
+            className="mb-2 flex h-[72px] items-center gap-2 rounded-lg border border-white/10 bg-black/10 p-2 dark:bg-black/25"
+          >
             <div className="h-[56px] w-[42px] shrink-0 rounded-md bg-white/10" />
             <div className="flex-1 space-y-2">
               <div className="h-2.5 w-full rounded bg-white/10" />
