@@ -36,48 +36,18 @@ export function Icon({ name, className = "h-6 w-6" }: { name: string; className?
   }
 }
 
-export function SidebarLink({
-  href,
-  icon,
-  children,
-  onClick,
-  external = false,
-}: {
+export function SidebarLink({ href, icon, children, onClick, external = false }: {
   href: string;
   icon: string;
   children: ReactNode;
   onClick?: () => void;
   external?: boolean;
 }) {
-  const className =
-    "relative z-[1] flex w-full cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-slate-900 no-underline transition hover:bg-white/75 hover:text-black dark:text-indigo-50/90 dark:hover:bg-white/10 dark:hover:text-white";
-
-  const content = (
-    <>
-      <Icon name={icon} className="pointer-events-none h-5 w-5 shrink-0" />
-      <span className="pointer-events-none">{children}</span>
-    </>
-  );
-
-  if (external) {
-    return (
-      <a
-        className={className}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={onClick}
-      >
-        {content}
-      </a>
-    );
-  }
-
-  return (
-    <Link className={className} href={href} prefetch onClick={onClick}>
-      {content}
-    </Link>
-  );
+  const className = "flex w-full items-center gap-3 rounded-xl border border-transparent px-3.5 py-3 text-sm font-medium text-slate-900 no-underline transition hover:bg-white/75 hover:text-black dark:text-indigo-50/90 dark:hover:bg-white/10 dark:hover:text-white";
+  const content = <><Icon name={icon} className="h-5 w-5 shrink-0" />{children}</>;
+  return external
+    ? <a className={className} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{content}</a>
+    : <a className={className} href={href} onClick={onClick}>{content}</a>;
 }
 
 export function SiteSidebar({
@@ -101,15 +71,12 @@ export function SiteSidebar({
   return (
     <>
       <button type="button" tabIndex={mobile && open ? 0 : -1} aria-label="Close navigation menu" aria-hidden={!(mobile && open)} onClick={onClose} className={`fixed inset-0 z-[10000] bg-slate-900/35 transition-opacity duration-200 min-[769px]:hidden ${mobile && open ? "visible opacity-100" : "pointer-events-none invisible opacity-0"}`} />
-      <aside
-         id="siteSidebar"
-         aria-hidden={!open}
-         {...(mobile && !open ? { inert: true as const } : {})}
-         aria-label="Navigation menu"
-         className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.72)_0%,rgba(248,250,252,0.84)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[3px_14px_18px] text-indigo-950 transition-transform duration-300 ease-in-out dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] min-[769px]:transition-none ${
-         open ? "translate-x-0" : "-translate-x-full"
-        }`}
-        >
+      <aside id="siteSidebar" aria-hidden={!open} inert={!open} aria-label="Navigation menu" className={`fixed left-0 top-0 z-[10001] flex h-dvh w-[var(--sidebar-width)] max-w-[85vw] flex-col overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.72)_0%,rgba(248,250,252,0.84)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] bg-cover bg-center p-[3px_14px_18px] text-indigo-950 transition-transform duration-300 ease-in-out dark:bg-[linear-gradient(180deg,rgba(11,16,32,0.637)_0%,rgba(11,16,32,0.88)_100%),url('https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg')] dark:text-indigo-50 min-[769px]:max-w-[var(--sidebar-width)] min-[769px]:transition-none ${open ? "translate-x-0" : "-translate-x-full"}`}>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-[calc(3.5rem-1px)] h-px"
+          style={{ backgroundColor: "var(--mikoroku-accent-border, color-mix(in srgb, var(--mikoroku-accent, #9d1018) 40%, transparent))" }}
+        />
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5 pb-[33px] pt-1">
           <Link href="/" aria-label="Mikoroku home" onClick={(event) => {
             returnToHomepageIfPossible(event);
