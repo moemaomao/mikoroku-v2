@@ -68,7 +68,8 @@ export function returnToHomepageIfPossible(
     marker !== null &&
     marker.pathname === window.location.pathname &&
     Date.now() - marker.createdAt < NAVIGATION_MARKER_TTL &&
-    window.history.length > 1;
+    window.history.length > 1 &&
+    document.readyState === "complete";
 
   try {
     window.sessionStorage.removeItem(HOMEPAGE_SERIES_NAVIGATION_KEY);
