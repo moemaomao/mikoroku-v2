@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import {
@@ -37,13 +36,10 @@ import {
 import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
-import { markHomepageSeriesNavigation } from "./lib/home-navigation";
 import {
   getLatestChapterUpdateTimestamp,
   refreshGlobalAppearance,
 } from "./lib/global-appearance";
-import { preloadDetailPageContent } from "./series/detail-page-client";
-import SeriesCardPrefetch from "./series/series-card-prefetch";
 import { latestChapterFromRecord } from "../lib/latest-chapter";
 
 type MangaItem = Record<string, unknown> & {
@@ -596,22 +592,16 @@ function MangaCard({
   if (!href) return null;
 
   return (
-    <SeriesCardPrefetch
-      slug={slug}
+    <a
       href={href}
       className={animate ? cardClass : cardClassStatic}
-      prefetchOnHover={true}
-      prefetchOnVisible={false}
-      onNavigate={(event) => {
+      data-slug={slug}
+      onClick={() => {
         try {
           localStorage.setItem("currentManga", JSON.stringify(manga));
         } catch {
           setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
         }
-        markHomepageSeriesNavigation(
-          href,
-          event,
-        );
       }}
     >
       <div
@@ -691,7 +681,7 @@ function MangaCard({
           </div>
         </div>
       </div>
-    </SeriesCardPrefetch>
+    </a>
   );
 }
 
@@ -740,7 +730,6 @@ function GithubMangaCatalog({ children }: { children?: ReactNode }) {
   metadataRef.current = metadata;
 
   useEffect(() => {
-    preloadDetailPageContent();
     setHasMounted(true);
     const cached = readCachedItems();
     const cachedMeta = readCachedMetadata();
@@ -1229,21 +1218,17 @@ function CatalogCard({
   if (!href) return null;
 
   return (
-    <Link
+    <a
       className={cardClass}
       data-slug={record.slug}
       data-section={section}
       href={href}
-      prefetch={false}
-      onMouseEnter={preloadDetailPageContent}
-      onFocus={preloadDetailPageContent}
-      onClick={(event) => {
+      onClick={() => {
         try {
           localStorage.setItem("currentManga", JSON.stringify(record));
         } catch {
           setLocalStorageCacheItem("currentManga", JSON.stringify(record));
         }
-        markHomepageSeriesNavigation(href, event);
       }}
     >
       <div className={cardCoverClass}>
@@ -1305,7 +1290,7 @@ function CatalogCard({
           <div className={cardTitleClass}>{record.title}</div>
         </div>
       </div>
-    </Link>
+    </a>
   );
 }
 
