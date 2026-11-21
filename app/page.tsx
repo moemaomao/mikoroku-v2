@@ -17,7 +17,7 @@ export default function HomePage() {
           <HeroFeatured />
         </div>
         <BannerAdSlot placement="site-top" />
-        <div className="main-layout mx-0 flex w-full items-start gap-5 px-4 transition-[margin-left,width] duration-300 min-[769px]:ml-[var(--sidebar-width,240px)] min-[769px]:w-[calc(100%-var(--sidebar-width,240px))] min-[769px]:max-w-full min-[769px]:px-[15px] min-[769px]:gap-5 min-[1101px]:flex-row max-[1100px]:!my-0 max-[1100px]:!ml-0 max-[1100px]:!w-full max-[1100px]:!flex-col max-[1100px]:!gap-0 max-[1100px]:!px-3 min-[1400px]:gap-7 min-[1400px]:px-6 min-[1101px]:max-[1199px]:gap-4 min-[1101px]:max-[1199px]:px-[14px] max-[768px]:!px-[10px] max-[480px]:!px-2 [body.left-sidebar-closed_&]:!ml-0 [body.left-sidebar-closed_&]:!w-full [body.sidebar-open_&]:!ml-[var(--sidebar-width)] [body.sidebar-open_&]:!w-[calc(100%-var(--sidebar-width))]">
+        <div className="main-layout home-page-layout mx-0 flex w-full items-start gap-5 px-4 transition-[margin-left,width] duration-300 min-[769px]:max-w-full min-[769px]:px-[15px] min-[769px]:gap-5 min-[1101px]:flex-row max-[1100px]:!my-0 max-[1100px]:!ml-0 max-[1100px]:!w-full max-[1100px]:!flex-col max-[1100px]:!gap-0 max-[1100px]:!px-3 min-[1400px]:gap-7 min-[1400px]:px-6 min-[1101px]:max-[1199px]:gap-4 min-[1101px]:max-[1199px]:px-[14px] max-[768px]:!px-[10px] max-[480px]:!px-2">
           <section className="content min-w-0 w-auto flex-[1_1_0%] max-[1100px]:!order-1 max-[1100px]:!w-full max-[1100px]:!flex-none" aria-label="Katalog terbaru">
             <GithubMangaCatalog>
               <h2 className={homepageSectionHeadingClass}>
