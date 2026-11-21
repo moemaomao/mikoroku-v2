@@ -831,11 +831,13 @@ async function handleMangaCatalogSourceUpdate(
 
     const previousMode = await getMangaCatalogSourceMode(kv);
     if (previousMode === body.sourceMode) {
+      const payload = await refreshMangaCatalogOnce(env, request.url, kv, body.sourceMode);
       return new Response(
         JSON.stringify({
           ok: true,
           sourceMode: body.sourceMode,
           unchanged: true,
+          mangaCount: Array.isArray(payload.manga) ? payload.manga.length : 0,
         }),
         {
           headers: {
@@ -1018,28 +1020,43 @@ async function fetchFirestoreMangaChanges(
   queryFields = ["updatedAt", "metadataUpdatedAt"],
 ): Promise<Array<{ id: string; record: Record<string, unknown> }>> {
   const queryField = async (fieldPath: string) => {
-    const response = await fetchUpstream(`${FIRESTORE_DOCUMENTS_URL}:runQuery`, {
+    const requestBody = JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "manga" }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath },
+            op: "GREATER_THAN",
+            value: { doubleValue: cursor },
+          },
+        },
+      },
+    });
+    let response = await fetchUpstream(`${FIRESTORE_DOCUMENTS_URL}:runQuery`, {
       method: "POST",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        structuredQuery: {
-          from: [{ collectionId: "manga" }],
-          where: {
-            fieldFilter: {
-              field: { fieldPath },
-              op: "GREATER_THAN",
-              value: { doubleValue: cursor },
-            },
-          },
-        },
-      }),
+      body: requestBody,
     });
+    for (let attempt = 0; response.status === 429 && attempt < 2; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+      response = await fetchUpstream(`${FIRESTORE_DOCUMENTS_URL}:runQuery`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: requestBody,
+      });
+    }
     if (!response.ok) {
-      throw new Error(`Firestore manga ${fieldPath} delta query returned HTTP ${response.status}.`);
+      throw new Error(
+        `Firestore manga ${fieldPath} delta query returned HTTP ${response.status} after retries.`,
+      );
     }
 
     const rows = await response.json() as Array<{
