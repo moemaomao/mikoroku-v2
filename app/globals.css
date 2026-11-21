@@ -62,6 +62,14 @@
   }
 }
 
+@media (min-width: 1101px) {
+  html:not([data-card-display="list"]) body.sidebar-open #githubManga,
+  html:not([data-card-display="list"]) body.sidebar-open #firebaseManga,
+  html:not([data-card-display="list"]) body.sidebar-open #firebaseNovel {
+    grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+  }
+}
+
 :root {
   --mikoroku-theme-gradient: linear-gradient(180deg, #481126 0%, #120d14 60%, #0b0b0b 100%);
   --mikoroku-sidebar-gradient-start: #481126;
