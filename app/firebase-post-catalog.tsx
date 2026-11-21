@@ -218,7 +218,7 @@ function CatalogCard({
       data-slug={record.slug}
       data-section={section}
       href={href}
-      prefetch={true}
+      prefetch={false}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
       onClick={(event) => {

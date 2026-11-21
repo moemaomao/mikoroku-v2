@@ -56,7 +56,7 @@ export default function SeriesCardPrefetch({
       href={targetHref}
       className={className}
       data-slug={slug}
-      prefetch={true}
+      prefetch={false}
       onMouseEnter={prefetchOnHover ? warm : undefined}
       onPointerDown={warm}
       onClick={(event) => {
