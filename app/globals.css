@@ -36,10 +36,10 @@
 @media (min-width: 1101px) {
   .home-page-layout {
     box-sizing: border-box;
-    width: calc(100% - 64px) !important;
-    max-width: 1550px !important;
-    margin-left: max(32px, calc((100% - 1550px) / 2)) !important;
-    margin-right: max(32px, calc((100% - 1550px) / 2)) !important;
+    width: calc(100% - 32px) !important;
+    max-width: 1700px !important;
+    margin-left: max(16px, calc((100% - 1700px) / 2)) !important;
+    margin-right: max(16px, calc((100% - 1700px) / 2)) !important;
     transition:
       width 300ms cubic-bezier(0.22, 1, 0.36, 1),
       margin-left 300ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -47,18 +47,18 @@
   }
 
   html body.sidebar-open .home-page-layout {
-    width: calc(100% - var(--sidebar-width) - 64px) !important;
-    max-width: 1550px !important;
-    margin-left: calc(var(--sidebar-width) + max(32px, calc((100% - var(--sidebar-width) - 1550px) / 2))) !important;
-    margin-right: max(32px, calc((100% - var(--sidebar-width) - 1550px) / 2)) !important;
+    width: calc(100% - var(--sidebar-width) - 32px) !important;
+    max-width: 1700px !important;
+    margin-left: calc(var(--sidebar-width) + max(16px, calc((100% - var(--sidebar-width) - 1700px) / 2))) !important;
+    margin-right: max(16px, calc((100% - var(--sidebar-width) - 1700px) / 2)) !important;
   }
 
   html body.left-sidebar-closed .home-page-layout,
   html body:not(.sidebar-open) .home-page-layout {
-    width: calc(100% - 64px) !important;
-    max-width: 1550px !important;
-    margin-left: max(32px, calc((100% - 1550px) / 2)) !important;
-    margin-right: max(32px, calc((100% - 1550px) / 2)) !important;
+    width: calc(100% - 32px) !important;
+    max-width: 1700px !important;
+    margin-left: max(16px, calc((100% - 1700px) / 2)) !important;
+    margin-right: max(16px, calc((100% - 1700px) / 2)) !important;
   }
 }
 
