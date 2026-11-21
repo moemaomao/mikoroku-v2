@@ -10,6 +10,7 @@ type HeroCover = {
   title: string;
   slug: string;
   cover: string;
+  timestamp?: number;
   nsfw?: boolean;
   subtitle?: string;
 };
@@ -35,13 +36,30 @@ function resolveCover(value: unknown): string {
   return "";
 }
 
-function shuffle<T>(items: T[]): T[] {
-  const shuffled = [...items];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+function toTimestamp(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value < 1e8) return 0;
+    return value < 1e11 ? value * 1000 : value;
   }
-  return shuffled;
+  if (value && typeof value === "object") {
+    const timestamp = value as { toMillis?: () => number; seconds?: number; _seconds?: number };
+    if (typeof timestamp.toMillis === "function") return timestamp.toMillis();
+    const seconds = timestamp.seconds ?? timestamp._seconds;
+    if (typeof seconds === "number") return seconds * 1000;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric >= 1e8) {
+      return numeric < 1e11 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function compareCovers(a: HeroCover, b: HeroCover): number {
+  return (b.timestamp || 0) - (a.timestamp || 0);
 }
 
 function pickFromWindow(limit = 15): HeroCover[] {
@@ -67,6 +85,21 @@ function pickFromWindow(limit = 15): HeroCover[] {
       .find(Boolean) || "";
     if (!raw) return;
     seen.add(key);
+    const timestamp = Math.max(
+      ...[matchedData, item]
+        .flatMap((record) => record
+          ? [
+              record.lastChapterUpdated,
+              record.latestUpdate,
+              record.updatedAt,
+              record.timestamp,
+              record.published,
+              record.createdAt,
+              record.date,
+            ]
+          : [])
+        .map(toTimestamp),
+    );
     const resolvedNsfw = dataMatch && typeof dataMatch === "object" &&
       typeof (dataMatch as Record<string, unknown>).nsfw === "boolean"
       ? (dataMatch as Record<string, unknown>).nsfw === true
@@ -75,6 +108,7 @@ function pickFromWindow(limit = 15): HeroCover[] {
       title: item.title,
       slug: slug || key,
       cover: raw,
+      timestamp,
       nsfw: resolvedNsfw,
       subtitle: Array.isArray(item.genres)
         ? (item.genres as string[]).slice(0, 2).join(" · ")
@@ -99,18 +133,18 @@ function pickFromWindow(limit = 15): HeroCover[] {
     }
   }
 
-  const randomizedGithubPool = shuffle(githubPool);
-  const randomizedFirestorePool = shuffle(firestorePool);
+  githubPool.sort(compareCovers);
+  firestorePool.sort(compareCovers);
   const pool: HeroCover[] = [];
   const fsCap = Math.max(2, Math.floor(limit * 0.3));
   const ghCap = limit - fsCap;
 
-  for (let i = 0; i < randomizedGithubPool.length && pool.length < ghCap; i++) {
-    pool.push(randomizedGithubPool[i]);
+  for (let i = 0; i < githubPool.length && pool.length < ghCap; i++) {
+    pool.push(githubPool[i]);
   }
 
-  for (let i = 0; i < randomizedFirestorePool.length && pool.length < limit && i < fsCap; i++) {
-    pool.push(randomizedFirestorePool[i]);
+  for (let i = 0; i < firestorePool.length && pool.length < limit && i < fsCap; i++) {
+    pool.push(firestorePool[i]);
   }
 
   const ghPart = pool.slice(0, Math.min(pool.length, ghCap));
@@ -123,7 +157,7 @@ function pickFromWindow(limit = 15): HeroCover[] {
   }
 
   if (mixed.length < limit) {
-    for (const item of [...randomizedGithubPool, ...randomizedFirestorePool]) {
+    for (const item of [...githubPool, ...firestorePool]) {
       if (mixed.length >= limit) break;
       if (!mixed.some((p) => normalizeTitle(p.title) === normalizeTitle(item.title))) {
         mixed.push(item);
@@ -193,6 +227,9 @@ export default function HeroFeatured() {
   const [titlePhase, setTitlePhase] = useState<"in" | "out">("in");
   const [failedCovers, setFailedCovers] = useState<Set<string>>(() => new Set());
   const titleToken = useRef(0);
+  const lastSelectionRef = useRef("");
+  const activeSlugRef = useRef<string | null>(null);
+  activeSlugRef.current = covers[active]?.slug ?? null;
 
   useEffect(() => {
     const id = "mikoroku-cyber-font";
@@ -244,8 +281,13 @@ export default function HeroFeatured() {
     const apply = () => {
       const picked = pickFromWindow(15);
       if (picked.length >= 9) {
+        const selection = JSON.stringify(picked);
+        if (selection === lastSelectionRef.current) return;
+
+        lastSelectionRef.current = selection;
+        const activeIndex = picked.findIndex((item) => item.slug === activeSlugRef.current);
         setCovers(picked);
-        setActive(0);
+        setActive(activeIndex >= 0 ? activeIndex : 0);
       }
     };
     apply();
