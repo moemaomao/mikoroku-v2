@@ -34,10 +34,16 @@ export function markHomepageSeriesNavigation(
   try {
     window.sessionStorage.setItem(
       HOMEPAGE_SERIES_NAVIGATION_KEY,
-      JSON.stringify({ pathname, createdAt: Date.now() } satisfies HomepageNavigationMarker),
+      JSON.stringify({
+        pathname,
+        createdAt: Date.now(),
+      } satisfies HomepageNavigationMarker),
     );
   } catch (error) {
-    console.warn("Homepage navigation could not be cached for a fast return.", error);
+    console.warn(
+      "Homepage navigation could not be cached for a fast return.",
+      error,
+    );
   }
 }
 
@@ -50,7 +56,9 @@ export function returnToHomepageIfPossible(
   let marker: HomepageNavigationMarker | null = null;
   try {
     const raw = window.sessionStorage.getItem(HOMEPAGE_SERIES_NAVIGATION_KEY);
-    marker = raw ? JSON.parse(raw) as HomepageNavigationMarker : null;
+    marker = raw
+      ? (JSON.parse(raw) as HomepageNavigationMarker)
+      : null;
   } catch (error) {
     console.warn("Homepage navigation cache could not be read.", error);
   }
@@ -71,9 +79,5 @@ export function returnToHomepageIfPossible(
   if (canRestoreHomepage) {
     event.preventDefault();
     window.history.back();
-    return;
   }
-
-  event.preventDefault();
-  window.location.assign(event.currentTarget.href);
 }
