@@ -348,7 +348,7 @@
 
 /* Desktop: hero shifts with sidebar */
 @media (min-width: 769px) {
-  :global(body.sidebar-open) .hero {
+  :global(html[data-site-sidebar-open="true"]) .hero {
     margin-left: var(--sidebar-w);
     width: calc(100% - var(--sidebar-w));
   }

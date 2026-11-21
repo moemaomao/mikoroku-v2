@@ -46,15 +46,14 @@
       margin-right 300ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  html body.sidebar-open .home-page-layout {
+  html[data-site-sidebar-open="true"] .home-page-layout {
     width: calc(100% - var(--sidebar-width) - 32px) !important;
     max-width: 1700px !important;
     margin-left: calc(var(--sidebar-width) + max(16px, calc((100% - var(--sidebar-width) - 1700px) / 2))) !important;
     margin-right: max(16px, calc((100% - var(--sidebar-width) - 1700px) / 2)) !important;
   }
 
-  html body.left-sidebar-closed .home-page-layout,
-  html body:not(.sidebar-open) .home-page-layout {
+  html:not([data-site-sidebar-open="true"]) .home-page-layout {
     width: calc(100% - 32px) !important;
     max-width: 1700px !important;
     margin-left: max(16px, calc((100% - 1700px) / 2)) !important;
@@ -63,18 +62,25 @@
 }
 
 @media (min-width: 1101px) {
-  html:not([data-card-display="list"]) body.sidebar-open #githubManga,
-  html:not([data-card-display="list"]) body.sidebar-open #firebaseManga,
-  html:not([data-card-display="list"]) body.sidebar-open #firebaseNovel {
+  html:not([data-card-display="list"])[data-site-sidebar-open="true"] #githubManga,
+  html:not([data-card-display="list"])[data-site-sidebar-open="true"] #firebaseManga,
+  html:not([data-card-display="list"])[data-site-sidebar-open="true"] #firebaseNovel {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
 }
 
 @media (min-width: 1300px) {
-  html:not([data-card-display="list"]) body.sidebar-open #githubManga,
-  html:not([data-card-display="list"]) body.sidebar-open #firebaseManga,
-  html:not([data-card-display="list"]) body.sidebar-open #firebaseNovel {
+  html:not([data-card-display="list"])[data-site-sidebar-open="true"] #githubManga,
+  html:not([data-card-display="list"])[data-site-sidebar-open="true"] #firebaseManga,
+  html:not([data-card-display="list"])[data-site-sidebar-open="true"] #firebaseNovel {
     grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 769px) {
+  html[data-site-sidebar-open="true"] #site-footer {
+    margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
   }
 }
 
