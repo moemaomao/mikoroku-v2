@@ -66,7 +66,15 @@
   html:not([data-card-display="list"]) body.sidebar-open #githubManga,
   html:not([data-card-display="list"]) body.sidebar-open #firebaseManga,
   html:not([data-card-display="list"]) body.sidebar-open #firebaseNovel {
-    grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+}
+
+@media (min-width: 1300px) {
+  html:not([data-card-display="list"]) body.sidebar-open #githubManga,
+  html:not([data-card-display="list"]) body.sidebar-open #firebaseManga,
+  html:not([data-card-display="list"]) body.sidebar-open #firebaseNovel {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 }
 
