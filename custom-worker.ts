@@ -1041,8 +1041,18 @@ async function fetchFirestoreMangaChanges(
       },
       body: requestBody,
     });
-    for (let attempt = 0; response.status === 429 && attempt < 2; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+    for (let attempt = 0; response.status === 429 && attempt < 4; attempt += 1) {
+      const retryAfter = response.headers.get("retry-after");
+      const retryAfterSeconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+      const retryAfterDate = retryAfter === null ? Number.NaN : Date.parse(retryAfter);
+      const retryDelay = Number.isFinite(retryAfterSeconds)
+        ? Math.min(8_000, Math.max(0, retryAfterSeconds * 1_000))
+        : Number.isFinite(retryAfterDate)
+          ? Math.min(8_000, Math.max(0, retryAfterDate - Date.now()))
+          : Math.min(8_000, 1_000 * 2 ** attempt);
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelay + Math.floor(Math.random() * 250)),
+      );
       response = await fetchUpstream(`${FIRESTORE_DOCUMENTS_URL}:runQuery`, {
         method: "POST",
         headers: {
