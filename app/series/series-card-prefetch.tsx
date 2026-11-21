@@ -1,16 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useRef } from "react";
+import Link from "next/link";
+import { useCallback, useRef, type MouseEvent, type ReactNode } from "react";
 import { preloadDetailPageContent } from "./detail-page-client";
 
 type SeriesCardPrefetchProps = {
   slug: string;
   href?: string;
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   prefetchOnHover?: boolean;
   prefetchOnVisible?: boolean;
+  onNavigate?: (event: MouseEvent<HTMLAnchorElement>) => void;
 };
 
 export default function SeriesCardPrefetch({
@@ -20,8 +21,8 @@ export default function SeriesCardPrefetch({
   children,
   prefetchOnHover = true,
   prefetchOnVisible = false,
+  onNavigate,
 }: SeriesCardPrefetchProps) {
-  const router = useRouter();
   const warmedRef = useRef(false);
   const targetHref = href ?? `/series/${encodeURIComponent(slug)}`;
 
@@ -31,9 +32,8 @@ export default function SeriesCardPrefetch({
     preloadDetailPageContent();
   }, []);
 
-  const onMouseEnter = prefetchOnHover ? warm : undefined;
   const setNode = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node: HTMLAnchorElement | null) => {
       if (!node || !prefetchOnVisible) return;
       const io = new IntersectionObserver(
         (entries) => {
@@ -51,19 +51,19 @@ export default function SeriesCardPrefetch({
   );
 
   return (
-    <div
+    <Link
       ref={setNode}
+      href={targetHref}
       className={className}
       data-slug={slug}
-      onMouseEnter={onMouseEnter}
+      prefetch={true}
+      onMouseEnter={prefetchOnHover ? warm : undefined}
       onPointerDown={warm}
       onClick={(event) => {
-        if (!(event.target instanceof Element)) return;
-        if (event.target.closest("a, button")) return;
-        router.push(targetHref);
+        onNavigate?.(event);
       }}
     >
       {children}
-    </div>
+    </Link>
   );
 }

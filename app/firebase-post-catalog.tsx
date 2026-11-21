@@ -56,7 +56,9 @@ function CatalogSkeleton() {
       aria-hidden="true"
       className={`${staticCardClass} skeleton-card overflow-hidden rounded-lg ${skeletonListCardClass}`}
     >
-      <div className={`${cardCoverClass} skeleton-thumb animate-pulse bg-gradient-to-r from-[#1a1a1a] via-[#242424] to-[#1a1a1a] ${skeletonListCoverClass}`} />
+      <div
+        className={`${cardCoverClass} skeleton-thumb animate-pulse bg-gradient-to-r from-[#1a1a1a] via-[#242424] to-[#1a1a1a] ${skeletonListCoverClass}`}
+      />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[50px] flex-col items-center justify-end gap-2 px-2 pb-7 list-mode:hidden md:flex">
         <div className="h-3 w-3/4 animate-pulse rounded bg-white/20" />
         <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/10" />
@@ -65,7 +67,9 @@ function CatalogSkeleton() {
         <div className="h-full flex-1 animate-pulse bg-white/[0.06]" />
         <div className="h-full flex-1 animate-pulse bg-white/[0.04]" />
       </div>
-      <div className={`hidden flex-1 flex-col justify-center gap-2 p-3 ${skeletonListContentClass}`}>
+      <div
+        className={`hidden flex-1 flex-col justify-center gap-2 p-3 ${skeletonListContentClass}`}
+      >
         <div className="h-3 w-3/4 animate-pulse rounded bg-[#2a2a2a]" />
         <div className="h-4 w-full animate-pulse rounded bg-[#222]" />
         <div className="h-4 w-5/6 animate-pulse rounded bg-[#222]" />
@@ -206,14 +210,15 @@ function CatalogCard({
   const status = String(value(record, "status") || "");
   const commissionEnabled = value(record, "commissionEnabled") === true;
   const updatedAt = Number(record.updatedAt || 0);
+  const href = `/series/${encodeURIComponent(record.slug)}`;
 
   return (
     <Link
       className={cardClass}
       data-slug={record.slug}
       data-section={section}
-      href={`/series/${encodeURIComponent(record.slug)}`}
-      prefetch={false}
+      href={href}
+      prefetch={true}
       onMouseEnter={preloadDetailPageContent}
       onFocus={preloadDetailPageContent}
       onClick={(event) => {
@@ -222,7 +227,7 @@ function CatalogCard({
         } catch {
           setLocalStorageCacheItem("currentManga", JSON.stringify(record));
         }
-        markHomepageSeriesNavigation(`/series/${encodeURIComponent(record.slug)}`, event);
+        markHomepageSeriesNavigation(href, event);
       }}
     >
       <div className={cardCoverClass}>
@@ -232,12 +237,17 @@ function CatalogCard({
         {updatedAt > 0 && Date.now() - updatedAt < 86400000 && (
           <div className={upBadgeClass}>UP</div>
         )}
-        {commissionEnabled && <div className={commissionBadgeClass}>COMMISSION</div>}
+        {commissionEnabled && (
+          <div className={commissionBadgeClass}>COMMISSION</div>
+        )}
         {(type || status) && (
           <div className={bottomBadgeBarClass}>
             {type ? (
               <div
-                className={`${typeBadgeClass} ${typeBadgeColors[type.replace(/\s+/g, "-")] || typeBadgeColors.default}`}
+                className={`${typeBadgeClass} ${
+                  typeBadgeColors[type.replace(/\s+/g, "-")] ||
+                  typeBadgeColors.default
+                }`}
               >
                 {type.toUpperCase()}
               </div>
@@ -246,7 +256,9 @@ function CatalogCard({
             )}
             {status ? (
               <div
-                className={`${statusBadgeClass} ${statusBadgeColors[status.toLowerCase()] || "text-[#bdbdbd]"}`}
+                className={`${statusBadgeClass} ${
+                  statusBadgeColors[status.toLowerCase()] || "text-[#bdbdbd]"
+                }`}
               >
                 {status.toUpperCase()}
               </div>
@@ -270,7 +282,10 @@ function CatalogCard({
           }}
         />
         {commissionEnabled && <div className={commissionCoverGradientClass} />}
-        <div className={cardOverlayClass} style={commissionEnabled ? { paddingBottom: "3rem" } : undefined}>
+        <div
+          className={cardOverlayClass}
+          style={commissionEnabled ? { paddingBottom: "3rem" } : undefined}
+        >
           <div className={cardTitleClass}>{record.title}</div>
         </div>
       </div>

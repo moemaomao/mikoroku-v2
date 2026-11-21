@@ -554,7 +554,11 @@ function cacheLightList(items: MangaItem[], metadata: Record<string, FirestoreMe
 }
 
 function MangaCard({
-  item, metadata, priority, index, animate,
+  item,
+  metadata,
+  priority,
+  index,
+  animate,
 }: {
   item: MangaItem;
   metadata: Record<string, FirestoreMeta>;
@@ -575,27 +579,27 @@ function MangaCard({
   const updatedAt = displayedUpdateTimestamp(item, meta);
   manga.rating = meta?.rating ?? item.rating ?? "-";
 
-    return (
+  return (
     <SeriesCardPrefetch
       slug={slug}
       className={animate ? cardClass : cardClassStatic}
       prefetchOnHover={true}
       prefetchOnVisible={false}
+      onNavigate={(event) => {
+        try {
+          localStorage.setItem("currentManga", JSON.stringify(manga));
+        } catch {
+          setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
+        }
+        markHomepageSeriesNavigation(
+          `/series/${encodeURIComponent(slug)}`,
+          event,
+        );
+      }}
     >
       <div
         data-key={normalize(item.title)}
         data-slug={slug}
-        onClick={(event) => {
-          try {
-            localStorage.setItem("currentManga", JSON.stringify(manga));
-          } catch {
-            setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
-          }
-          markHomepageSeriesNavigation(
-            `/series/${encodeURIComponent(slug)}`,
-            event,
-          );
-        }}
         style={
           animate
             ? { animationDelay: `${Math.min(index, 24) * 0.04}s` }
