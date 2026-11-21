@@ -368,8 +368,7 @@ function observeChapterSummaryPrefetch(card: HTMLElement, slug: string, title: s
 
 function bindChapterNavigation(item: HTMLAnchorElement, card: HTMLElement, slug: string, chapter: string): void {
   const route = card.closest("#firebaseNovel") ? "novel" : "manga";
-  const readerParams = new URLSearchParams({ kind: route, slug, chapter });
-  const readerHref = `/reader-shell?${readerParams.toString()}`;
+  const readerHref = `/${route}/${encodeURIComponent(slug)}/${encodeURIComponent(chapter)}`;
   item.href = readerHref;
   item.setAttribute("aria-label", `Open ${chapter} in reader`);
   item.dataset.readerNavigationBound = "true";
