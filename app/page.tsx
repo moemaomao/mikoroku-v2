@@ -1,6 +1,5 @@
 import HomepageIntegrations from "./homepage-integrations";
-import FirebasePostCatalog from "./firebase-post-catalog";
-import GithubMangaCatalog from "./github-manga-catalog";
+import MangaCatalog from "./manga-catalog";
 import HomeCommunityWidgets from "./home-community-widgets";
 import { BannerAdSlot } from "./advertisement-manager";
 import SiteFooter from "./site-footer";
@@ -19,13 +18,11 @@ export default function HomePage() {
         <BannerAdSlot placement="site-top" />
         <div className="main-layout home-page-layout mx-0 flex w-full items-start gap-5 px-4 transition-[margin-left,width] duration-300 min-[769px]:max-w-full min-[769px]:px-[15px] min-[769px]:gap-5 min-[1101px]:flex-row max-[1100px]:!my-0 max-[1100px]:!ml-0 max-[1100px]:!w-full max-[1100px]:!flex-col max-[1100px]:!gap-0 max-[1100px]:!px-3 min-[1400px]:gap-7 min-[1400px]:px-6 min-[1101px]:max-[1199px]:gap-4 min-[1101px]:max-[1199px]:px-[14px] max-[768px]:!px-[10px] max-[480px]:!px-2">
           <section className="content min-w-0 w-auto flex-[1_1_0%] max-[1100px]:!order-1 max-[1100px]:!w-full max-[1100px]:!flex-none" aria-label="Katalog terbaru">
-            <GithubMangaCatalog>
+            <MangaCatalog>
               <h2 className={homepageSectionHeadingClass}>
                 <span>Latest Manga</span>
               </h2>
-            </GithubMangaCatalog>
-
-            <FirebasePostCatalog />
+            </MangaCatalog>
             <BannerAdSlot placement="home-after-list" />
           </section>
 

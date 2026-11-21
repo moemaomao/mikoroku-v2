@@ -1405,6 +1405,70 @@
   line-height: 1.7;
 }
 
+.metadataSourceDebug {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid rgb(251 191 36 / 35%);
+  border-radius: 12px;
+  background: rgb(251 191 36 / 5%);
+}
+
+.metadataSourceDebugHeading,
+.metadataSourceControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.metadataSourceDebugHeading h2 {
+  margin: 0;
+  color: #f5d178;
+  font-size: 15px;
+}
+
+.metadataSourceDebugHeading p,
+.metadataSourceDebugStatus {
+  margin: 6px 0 0;
+  color: #b7c1d8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.metadataSourceControls {
+  align-items: flex-end;
+  margin-top: 14px;
+}
+
+.metadataSourceButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selectedMetadataSource {
+  border-color: rgb(251 191 36 / 65%);
+  color: #f5d178;
+  background: rgb(251 191 36 / 12%);
+}
+
+.metadataSourceMangaSelect {
+  width: min(100%, 300px);
+}
+
+.metadataSourceDebugList {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #f5d178;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.metadataSourceDebug .error {
+  margin: 10px 0 0;
+}
+
 .metadataJsonTextarea {
   display: block;
   width: 100%;
@@ -2228,6 +2292,27 @@
 .lightMode .metadataJsonHint {
   color: #68738b;
   box-shadow: 0 1px 2px rgb(20 29 55 / 4%);
+}
+
+.lightMode .metadataSourceDebug {
+  border-color: rgb(180 83 9 / 30%);
+  background: rgb(180 83 9 / 5%);
+}
+
+.lightMode .metadataSourceDebugHeading h2,
+.lightMode .selectedMetadataSource,
+.lightMode .metadataSourceDebugList {
+  color: #92400e;
+}
+
+.lightMode .metadataSourceDebugHeading p,
+.lightMode .metadataSourceDebugStatus {
+  color: #68738b;
+}
+
+.lightMode .selectedMetadataSource {
+  border-color: rgb(180 83 9 / 45%);
+  background: rgb(180 83 9 / 8%);
 }
 
 .lightMode .field select {

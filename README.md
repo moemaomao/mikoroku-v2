@@ -156,13 +156,11 @@ and does not fetch the parent manga document separately. The authenticated
 cache-refresh endpoint verifies Firebase ID tokens and allows only the Admin
 email addresses configured by the Worker.
 
-Admins can use the "Debug sumber manga" button on a series page to inspect
-which Firestore metadata sources were found and which one supplied the primary
-record. The source selector in that panel changes the shared catalog mode for
-all visitors: "Effective catalog" includes full Firestore metadata deltas,
-while "Catalog baseline" keeps baseline metadata but still applies chapter
-progress and update timestamps written by chapter uploads. Chapter server
-selection is separate.
+Admins can inspect a manga's metadata sources and change the catalog mode at
+the top of the Admin panel's `metadata.json` section. "Effective catalog"
+includes full Firestore metadata deltas, while "Catalog baseline" keeps
+baseline metadata but still applies chapter progress and update timestamps
+written by chapter uploads. Chapter server selection is separate.
 
 Untuk live preview widget komentar, jalankan:
 

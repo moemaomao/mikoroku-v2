@@ -45,6 +45,7 @@ import {
   MANGA_METADATA_SOURCE_PATH,
   notifyMangaMetadataUpdated,
   parseMangaMetadataPayload,
+  setDevelopmentMangaCatalogSourceMode,
   type MangaMetadataPayload,
 } from "../lib/manga-metadata";
 import {
@@ -69,6 +70,11 @@ const ADMIN_MANGA_CACHE_DURATION = 2 * 60 * 60 * 1000;
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
 
 type AdminFirebase = { auth: Auth; firestore: Firestore };
+type MetadataCatalogSourceMode = "effective" | "baseline";
+type MetadataSourceDebugCatalog = {
+  payload: MangaMetadataPayload;
+  records: Awaited<ReturnType<typeof loadFirestoreMangaCatalog>>;
+};
 
 type MangaRecord = {
   [key: string]: unknown;
@@ -932,6 +938,13 @@ export default function AdminPage() {
   const [metadataJsonLoading, setMetadataJsonLoading] = useState(false);
   const [metadataJsonSaving, setMetadataJsonSaving] = useState(false);
   const [metadataJsonStatus, setMetadataJsonStatus] = useState("");
+  const [metadataSourceMode, setMetadataSourceMode] = useState<MetadataCatalogSourceMode>("effective");
+  const [metadataSourceSaving, setMetadataSourceSaving] = useState(false);
+  const [metadataSourceError, setMetadataSourceError] = useState("");
+  const [metadataSourceDebugCatalog, setMetadataSourceDebugCatalog] = useState<MetadataSourceDebugCatalog | null>(null);
+  const [metadataSourceDebugLoading, setMetadataSourceDebugLoading] = useState(false);
+  const [metadataSourceDebugError, setMetadataSourceDebugError] = useState("");
+  const [metadataSourceDebugSlug, setMetadataSourceDebugSlug] = useState("");
   const metadataJsonOriginalRef = useRef("");
   const [queryText, setQueryText] = useState("");
   const [activeSection, setActiveSection] = useState<
@@ -1148,6 +1161,77 @@ export default function AdminPage() {
     setCatalogFromCache(true);
     setLoadError("");
     setWarning(`Loaded local cache from ${new Date(cached.time).toLocaleString()}.`);
+  }
+
+  function setMetadataSourceDebugData(
+    payload: MangaMetadataPayload,
+    records: MetadataSourceDebugCatalog["records"],
+  ) {
+    setMetadataSourceDebugCatalog({ payload, records });
+    setMetadataSourceMode(payload.catalogSourceMode === "baseline" ? "baseline" : "effective");
+    setMetadataSourceDebugSlug((currentSlug) =>
+      records.some((record) => record.slug === currentSlug)
+        ? currentSlug
+        : records[0]?.slug || "",
+    );
+  }
+
+  async function loadMetadataSourceDebug() {
+    setMetadataSourceDebugLoading(true);
+    setMetadataSourceDebugError("");
+    try {
+      const payload = await fetchMangaMetadataPayload({ force: true });
+      const records = await loadFirestoreMangaCatalog({ force: true, payload });
+      setMetadataSourceDebugData(payload, records);
+    } catch (error) {
+      console.error("Failed to load metadata source diagnostics.", error);
+      setMetadataSourceDebugCatalog(null);
+      setMetadataSourceDebugError(`Could not load source details: ${getErrorMessage(error)}`);
+    } finally {
+      setMetadataSourceDebugLoading(false);
+    }
+  }
+
+  async function selectMetadataCatalogSource(nextSource: MetadataCatalogSourceMode) {
+    if (!user || metadataSourceSaving) return;
+    setMetadataSourceSaving(true);
+    setMetadataSourceError("");
+    try {
+      if (process.env.NODE_ENV === "development") {
+        setDevelopmentMangaCatalogSourceMode(nextSource);
+      } else {
+        const response = await fetch("/api/admin/manga-catalog-source", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${await user.getIdToken()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sourceMode: nextSource }),
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => null) as {
+            error?: string;
+            detail?: string;
+          } | null;
+          const message = [body?.error, body?.detail].filter(Boolean).join(" ");
+          throw new Error(message || `Catalog source update returned HTTP ${response.status}.`);
+        }
+        const result = await response.json() as { sourceMode?: unknown };
+        if (result.sourceMode !== nextSource) {
+          throw new Error("The server did not confirm the requested catalog source.");
+        }
+      }
+      setMetadataSourceMode(nextSource);
+      notifyMangaMetadataUpdated();
+      void loadMetadataSourceDebug();
+    } catch (error) {
+      console.error("Global catalog source could not be changed.", error);
+      setMetadataSourceError(
+        error instanceof Error ? error.message : "Catalog source could not be changed.",
+      );
+    } finally {
+      setMetadataSourceSaving(false);
+    }
   }
 
   async function loadMetadataJson() {
@@ -1503,6 +1587,59 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === "settings" && user) void loadReaderNoticeConfig();
   }, [activeSection, user]);
+
+  const metadataSourceDebugOptions = useMemo(
+    () => (metadataSourceDebugCatalog?.records || [])
+      .filter((record) => record.slug)
+      .map((record) => ({
+        slug: record.slug,
+        title: typeof record.title === "string" ? record.title : record.slug,
+      }))
+      .sort((left, right) => left.title.localeCompare(right.title)),
+    [metadataSourceDebugCatalog],
+  );
+
+  const metadataSourceDebugInfo = useMemo(() => {
+    const catalog = metadataSourceDebugCatalog;
+    if (!catalog || !metadataSourceDebugSlug) return [];
+
+    const catalogManga = catalog.payload.manga.find(
+      (record) => record.slug === metadataSourceDebugSlug,
+    );
+    const metadataRecord = catalog.records.find(
+      (record) => record.slug === metadataSourceDebugSlug,
+    );
+    const firestoreDeltaFound =
+      metadataRecord?.__catalogDebugSources?.includes("Firestore delta") === true;
+    const firestoreChapterUpdateFound =
+      metadataRecord?.__catalogDebugSources?.includes("Firestore chapter update") === true;
+    const catalogSourceMode =
+      catalog.payload.catalogSourceMode === "baseline" ? "baseline" : "effective";
+    const effectiveSource = catalogSourceMode === "baseline"
+      ? firestoreChapterUpdateFound
+        ? "Catalog baseline (global) + chapter update"
+        : "Catalog baseline (global)"
+      : firestoreDeltaFound
+        ? "Firestore catalog delta (catalog baseline)"
+        : metadataRecord || catalogManga
+          ? "Effective catalog"
+          : "none";
+
+    return [
+      `Catalog entry: ${metadataRecord ? "found" : "not found"}`,
+      `Firestore catalog delta: ${
+        firestoreDeltaFound ? "changed record found" : "no newer change for this manga"
+      }`,
+      `Firestore chapter update: ${
+        firestoreChapterUpdateFound ? "chapter progress found" : "no chapter update for this manga"
+      }`,
+      catalogSourceMode === "baseline"
+        ? `${process.env.NODE_ENV === "development" ? "Local" : "Global"} source setting: full Firestore catalog deltas are disabled; chapter-only updates are included.`
+        : "Firestore per-manga metadata read: skipped; using the catalog baseline and change query",
+      `Catalog primary record: ${catalogManga ? "found" : "not found"}`,
+      `Effective source: ${effectiveSource}`,
+    ];
+  }, [metadataSourceDebugCatalog, metadataSourceDebugSlug]);
 
   const filteredManga = useMemo(() => {
     const titledManga = manga.filter((item) => item.title.trim().length > 0);
@@ -3125,7 +3262,13 @@ export default function AdminPage() {
             onClick={() => {
               setActiveSection("metadata-json");
               setMobileNavOpen(false);
-              if (!metadataJsonText) void loadMetadataJson();
+              if (!metadataJsonText) {
+                void loadMetadataJson().then(() => {
+                  if (!metadataSourceDebugCatalog) void loadMetadataSourceDebug();
+                });
+              } else if (!metadataSourceDebugCatalog) {
+                void loadMetadataSourceDebug();
+              }
             }}
             disabled={metadataJsonLoading || metadataJsonSaving}
           >
@@ -3351,10 +3494,21 @@ export default function AdminPage() {
               loading={metadataJsonLoading}
               saving={metadataJsonSaving}
               status={metadataJsonStatus}
+              sourceMode={metadataSourceMode}
+              sourceSaving={metadataSourceSaving}
+              sourceError={metadataSourceError}
+              sourceDebugOptions={metadataSourceDebugOptions}
+              sourceDebugSlug={metadataSourceDebugSlug}
+              sourceDebugInfo={metadataSourceDebugInfo}
+              sourceDebugLoading={metadataSourceDebugLoading}
+              sourceDebugError={metadataSourceDebugError}
               onChange={setMetadataJsonText}
               onFormat={formatMetadataJson}
               onReload={() => void loadMetadataJson()}
               onSave={() => void saveMetadataJson()}
+              onSourceChange={(source) => void selectMetadataCatalogSource(source)}
+              onSourceDebugSlugChange={setMetadataSourceDebugSlug}
+              onSourceDebugReload={() => void loadMetadataSourceDebug()}
             />
           )}
 
