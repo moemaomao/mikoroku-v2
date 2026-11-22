@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { CoverImage } from "../lib/cover-image";
 import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
@@ -502,8 +503,9 @@ export default function RecommendationSidebar({
                 ? imageProxyUrl(itemCover, "nsfwCover")
                 : thumbnailUrl(itemCover);
               return (
-              <a
+              <Link
                 href={`/series/${encodeURIComponent(item.slug || normalizeSlug(item.title))}`}
+                prefetch={false}
                 key={`${item.slug}-${item.title}`}
                 title={item.title}
                 onClick={() => {
@@ -544,7 +546,7 @@ export default function RecommendationSidebar({
                 <span className="relative z-10 line-clamp-2 min-w-0 flex-1 overflow-hidden pr-1 text-left text-[12px] font-semibold leading-[1.35] text-zinc-900 drop-shadow-sm dark:text-white">
                   {displayTitle(item)}
                 </span>
-              </a>
+              </Link>
               );
             })}
           </div>
