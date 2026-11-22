@@ -125,7 +125,6 @@ function rememberCurrentManga(payload: unknown) {
   }
 }
 
-/** Full-page skeleton matching SeriesLoadingContent (hindari spinner → skeleton). */
 function showSeriesNavSkeleton() {
   if (typeof document === "undefined") return;
   if (document.getElementById(SERIES_NAV_OVERLAY_ID)) return;
