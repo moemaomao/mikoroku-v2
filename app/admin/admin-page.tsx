@@ -2868,7 +2868,9 @@ export default function AdminPage() {
       setSelectedManga(nextManga);
       setChapters(remaining);
       setManga((current) => {
-        const next = current.map((item) => item.slug === nextManga.slug ? nextManga : item);
+        const next = current
+          .map((item) => item.slug === nextManga.slug ? nextManga : item)
+          .sort((left, right) => right.updatedAt - left.updatedAt);
         writeAdminMangaCache(next);
         return next;
       });
@@ -3149,7 +3151,9 @@ export default function AdminPage() {
       }
       if (nextManga) {
         setManga((current) => {
-          const next = current.map((item) => item.slug === mangaSlug ? nextManga! : item);
+          const next = current
+            .map((item) => item.slug === mangaSlug ? nextManga! : item)
+            .sort((left, right) => right.updatedAt - left.updatedAt);
           writeAdminMangaCache(next);
           return next;
         });
