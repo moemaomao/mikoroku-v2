@@ -338,6 +338,15 @@ const READER_IMAGE_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const READER_IMAGE_CACHE_MAX_ENTRIES = 100;
 const READER_IMAGE_CACHE_MAX_BYTES = 120 * 1024 * 1024;
 const READER_IMAGE_CACHE_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const loadedReaderImageSources = new Set<string>();
+
+function markReaderImageLoaded(src: string): void {
+  loadedReaderImageSources.add(src);
+  if (loadedReaderImageSources.size > 300) {
+    const oldestSource = loadedReaderImageSources.values().next().value;
+    if (oldestSource) loadedReaderImageSources.delete(oldestSource);
+  }
+}
 
 async function pruneReaderImageCache(cache: Cache): Promise<void> {
   const keys = await cache.keys();
@@ -395,13 +404,27 @@ function ReaderImage({
     src: "",
   }));
   const isCurrentSource = displayState.source === imageSrc;
-  const displaySrc = isCurrentSource ? displayState.src : "";
-  const currentImageLoaded = isCurrentSource && loaded;
+  const sourceWasLoaded = loadedReaderImageSources.has(imageSrc);
+  const displaySrc = isCurrentSource
+    ? displayState.src || (sourceWasLoaded ? imageSrc : "")
+    : sourceWasLoaded
+      ? imageSrc
+      : "";
+  const currentImageLoaded = sourceWasLoaded || (isCurrentSource && loaded);
   const currentImageFailed = isCurrentSource && failed;
 
   useEffect(() => {
     let active = true;
     let objectUrl = "";
+    if (sourceWasLoaded) {
+      setDisplayState({ source: imageSrc, src: imageSrc });
+      setLoaded(true);
+      setFailed(false);
+      return () => {
+        active = false;
+      };
+    }
+
     setDisplayState({ source: imageSrc, src: "" });
     setLoaded(false);
     setFailed(false);
@@ -438,7 +461,7 @@ function ReaderImage({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [imageSrc]);
+  }, [imageSrc, sourceWasLoaded]);
 
   function handleError(event: React.SyntheticEvent<HTMLImageElement>) {
     const image = event.currentTarget;
@@ -480,7 +503,10 @@ function ReaderImage({
             loading={loading}
             fetchPriority={fetchPriority}
             decoding="async"
-            onLoad={() => setLoaded(true)}
+            onLoad={() => {
+              markReaderImageLoaded(imageSrc);
+              setLoaded(true);
+            }}
             onError={handleError}
           />
           {concealNsfw && (
@@ -1867,7 +1893,9 @@ export default function ReaderPage({
     data.images.slice(start, start + preloadCount).forEach((src) => {
       const image = new Image();
       image.decoding = "async";
-      image.src = readerPageImageUrl(src, dataSaver, imageQuality, mangaNsfw, showNsfw);
+      const imageSrc = readerPageImageUrl(src, dataSaver, imageQuality, mangaNsfw, showNsfw);
+      image.onload = () => markReaderImageLoaded(imageSrc);
+      image.src = imageSrc;
     });
   }, [data, dataSaver, imageQuality, kind, mangaNsfw, mode, page, showNsfw]);
 
