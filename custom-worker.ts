@@ -72,6 +72,10 @@ type MangaCatalogSourceMode = "effective" | "baseline";
 let firebaseAccessToken: FirebaseAccessToken | null = null;
 let firebaseAccessTokenPromise: Promise<string> | null = null;
 const mangaCatalogRefreshes = new Map<string, Promise<Record<string, unknown>>>();
+const mangaCatalogMemoryFallbacks = new Map<
+  string,
+  { cachedAt: number; data: Record<string, unknown> }
+>();
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -486,8 +490,10 @@ async function fetchAndCacheMangaCatalog(
       JSON.stringify({ cachedAt, data }),
       { expirationTtl: MANGA_CATALOG_CACHE_TTL },
     );
+    mangaCatalogMemoryFallbacks.delete(cacheKey);
   } catch (error) {
     console.error("[worker manga-catalog] KV put failed", error);
+    mangaCatalogMemoryFallbacks.set(cacheKey, { cachedAt, data });
     throw new Error("Shared manga catalog cache could not be written.");
   }
   return data;
@@ -649,6 +655,21 @@ async function handleMangaCatalogProxy(
   const freshnessTtl = isFeedCatalogRequest
     ? MANGA_CATALOG_FEED_FRESH_TTL
     : MANGA_CATALOG_FRESH_TTL;
+  const memoryFallback = mangaCatalogMemoryFallbacks.get(cacheKey);
+  if (memoryFallback) {
+    const age = Date.now() - memoryFallback.cachedAt;
+    if (
+      memoryFallback.data.catalogSourceMode === sourceMode &&
+      age >= 0 &&
+      age <= freshnessTtl
+    ) {
+      const responseBody = url.pathname === "/api/catalog/manga"
+        ? memoryFallback.data.manga
+        : memoryFallback.data;
+      return catalogResponse(responseBody, "BYPASS");
+    }
+    mangaCatalogMemoryFallbacks.delete(cacheKey);
+  }
   let cached: { cachedAt?: number; data?: Record<string, unknown> } | null = null;
   try {
     cached = await kv.get(cacheKey, "json");
