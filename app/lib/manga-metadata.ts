@@ -320,38 +320,23 @@ async function loadMangaMetadataPayload({
     throw new DOMException("The operation was aborted.", "AbortError");
   }
 
-  let sourceMode: MangaCatalogSourceMode | null = null;
-  let sourceCheckFailed = false;
-  try {
-    sourceMode = await fetchMangaCatalogSourceMode(signal, force);
-  } catch (error) {
-    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
-      throw error;
-    }
-    sourceCheckFailed = true;
-    console.warn("Global catalog source could not be checked; fetching a fresh catalog.", error);
-  }
-
-  if (!force && !sourceCheckFailed) {
+  // IDB is the first-paint source. It must not wait for Worker/KV or source
+  // configuration requests, especially when the network is unavailable.
+  if (!force) {
     try {
       const cached = await readMangaMetadataCache();
       if (signal?.aborted) {
         throw new DOMException("The operation was aborted.", "AbortError");
       }
-      if (
-        cached &&
-        (!sourceMode || cached.payload.catalogSourceMode === sourceMode)
-      ) {
-        if (Date.now() - cached.cachedAt >= MANGA_METADATA_REVALIDATE_AFTER) {
-          refreshMangaMetadataInBackground(cached);
-        }
+      if (cached) {
+        refreshMangaMetadataInBackground(cached);
         return cached.payload;
       }
     } catch (error) {
       if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
         throw error;
       }
-      console.warn("IndexedDB manga metadata cache could not be read; loading metadata.json.", error);
+      console.warn("IndexedDB manga metadata cache could not be read; loading shared catalog.", error);
     }
   }
 

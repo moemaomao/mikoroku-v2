@@ -723,9 +723,20 @@ async function loadManga(
       };
     }),
     loadFirestoreMangaCatalog({ force }),
+    (async () => {
+      const response = await fetch(
+        `/api/manga/${encodeURIComponent(slug)}${force ? "?refresh=1" : ""}`,
+        { signal, cache: force ? "no-store" : "default" },
+      );
+      if (!response.ok) return null;
+      return normalizeManga(await response.json() as Record<string, unknown>, slug);
+    })(),
   ]);
 
-  const catalogManga = responses[0].status === "fulfilled" ? responses[0].value.manga : null;
+  const kvManga = responses[2].status === "fulfilled" ? responses[2].value : null;
+  const catalogManga = responses[0].status === "fulfilled"
+    ? responses[0].value.manga
+    : kvManga;
   const catalogSourceMode = responses[0].status === "fulfilled"
     ? responses[0].value.sourceMode
     : undefined;
@@ -795,6 +806,7 @@ async function loadManga(
         [
           "Manga metadata failed to load.",
           "Katalog metadata Firestore gagal dimuat.",
+          "Detail manga dari cache KV gagal dimuat.",
         ][index],
         result.reason,
       );

@@ -41,6 +41,7 @@ import {
   refreshGlobalAppearance,
 } from "./lib/global-appearance";
 import { latestChapterFromRecord } from "../lib/latest-chapter";
+import { readCachedMangaMetadataPayload } from "./lib/manga-metadata";
 
 type MangaItem = Record<string, unknown> & {
   title: string;
@@ -239,6 +240,31 @@ function readCachedItems(): MangaItem[] {
     return homeCatalogMemory.items;
   }
   return [];
+}
+
+async function readIndexedDbItems(): Promise<MangaItem[]> {
+  try {
+    const payload = await readCachedMangaMetadataPayload();
+    if (!payload?.manga?.length) return [];
+    return payload.manga
+      .filter((item) => typeof item.title === "string" && item.title.trim())
+      .map((item) => {
+        const title = String(item.title);
+        const slug = typeof item.slug === "string" && item.slug
+          ? item.slug
+          : slugify(title);
+        return {
+          ...item,
+          title,
+          slug,
+          img: resolveCover(item.cover || item.img),
+          cover: resolveCover(item.cover || item.img),
+        } as MangaItem;
+      });
+  } catch (error) {
+    console.warn("IndexedDB homepage catalog could not be read.", error);
+    return [];
+  }
 }
 
 function readMangaDataList(): MangaItem[] {
@@ -742,6 +768,16 @@ function GithubMangaCatalog({ children }: { children?: ReactNode }) {
       if (!homeCatalogMemory.entrancePlayed) setPlayEntrance(true);
     }
     if (cachedHero.length) setHeroItems(cachedHero);
+    if (!cached.length) {
+      void readIndexedDbItems().then((indexedItems) => {
+        if (!indexedItems.length) return;
+        listSigRef.current = listSignature(indexedItems);
+        rememberItems(indexedItems);
+        setItems(indexedItems);
+        setLoading(false);
+        if (!homeCatalogMemory.entrancePlayed) setPlayEntrance(true);
+      });
+    }
     const refreshChapterTimestamps = () => {
       chapterUpdateTimestampsRef.current.clear();
       setChapterUpdateRevision((revision) => revision + 1);
