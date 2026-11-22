@@ -1900,20 +1900,6 @@ export default function ReaderPage({
   }, [data, dataSaver, imageQuality, kind, mangaNsfw, mode, page, showNsfw]);
 
   useEffect(() => {
-    if (!data || kind !== "manga" || mode !== "long-strip" || infiniteRead) return;
-    const images = [...document.querySelectorAll<HTMLImageElement>(".reader-images.long-strip img")];
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting)
-        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
-      if (!visible) return;
-      const index = images.indexOf(visible.target as HTMLImageElement);
-      if (index >= 0) setPage(index + 1);
-    }, { rootMargin: "-40% 0px -40% 0px" });
-    images.forEach((image) => observer.observe(image));
-    return () => observer.disconnect();
-  }, [data, infiniteRead, kind, mode]);
-
-  useEffect(() => {
     if (!data || kind !== "manga" || mode === "long-strip") return;
     const imageCount = data.images.length;
     const nextArrow = readingDirection === "rtl" ? "ArrowLeft" : "ArrowRight";
