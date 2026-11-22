@@ -376,6 +376,7 @@ function ReaderImage({
   loading,
   fetchPriority = "auto",
   concealNsfw = false,
+  showSkeleton = false,
 }: {
   src: string;
   alt: string;
@@ -384,21 +385,29 @@ function ReaderImage({
   loading: "eager" | "lazy";
   fetchPriority?: "high" | "auto" | "low";
   concealNsfw?: boolean;
+  showSkeleton?: boolean;
 }) {
   const imageSrc = src;
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [displaySrc, setDisplaySrc] = useState("");
+  const [displayState, setDisplayState] = useState(() => ({
+    source: imageSrc,
+    src: "",
+  }));
+  const isCurrentSource = displayState.source === imageSrc;
+  const displaySrc = isCurrentSource ? displayState.src : "";
+  const currentImageLoaded = isCurrentSource && loaded;
+  const currentImageFailed = isCurrentSource && failed;
 
   useEffect(() => {
     let active = true;
     let objectUrl = "";
-    setDisplaySrc("");
+    setDisplayState({ source: imageSrc, src: "" });
     setLoaded(false);
     setFailed(false);
 
     if (!("caches" in window)) {
-      setDisplaySrc(src);
+      setDisplayState({ source: imageSrc, src: imageSrc });
       return () => {
         active = false;
       };
@@ -408,21 +417,21 @@ function ReaderImage({
       .then((cache) => cache.match(imageSrc))
       .then(async (response) => {
         if (!response) {
-          if (active) setDisplaySrc(imageSrc);
+          if (active) setDisplayState({ source: imageSrc, src: imageSrc });
           return;
         }
         const blob = await response.blob();
         if (blob.size < 100) {
-          if (active) setDisplaySrc(imageSrc);
+          if (active) setDisplayState({ source: imageSrc, src: imageSrc });
           return;
         }
         objectUrl = URL.createObjectURL(blob);
-        if (active) setDisplaySrc(objectUrl);
+        if (active) setDisplayState({ source: imageSrc, src: objectUrl });
         else URL.revokeObjectURL(objectUrl);
       })
       .catch((cacheError: unknown) => {
         console.warn("Could not read the cached reader image; loading its URL directly.", cacheError);
-        if (active) setDisplaySrc(imageSrc);
+        if (active) setDisplayState({ source: imageSrc, src: imageSrc });
       });
 
     return () => {
@@ -451,15 +460,21 @@ function ReaderImage({
   }
 
   return (
-    <span className={`reader-image-frame relative block ${wrapperClassName}`} aria-busy={!loaded && !failed}>
-      {failed ? (
+    <span
+      className={`reader-image-frame relative block ${showSkeleton ? "min-h-[55vh]" : ""} ${wrapperClassName}`}
+      aria-busy={!currentImageLoaded && !currentImageFailed}
+    >
+      {currentImageFailed ? (
         <span className="grid min-h-[40vh] place-items-center bg-black/[.04] px-4 text-sm text-slate-500 dark:bg-white/[.04] dark:text-slate-400" role="img" aria-label={`${alt} could not be loaded`}>
           Image could not be loaded
         </span>
       ) : displaySrc ? (
         <>
+          {showSkeleton && !currentImageLoaded && (
+            <span className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-md bg-black/10 dark:bg-white/10" aria-hidden="true" />
+          )}
           <img
-            className={`${className} relative`}
+            className={`${className} relative ${showSkeleton && !currentImageLoaded ? "opacity-0" : ""}`}
             src={displaySrc}
             alt={alt}
             loading={loading}
@@ -485,6 +500,8 @@ function ReaderImage({
             </span>
           )}
         </>
+      ) : showSkeleton ? (
+        <span className="pointer-events-none absolute inset-0 animate-pulse rounded-md bg-black/10 dark:bg-white/10" aria-hidden="true" />
       ) : (
         <span className="grid min-h-[20vh] place-items-center" aria-hidden="true">
           <span className="size-8 animate-spin rounded-full border-2 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />
@@ -2567,12 +2584,12 @@ export default function ReaderPage({
                   <ReaderImage
                     className="w-full max-w-full object-contain [max-height:calc(100vh-250px)]"
                     wrapperClassName="grid w-full justify-items-center"
-                    key={readerPageImageUrl(data.images[page - 1], dataSaver, imageQuality, mangaNsfw, showNsfw)}
                     src={readerPageImageUrl(data.images[page - 1], dataSaver, imageQuality, mangaNsfw, showNsfw)}
                     alt={`Page ${page}`}
                     loading="eager"
                     fetchPriority="high"
                     concealNsfw={concealReaderPages}
+                    showSkeleton
                   />
                   <button className={`reader-image-nav reader-image-nav-previous absolute ${previousPagePosition} top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center border-0 bg-transparent text-lg text-[var(--mikoroku-accent)] opacity-80 shadow-none transition hover:scale-105 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25`} type="button" disabled={!hasPreviousPage} onClick={() => goToPage(previousPage)} aria-label="Previous page" title="Previous page">
                     <i className={`fas ${previousPageIcon}`} aria-hidden="true" />
