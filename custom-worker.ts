@@ -268,7 +268,7 @@ function catalogResponse(data: unknown, cacheStatus: string): Response {
   return new Response(JSON.stringify(data), {
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+      "cache-control": "no-store",
       "x-cache": cacheStatus,
       "x-content-type-options": "nosniff",
     },
@@ -493,15 +493,27 @@ async function fetchAndCacheMangaCatalog(
   return data;
 }
 
-function refreshMangaCatalogOnce(
+async function refreshMangaCatalogOnce(
   env: CloudflareEnv,
   requestUrl: string,
   kv: KVNamespace,
   sourceMode: MangaCatalogSourceMode,
   cacheKey = MANGA_CATALOG_CACHE_KEY,
+  forceRefresh = false,
 ): Promise<Record<string, unknown>> {
   const refreshKey = `${cacheKey}:${sourceMode}`;
-  const existing = mangaCatalogRefreshes.get(refreshKey);
+  let existing = mangaCatalogRefreshes.get(refreshKey);
+  if (existing && forceRefresh) {
+    try {
+      await existing;
+    } catch {
+      // Retry the forced refresh after a failed in-flight refresh.
+    }
+    const current = mangaCatalogRefreshes.get(refreshKey);
+    if (current && current !== existing) return current;
+    if (current === existing) mangaCatalogRefreshes.delete(refreshKey);
+    existing = undefined;
+  }
   if (existing) return existing;
 
   const refresh = fetchAndCacheMangaCatalog(env, requestUrl, kv, sourceMode, cacheKey);
@@ -742,6 +754,7 @@ async function handleMangaCatalogCacheRefresh(
       kv,
       sourceMode,
       MANGA_CATALOG_CACHE_KEY,
+      true,
     );
 
     let feedMangaCount: number | null = null;
@@ -753,6 +766,7 @@ async function handleMangaCatalogCacheRefresh(
         kv,
         "effective",
         MANGA_CATALOG_FEED_CACHE_KEY,
+        true,
       );
       feedMangaCount = Array.isArray(feedPayload.manga) ? feedPayload.manga.length : 0;
     } catch (error) {
@@ -831,7 +845,14 @@ async function handleMangaCatalogSourceUpdate(
 
     const previousMode = await getMangaCatalogSourceMode(kv);
     if (previousMode === body.sourceMode) {
-      const payload = await refreshMangaCatalogOnce(env, request.url, kv, body.sourceMode);
+      const payload = await refreshMangaCatalogOnce(
+        env,
+        request.url,
+        kv,
+        body.sourceMode,
+        MANGA_CATALOG_CACHE_KEY,
+        true,
+      );
       return new Response(
         JSON.stringify({
           ok: true,
@@ -851,7 +872,14 @@ async function handleMangaCatalogSourceUpdate(
 
     await kv.put(MANGA_CATALOG_SOURCE_KEY, body.sourceMode);
     try {
-      const payload = await refreshMangaCatalogOnce(env, request.url, kv, body.sourceMode);
+      const payload = await refreshMangaCatalogOnce(
+        env,
+        request.url,
+        kv,
+        body.sourceMode,
+        MANGA_CATALOG_CACHE_KEY,
+        true,
+      );
 
       return new Response(
         JSON.stringify({
