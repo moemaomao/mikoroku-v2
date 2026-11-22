@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import DetailPageClient from "../series/detail-page-client";
+import SeriesLoadingContent from "../series/series-loading-content";
 
 export default function SeriesShellClient() {
   const [slug, setSlug] = useState("");
@@ -36,14 +37,7 @@ export default function SeriesShellClient() {
   }
 
   if (!slug) {
-    return (
-      <main className="grid min-h-screen place-items-center" role="status" aria-label="Memuat detail manga">
-        <span
-          className="h-[42px] w-[42px] animate-spin rounded-full border-4 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]"
-          aria-hidden="true"
-        />
-      </main>
-    );
+    return <SeriesLoadingContent />;
   }
 
   return <DetailPageClient slug={slug} />;

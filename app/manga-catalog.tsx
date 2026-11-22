@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
 import {
   getHomepageMangaSection,
@@ -107,6 +115,120 @@ function seriesHref(slug: string): string | null {
     return null;
   }
   return `/series/${encodeURIComponent(safeSlug)}`;
+}
+
+const SERIES_NAV_OVERLAY_ID = "mk-series-nav-overlay";
+
+function rememberCurrentManga(payload: unknown) {
+  const raw = JSON.stringify(payload);
+  try {
+    localStorage.setItem("currentManga", raw);
+  } catch {
+    setLocalStorageCacheItem("currentManga", raw);
+  }
+}
+
+/** Full-page skeleton matching SeriesLoadingContent (hindari spinner → skeleton). */
+function showSeriesNavSkeleton() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(SERIES_NAV_OVERLAY_ID)) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = SERIES_NAV_OVERLAY_ID;
+  overlay.setAttribute("role", "status");
+  overlay.setAttribute("aria-live", "polite");
+  overlay.setAttribute("aria-label", "Memuat detail manga");
+  overlay.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    "z-index:99999",
+    "overflow:auto",
+    "background:#0b0b0b",
+    "color:#fff",
+  ].join(";");
+
+  const row = (n: number) =>
+    Array.from({ length: n }, () => '<div class="mk-sk" style="height:27px;border-radius:8px"></div>').join("");
+  const chapterRows = Array.from({ length: 12 }, () => '<div class="mk-sk" style="height:44px;border-radius:8px"></div>').join("");
+  const metaRows = Array.from({ length: 6 }, () =>
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><div class="mk-sk" style="width:12px;height:12px;flex-shrink:0"></div><div class="mk-sk" style="width:48px;height:12px"></div><div class="mk-sk" style="width:40%;height:12px"></div></div>',
+  ).join("");
+
+  overlay.innerHTML =
+    "<style>" +
+    "@keyframes mk-pulse{0%,100%{opacity:.45}50%{opacity:.9}}" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-sk{animation:mk-pulse 1.2s ease-in-out infinite;background:rgba(255,255,255,.1);border-radius:10px}" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-wrap{max-width:720px;margin:24px auto;padding:18px 14px}" +
+    "@media (min-width:768px){" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-wrap{margin:40px auto;padding:35px 30px;border-radius:20px;background:rgba(23,23,23,.75)}" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-grid{display:grid;grid-template-columns:200px 1fr;gap:30px}" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-cover{width:200px!important;height:280px!important}" +
+    "}" +
+    "@media (min-width:1024px){" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-wrap{max-width:1100px}" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-grid{grid-template-columns:240px 1fr;gap:40px}" +
+    "#" + SERIES_NAV_OVERLAY_ID + " .mk-cover{width:240px!important;height:340px!important}" +
+    "}" +
+    "</style>" +
+    '<div class="mk-wrap">' +
+    '<div class="mk-grid" style="display:flex;gap:14px;align-items:flex-start">' +
+    '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;flex-shrink:0">' +
+    '<div class="mk-sk mk-cover" style="width:90px;height:130px;border-radius:12px"></div>' +
+    '<div class="mk-sk" style="width:70%;height:10px"></div>' +
+    '<div class="mk-sk" style="width:100%;height:20px"></div>' +
+    '<div class="mk-sk" style="width:100%;height:20px"></div>' +
+    '<div class="mk-sk" style="width:100%;height:20px"></div>' +
+    "</div>" +
+    '<div style="flex:1;min-width:0">' +
+    '<div class="mk-sk" style="width:56px;height:12px;margin-bottom:8px"></div>' +
+    '<div class="mk-sk" style="width:80%;height:18px;margin-bottom:10px"></div>' +
+    '<div style="height:1px;background:rgba(255,255,255,.12);margin:10px 0 12px"></div>' +
+    '<div class="mk-sk" style="width:70%;height:12px;margin-bottom:14px"></div>' +
+    metaRows +
+    "</div></div>" +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0 14px">' +
+    row(4) +
+    "</div>" +
+    '<div style="display:flex;gap:16px;margin:12px 0 16px">' +
+    '<div class="mk-sk" style="width:80px;height:16px"></div>' +
+    '<div class="mk-sk" style="width:56px;height:16px"></div>' +
+    '<div class="mk-sk" style="width:56px;height:16px"></div>' +
+    '<div class="mk-sk" style="width:64px;height:16px"></div>' +
+    "</div>" +
+    '<div class="mk-sk" style="height:40px;margin-bottom:14px;border-radius:8px"></div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin:12px 0 16px">' +
+    '<div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>' +
+    '<div class="mk-sk" style="width:96px;height:20px;border-radius:999px"></div>' +
+    '<div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>' +
+    "</div>" +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">' +
+    chapterRows +
+    "</div></div>";
+
+  document.body.appendChild(overlay);
+}
+
+function navigateToSeries(
+  event: MouseEvent<HTMLAnchorElement>,
+  href: string,
+  payload: unknown,
+) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    rememberCurrentManga(payload);
+    return;
+  }
+
+  event.preventDefault();
+  rememberCurrentManga(payload);
+  showSeriesNavSkeleton();
+  window.location.assign(href);
 }
 
 const MANGA_CACHE_KEY = "mangaMetadataCache_v2";
@@ -622,12 +744,8 @@ function MangaCard({
       href={href}
       className={animate ? cardClass : cardClassStatic}
       data-slug={slug}
-      onClick={() => {
-        try {
-          localStorage.setItem("currentManga", JSON.stringify(manga));
-        } catch {
-          setLocalStorageCacheItem("currentManga", JSON.stringify(manga));
-        }
+      onClick={(event) => {
+        navigateToSeries(event, href, manga);
       }}
     >
       <div
@@ -1259,12 +1377,8 @@ function CatalogCard({
       data-slug={record.slug}
       data-section={section}
       href={href}
-      onClick={() => {
-        try {
-          localStorage.setItem("currentManga", JSON.stringify(record));
-        } catch {
-          setLocalStorageCacheItem("currentManga", JSON.stringify(record));
-        }
+      onClick={(event) => {
+        navigateToSeries(event, href, record);
       }}
     >
       <div className={cardCoverClass}>
