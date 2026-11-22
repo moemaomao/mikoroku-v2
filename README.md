@@ -10,6 +10,18 @@ Built with **Next.js App Router** and deployed on **Cloudflare Workers** using `
 
 ---
 
+## Important: Prefetch is Disabled
+
+**This project deliberately does not use Next.js RSC Prefetch / `<Link prefetch>`.**
+
+- All critical navigation links (especially homepage and main navigation) use `prefetch={false}`.
+- Automatic background RSC prefetching is intentionally turned off to avoid unnecessary Worker load, cache pollution, and unexpected 500 errors on soft navigation.
+- Do **not** re-enable default Link prefetch behavior without explicit approval and thorough testing.
+
+This is a hard project rule, not a temporary workaround.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -286,6 +298,7 @@ Do **not** use `npm run build` for Workers — it only produces a standalone Nex
 
 ## Notes
 
+- **Prefetch is disabled by design.** Do not re-enable default Next.js Link prefetching.
 - Some legacy integrations (Firebase header/footer, comment widget, etc.) still run via browser scripts while being fully migrated to the App Router.
 - Old image asset URLs redirect to the new locations under `public/assets/`.
 - Full admin panel is available at `/admin` (App Router). Legacy HTML fallback exists at `public/pages/admin.html`.
