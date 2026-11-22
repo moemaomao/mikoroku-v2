@@ -855,6 +855,7 @@ function HeaderContents() {
           <Link
             id="headerLogo"
             href="/"
+            prefetch={false}
             aria-label="Mikoroku home"
             onClick={returnToHomepageIfPossible}
             className={`${!mobile && sidebarOpen ? "min-[769px]:hidden" : ""} flex h-9 max-w-[120px] shrink-0 items-center sm:h-10 sm:max-w-none`}
