@@ -1341,6 +1341,7 @@ export default function ReaderPage({
     return mode === "sv1" || mode === "sv2" || mode === "es" ? mode : null;
   });
   const [page, setPage] = useState(1);
+  const pageChapterKeyRef = useRef("");
   const [mode, setMode] = useState<ReaderMode>("long-strip");
   const [readingDirection, setReadingDirection] = useState<ReadingDirection>("ltr");
   const [fontSize, setFontSize] = useState(18);
@@ -1556,6 +1557,11 @@ export default function ReaderPage({
       const cached = getCurrentChapterCache(slug);
       if (cached?.num) targetChapter = String(cached.num);
     }
+    const pageChapterKey = `${slug}:${kind}:${targetChapter}`;
+    if (pageChapterKeyRef.current !== pageChapterKey) {
+      pageChapterKeyRef.current = pageChapterKey;
+      setPage(1);
+    }
     nextChapterAbortRef.current?.abort(new DOMException("Reader chapter changed.", "AbortError"));
     nextChapterAbortRef.current = null;
     nextChapterLoadingRef.current = false;
@@ -1620,7 +1626,6 @@ export default function ReaderPage({
             console.warn("Could not cache the loaded reader chapter.", cacheError);
           });
         }
-        setPage(1);
         localStorage.setItem("currentChapter", JSON.stringify({
           ...getCurrentChapterCache(slug),
           slug,
