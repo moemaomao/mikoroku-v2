@@ -356,6 +356,56 @@ html.light .reader-page .reader-accent-toolbar .reader-accent-header-button:hove
   z-index: 2;
 }
 
+.homepage-catalog-skeleton {
+  position: relative;
+  isolation: isolate;
+  background-color: #d1d1d1;
+}
+
+.dark .homepage-catalog-skeleton {
+  background-color: #303030;
+}
+
+.homepage-catalog-skeleton::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(255 255 255 / 55%) 50%,
+    transparent 80%
+  );
+  animation: homepage-catalog-shimmer 1.6s ease-in-out infinite;
+  content: "";
+  pointer-events: none;
+}
+
+.dark .homepage-catalog-skeleton::after {
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(255 255 255 / 14%) 50%,
+    transparent 80%
+  );
+}
+
+@keyframes homepage-catalog-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .homepage-catalog-skeleton::after {
+    animation: none;
+  }
+}
+
 @keyframes leaderboard-gradient-flow {
   from {
     background-position: 0% 50%;

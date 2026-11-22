@@ -28,9 +28,6 @@ import {
   commissionCoverGradientClass,
   homepageLoadMoreClass,
   homepageSectionHeadingClass,
-  skeletonListCardClass,
-  skeletonListContentClass,
-  skeletonListCoverClass,
   statusBadgeClass,
   statusBadgeColors,
   typeBadgeClass,
@@ -829,25 +826,12 @@ function MangaCard({
   );
 }
 
-function SkeletonCard() {
+function HomepageCatalogSkeleton() {
   return (
-    <div className={`${cardClassStatic} skeleton-card overflow-hidden rounded-lg ${skeletonListCardClass}`}>
-      <div className={`${cardCoverClass} skeleton-thumb animate-pulse bg-gradient-to-r from-[#1a1a1a] via-[#242424] to-[#1a1a1a] ${skeletonListCoverClass}`} />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[50px] flex-col items-center justify-end gap-2 px-2 pb-7 list-mode:hidden md:flex">
-        <div className="h-3 w-3/4 animate-pulse rounded bg-white/20" />
-        <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/10" />
-      </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[22px] items-stretch rounded-b-[10px] list-mode:hidden md:flex">
-        <div className="h-full flex-1 animate-pulse bg-white/[0.06]" />
-        <div className="h-full flex-1 animate-pulse bg-white/[0.04]" />
-      </div>
-      <div className={`hidden flex-1 flex-col justify-center gap-2 p-3 ${skeletonListContentClass}`}>
-        <div className="h-3 w-3/4 animate-pulse rounded bg-[#2a2a2a]" />
-        <div className="h-4 w-full animate-pulse rounded bg-[#222]" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-[#222]" />
-        <div className="h-4 w-2/3 animate-pulse rounded bg-[#222]" />
-      </div>
-    </div>
+    <div
+      aria-hidden="true"
+      className={`${cardClassStatic} homepage-catalog-skeleton aspect-[2/3] overflow-hidden rounded-lg list-mode:!aspect-auto list-mode:!h-[72px] md:list-mode:!h-[96px]`}
+    />
   );
 }
 
@@ -1178,7 +1162,7 @@ function GithubMangaCatalog({ children }: { children?: ReactNode }) {
             );
           })
         ) : loading ? (
-          Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonCard key={index} />)
+          Array.from({ length: PAGE_SIZE }, (_, index) => <HomepageCatalogSkeleton key={index} />)
         ) : null}
       </div>
       <button
@@ -1205,36 +1189,6 @@ type MangaRecord = Record<string, unknown> & {
 const FIREBASE_POST_CACHE_KEY = "manga_cache_v5";
 const FIREBASE_POST_CACHE_TIME = 60 * 60 * 1000;
 const FIREBASE_POST_PAGE_SIZE = 12;
-const staticCardClass = cardClass.replace("animate-fade-in-up", "").replace(/  +/g, " ").trim();
-
-function CatalogSkeleton() {
-  return (
-    <div
-      aria-hidden="true"
-      className={`${staticCardClass} skeleton-card overflow-hidden rounded-lg ${skeletonListCardClass}`}
-    >
-      <div
-        className={`${cardCoverClass} skeleton-thumb animate-pulse bg-gradient-to-r from-[#1a1a1a] via-[#242424] to-[#1a1a1a] ${skeletonListCoverClass}`}
-      />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[50px] flex-col items-center justify-end gap-2 px-2 pb-7 list-mode:hidden md:flex">
-        <div className="h-3 w-3/4 animate-pulse rounded bg-white/20" />
-        <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/10" />
-      </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[22px] items-stretch rounded-b-[10px] list-mode:hidden md:flex">
-        <div className="h-full flex-1 animate-pulse bg-white/[0.06]" />
-        <div className="h-full flex-1 animate-pulse bg-white/[0.04]" />
-      </div>
-      <div
-        className={`hidden flex-1 flex-col justify-center gap-2 p-3 ${skeletonListContentClass}`}
-      >
-        <div className="h-3 w-3/4 animate-pulse rounded bg-[#2a2a2a]" />
-        <div className="h-4 w-full animate-pulse rounded bg-[#222]" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-[#222]" />
-        <div className="h-4 w-2/3 animate-pulse rounded bg-[#222]" />
-      </div>
-    </div>
-  );
-}
 
 function updatedAtMillis(record: MangaRecord): number {
   const updatedAt = value(record, "updatedAt", value(record, "latestUpdate", 0));
@@ -1529,7 +1483,7 @@ function FirebasePostCatalog() {
             record={record}
           />
         )) : isLoading ? Array.from({ length: FIREBASE_POST_PAGE_SIZE }, (_, index) => (
-          <CatalogSkeleton key={`random-skeleton-${index}`} />
+          <HomepageCatalogSkeleton key={`random-skeleton-${index}`} />
         )) : null}
       </div>
       <button
@@ -1553,7 +1507,7 @@ function FirebasePostCatalog() {
             record={record}
           />
         )) : isLoading ? Array.from({ length: FIREBASE_POST_PAGE_SIZE }, (_, index) => (
-          <CatalogSkeleton key={`novel-skeleton-${index}`} />
+          <HomepageCatalogSkeleton key={`novel-skeleton-${index}`} />
         )) : null}
       </div>
       {loadError && records.length === 0 && <p role="alert">{loadError}</p>}
