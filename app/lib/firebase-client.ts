@@ -303,7 +303,7 @@ export function loadFirestoreMangaCatalog(
         if (!record || metadataChangeTime(record) <= deletedAt) bySlug.delete(slug);
       }
 
-      if (sourceMode === "effective" && catalog.firestoreDeltasIncluded !== true) {
+      if (sourceMode === "effective") {
         try {
           const { firestore } = initializeFirebaseClient();
           const mangaCollection = collection(firestore, "manga");
