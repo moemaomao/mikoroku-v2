@@ -1926,19 +1926,9 @@ export default function DetailPageContent({
       return !query || `chapter ${chapter.num} ${chapter.title || ""}`.toLowerCase().includes(query);
     })
     .sort((left, right) => {
-      if (
-        managedChapterList &&
-        left.order != null &&
-        right.order != null &&
-        left.order !== right.order
-      ) {
-        return sort === "newest"
-          ? left.order - right.order
-          : right.order - left.order;
-      }
       const order = chapterNumber(left.num) - chapterNumber(right.num);
       return sort === "newest" ? -order : order;
-    }), [chapterSearch, chapters, managedChapterList, sort]);
+    }), [chapterSearch, chapters, sort]);
 
   const visibleChapters = useMemo(
     () => filteredSortedChapters.slice(0, chapterWindow),
