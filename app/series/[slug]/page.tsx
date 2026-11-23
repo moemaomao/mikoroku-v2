@@ -65,6 +65,7 @@ export default async function DetailRoute({ params }: PageProps) {
       initialManga={initial.manga}
       initialChapters={initial.chapters}
       initialChapterSource={initial.chapterSource}
+      initialChaptersManaged={initial.chaptersManaged}
     />
   );
 }

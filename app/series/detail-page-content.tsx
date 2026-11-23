@@ -86,10 +86,11 @@ type Chapter = {
   id?: string;
   num: string | number;
   title?: string;
+  slug?: string;
+  url?: string;
   thumbnail?: string;
   images?: string[];
   isNovel?: boolean;
-  url?: string;
   source: "blogger" | "blogger2" | "firestore";
   createdAt?: string;
   updatedAt?: string;
@@ -833,7 +834,7 @@ async function loadBloggerChapterSource(
   const params = new URLSearchParams({
     title: title.trim(),
     source: bloggerSource,
-    full: "1",
+    full: "0",
   });
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
@@ -863,29 +864,14 @@ async function loadBloggerChapterSource(
     }>;
   };
 
-  return (data.chapters || []).map((chapter) => {
-    const images = Array.isArray(chapter.images)
-      ? chapter.images.filter(
-          (src): src is string =>
-            typeof src === "string" &&
-            /^https?:\/\//i.test(src) &&
-            !/favicon|emoji|icon|spacer|pixel|1x1/i.test(src),
-        )
-      : [];
-
-    const rawThumb =
-      images[2] ||
-      images[1] ||
-      images[0] ||
-      (typeof chapter.thumbnail === "string" ? chapter.thumbnail : "") ||
-      "";
-    const thumbnail = rawThumb;
+  return (data.chapters || []).map((chapter, order) => {
     return {
       num: chapter.num,
       title: chapter.title,
       url: chapter.url,
-      images: images.slice(0, 4),
-      thumbnail,
+      images: [],
+      thumbnail: chapter.thumbnail || "",
+      order,
       createdAt: chapter.createdAt || "",
       source: chapter.source === "blogger2" ? "blogger2" : "blogger",
     };
@@ -1219,6 +1205,7 @@ type DetailPageContentProps = {
   initialManga?: Manga | null;
   initialChapters?: Chapter[];
   initialChapterSource?: ChapterSource | "cache";
+  initialChaptersManaged?: boolean;
 };
 
 export default function DetailPageContent({
@@ -1226,6 +1213,7 @@ export default function DetailPageContent({
   initialManga = null,
   initialChapters = [],
   initialChapterSource = "cache",
+  initialChaptersManaged = false,
 }: DetailPageContentProps) {
   const [manga, setManga] = useState<Manga | null>(() =>
     initialManga ?? getCurrentMangaForSlug(slug),
@@ -1236,6 +1224,7 @@ export default function DetailPageContent({
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
   const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
   const chapterCacheSlugRef = useRef(slug);
+  const managedInitialSeededSlugRef = useRef("");
   const trackedSeriesRef = useRef(new Map<string, number>());
   const baseCoverUrl = manga?.covers?.length
     ? manga.covers[manga.covers.length - 1]
@@ -1278,14 +1267,15 @@ export default function DetailPageContent({
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(false);
   const [chapters, setChapters] = useState<Chapter[]>(() => initialChapters ?? []);
+  const [managedChapterList, setManagedChapterList] = useState(
+    () => initialChaptersManaged && initialChapters.length > 0,
+  );
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">(
     () => (initialChapters.length > 0 ? "ready" : "loading"),
   );
   const [chapterError, setChapterError] = useState("");
-  const [source, setSource] = useState<ChapterSource>(() =>
-    initialChapterSource === "cache" ? "blogger" : (initialChapterSource as ChapterSource) || "blogger",
-  );
+  const [source, setSource] = useState<ChapterSource>("blogger");
   const [chapterRetry, setChapterRetry] = useState(0);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("text-grid");
@@ -1452,7 +1442,7 @@ export default function DetailPageContent({
     if (viewPreference === "list" || viewPreference === "text-grid" || viewPreference === "grid") {
       setView(viewPreference);
     }
-  }, []);
+  }, [initialChaptersManaged]);
 
   useEffect(() => {
     let controller = new AbortController();
@@ -1527,6 +1517,48 @@ export default function DetailPageContent({
   }, [slug]);
 
   useLayoutEffect(() => {
+    if (initialChaptersManaged && initialChapters.length > 0 && source === initialChapterSource) {
+      setChapters(initialChapters);
+      setManagedChapterList(true);
+      setChapterState("ready");
+      try {
+        const saved = setLocalStorageCacheItem(`chapters_${slug}`, JSON.stringify({
+          time: Date.now(),
+          data: compactChapterCache(initialChapters),
+          summaryOnlySource: "firestore",
+          managed: true,
+        }));
+        if (!saved) console.warn(`Managed chapter cache could not be saved for ${slug}.`);
+      } catch (error) {
+        console.warn(`Managed chapter cache could not be saved for ${slug}.`, error);
+      }
+      return;
+    }
+    if (
+      initialChaptersManaged &&
+      initialChapters.length > 0 &&
+      managedInitialSeededSlugRef.current !== slug
+    ) {
+      managedInitialSeededSlugRef.current = slug;
+      setChapters(initialChapters);
+      setManagedChapterList(true);
+      setChapterState("ready");
+      try {
+        const saved = setLocalStorageCacheItem(`chapters_${slug}`, JSON.stringify({
+          time: Date.now(),
+          data: compactChapterCache(initialChapters),
+          summaryOnlySource: "firestore",
+          managed: true,
+        }));
+        if (!saved) console.warn(`Managed chapter cache could not be saved for ${slug}.`);
+      } catch (error) {
+        console.warn(`Managed chapter cache could not be saved for ${slug}.`, error);
+      }
+    }
+    if (managedChapterList && chapters.length > 0 && source === initialChapterSource) {
+      setChapterState("ready");
+      return;
+    }
     const hasLocalCache = Boolean(
       typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
     );
@@ -1555,36 +1587,44 @@ export default function DetailPageContent({
           time?: number;
           data?: Chapter[];
           summaryOnlySource?: ChapterSource;
+          managed?: boolean;
         };
         cacheAge = Date.now() - (parsed.time || 0);
         summaryOnlySource = parsed.summaryOnlySource || null;
         const valid = cacheAge >= 0 && cacheAge < CHAPTER_CACHE_DURATION_MS
           ? parsed.data || []
           : [];
+        if (parsed.managed && valid.length && summaryOnlySource === source) {
+          cachedChapters = valid;
+          cachedSelectedChapters = valid;
+          setManagedChapterList(true);
+        }
         cachedSelectedChapters = valid.filter(
-          (chapter) => chapter.source === source && summaryOnlySource !== source,
+          (chapter) => (parsed.managed === true && summaryOnlySource === source) ||
+            (chapter.source === source && summaryOnlySource !== source),
         );
-        cachedFirestoreChapters = valid.filter(
-          (chapter) => chapter.source === "firestore" && summaryOnlySource !== "firestore",
+        cachedFirestoreChapters = mergeChapterSources(
+          initialChaptersManaged ? initialChapters : [],
+          valid.filter((chapter) => chapter.source === "firestore"),
         );
-        if (chaptersNeedEmergencyFill(cachedSelectedChapters)) {
+        if (!parsed.managed && chaptersNeedEmergencyFill(cachedSelectedChapters)) {
           cachedSelectedChapters = [];
         }
-        cachedChapters = cachedSelectedChapters;
+        cachedChapters = mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters);
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
         localStorage.removeItem(`chapters_${slug}`);
       }
     }
     if (
-      cachedChapters.length > 0 &&
+      cachedSelectedChapters.length > 0 &&
       cacheAge >= 0 &&
       cacheAge < CHAPTER_CACHE_DURATION_MS
     ) {
-      if (source === "firestore" || chaptersHaveThumbnails(cachedChapters)) {
+      if (source === "firestore" || chaptersHaveThumbnails(cachedSelectedChapters)) {
         chapterSourceCacheRef.current.set(
           chapterSourceCacheKey(slug, source),
-          cachedChapters,
+          cachedSelectedChapters,
         );
       }
       if (cachedFirestoreChapters.length) {
@@ -1593,7 +1633,7 @@ export default function DetailPageContent({
           cachedFirestoreChapters,
         );
       }
-      setChapters(cachedChapters);
+      setChapters(mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters));
       setChapterState("ready");
       return () => controller.abort();
     }
@@ -1604,14 +1644,19 @@ export default function DetailPageContent({
     );
 
     if (immediatelyAvailable !== undefined) {
-      setChapters(immediatelyAvailable);
+      setChapters(mergeChapterSources(immediatelyAvailable, cachedFirestoreChapters));
       setChapterState("ready");
     } else if (cachedChapters.length > 0) {
       setChapters(cachedChapters);
       setChapterState("ready");
-      const seedList = cachedSelectedChapters.length ? cachedSelectedChapters : cachedChapters;
-      if (source === "firestore" || chaptersHaveThumbnails(seedList)) {
-        chapterSourceCacheRef.current.set(chapterSourceCacheKey(slug, source), seedList);
+      if (
+        cachedSelectedChapters.length > 0 &&
+        (source === "firestore" || chaptersHaveThumbnails(cachedSelectedChapters))
+      ) {
+        chapterSourceCacheRef.current.set(
+          chapterSourceCacheKey(slug, source),
+          cachedSelectedChapters,
+        );
       }
       if (cachedFirestoreChapters.length) {
         chapterSourceCacheRef.current.set(
@@ -1619,6 +1664,8 @@ export default function DetailPageContent({
           cachedFirestoreChapters,
         );
       }
+    } else if (chapters.length > 0) {
+      setChapterState("ready");
     } else {
       setChapterState("loading");
     }
@@ -1697,6 +1744,10 @@ export default function DetailPageContent({
         console.warn(`Chapter source ${source} failed for ${slug}.`, error);
       }
 
+      selectedChapters = mergeChapterSources(
+        selectedChapters,
+        initialChaptersManaged ? initialChapters : cachedFirestoreChapters,
+      );
       if (selectedChapters.length) publishEarly(selectedChapters);
 
       if (!chaptersNeedEmergencyFill(selectedChapters)) {
@@ -1752,7 +1803,16 @@ export default function DetailPageContent({
     });
 
     return () => controller.abort();
-  }, [slug, mangaTitle, source, chapterRetry]);
+  }, [
+    slug,
+    mangaTitle,
+    source,
+    chapterRetry,
+    chapters.length,
+    managedChapterList,
+    initialChapters,
+    initialChaptersManaged,
+  ]);
 
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {
     if (source === nextSource) return;
@@ -1866,9 +1926,19 @@ export default function DetailPageContent({
       return !query || `chapter ${chapter.num} ${chapter.title || ""}`.toLowerCase().includes(query);
     })
     .sort((left, right) => {
+      if (
+        managedChapterList &&
+        left.order != null &&
+        right.order != null &&
+        left.order !== right.order
+      ) {
+        return sort === "newest"
+          ? left.order - right.order
+          : right.order - left.order;
+      }
       const order = chapterNumber(left.num) - chapterNumber(right.num);
       return sort === "newest" ? -order : order;
-    }), [chapterSearch, chapters, sort]);
+    }), [chapterSearch, chapters, managedChapterList, sort]);
 
   const visibleChapters = useMemo(
     () => filteredSortedChapters.slice(0, chapterWindow),
@@ -2083,7 +2153,11 @@ export default function DetailPageContent({
     if (!manga) return;
     const isNovel = chapter.isNovel || isNovelSeries(manga);
     const chapterName = `Chapter ${chapter.num}`;
-    const readerSource = chapter.source === "firestore" && source !== "firestore"
+    const isManagedInternalLink = chapter.source === "firestore" &&
+      /^\/(?:manga|novel)\//.test(chapter.url || "");
+    const readerSource = chapter.source === "firestore" &&
+      source !== "firestore" &&
+      !isManagedInternalLink
       ? source
       : chapter.source;
     let images = chapter.source === "firestore" && readerSource !== "firestore"

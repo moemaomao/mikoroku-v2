@@ -6,7 +6,21 @@
  * (fetchMangaMetadataPayload, MIKOROKU_V2_CACHE, public/catalog/metadata.json, etc.).
  */
 
+import { CacheKeys, kvGet, kvSet } from "./kv-cache";
 import catalog from "../public/catalog/metadata.json";
+
+export type ChapterLink = {
+  id?: string;
+  chapterId?: string;
+  num: string | number;
+  title?: string;
+  url?: string;
+  slug?: string;
+  date?: string;
+  thumbnail?: string;
+  source?: "blogger" | "blogger2" | "firestore";
+  order?: number;
+};
 
 export type SeriesManga = {
   slug: string;
@@ -37,21 +51,19 @@ export type SeriesManga = {
   [key: string]: unknown;
 };
 
-export type SeriesChapterSummary = {
-  id?: string;
-  num: string | number;
-  title?: string;
-  date?: string;
-  source?: "blogger" | "blogger2" | "firestore";
-  thumbnail?: string;
-};
+export type SeriesChapterSummary = ChapterLink;
 
 export type SeriesInitialData = {
   manga: SeriesManga | null;
   chapters: SeriesChapterSummary[];
   chapterSource: "blogger" | "blogger2" | "firestore" | "cache";
+  chaptersManaged: boolean;
   fromCache: boolean;
 };
+
+const CHAPTER_SUMMARY_TTL = 60 * 60 * 24 * 30;
+const FIRESTORE_BASE =
+  "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : value == null ? fallback : String(value);
@@ -144,61 +156,98 @@ export function getMangaFromCatalog(slug: string): SeriesManga | null {
 
 /**
  * Lightweight chapter list for first paint.
- * Prefer reading from KV / shared chapter cache.
- * Falls back to empty array so the client can still fetch.
+ * Read managed summaries from KV first, then the lightweight Firestore collection.
  *
  * IMPORTANT: do NOT call external Blogger with full=1 on the server
  * for every page view — that is what burns Workers quota.
  */
 export async function getChapterSummaries(
   slug: string,
-  title?: string,
-): Promise<{ chapters: SeriesChapterSummary[]; source: SeriesInitialData["chapterSource"] }> {
-  // --- Option A: read from your existing shared chapter cache (KV / memory) ---
-  // Example (adapt to your real helper):
-  //
-  //   const cached = await readSharedChapterCache(slug);
-  //   if (cached?.chapters?.length) {
-  //     return {
-  //       chapters: cached.chapters.map((c) => ({
-  //         id: c.id,
-  //         num: c.num,
-  //         title: c.title,
-  //         date: c.date || c.updatedAt,
-  //         source: c.source,
-  //         thumbnail: c.thumbnail,
-  //       })),
-  //       source: "cache",
-  //     };
-  //   }
-
-  // --- Option B: optional cheap Worker API that only returns summaries ---
-  // Keep timeout short. Never block the whole page for more than ~400ms.
+): Promise<{
+  chapters: SeriesChapterSummary[];
+  source: SeriesInitialData["chapterSource"];
+  managed: boolean;
+}> {
+  const cacheKey = CacheKeys.chapterSummary(slug);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 400);
-
-    const params = new URLSearchParams({
-      title: title || slug,
-      source: "blogger",
-      // summary-only endpoint if you have one; otherwise omit full=1
-      // full: "0",
-    });
-
-    // Use absolute URL only when running on the edge with a known origin,
-    // or call your internal cache helper instead of fetch.
-    // const res = await fetch(`${origin}/api/blogger/chapters?${params}`, {
-    //   signal: controller.signal,
-    //   next: { revalidate: 600 },
-    // });
-
-    clearTimeout(timeout);
-    // if (res?.ok) { ... map to SeriesChapterSummary[] ... }
-  } catch {
-    // swallow — client will fetch
+    const cached = await kvGet<SeriesChapterSummary[]>(cacheKey);
+    if (cached && Array.isArray(cached)) {
+      const chapters = cached.map((chapter) => ({
+        ...chapter,
+        id: chapter.source === "firestore"
+          ? chapter.chapterId || String(chapter.num)
+          : chapter.id,
+      }));
+      return {
+        chapters,
+        source: chapters.length ? "firestore" : "cache",
+        managed: chapters.length > 0,
+      };
+    }
+  } catch (error) {
+    console.warn(`Chapter summary KV cache could not be read for ${slug}.`, error);
   }
 
-  return { chapters: [], source: "cache" };
+  let chapters: SeriesChapterSummary[] = [];
+  try {
+    const response = await fetch(
+      `${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}/chapterLinks?pageSize=1000`,
+      { cache: "no-store" },
+    );
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Firestore chapter summary returned HTTP ${response.status}.`);
+    }
+    if (response.ok) {
+      const payload = await response.json() as {
+        documents?: Array<{ name?: string; fields?: Record<string, unknown> }>;
+      };
+      chapters = (payload.documents || []).flatMap((document) => {
+        const fields = document.fields || {};
+        const read = (key: string): unknown => {
+          const value = fields[key];
+          if (!value || typeof value !== "object") return undefined;
+          const field = value as Record<string, unknown>;
+          if ("stringValue" in field) return field.stringValue;
+          if ("integerValue" in field) return Number(field.integerValue);
+          if ("doubleValue" in field) return Number(field.doubleValue);
+          if ("timestampValue" in field) return field.timestampValue;
+          return undefined;
+        };
+        const num = read("num");
+        if (typeof num !== "string" && typeof num !== "number") return [];
+        const source = read("source");
+        const chapterId = read("chapterId");
+        const chapter: SeriesChapterSummary = {
+          id: source === "firestore"
+            ? String(chapterId || num)
+            : String(read("id") || document.name?.split("/").pop() || num),
+          chapterId: typeof chapterId === "string" ? chapterId : undefined,
+          num,
+          title: typeof read("title") === "string" ? read("title") as string : undefined,
+          url: typeof read("url") === "string" ? read("url") as string : undefined,
+          slug: typeof read("slug") === "string" ? read("slug") as string : undefined,
+          date: typeof read("date") === "string" ? read("date") as string : undefined,
+          thumbnail: typeof read("thumbnail") === "string" ? read("thumbnail") as string : undefined,
+          source: source === "blogger" || source === "blogger2" ? source : "firestore",
+          order: Number(read("order") || 0),
+        };
+        return [chapter];
+      }).sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+    }
+  } catch (error) {
+    console.warn(`Managed chapter summaries could not be loaded for ${slug}.`, error);
+  }
+
+  try {
+    await kvSet(cacheKey, chapters, chapters.length ? CHAPTER_SUMMARY_TTL : 300);
+  } catch (error) {
+    console.warn(`Chapter summary KV cache could not be updated for ${slug}.`, error);
+  }
+  return {
+    chapters,
+    source: chapters.length ? "firestore" : "cache",
+    managed: chapters.length > 0,
+  };
 }
 
 /**
@@ -206,12 +255,13 @@ export async function getChapterSummaries(
  */
 export async function getSeriesInitialData(slug: string): Promise<SeriesInitialData> {
   const manga = getMangaFromCatalog(slug);
-  const { chapters, source } = await getChapterSummaries(slug, manga?.title);
+  const { chapters, source, managed } = await getChapterSummaries(slug);
 
   return {
     manga,
     chapters,
     chapterSource: source,
+    chaptersManaged: managed,
     fromCache: Boolean(manga),
   };
 }

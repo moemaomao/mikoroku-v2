@@ -29,6 +29,7 @@ const cachedChapterFields = [
   "title",
   "label",
   "postTitle",
+  "slug",
   "thumbnail",
   "url",
   "source",
@@ -216,13 +217,28 @@ export function pruneStoredChapterCaches(): void {
         if (!raw) return [];
         const parsed: unknown = JSON.parse(raw);
         const cached = parsed && typeof parsed === "object" && !Array.isArray(parsed)
-          ? parsed as { time?: unknown; data?: unknown }
+          ? parsed as {
+              time?: unknown;
+              data?: unknown;
+              summaryOnlySource?: unknown;
+              managed?: unknown;
+            }
           : null;
         const time = typeof cached?.time === "number" ? cached.time : 0;
         if (!cached || !Array.isArray(cached.data) || now - time >= CHAPTER_CACHE_TTL) return [];
 
         const data = compactChapterRecords(cached.data);
-        const compacted = JSON.stringify({ time, data });
+        const summaryOnlySource = cached.summaryOnlySource === "blogger" ||
+          cached.summaryOnlySource === "blogger2" ||
+          cached.summaryOnlySource === "firestore"
+          ? cached.summaryOnlySource
+          : undefined;
+        const compacted = JSON.stringify({
+          time,
+          data,
+          ...(summaryOnlySource ? { summaryOnlySource } : {}),
+          ...(cached.managed === true ? { managed: true } : {}),
+        });
         const bytes = compacted.length * 2;
         if (!data.length || bytes > MAX_CHAPTER_CACHE_ENTRY_BYTES) return [];
         return [{ key, time, compacted, bytes }];

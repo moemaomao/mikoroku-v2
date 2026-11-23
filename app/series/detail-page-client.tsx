@@ -23,6 +23,7 @@ type DetailPageClientProps = {
   initialManga?: SeriesManga | null;
   initialChapters?: SeriesChapterSummary[];
   initialChapterSource?: "blogger" | "blogger2" | "firestore" | "cache";
+  initialChaptersManaged?: boolean;
 };
 
 export default function DetailPageClient({
@@ -30,6 +31,7 @@ export default function DetailPageClient({
   initialManga = null,
   initialChapters = [],
   initialChapterSource = "cache",
+  initialChaptersManaged = false,
 }: DetailPageClientProps) {
   const pathname = usePathname();
 
@@ -54,6 +56,7 @@ export default function DetailPageClient({
             ? "blogger"
             : (initialChapterSource as "blogger" | "blogger2" | "firestore")
         }
+        initialChaptersManaged={initialChaptersManaged}
       />
     </>
   );

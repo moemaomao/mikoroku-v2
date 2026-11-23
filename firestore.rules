@@ -1,200 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function isAdmin() {
       return request.auth != null &&
-             request.auth.token.email in [
-               'mikorokuscan@gmail.com',
-               'moemaomao@gmail.com'
-             ];
+        request.auth.token.email in [
+          "moemaomao@gmail.com",
+          "mikorokuscan@gmail.com"
+        ];
     }
 
-    // User Stats
-    match /userStats/{uid} {
+    match /manga/{slug} {
       allow read: if true;
-      allow create: if request.auth != null &&
-                    request.auth.uid == uid &&
-                    !('leaderboardHidden' in request.resource.data) &&
-                    !('leaderboardHiddenAt' in request.resource.data);
-      allow update: if isAdmin() ||
-                    (request.auth != null &&
-                     request.auth.uid == uid &&
-                     !request.resource.data.diff(resource.data)
-                       .affectedKeys()
-                       .hasAny(['leaderboardHidden', 'leaderboardHiddenAt']));
-      allow delete: if request.auth != null &&
-                     request.auth.uid == uid;
+      allow write: if isAdmin();
 
-      match /chapterReadMarks/{seriesId} {
-        allow read, write: if request.auth != null &&
-                           request.auth.uid == uid;
-      }
-    }
-
-    // Direct messages
-    match /directMessages/{messageId} {
-      allow read: if request.auth != null &&
-                  request.auth.uid in resource.data.participants;
-
-      allow create: if request.auth != null &&
-                    request.resource.data.from == request.auth.uid &&
-                    request.resource.data.participants is list &&
-                    request.auth.uid in request.resource.data.participants;
-
-      allow update: if request.auth != null &&
-                    request.auth.uid in resource.data.participants &&
-                    (
-                      resource.data.from == request.auth.uid ||
-                      (
-                        resource.data.to == request.auth.uid &&
-                        request.resource.data.diff(resource.data)
-                          .affectedKeys().hasOnly(['read']) &&
-                        request.resource.data.read == true
-                      )
-                    );
-
-      allow delete: if request.auth != null &&
-                    resource.data.from == request.auth.uid;
-    }
-
-    // Comments + Replies
-    match /comments/{postId}/postComments/{commentId} {
-      allow read: if true;
-      allow create, update: if true;
-      allow delete: if isAdmin() ||
-                    (request.auth != null &&
-                     resource.data.uid == request.auth.uid);
-
-      match /replies/{replyId} {
+      match /chapters/{chapterId} {
         allow read: if true;
-        allow create, update: if true;
-        allow delete: if isAdmin() ||
-                      (request.auth != null &&
-                       resource.data.uid == request.auth.uid);
+        allow write: if isAdmin();
+      }
 
-        match /replies/{subReplyId} {
-          allow read: if true;
-          allow create, update: if true;
-          allow delete: if isAdmin() ||
-                        (request.auth != null &&
-                         resource.data.uid == request.auth.uid);
-        }
+      match /chapterLinks/{chapterId} {
+        allow read: if true;
+        allow write: if isAdmin();
       }
     }
 
-    match /{path=**}/postComments/{commentId} {
-      allow read: if true;
+    match /chapterReports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
     }
 
-    match /comments/{commentId} {
-      allow read: if true;
-      allow create, update: if true;
-      allow delete: if isAdmin() ||
-                    (request.auth != null &&
-                     resource.data.uid == request.auth.uid);
-    }
-
-    // Notifications
-    match /notifications/{uid} {
-      allow read: if request.auth != null &&
-                  request.auth.uid == uid;
-
-      allow create: if request.auth != null &&
-                    (
-                      request.auth.uid == uid ||
-                      (
-                        request.resource.data.keys().hasOnly(['unreadCount']) &&
-                        request.resource.data.unreadCount == 1
-                      )
-                    );
-
-      allow update: if request.auth != null &&
-                    (
-                      request.auth.uid == uid ||
-                      (
-                        request.resource.data.diff(resource.data)
-                          .affectedKeys().hasOnly(['unreadCount']) &&
-                        request.resource.data.unreadCount is number &&
-                        (
-                          (!('unreadCount' in resource.data) &&
-                            request.resource.data.unreadCount == 1) ||
-                          (resource.data.unreadCount is number &&
-                            request.resource.data.unreadCount ==
-                              resource.data.unreadCount + 1)
-                        )
-                      )
-                    );
-
-      allow delete: if request.auth != null &&
-                    request.auth.uid == uid;
-
-      match /items/{notifId} {
-        allow read: if request.auth != null &&
-                    request.auth.uid == uid;
-
-        allow create: if request.auth != null &&
-                      request.resource.data.keys().hasOnly([
-                        'type',
-                        'author',
-                        'text',
-                        'parentId',
-                        'postId',
-                        'postUrl',
-                        'postTitle',
-                        'date',
-                        'read'
-                      ]) &&
-                      request.resource.data.type in ['reply', 'mention'] &&
-                      request.resource.data.author is string &&
-                      request.resource.data.text is string &&
-                      request.resource.data.postId is string &&
-                      request.resource.data.postUrl is string &&
-                      request.resource.data.date is number &&
-                      request.resource.data.read is bool &&
-                      (!('parentId' in request.resource.data) ||
-                        request.resource.data.parentId is string) &&
-                      (!('postTitle' in request.resource.data) ||
-                        request.resource.data.postTitle is string);
-
-        allow update: if request.auth != null &&
-                      request.auth.uid == uid &&
-                      resource.data.read == false &&
-                      request.resource.data.diff(resource.data)
-                        .affectedKeys().hasOnly(['read']) &&
-                      request.resource.data.read == true;
-
-        allow delete: if request.auth != null &&
-                      request.auth.uid == uid;
-      }
-    }
-
-    // Bookmarks
-    match /users/{userId}/bookmarks/{bookmarkId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null &&
-                                    request.auth.uid == userId;
-    }
-
-    // Reading History
-    match /users/{userId}/readingHistory/{docId} {
-      allow read, write: if true;
-    }
-
-    // Reports
-    match /reports/{reportId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update, delete: if isAdmin();
-    }
-
-    // Banned Users
-    match /bannedUsers/{bannedId} {
+    match /meta/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // BLOCK ALL OTHER
+    // Announcements: publik hanya yang published, admin full access
+    match /announcements/{announcementId} {
+      allow read: if isAdmin() || resource.data.published == true;
+      allow create, update, delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

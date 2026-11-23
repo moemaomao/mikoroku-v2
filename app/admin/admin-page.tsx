@@ -53,6 +53,7 @@ import {
   normalizeReaderServerNoticeConfig,
   type ReaderServerNoticeConfig,
 } from "../series/reader-server-notice-config";
+import { isNovelSeries } from "../../lib/reader-kind";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
@@ -203,6 +204,18 @@ type AdminChapter = {
   order: number;
 };
 
+type AdminChapterLink = {
+  id: string;
+  chapterId: string;
+  num: string;
+  title: string;
+  url: string;
+  date: string;
+  thumbnail: string;
+  source: "firestore";
+  order: number;
+};
+
 type UploadNotice = {
   status: "uploading" | "success" | "error";
   message: string;
@@ -275,6 +288,32 @@ async function refreshSharedMangaCatalogCache(): Promise<void> {
   }
 }
 
+async function refreshChapterSummaryCache(
+  slug: string,
+  chapters: AdminChapterLink[],
+): Promise<void> {
+  const user = getAdminFirebase().auth.currentUser;
+  if (!user) throw new Error("Sign in as an admin before saving chapter links.");
+  const response = await fetch("/api/admin/chapter-summaries", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await user.getIdToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ slug, chapters }),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.json() as { error?: string };
+      detail = body.error ? ` ${body.error}` : "";
+    } catch (error) {
+      console.warn("Chapter summary cache returned an unreadable error response.", error);
+    }
+    throw new Error(`Chapter summary cache refresh returned HTTP ${response.status}.${detail}`);
+  }
+}
+
 function scheduleSharedMangaCatalogCacheRefresh(): void {
   void refreshSharedMangaCatalogCache()
     .catch((error: unknown) => {
@@ -285,6 +324,10 @@ function scheduleSharedMangaCatalogCacheRefresh(): void {
 
 function text(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function chapterLinkDocumentId(number: string): string {
+  return `link-${encodeURIComponent(number.trim())}`;
 }
 
 function toDateTimeInput(value: number): string {
@@ -733,6 +776,79 @@ function getTimestamp(value: unknown): number {
   return 0;
 }
 
+function generatedChapterPath(slug: string, number: string, isNovel: boolean): string {
+  const kind = isNovel ? "novel" : "manga";
+  return `/${kind}/${encodeURIComponent(slug)}/${encodeURIComponent(number)}`;
+}
+
+function generatedChapterLink(
+  slug: string,
+  isNovel: boolean,
+  chapter: AdminChapter,
+  order: number,
+): AdminChapterLink {
+  const chapterId = chapter.num;
+  const timestamp = chapter.date ? getTimestamp(chapter.date) : 0;
+  return {
+    id: chapterLinkDocumentId(chapter.num),
+    chapterId,
+    num: chapter.num,
+    title: chapter.title || `Chapter ${chapter.num}`,
+    url: generatedChapterPath(slug, chapter.num, isNovel),
+    date: timestamp > 0 ? new Date(timestamp).toISOString() : "",
+    thumbnail: chapter.thumbnail,
+    source: "firestore",
+    order,
+  };
+}
+
+async function syncGeneratedChapterLinks(
+  firestore: Firestore,
+  slug: string,
+  isNovel: boolean,
+  chapters: AdminChapter[],
+): Promise<string> {
+  const links = chapters
+    .filter((chapter) => !chapter.isDraft)
+    .map((chapter, order) => generatedChapterLink(slug, isNovel, chapter, order));
+  const linkCollection = collection(firestore, "manga", slug, "chapterLinks");
+  const existing = await getDocs(linkCollection);
+  const linkIds = new Set(links.map((link) => link.id));
+  const stale = existing.docs.filter((link) => !linkIds.has(link.id));
+
+  for (let start = 0; start < stale.length; start += 450) {
+    const batch = writeBatch(firestore);
+    stale.slice(start, start + 450).forEach((link) => batch.delete(link.ref));
+    await batch.commit();
+  }
+  for (let start = 0; start < links.length; start += 450) {
+    const batch = writeBatch(firestore);
+    links.slice(start, start + 450).forEach((link) => {
+      batch.set(doc(firestore, "manga", slug, "chapterLinks", link.id), link);
+    });
+    await batch.commit();
+  }
+
+  let warning = "";
+  try {
+    await refreshChapterSummaryCache(slug, links);
+  } catch (error) {
+    warning = error instanceof Error ? error.message : String(error);
+    console.error(`Generated links were saved, but their shared cache could not be refreshed for ${slug}.`, error);
+  }
+  try {
+    window.localStorage.setItem(`chapters_${slug}`, JSON.stringify({
+      time: Date.now(),
+      data: links.map((link) => ({ ...link, id: link.chapterId, images: [] })),
+      summaryOnlySource: "firestore",
+      managed: true,
+    }));
+  } catch (error) {
+    console.warn(`Generated links were saved, but local chapter cache could not be updated for ${slug}.`, error);
+  }
+  return warning;
+}
+
 function isQuotaError(error: unknown): boolean {
   const msg = getErrorMessage(error).toLowerCase();
   const code =
@@ -997,6 +1113,15 @@ export default function AdminPage() {
       return [];
     }
   }, [chapterDraft.images]);
+  const chapterManga = manga.find((item) => item.slug === chapterDraft.mangaSlug) || selectedManga;
+  const generatedReaderLinkPath = chapterDraft.mangaSlug && chapterDraft.number.trim()
+    ? generatedChapterPath(
+        chapterDraft.mangaSlug,
+        chapterDraft.number.trim(),
+        isNovelSeries(chapterManga || {}),
+      )
+    : "";
+  const generatedReaderLink = generatedReaderLinkPath;
 
   useEffect(() => {
     setIsLightMode(window.localStorage.getItem("theme") === "light");
@@ -2761,6 +2886,16 @@ export default function AdminPage() {
     }
   }
 
+  async function copyGeneratedReaderLink() {
+    if (!generatedReaderLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedReaderLink);
+      setUploadNotice({ status: "success", message: "Chapter link copied to clipboard." });
+    } catch {
+      setUploadNotice({ status: "error", message: "Failed to copy chapter link." });
+    }
+  }
+
   async function openMangaChapters(item: MangaRecord) {
     const initialVolumes = item.covers?.length ? item.covers : [item.cover].filter(Boolean);
     setSelectedManga({ ...item, cover: initialVolumes[initialVolumes.length - 1] || item.cover, covers: initialVolumes });
@@ -2807,6 +2942,25 @@ export default function AdminPage() {
             : right.order - left.order;
         });
       setChapters(loaded);
+      try {
+        const linksSnapshot = await getDocs(
+          collection(firestore, "manga", item.slug, "chapterLinks"),
+        );
+        if (linksSnapshot.empty && loaded.some((chapter) => !chapter.isDraft)) {
+          const warning = await syncGeneratedChapterLinks(
+            firestore,
+            item.slug,
+            isNovelSeries(item),
+            loaded,
+          );
+          setMessage(warning
+            ? `Chapter links generated, but cache refresh failed: ${warning}`
+            : `${loaded.filter((chapter) => !chapter.isDraft).length} chapter links generated.`);
+        }
+      } catch (error) {
+        console.error(`Failed to generate chapter links for ${item.slug}.`, error);
+        setMessage(`Chapter list loaded, but generated links could not be updated: ${getErrorMessage(error)}`);
+      }
     } catch (error) {
       console.error(`Failed to load chapters for ${item.slug}.`, error);
       setMessage(`Failed to load chapters: ${getErrorMessage(error)}`);
@@ -2841,6 +2995,18 @@ export default function AdminPage() {
         doc(firestore, "manga", selectedManga.slug, "chapters", chapter.num),
       );
       const remaining = chapters.filter((item) => item.num !== chapter.num);
+      let chapterLinkWarning = "";
+      try {
+        chapterLinkWarning = await syncGeneratedChapterLinks(
+          firestore,
+          selectedManga.slug,
+          isNovelSeries(selectedManga),
+          remaining,
+        );
+      } catch (error) {
+        chapterLinkWarning = `Managed chapter links could not be updated: ${getErrorMessage(error)}`;
+        console.error("Chapter was deleted, but generated links could not be synchronized.", error);
+      }
       const latestChapter = remaining
         .map((item) => item.num)
         .sort((left, right) => Number.parseFloat(right) - Number.parseFloat(left))[0] ?? null;
@@ -2876,14 +3042,16 @@ export default function AdminPage() {
       });
       try {
         const summaryResult = await updateSummary(firestore, nextManga);
-        setMessage(
-          summaryResult === "ok"
-            ? `Chapter ${chapter.num} deleted successfully.`
-            : `Chapter ${chapter.num} deleted. Summary skipped (quota).`,
-        );
+        const summaryMessage = summaryResult === "ok"
+          ? `Chapter ${chapter.num} deleted successfully.`
+          : `Chapter ${chapter.num} deleted. Summary skipped (quota).`;
+        setMessage([summaryMessage, chapterLinkWarning].filter(Boolean).join(" "));
       } catch (error) {
         console.error("Failed to update summary after chapter delete.", error);
-        setMessage(`Chapter deleted, but summary could not be updated: ${getErrorMessage(error)}`);
+        setMessage([
+          `Chapter deleted, but summary could not be updated: ${getErrorMessage(error)}`,
+          chapterLinkWarning,
+        ].filter(Boolean).join(" "));
       }
     } catch (error) {
       console.error(`Failed to delete chapter ${chapter.num}.`, error);
@@ -2923,7 +3091,21 @@ export default function AdminPage() {
         order: chapters.length - index,
       }));
       setChapters(ordered);
-      setMessage("Chapter order saved successfully.");
+      let chapterLinkWarning = "";
+      try {
+        chapterLinkWarning = await syncGeneratedChapterLinks(
+          firestore,
+          selectedManga.slug,
+          isNovelSeries(selectedManga),
+          ordered,
+        );
+      } catch (error) {
+        chapterLinkWarning = `Managed chapter links could not be updated: ${getErrorMessage(error)}`;
+        console.error("Chapter order was saved, but generated links could not be synchronized.", error);
+      }
+      setMessage(chapterLinkWarning
+        ? `Chapter order saved. ${chapterLinkWarning}`
+        : "Chapter order saved successfully.");
     } catch (error) {
       console.error("Failed to save the chapter order.", error);
       setMessage(`Failed to save chapter order: ${getErrorMessage(error)}`);
@@ -3038,6 +3220,7 @@ export default function AdminPage() {
 
       let nextManga = currentManga;
       let refreshedChapters: AdminChapter[] | null = null;
+      let chapterLinkWarning = "";
       const allChapters = await getDocs(
         collection(firestore, "manga", mangaSlug, "chapters"),
       );
@@ -3062,6 +3245,19 @@ export default function AdminPage() {
             ? rightNumber - leftNumber
             : right.order - left.order;
         });
+      if (refreshedChapters) {
+        try {
+          chapterLinkWarning = await syncGeneratedChapterLinks(
+            firestore,
+            mangaSlug,
+            isNovelSeries(currentManga || catalogManga || {}),
+            refreshedChapters,
+          );
+        } catch (error) {
+          chapterLinkWarning = `Managed chapter links could not be updated: ${getErrorMessage(error)}`;
+          console.error("Chapter was saved, but generated links could not be synchronized.", error);
+        }
+      }
       const chapterNumbers = allChapters.docs.map((chapter) => chapter.id);
       const latestChapter = chapterNumbers.sort((left, right) => {
         const leftNumber = Number.parseFloat(left);
@@ -3174,11 +3370,15 @@ export default function AdminPage() {
         setChapters(nextChapters);
       }
       setChapterEditorOpen(false);
-      setMessage(
+      const saveWarnings = [
         sharedCatalogRefreshFailed
-          ? `Chapter ${chapterNumber} saved, but the homepage catalog could not be refreshed. Check the browser console and retry the catalog refresh.`
-          : `Chapter ${chapterNumber} saved successfully.`,
-      );
+          ? "The homepage catalog could not be refreshed. Check the browser console and retry the catalog refresh."
+          : "",
+        chapterLinkWarning,
+      ].filter(Boolean);
+      setMessage(saveWarnings.length
+        ? `Chapter ${chapterNumber} saved. ${saveWarnings.join(" ")}`
+        : `Chapter ${chapterNumber} saved successfully.`);
       setEditingChapterNumber(null);
       if (selectedManga?.slug === mangaSlug && nextManga) {
         setSelectedManga(nextManga);
@@ -4164,6 +4364,20 @@ export default function AdminPage() {
               <label className={styles.field}><span>Chapter Number</span><input required placeholder="e.g. 12 or 12.5" value={chapterDraft.number} onChange={(event) => setChapterDraft((current) => ({ ...current, number: event.target.value.trim() }))} /></label>
               <label className={styles.field}><span>Chapter Title</span><input placeholder="e.g. The Beginning" value={chapterDraft.title} onChange={(event) => setChapterDraft((current) => ({ ...current, title: event.target.value }))} /></label>
             </div>
+            {generatedReaderLink && (
+              <div className={styles.field}>
+                <span>Generated reader link</span>
+                <div className={styles.fileUploadRow}>
+                  <input readOnly value={generatedReaderLink} aria-label="Generated reader link" />
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => void copyGeneratedReaderLink()}
+                  >Copy</button>
+                </div>
+                <small>Link ini dibuat otomatis dan disimpan saat chapter disimpan.</small>
+              </div>
+            )}
             <div className={`${styles.field} ${styles.chapterThumbnailField}`}>
               <span>Thumbnail</span>
               <div className={styles.fileUploadRow}>
