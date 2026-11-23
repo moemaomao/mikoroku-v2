@@ -109,6 +109,19 @@ function isSharePage(pathname: string): boolean {
   return /^\/(?:series\/[^/]+|manga\/[^/]+\/[^/]+|novel\/[^/]+\/[^/]+)\/?$/.test(pathname);
 }
 
+function isLegacyBloggerFeedProbe(url: URL): boolean {
+  if (url.pathname !== "/") return false;
+  if (url.searchParams.get("alt") !== "json") return false;
+
+  const query = url.searchParams.get("q")?.trim().toLowerCase() || "";
+  return (
+    query.startsWith("label:") ||
+    url.searchParams.has("start-index") ||
+    url.searchParams.has("updated-max") ||
+    url.searchParams.has("published-min")
+  );
+}
+
 function shouldServeSeriesShell(request: Request, url: URL): boolean {
   return /^\/series\/[^/]+\/?$/.test(url.pathname) &&
     isStaticDocumentRequest(request, url) &&
@@ -1557,6 +1570,17 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+    if (isLegacyBloggerFeedProbe(url)) {
+      return new Response("Not Found", {
+        status: 404,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "public, max-age=3600",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
+
     if (
       url.pathname.startsWith("/__static_pages/") &&
       (request.method === "GET" || request.method === "HEAD")
