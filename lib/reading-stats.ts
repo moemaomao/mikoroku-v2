@@ -1020,10 +1020,7 @@ export async function saveReaderStats(
   }
   const activityDate = utcDateKey(new Date());
   recordLocalReadingProgress(user.uid, input);
-  const shouldRecordChapterActivity = recordChapterActivity
-    ? await markChapterReadOnce(user.uid, input)
-    : false;
-  onOptimisticUpdate?.(user.uid, activityDate, shouldRecordChapterActivity);
+  onOptimisticUpdate?.(user.uid, activityDate, recordChapterActivity);
 
   const localProgress = readLocalReadingProgress(user.uid)
     .find((item) => item.slug === input.slug);
@@ -1047,7 +1044,7 @@ export async function saveReaderStats(
     updatedAt: new Date(localProgress?.updatedAt || Date.now()).toISOString(),
   };
 
-  if (shouldRecordChapterActivity) {
+  if (recordChapterActivity) {
     queue.activityCounts[activityDate] = (queue.activityCounts[activityDate] || 0) + 1;
     if (onSynced) {
       const callbacks = pendingReaderStatsCallbacks.get(user.uid) || new Map();
@@ -1059,6 +1056,13 @@ export async function saveReaderStats(
   pendingReaderStatsQueues.set(user.uid, queue);
   writePendingReaderStatsQueue(user.uid, queue);
   schedulePendingReaderStatsFlushIfNeeded(user.uid);
+  if (recordChapterActivity) {
+    try {
+      await markChapterReadOnce(user.uid, input);
+    } catch (error) {
+      console.warn("The chapter read mark could not be saved; reading stats will still be recorded.", error);
+    }
+  }
   window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
   return true;
 }
