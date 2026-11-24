@@ -3,7 +3,7 @@
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
-import { addDoc, collection, doc, getDoc, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, getDocsFromServer, getFirestore, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
@@ -78,6 +78,7 @@ type Manga = {
   maleTags?: string | string[];
   updatedAt?: string | number;
   latestUpdate?: string | number;
+  source?: string;
   info?: Record<string, unknown>;
   catalogSourceMode?: "effective" | "baseline";
 };
@@ -354,6 +355,7 @@ function normalizeManga(value: Record<string, unknown>, fallbackSlug: string): M
     maleTags: (info.maleTags || value.maleTags) as string | string[] | undefined,
     updatedAt: asString(info.updatedAt || info.latestUpdate || info.date || value.updatedAt || value.latestUpdate),
     latestUpdate: asString(info.latestUpdate || info.updatedAt || info.date || value.latestUpdate || value.updatedAt),
+    source: asString(info.source || value.source),
     coverUpdatedAt: asString(info.coverUpdatedAt || value.coverUpdatedAt),
     info,
   };
@@ -909,10 +911,43 @@ async function loadBloggerChapterImages(
   return match?.images || [];
 }
 
-async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Promise<Chapter[]> {
+async function loadFirestoreChapterSource(
+  slug: string,
+  signal: AbortSignal,
+  forceServer = false,
+): Promise<Chapter[]> {
   if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
   const { firestore } = initializeFirebaseClient();
-  const chapterSnapshot = await getDocs(collection(firestore, "manga", slug, "chapters"));
+  const chapterLinksRef = collection(firestore, "manga", slug, "chapterLinks");
+  const chapterLinksSnapshot = forceServer
+    ? await getDocsFromServer(chapterLinksRef)
+    : await getDocs(chapterLinksRef);
+  if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
+  const chapterLinks = chapterLinksSnapshot.docs.flatMap((document, index) => {
+    const data = document.data();
+    if (data.isDraft === true) return [];
+    const num = data.num ?? data.chapterId ?? document.id;
+    if ((typeof num !== "string" && typeof num !== "number") || !String(num).trim()) return [];
+    const date = firestoreDate(data.date || data.createdAt || data.updatedAt);
+    return [{
+      id: asString(data.chapterId || data.id, document.id),
+      num,
+      title: asString(data.title, `Chapter ${num}`),
+      url: asString(data.url),
+      thumbnail: asString(data.thumbnail),
+      images: [],
+      createdAt: date,
+      date,
+      order: Number(data.order ?? index) || 0,
+      source: "firestore" as const,
+    }];
+  });
+  if (chapterLinks.length) return chapterLinks;
+
+  const chaptersRef = collection(firestore, "manga", slug, "chapters");
+  const chapterSnapshot = forceServer
+    ? await getDocsFromServer(chaptersRef)
+    : await getDocs(chaptersRef);
   if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
   const collectionChapters: Chapter[] = [];
   chapterSnapshot.forEach((document) => {
@@ -1417,6 +1452,7 @@ export default function DetailPageContent({
     "--detail-gutter": "32px",
     "--detail-max-width": "1250px",
   } as CSSProperties;
+  const isHybridSeries = manga?.source === "hybrid" || initialManga?.source === "hybrid";
 
   useLayoutEffect(() => {
     const sourcePreference = localStorage.getItem("chapterSourceMode");
@@ -1509,7 +1545,8 @@ export default function DetailPageContent({
     const managedChapters = initialChaptersManaged
       ? initialChapters.filter((chapter) => chapter.source === "firestore" || chapter.source === source)
       : [];
-    if (initialChaptersManaged && initialChapters.length > 0 && source === initialChapterSource) {
+    if (initialChaptersManaged && initialChapters.length > 0 &&
+        source === initialChapterSource && !isHybridSeries) {
       setChapters(initialChapters);
       setManagedChapterList(true);
       setChapterState("ready");
@@ -1552,7 +1589,8 @@ export default function DetailPageContent({
         console.warn(`Managed chapter cache could not be saved for ${slug}.`, error);
       }
     }
-    if (managedChapterList && chapters.length > 0 && source === initialChapterSource) {
+    if (managedChapterList && chapters.length > 0 &&
+        source === initialChapterSource && !isHybridSeries) {
       setChapterState("ready");
       return;
     }
@@ -1628,7 +1666,8 @@ export default function DetailPageContent({
       cachedSelectedChapters.length > 0 &&
       cacheAge >= 0 &&
       cacheAge < CHAPTER_CACHE_DURATION_MS &&
-      (source === "firestore" || cacheAge < BLOGGER_LIST_REFRESH_INTERVAL_MS)
+      (source === "firestore" || cacheAge < BLOGGER_LIST_REFRESH_INTERVAL_MS) &&
+      !isHybridSeries
     ) {
       if (source === "firestore" || chaptersHaveThumbnails(cachedSelectedChapters)) {
         chapterSourceCacheRef.current.set(
@@ -1686,19 +1725,23 @@ export default function DetailPageContent({
     }
 
     const loadSelectedAndSupplementalSources = async () => {
-      const loadAndCache = async (chapterSource: ChapterSource): Promise<Chapter[]> => {
+      const loadAndCache = async (
+        chapterSource: ChapterSource,
+        forceServer = false,
+      ): Promise<Chapter[]> => {
         const key = chapterSourceCacheKey(slug, chapterSource);
         const memoryCache = chapterSourceCacheRef.current;
         const cached = memoryCache.get(key);
         const fetchedAt = chapterSourceFetchedAtRef.current.get(key) || 0;
         if (
+          !forceServer &&
           cached &&
           chapterSource !== "firestore" &&
           Date.now() - fetchedAt < BLOGGER_LIST_REFRESH_INTERVAL_MS
         ) {
           return cached;
         }
-        if (cached?.length && chapterSource === "firestore") {
+        if (!forceServer && cached?.length && chapterSource === "firestore") {
           try {
             await mergeSharedChapterCache(slug, chapterSource, cached);
           } catch (error) {
@@ -1711,6 +1754,7 @@ export default function DetailPageContent({
           sharedCachedChapters =
             (await readSharedChapterCache<Chapter>(slug, chapterSource)) || [];
           if (
+            !forceServer &&
             sharedCachedChapters.length &&
             (chapterSource === "firestore" || chaptersHaveThumbnails(sharedCachedChapters))
           ) {
@@ -1721,7 +1765,7 @@ export default function DetailPageContent({
           console.warn(`IndexedDB chapter cache could not be read for ${slug}.`, error);
         }
         const loaded = chapterSource === "firestore"
-          ? await loadFirestoreChapterSource(slug, controller.signal)
+          ? await loadFirestoreChapterSource(slug, controller.signal, forceServer)
           : mangaTitle
             ? await loadBloggerChapterSource(mangaTitle, chapterSource, controller.signal)
             : [];
@@ -1736,10 +1780,12 @@ export default function DetailPageContent({
           return sharedCachedChapters;
         }
         let sharedChapters = loaded;
-        try {
-          sharedChapters = await mergeSharedChapterCache(slug, chapterSource, loaded);
-        } catch (error) {
-          console.warn(`IndexedDB chapter cache could not be updated for ${slug}.`, error);
+        if (!forceServer) {
+          try {
+            sharedChapters = await mergeSharedChapterCache(slug, chapterSource, loaded);
+          } catch (error) {
+            console.warn(`IndexedDB chapter cache could not be updated for ${slug}.`, error);
+          }
         }
         memoryCache.set(key, sharedChapters);
         if (chapterSource !== "firestore") {
@@ -1754,13 +1800,23 @@ export default function DetailPageContent({
         setChapterState("ready");
       };
 
+      const liveHybridChapterPromise = isHybridSeries && source !== "firestore"
+        ? loadAndCache("firestore", true).then(
+            (chapters) => {
+              if (chapters.length) publishEarly(chapters);
+              return { chapters };
+            },
+            (error: unknown) => ({ chapters: [] as Chapter[], error }),
+          )
+        : null;
+
       if (source === "firestore") {
-        if (initialChaptersManaged && initialChapters.length > 0) {
+        if (initialChaptersManaged && initialChapters.length > 0 && !isHybridSeries) {
           publishEarly(initialChapters);
           return initialChapters;
         }
         try {
-          const only = await loadAndCache(source);
+          const only = await loadAndCache(source, isHybridSeries);
           if (only.length) return only;
         } catch (error) {
           if (cachedSelectedChapters.length) return cachedSelectedChapters;
@@ -1784,7 +1840,21 @@ export default function DetailPageContent({
       selectedChapters = mergeChapterFallback(source, selectedChapters, managedChapters);
       if (selectedChapters.length) publishEarly(selectedChapters);
 
-      if (!selectedChapters.length) {
+      if (isHybridSeries) {
+        const liveHybridResult = liveHybridChapterPromise
+          ? await liveHybridChapterPromise
+          : { chapters: await loadAndCache("firestore", true) };
+        if ("error" in liveHybridResult) {
+          firestoreFallbackError = liveHybridResult.error;
+          console.warn(
+            `Live Firestore chapter links could not be loaded for hybrid series ${slug}.`,
+            liveHybridResult.error,
+          );
+        } else {
+          selectedChapters = mergeChapterFallback(source, selectedChapters, liveHybridResult.chapters);
+          if (selectedChapters.length) publishEarly(selectedChapters);
+        }
+      } else if (!selectedChapters.length) {
         try {
           const firestoreChapters = await loadAndCache("firestore");
           selectedChapters = mergeChapterFallback(source, selectedChapters, firestoreChapters);
@@ -1832,6 +1902,7 @@ export default function DetailPageContent({
     initialChapters,
     initialChaptersManaged,
     sourcePreferenceReady,
+    isHybridSeries,
   ]);
 
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {
