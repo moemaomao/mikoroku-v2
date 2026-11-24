@@ -1697,7 +1697,7 @@ export default function DetailPageContent({
         ) {
           return cached;
         }
-        if (cached && chapterSource === "firestore") {
+        if (cached?.length && chapterSource === "firestore") {
           try {
             await mergeSharedChapterCache(slug, chapterSource, cached);
           } catch (error) {
@@ -1770,6 +1770,7 @@ export default function DetailPageContent({
 
       let selectedChapters = cachedSelectedChapters;
       let primaryError: unknown;
+      let firestoreFallbackError: unknown;
 
       try {
         const primary = await loadAndCache(source);
@@ -1782,7 +1783,19 @@ export default function DetailPageContent({
       selectedChapters = mergeChapterFallback(source, selectedChapters, managedChapters);
       if (selectedChapters.length) publishEarly(selectedChapters);
 
-      if (primaryError) throw primaryError;
+      if (!selectedChapters.length) {
+        try {
+          const firestoreChapters = await loadAndCache("firestore");
+          selectedChapters = mergeChapterFallback(source, selectedChapters, firestoreChapters);
+          if (selectedChapters.length) publishEarly(selectedChapters);
+        } catch (error) {
+          firestoreFallbackError = error;
+          console.warn(`Firestore chapter fallback failed for ${slug}.`, error);
+        }
+      }
+
+      if (!selectedChapters.length && primaryError) throw primaryError;
+      if (!selectedChapters.length && firestoreFallbackError) throw firestoreFallbackError;
       return selectedChapters;
     };
 
