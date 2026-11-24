@@ -942,7 +942,7 @@ async function loadFirestoreChapterSource(
       source: "firestore" as const,
     }];
   });
-  if (chapterLinks.length) return chapterLinks;
+  if (chapterLinks.length && !forceServer) return chapterLinks;
 
   const chaptersRef = collection(firestore, "manga", slug, "chapters");
   const chapterSnapshot = forceServer
@@ -972,7 +972,12 @@ async function loadFirestoreChapterSource(
       source: "firestore",
     });
   });
-  if (collectionChapters.length) return collectionChapters;
+  if (collectionChapters.length) {
+    return forceServer
+      ? mergeChapterSources(chapterLinks, collectionChapters)
+      : collectionChapters;
+  }
+  if (chapterLinks.length) return chapterLinks;
 
   const mangaSnapshot = await getDoc(doc(firestore, "manga", slug));
   if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
