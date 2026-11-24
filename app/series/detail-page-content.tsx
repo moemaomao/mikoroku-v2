@@ -1453,6 +1453,7 @@ export default function DetailPageContent({
     "--detail-max-width": "1250px",
   } as CSSProperties;
   const isHybridSeries = manga?.source === "hybrid" || initialManga?.source === "hybrid";
+  const shouldLoadLiveChapterLinks = initialChaptersManaged || isHybridSeries;
 
   useLayoutEffect(() => {
     const sourcePreference = localStorage.getItem("chapterSourceMode");
@@ -1546,7 +1547,7 @@ export default function DetailPageContent({
       ? initialChapters.filter((chapter) => chapter.source === "firestore" || chapter.source === source)
       : [];
     if (initialChaptersManaged && initialChapters.length > 0 &&
-        source === initialChapterSource && !isHybridSeries) {
+        source === initialChapterSource && !shouldLoadLiveChapterLinks) {
       setChapters(initialChapters);
       setManagedChapterList(true);
       setChapterState("ready");
@@ -1590,7 +1591,7 @@ export default function DetailPageContent({
       }
     }
     if (managedChapterList && chapters.length > 0 &&
-        source === initialChapterSource && !isHybridSeries) {
+        source === initialChapterSource && !shouldLoadLiveChapterLinks) {
       setChapterState("ready");
       return;
     }
@@ -1603,7 +1604,7 @@ export default function DetailPageContent({
       setChapterState("ready");
     }
 
-    if (!mangaTitle && !hasLocalCache) return;
+    if (!mangaTitle && !hasLocalCache && !shouldLoadLiveChapterLinks) return;
     const controller = new AbortController();
     setChapterError("");
     if (chapterCacheSlugRef.current !== slug) {
@@ -1667,7 +1668,7 @@ export default function DetailPageContent({
       cacheAge >= 0 &&
       cacheAge < CHAPTER_CACHE_DURATION_MS &&
       (source === "firestore" || cacheAge < BLOGGER_LIST_REFRESH_INTERVAL_MS) &&
-      !isHybridSeries
+      !shouldLoadLiveChapterLinks
     ) {
       if (source === "firestore" || chaptersHaveThumbnails(cachedSelectedChapters)) {
         chapterSourceCacheRef.current.set(
@@ -1800,7 +1801,7 @@ export default function DetailPageContent({
         setChapterState("ready");
       };
 
-      const liveHybridChapterPromise = isHybridSeries && source !== "firestore"
+      const liveManagedChapterLinksPromise = shouldLoadLiveChapterLinks && source !== "firestore"
         ? loadAndCache("firestore", true).then(
             (chapters) => {
               if (chapters.length) publishEarly(chapters);
@@ -1811,12 +1812,12 @@ export default function DetailPageContent({
         : null;
 
       if (source === "firestore") {
-        if (initialChaptersManaged && initialChapters.length > 0 && !isHybridSeries) {
+        if (initialChaptersManaged && initialChapters.length > 0 && !shouldLoadLiveChapterLinks) {
           publishEarly(initialChapters);
           return initialChapters;
         }
         try {
-          const only = await loadAndCache(source, isHybridSeries);
+          const only = await loadAndCache(source, shouldLoadLiveChapterLinks);
           if (only.length) return only;
         } catch (error) {
           if (cachedSelectedChapters.length) return cachedSelectedChapters;
@@ -1840,18 +1841,18 @@ export default function DetailPageContent({
       selectedChapters = mergeChapterFallback(source, selectedChapters, managedChapters);
       if (selectedChapters.length) publishEarly(selectedChapters);
 
-      if (isHybridSeries) {
-        const liveHybridResult = liveHybridChapterPromise
-          ? await liveHybridChapterPromise
+      if (shouldLoadLiveChapterLinks) {
+        const liveChapterLinksResult = liveManagedChapterLinksPromise
+          ? await liveManagedChapterLinksPromise
           : { chapters: await loadAndCache("firestore", true) };
-        if ("error" in liveHybridResult) {
-          firestoreFallbackError = liveHybridResult.error;
+        if ("error" in liveChapterLinksResult) {
+          firestoreFallbackError = liveChapterLinksResult.error;
           console.warn(
-            `Live Firestore chapter links could not be loaded for hybrid series ${slug}.`,
-            liveHybridResult.error,
+            `Live Firestore chapter links could not be loaded for managed series ${slug}.`,
+            liveChapterLinksResult.error,
           );
         } else {
-          selectedChapters = mergeChapterFallback(source, selectedChapters, liveHybridResult.chapters);
+          selectedChapters = mergeChapterFallback(source, selectedChapters, liveChapterLinksResult.chapters);
           if (selectedChapters.length) publishEarly(selectedChapters);
         }
       } else if (!selectedChapters.length) {
@@ -1903,6 +1904,7 @@ export default function DetailPageContent({
     initialChaptersManaged,
     sourcePreferenceReady,
     isHybridSeries,
+    shouldLoadLiveChapterLinks,
   ]);
 
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {
