@@ -835,7 +835,6 @@ async function loadBloggerChapterSource(
     title: title.trim(),
     source: bloggerSource,
     full: "0",
-    limit: "20",
   });
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
@@ -1017,6 +1016,16 @@ function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapt
   return merged;
 }
 
+function mergeChapterFallback(
+  source: ChapterSource,
+  chapters: Chapter[],
+  fallback: Chapter[],
+): Chapter[] {
+  return source === "firestore"
+    ? mergeChapterSources(fallback, chapters)
+    : mergeChapterSources(chapters, fallback);
+}
+
 function chapterHasPreviewImage(chapter: Chapter): boolean {
   return Boolean(
     (typeof chapter.thumbnail === "string" && chapter.thumbnail.length > 8) ||
@@ -1043,10 +1052,14 @@ function cachedChapterListForSource(
   return cache.get(chapterSourceCacheKey(slug, source));
 }
 
-function cacheChapterList(slug: string, chapters: Chapter[]): void {
+function cacheChapterList(
+  slug: string,
+  chapters: Chapter[],
+  completeSources: ChapterSource[],
+): void {
   const key = `chapters_${slug}`;
   const data = compactChapterCache(chapters);
-  const value = JSON.stringify({ time: Date.now(), data });
+  const value = JSON.stringify({ time: Date.now(), data, completeSources, chapterListVersion: 2 });
 
   setLocalStorageCacheItem(key, value);
 }
@@ -1254,13 +1267,15 @@ export default function DetailPageContent({
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(false);
-  const [chapters, setChapters] = useState<Chapter[]>(() => initialChapters ?? []);
+  const [chapters, setChapters] = useState<Chapter[]>(() =>
+    initialChaptersManaged ? initialChapters : [],
+  );
   const [managedChapterList, setManagedChapterList] = useState(
     () => initialChaptersManaged && initialChapters.length > 0,
   );
   const [commentCount, setCommentCount] = useState<number | null>(null);
   const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">(
-    () => (initialChapters.length > 0 ? "ready" : "loading"),
+    () => (initialChaptersManaged && initialChapters.length ? "ready" : "loading"),
   );
   const [chapterError, setChapterError] = useState("");
   const [source, setSource] = useState<ChapterSource>("blogger");
@@ -1505,6 +1520,9 @@ export default function DetailPageContent({
   }, [slug]);
 
   useLayoutEffect(() => {
+    const managedChapters = initialChaptersManaged
+      ? initialChapters.filter((chapter) => chapter.source === "firestore" || chapter.source === source)
+      : [];
     if (initialChaptersManaged && initialChapters.length > 0 && source === initialChapterSource) {
       setChapters(initialChapters);
       setManagedChapterList(true);
@@ -1513,6 +1531,8 @@ export default function DetailPageContent({
         const saved = setLocalStorageCacheItem(`chapters_${slug}`, JSON.stringify({
           time: Date.now(),
           data: compactChapterCache(initialChapters),
+          completeSources: ["firestore"],
+          chapterListVersion: 2,
           summaryOnlySource: "firestore",
           managed: true,
         }));
@@ -1525,6 +1545,7 @@ export default function DetailPageContent({
     if (
       initialChaptersManaged &&
       initialChapters.length > 0 &&
+      source === "firestore" &&
       managedInitialSeededSlugRef.current !== slug
     ) {
       managedInitialSeededSlugRef.current = slug;
@@ -1535,6 +1556,8 @@ export default function DetailPageContent({
         const saved = setLocalStorageCacheItem(`chapters_${slug}`, JSON.stringify({
           time: Date.now(),
           data: compactChapterCache(initialChapters),
+          completeSources: ["firestore"],
+          chapterListVersion: 2,
           summaryOnlySource: "firestore",
           managed: true,
         }));
@@ -1551,7 +1574,7 @@ export default function DetailPageContent({
       typeof localStorage !== "undefined" && localStorage.getItem(`chapters_${slug}`),
     );
 
-    if (initialChapters.length > 0 && chapters.length === 0) {
+    if (source === "firestore" && initialChapters.length > 0 && chapters.length === 0) {
       setChapters(initialChapters);
       setChapterState("ready");
     }
@@ -1575,14 +1598,23 @@ export default function DetailPageContent({
         const parsed = JSON.parse(cached) as {
           time?: number;
           data?: Chapter[];
+          completeSources?: ChapterSource[];
+          chapterListVersion?: number;
           summaryOnlySource?: ChapterSource;
           managed?: boolean;
         };
         cacheAge = Date.now() - (parsed.time || 0);
         summaryOnlySource = parsed.summaryOnlySource || null;
-        const valid = cacheAge >= 0 && cacheAge < CHAPTER_CACHE_DURATION_MS
+        const cachedData = cacheAge >= 0 && cacheAge < CHAPTER_CACHE_DURATION_MS
           ? parsed.data || []
           : [];
+        const completeSources = Array.isArray(parsed.completeSources)
+          ? parsed.completeSources
+          : [];
+        const valid = cachedData.filter(
+          (chapter) => chapter.source === "firestore" ||
+            (parsed.chapterListVersion === 2 && completeSources.includes(chapter.source)),
+        );
         if (parsed.managed && valid.length && summaryOnlySource === source) {
           cachedChapters = valid;
           cachedSelectedChapters = valid;
@@ -1590,13 +1622,17 @@ export default function DetailPageContent({
         }
         cachedSelectedChapters = valid.filter(
           (chapter) => (parsed.managed === true && summaryOnlySource === source) ||
-            (chapter.source === source && summaryOnlySource !== source),
+            (
+              chapter.source === source &&
+              summaryOnlySource !== source &&
+              (source === "firestore" || !/^\/(?:manga|novel)\//.test(chapter.url || ""))
+            ),
         );
         cachedFirestoreChapters = mergeChapterSources(
           initialChaptersManaged ? initialChapters : [],
           valid.filter((chapter) => chapter.source === "firestore"),
         );
-        cachedChapters = mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters);
+        cachedChapters = mergeChapterFallback(source, cachedSelectedChapters, managedChapters);
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
         localStorage.removeItem(`chapters_${slug}`);
@@ -1626,7 +1662,7 @@ export default function DetailPageContent({
           cachedFirestoreChapters,
         );
       }
-      setChapters(mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters));
+      setChapters(mergeChapterFallback(source, cachedSelectedChapters, managedChapters));
       setChapterState("ready");
       return () => controller.abort();
     }
@@ -1636,8 +1672,8 @@ export default function DetailPageContent({
       source,
     );
 
-    if (immediatelyAvailable !== undefined) {
-      setChapters(mergeChapterSources(immediatelyAvailable, cachedFirestoreChapters));
+    if (immediatelyAvailable?.length) {
+      setChapters(mergeChapterFallback(source, immediatelyAvailable, managedChapters));
       setChapterState("ready");
     } else if (cachedChapters.length > 0) {
       setChapters(cachedChapters);
@@ -1728,11 +1764,15 @@ export default function DetailPageContent({
 
       const publishEarly = (list: Chapter[]) => {
         if (controller.signal.aborted || !list.length) return;
-        setChapters(list);
+        setChapters(mergeChapterFallback(source, list, managedChapters));
         setChapterState("ready");
       };
 
       if (source === "firestore") {
+        if (initialChaptersManaged && initialChapters.length > 0) {
+          publishEarly(initialChapters);
+          return initialChapters;
+        }
         try {
           const only = await loadAndCache(source);
           if (only.length) return only;
@@ -1754,10 +1794,7 @@ export default function DetailPageContent({
         console.warn(`Chapter source ${source} failed for ${slug}.`, error);
       }
 
-      selectedChapters = mergeChapterSources(
-        selectedChapters,
-        initialChaptersManaged ? initialChapters : cachedFirestoreChapters,
-      );
+      selectedChapters = mergeChapterFallback(source, selectedChapters, managedChapters);
       if (selectedChapters.length) publishEarly(selectedChapters);
 
       if (primaryError) throw primaryError;
@@ -1769,20 +1806,10 @@ export default function DetailPageContent({
       const finalResult = result.length || !cachedChapters.length ? result : cachedChapters;
       setChapters(finalResult);
       setChapterState("ready");
-      const existing = localStorage.getItem(`chapters_${slug}`);
-      let previous: Chapter[] = [];
-      if (existing) {
-        try {
-          previous = (JSON.parse(existing) as { data?: Chapter[] }).data || [];
-        } catch (error) {
-          console.warn("Cache chapter lama tidak valid.", error);
-        }
+      const sourceChapters = finalResult.filter((chapter) => chapter.source === source);
+      if (sourceChapters.length) {
+        cacheChapterList(slug, sourceChapters, [source]);
       }
-      const merged = mergeChapterSources(
-        previous.filter((item) => item.source !== source),
-        finalResult,
-      );
-      cacheChapterList(slug, merged);
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       console.error(`Chapter ${source} gagal dimuat.`, error);
@@ -1816,10 +1843,17 @@ export default function DetailPageContent({
       slug,
       nextSource,
     );
-    if (cachedChapters !== undefined) {
-      setChapters(cachedChapters);
+    const managedChapters = initialChaptersManaged
+      ? initialChapters.filter((chapter) => chapter.source === "firestore" || chapter.source === nextSource)
+      : [];
+    if (cachedChapters?.length) {
+      setChapters(mergeChapterFallback(nextSource, cachedChapters, managedChapters));
+      setChapterState("ready");
+    } else if (managedChapters.length) {
+      setChapters(managedChapters);
       setChapterState("ready");
     } else {
+      setChapters([]);
       setChapterState("loading");
     }
     setSource(nextSource);
