@@ -20,8 +20,9 @@ const MANGA_METADATA_CACHE_DB = "mikoroku-manga-metadata-cache";
 const MANGA_METADATA_CACHE_STORE = "payloads";
 const MANGA_METADATA_CACHE_KEY = "active";
 const DEVELOPMENT_MANGA_CATALOG_SOURCE_KEY = "mikoroku_dev_manga_catalog_source";
+const MANGA_CATALOG_SOURCE_STORAGE_KEY = "mikoroku_manga_catalog_source_mode";
 const MANGA_METADATA_REVALIDATE_AFTER = 10 * 60 * 1000;
-const MANGA_CATALOG_SOURCE_CACHE_TTL = 5 * 1000;
+const MANGA_CATALOG_SOURCE_CACHE_TTL = 5 * 60 * 1000;
 type MangaCatalogSourceMode = "effective" | "baseline";
 
 type CachedMangaMetadataPayload = {
@@ -155,7 +156,15 @@ export async function readCachedMangaMetadataPayload(): Promise<MangaMetadataPay
 
 export async function clearMangaMetadataCache(): Promise<void> {
   mangaMetadataCache = null;
+  mangaCatalogSourceCache = null;
   mangaMetadataCacheGeneration += 1;
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(MANGA_CATALOG_SOURCE_STORAGE_KEY);
+    } catch (error) {
+      console.warn("Catalog source cache could not be cleared from browser storage.", error);
+    }
+  }
   if (typeof window === "undefined" || !("indexedDB" in window)) return;
 
   const database = await openMangaMetadataCache();
@@ -175,6 +184,7 @@ export function notifyMangaMetadataUpdated(): void {
   mangaMetadataCacheGeneration += 1;
   if (typeof window === "undefined") return;
   try {
+    window.localStorage.removeItem(MANGA_CATALOG_SOURCE_STORAGE_KEY);
     window.localStorage.setItem(MANGA_METADATA_UPDATED_STORAGE_KEY, String(Date.now()));
   } catch (error) {
     console.warn("Manga metadata cache invalidation could not be shared across tabs.", error);
@@ -188,6 +198,11 @@ if (typeof window !== "undefined") {
     firestoreMetadataCache = null;
     mangaMetadataCache = null;
     mangaCatalogSourceCache = null;
+    try {
+      window.localStorage.removeItem(MANGA_CATALOG_SOURCE_STORAGE_KEY);
+    } catch (error) {
+      console.warn("Catalog source cache could not be invalidated in this tab.", error);
+    }
     mangaMetadataCacheGeneration += 1;
     window.dispatchEvent(new Event(MANGA_METADATA_UPDATED_EVENT));
   });
@@ -228,13 +243,36 @@ export async function fetchMangaCatalogSourceMode(
   ) {
     return mangaCatalogSourceCache.mode;
   }
-  if (!force && !signal && mangaCatalogSourceRequest) {
+  if (!force && typeof window !== "undefined") {
+    try {
+      const cached = window.localStorage.getItem(MANGA_CATALOG_SOURCE_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as {
+          mode?: unknown;
+          checkedAt?: unknown;
+        };
+        if (
+          (parsed.mode === "effective" || parsed.mode === "baseline") &&
+          typeof parsed.checkedAt === "number" &&
+          Date.now() - parsed.checkedAt >= 0 &&
+          Date.now() - parsed.checkedAt < MANGA_CATALOG_SOURCE_CACHE_TTL
+        ) {
+          mangaCatalogSourceCache = { mode: parsed.mode, checkedAt: parsed.checkedAt };
+          return parsed.mode;
+        }
+      }
+    } catch (error) {
+      console.warn("Cached manga catalog source mode is invalid and will be ignored.", error);
+    }
+  }
+  if (!force && mangaCatalogSourceRequest) {
     return mangaCatalogSourceRequest;
   }
 
   const request = (async () => {
+    if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const response = await fetch("/api/catalog/source", {
-      signal,
+      signal: force ? signal : undefined,
       cache: "no-store",
     });
     if (response.status === 404 || response.status === 405) return null;
@@ -245,11 +283,22 @@ export async function fetchMangaCatalogSourceMode(
     if (result.sourceMode !== "effective" && result.sourceMode !== "baseline") {
       throw new Error("Catalog source endpoint returned an invalid source mode.");
     }
-    mangaCatalogSourceCache = { mode: result.sourceMode, checkedAt: Date.now() };
+    const checkedAt = Date.now();
+    mangaCatalogSourceCache = { mode: result.sourceMode, checkedAt };
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          MANGA_CATALOG_SOURCE_STORAGE_KEY,
+          JSON.stringify({ mode: result.sourceMode, checkedAt }),
+        );
+      } catch (error) {
+        console.warn("Manga catalog source mode could not be cached in browser storage.", error);
+      }
+    }
     return result.sourceMode;
   })();
 
-  if (!force && !signal) {
+  if (!force) {
     mangaCatalogSourceRequest = request;
     void request.finally(() => {
       if (mangaCatalogSourceRequest === request) mangaCatalogSourceRequest = null;
@@ -329,7 +378,9 @@ async function loadMangaMetadataPayload({
         throw new DOMException("The operation was aborted.", "AbortError");
       }
       if (cached) {
-        refreshMangaMetadataInBackground(cached);
+        if (Date.now() - cached.cachedAt >= MANGA_METADATA_REVALIDATE_AFTER) {
+          refreshMangaMetadataInBackground(cached);
+        }
         return cached.payload;
       }
     } catch (error) {

@@ -1457,6 +1457,11 @@ async function handleBloggerChaptersProxy(
   const title = (url.searchParams.get("title") || "").trim();
   const sourceRaw = (url.searchParams.get("source") || "blogger").trim();
   const forceRefresh = url.searchParams.get("refresh") === "1";
+  const full = url.searchParams.get("full") === "1";
+  const requestedLimit = Number.parseInt(url.searchParams.get("limit") || "", 10);
+  const listLimit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(50, requestedLimit))
+    : 0;
 
   if (!title) {
     return new Response(
@@ -1497,6 +1502,18 @@ async function handleBloggerChaptersProxy(
     title?: string;
   } | null = null;
 
+  const shapeResponse = (body: {
+    chapters?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }) => {
+    if (!Array.isArray(body.chapters)) return body;
+    const chapters = full
+      ? body.chapters
+      : body.chapters
+          .slice(0, listLimit || undefined)
+          .map(({ images: _images, content: _content, html: _html, ...chapter }) => chapter);
+    return { ...body, chapters };
+  };
   const respond = (body: unknown, cacheStatus: string, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -1533,24 +1550,24 @@ async function handleBloggerChaptersProxy(
     };
 
     if (bloggerCacheAge(cached.cachedAt) <= BLOGGER_CHAPTERS_TTL * 1000) {
-      return respond(body, "HIT");
+      return respond(shapeResponse(body), "HIT");
     }
 
     try {
       const payload = await fetchAndCacheBloggerChapters(kv, source, title);
       return respond(
-        {
+        shapeResponse({
           chapters: payload.chapters,
           source,
           title,
           cachedAt: payload.cachedAt,
           count: payload.chapters.length,
-        },
+        }),
         "MISS",
       );
     } catch (error) {
       console.error("[worker blogger-proxy] refresh failed; serving stale chapters", error);
-      return respond({ ...body, stale: true }, "STALE");
+      return respond(shapeResponse({ ...body, stale: true }), "STALE");
     }
   }
 
@@ -1558,13 +1575,13 @@ async function handleBloggerChaptersProxy(
     const payload = await fetchAndCacheBloggerChapters(kv, source, title);
 
     return respond(
-      {
+      shapeResponse({
         chapters: payload.chapters,
         source,
         title,
         cachedAt: payload.cachedAt,
         count: payload.chapters.length,
-      },
+      }),
       forceRefresh ? "BYPASS" : "MISS",
     );
   } catch (error) {
@@ -1574,14 +1591,14 @@ async function handleBloggerChaptersProxy(
 
     if (cached) {
       return respond(
-        {
+        shapeResponse({
           chapters: cached.chapters,
           source: cached.source ?? source,
           title: cached.title ?? title,
           cachedAt: cached.cachedAt,
           count: cached.chapters.length,
           stale: true,
-        },
+        }),
         "STALE",
       );
     }

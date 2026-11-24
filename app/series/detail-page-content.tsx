@@ -835,6 +835,7 @@ async function loadBloggerChapterSource(
     title: title.trim(),
     source: bloggerSource,
     full: "0",
+    limit: "20",
   });
 
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
@@ -992,6 +993,7 @@ async function waitForFirestoreSdk(signal: AbortSignal): Promise<boolean> {
 }
 
 const CHAPTER_UI_BATCH = 48;
+const BLOGGER_LIST_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function chapterNumber(value: Chapter["num"]): number {
   return Number.parseFloat(String(value).replace(",", ".")) || 0;
@@ -1027,21 +1029,6 @@ function chaptersHaveThumbnails(list: Chapter[]): boolean {
   const sample = list.slice(0, Math.min(list.length, 24));
   const withThumb = sample.filter(chapterHasPreviewImage).length;
   return withThumb >= Math.ceil(sample.length * 0.4);
-}
-
-function chaptersNeedEmergencyFill(list: Chapter[]): boolean {
-  if (!list.length) return true;
-  const nums = [...new Set(
-    list
-      .map((chapter) => Math.floor(chapterNumber(chapter.num)))
-      .filter((value) => value > 0),
-  )].sort((left, right) => left - right);
-  if (!nums.length) return true;
-  if (nums[0] > 1) return true;
-  for (let index = 1; index < nums.length; index += 1) {
-    if (nums[index] - nums[index - 1] > 1) return true;
-  }
-  return false;
 }
 
 function chapterSourceCacheKey(slug: string, source: ChapterSource): string {
@@ -1223,6 +1210,7 @@ export default function DetailPageContent({
   const [coverPreviewOpen, setCoverPreviewOpen] = useState(false);
   const [coverPreferenceError, setCoverPreferenceError] = useState("");
   const chapterSourceCacheRef = useRef(new Map<string, Chapter[]>());
+  const chapterSourceFetchedAtRef = useRef(new Map<string, number>());
   const chapterCacheSlugRef = useRef(slug);
   const managedInitialSeededSlugRef = useRef("");
   const trackedSeriesRef = useRef(new Map<string, number>());
@@ -1573,6 +1561,7 @@ export default function DetailPageContent({
     setChapterError("");
     if (chapterCacheSlugRef.current !== slug) {
       chapterSourceCacheRef.current.clear();
+      chapterSourceFetchedAtRef.current.clear();
       chapterCacheSlugRef.current = slug;
     }
     let cachedChapters: Chapter[] = [];
@@ -1607,9 +1596,6 @@ export default function DetailPageContent({
           initialChaptersManaged ? initialChapters : [],
           valid.filter((chapter) => chapter.source === "firestore"),
         );
-        if (!parsed.managed && chaptersNeedEmergencyFill(cachedSelectedChapters)) {
-          cachedSelectedChapters = [];
-        }
         cachedChapters = mergeChapterSources(cachedSelectedChapters, cachedFirestoreChapters);
       } catch (error) {
         console.warn("Cache chapter manga tidak valid dan akan diabaikan.", error);
@@ -1620,13 +1606,19 @@ export default function DetailPageContent({
       cachedSelectedChapters.length > 0 &&
       cacheAge >= 0 &&
       cacheAge < CHAPTER_CACHE_DURATION_MS &&
-      source === "firestore"
+      (source === "firestore" || cacheAge < BLOGGER_LIST_REFRESH_INTERVAL_MS)
     ) {
       if (source === "firestore" || chaptersHaveThumbnails(cachedSelectedChapters)) {
         chapterSourceCacheRef.current.set(
           chapterSourceCacheKey(slug, source),
           cachedSelectedChapters,
         );
+        if (source !== "firestore") {
+          chapterSourceFetchedAtRef.current.set(
+            chapterSourceCacheKey(slug, source),
+            Date.now() - cacheAge,
+          );
+        }
       }
       if (cachedFirestoreChapters.length) {
         chapterSourceCacheRef.current.set(
@@ -1676,6 +1668,14 @@ export default function DetailPageContent({
         const key = chapterSourceCacheKey(slug, chapterSource);
         const memoryCache = chapterSourceCacheRef.current;
         const cached = memoryCache.get(key);
+        const fetchedAt = chapterSourceFetchedAtRef.current.get(key) || 0;
+        if (
+          cached &&
+          chapterSource !== "firestore" &&
+          Date.now() - fetchedAt < BLOGGER_LIST_REFRESH_INTERVAL_MS
+        ) {
+          return cached;
+        }
         if (cached && chapterSource === "firestore") {
           try {
             await mergeSharedChapterCache(slug, chapterSource, cached);
@@ -1706,7 +1706,13 @@ export default function DetailPageContent({
         if (controller.signal.aborted) {
           throw new DOMException("Permintaan chapter dibatalkan.", "AbortError");
         }
-        if (!loaded.length) return sharedCachedChapters;
+        if (!loaded.length) {
+          if (chapterSource !== "firestore") {
+            memoryCache.set(key, sharedCachedChapters);
+            chapterSourceFetchedAtRef.current.set(key, Date.now());
+          }
+          return sharedCachedChapters;
+        }
         let sharedChapters = loaded;
         try {
           sharedChapters = await mergeSharedChapterCache(slug, chapterSource, loaded);
@@ -1714,6 +1720,9 @@ export default function DetailPageContent({
           console.warn(`IndexedDB chapter cache could not be updated for ${slug}.`, error);
         }
         memoryCache.set(key, sharedChapters);
+        if (chapterSource !== "firestore") {
+          chapterSourceFetchedAtRef.current.set(key, Date.now());
+        }
         return sharedChapters;
       };
 

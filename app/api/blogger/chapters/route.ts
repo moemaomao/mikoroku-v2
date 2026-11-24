@@ -58,8 +58,9 @@ function jsonResponse(
   });
 }
 
-function shapeChapters(chapters: BloggerChapter[], full: boolean) {
-  return full ? chapters : toListChapters(chapters);
+function shapeChapters(chapters: BloggerChapter[], full: boolean, limit: number) {
+  const shaped = full ? chapters : toListChapters(chapters);
+  return !full && limit > 0 ? shaped.slice(0, limit) : shaped;
 }
 
 export async function OPTIONS(request: NextRequest) {
@@ -76,6 +77,10 @@ export async function GET(request: NextRequest) {
   const sourceRaw = (searchParams.get("source") || "blogger").trim();
   const forceRefresh = searchParams.get("refresh") === "1";
   const full = searchParams.get("full") === "1";
+  const requestedLimit = Number.parseInt(searchParams.get("limit") || "", 10);
+  const listLimit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(50, requestedLimit))
+    : 0;
 
   if (!title) {
     return jsonResponse(
@@ -103,7 +108,7 @@ export async function GET(request: NextRequest) {
       if (cached?.chapters && Array.isArray(cached.chapters)) {
         return jsonResponse(
           {
-            chapters: shapeChapters(cached.chapters, full),
+            chapters: shapeChapters(cached.chapters, full, listLimit),
             source: cached.source ?? source,
             title: cached.title ?? title,
             cachedAt: cached.cachedAt,
@@ -137,7 +142,7 @@ export async function GET(request: NextRequest) {
 
     return jsonResponse(
       {
-        chapters: shapeChapters(chapters, full),
+        chapters: shapeChapters(chapters, full, listLimit),
         source,
         title,
         cachedAt: payload.cachedAt,
@@ -156,7 +161,7 @@ export async function GET(request: NextRequest) {
       if (stale?.chapters?.length) {
         return jsonResponse(
           {
-            chapters: shapeChapters(stale.chapters, full),
+            chapters: shapeChapters(stale.chapters, full, listLimit),
             source: stale.source ?? source,
             title: stale.title ?? title,
             cachedAt: stale.cachedAt,
