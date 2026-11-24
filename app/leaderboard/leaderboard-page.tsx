@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getApps, initializeApp } from "firebase/app";
-import { collection, collectionGroup, getDocs, getFirestore, limit, orderBy, query, startAfter, where, type QueryDocumentSnapshot } from "firebase/firestore";
+import { collectionGroup, getDocs, getFirestore, limit, query, where } from "firebase/firestore";
 import SiteChrome from "../site-chrome";
 
 type LeaderboardUser = {
@@ -24,9 +24,6 @@ const defaultAvatar = "/assets/icons/favicon.ico";
 const leaderboardDatabaseName = "mikoroku-leaderboard";
 const leaderboardStoreName = "cache";
 const leaderboardCacheKey = "top-comments";
-const leaderboardCacheTtl = 2 * 60 * 60 * 1000;
-const leaderboardVisibleLimit = 100;
-const leaderboardBatchSize = 100;
 const commentFirebaseConfig = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
   authDomain: "widget-comment.firebaseapp.com",
@@ -293,53 +290,6 @@ async function readCachedLeaderboard(): Promise<LeaderboardCache | null> {
   }
 }
 
-async function readKvLeaderboard(): Promise<LeaderboardCache | null> {
-  try {
-    const response = await fetch("/api/leaderboard", { cache: "no-store" });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`KV cache returned HTTP ${response.status}.`);
-    const payload: unknown = await response.json();
-    if (!payload || typeof payload !== "object") return null;
-    const record = payload as Partial<LeaderboardCache>;
-    if (typeof record.updatedAt !== "number" || !Array.isArray(record.users)) return null;
-    const users = record.users.filter(isLeaderboardUser);
-    return users.length ? { users, updatedAt: record.updatedAt } : null;
-  } catch (error) {
-    console.warn("Cache KV leaderboard tidak dapat dibaca.", error);
-    return null;
-  }
-}
-
-async function writeCachedLeaderboard(users: LeaderboardUser[]): Promise<void> {
-  try {
-    const database = await openLeaderboardDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const request = database
-        .transaction(leaderboardStoreName, "readwrite")
-        .objectStore(leaderboardStoreName)
-        .put({ users, updatedAt: Date.now() } satisfies LeaderboardCache, leaderboardCacheKey);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error ?? new Error("Cache leaderboard gagal disimpan."));
-    });
-    database.close();
-  } catch (error) {
-    console.warn("Cache IndexedDB leaderboard tidak dapat disimpan.", error);
-  }
-}
-
-async function writeKvLeaderboard(users: LeaderboardUser[]): Promise<void> {
-  try {
-    const response = await fetch("/api/leaderboard", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ users, updatedAt: Date.now() }),
-    });
-    if (!response.ok) throw new Error(`KV cache returned HTTP ${response.status}.`);
-  } catch (error) {
-    console.warn("Cache KV leaderboard tidak dapat disimpan.", error);
-  }
-}
-
 function readLegacyCachedLeaderboard(): LeaderboardUser[] {
   try {
     const cached = window.localStorage.getItem("mikoroku:leaderboard:top-comments:v2");
@@ -371,68 +321,17 @@ function getCommentFirestore() {
 export default function LeaderboardPage() {
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
-    const loadLeaderboard = async () => {
-      const [indexedDbCache, kvCache] = await Promise.all([
-        readCachedLeaderboard(),
-        readKvLeaderboard(),
-      ]);
-      const cached = kvCache ?? indexedDbCache;
-      const cachedUsers = cached?.users ?? readLegacyCachedLeaderboard();
-      const cacheIsFresh = Boolean(cached && Date.now() - cached.updatedAt < leaderboardCacheTtl);
-      if (active && cachedUsers.length) {
-        setUsers(cachedUsers);
-        setLoading(false);
-      }
-      if (cacheIsFresh) return;
-
-      try {
-        const firestore = getCommentFirestore();
-        const result: LeaderboardUser[] = [];
-        let lastDocument: QueryDocumentSnapshot | undefined;
-        do {
-          const leaderboardQuery = query(
-            collection(firestore, "userStats"),
-            orderBy("commentCount", "desc"),
-            ...(lastDocument ? [startAfter(lastDocument)] : []),
-            limit(leaderboardBatchSize),
-          );
-          const snapshot = await getDocs(leaderboardQuery);
-          snapshot.forEach((entry) => {
-            const data = entry.data();
-            result.push({
-              uid: entry.id,
-              name: stringValue(data.displayName),
-              username: stringValue(data.username),
-              avatar: stringValue(data.avatar, defaultAvatar),
-              commentCount: numberValue(data.commentCount),
-              hidden: data.leaderboardHidden === true,
-            });
-          });
-          lastDocument = snapshot.docs.at(-1);
-          if (snapshot.empty || result.filter((user) => !user.hidden).length >= leaderboardVisibleLimit) break;
-        } while (result.length < leaderboardVisibleLimit * 2);
-
-        const visibleUsers = result.filter((user) => !user.hidden).slice(0, leaderboardVisibleLimit);
-        void Promise.all([
-          writeCachedLeaderboard(visibleUsers),
-          writeKvLeaderboard(visibleUsers),
-        ]);
-        if (active) {
-          setUsers(visibleUsers);
-          setError("");
-        }
-      } catch (loadError) {
-        console.error("Leaderboard komentar gagal dimuat.", loadError);
-        if (active && !cachedUsers.length) setError("Leaderboard belum bisa dimuat. Silakan coba lagi.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    void loadLeaderboard();
+    void readCachedLeaderboard().then((cached) => {
+      if (active) setUsers(cached?.users ?? readLegacyCachedLeaderboard());
+    }).catch((cacheError: unknown) => {
+      console.warn("Cache leaderboard lokal gagal dimuat.", cacheError);
+      if (active) setUsers(readLegacyCachedLeaderboard());
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
     return () => {
       active = false;
     };
@@ -493,10 +392,8 @@ export default function LeaderboardPage() {
               </ol>
             </section>
           </div>
-        ) : error ? (
-          <div role="alert" className="rounded-2xl border border-red-300/60 bg-red-50 p-6 text-center text-sm text-red-700 dark:border-red-400/30 dark:bg-red-950/30 dark:text-red-200">{error}</div>
         ) : !topUsers.length ? (
-          <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-10 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400">Belum ada data komentar.</div>
+          <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-10 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400">Belum ada data leaderboard tersimpan di browser ini.</div>
         ) : (
           <>
             <section aria-label="Top six commenters" className="mb-8 grid grid-cols-3 gap-2 min-[900px]:grid-cols-6 min-[900px]:gap-3">
