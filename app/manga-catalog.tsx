@@ -42,7 +42,6 @@ import { imageProxyUrl } from "../lib/image-proxy";
 import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import {
-  getLatestChapterUpdateTimestamp,
   refreshGlobalAppearance,
 } from "./lib/global-appearance";
 import { latestChapterFromRecord } from "../lib/latest-chapter";
@@ -846,12 +845,10 @@ function GithubMangaCatalog({ children }: { children?: ReactNode }) {
   const [heroVisibleCount, setHeroVisibleCount] = useState(3);
   const [playEntrance, setPlayEntrance] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
-  const [chapterUpdateRevision, setChapterUpdateRevision] = useState(0);
 
   const itemsRef = useRef(items);
   const metadataRef = useRef(metadata);
   const listSigRef = useRef("");
-  const chapterUpdateTimestampsRef = useRef(new Map<string, number>());
   const refreshRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
   itemsRef.current = items;
   metadataRef.current = metadata;
@@ -879,22 +876,6 @@ function GithubMangaCatalog({ children }: { children?: ReactNode }) {
         if (!homeCatalogMemory.entrancePlayed) setPlayEntrance(true);
       });
     }
-    const refreshChapterTimestamps = () => {
-      chapterUpdateTimestampsRef.current.clear();
-      setChapterUpdateRevision((revision) => revision + 1);
-    };
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === "chapterSourceMode" || event.key?.startsWith("chapters_")) {
-        refreshChapterTimestamps();
-      }
-    };
-    window.addEventListener("pageshow", refreshChapterTimestamps);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("pageshow", refreshChapterTimestamps);
-      window.removeEventListener("storage", handleStorage);
-      chapterUpdateTimestampsRef.current.clear();
-    };
   }, []);
 
   useEffect(() => {
@@ -1086,51 +1067,16 @@ function GithubMangaCatalog({ children }: { children?: ReactNode }) {
   }, [visibleCount]);
 
   const sortedItems = useMemo(() => {
-    let sourceMode = "";
-    if (typeof window !== "undefined") {
-      try {
-        sourceMode = window.localStorage.getItem("chapterSourceMode") || "";
-      } catch (error) {
-        console.warn("Chapter source preference could not be read for homepage sorting.", error);
-      }
-    }
-    const timeOf = (item: MangaItem) => {
-      const meta = getMetadata(item, metadata);
-      const slug = meta?.slug || item.slug || slugify(item.title);
-      const chapter = chapterNumber(item, meta);
-      const fallbackChapter = chapter >= 0 ? String(chapter) : "";
-      const cacheKey = `${slug}:${fallbackChapter}:${sourceMode}`;
-      if (typeof window !== "undefined" && !chapterUpdateTimestampsRef.current.has(cacheKey)) {
-        chapterUpdateTimestampsRef.current.set(
-          cacheKey,
-          getLatestChapterUpdateTimestamp(slug, fallbackChapter),
-        );
-      }
-
-      const cachedChapterUpdate = typeof window !== "undefined"
-        ? chapterUpdateTimestampsRef.current.get(cacheKey) || 0
-        : 0;
-      if (cachedChapterUpdate > 0) return cachedChapterUpdate;
-
-      for (const value of [
-        meta?.lastChapterUpdated,
-        item.lastChapterUpdated,
-        meta?.latestUpdate,
-        item.latestUpdate,
-        meta?.updatedAt,
-        item.updatedAt,
-      ]) {
-        const timestamp = toMilliseconds(value);
-        if (timestamp > 0) return timestamp;
-      }
-      return 0;
-    };
     return splitHomepageMangaSections(items).latest.sort((left, right) => {
-      const diff = timeOf(right) - timeOf(left);
+      const leftUpdatedAt = getMetadata(left, metadata)?.updatedAt ||
+        toMilliseconds(left.updatedAt || left.latestUpdate);
+      const rightUpdatedAt = getMetadata(right, metadata)?.updatedAt ||
+        toMilliseconds(right.updatedAt || right.latestUpdate);
+      const diff = rightUpdatedAt - leftUpdatedAt;
       if (diff !== 0) return diff;
       return normalize(left.title).localeCompare(normalize(right.title));
     });
-  }, [items, metadata, chapterUpdateRevision]);
+  }, [items, metadata]);
 
   const visibleItems = sortedItems.slice(0, visibleCount);
   const maxHeroPage = Math.max(0, Math.ceil(heroItems.length / heroVisibleCount) - 1);
