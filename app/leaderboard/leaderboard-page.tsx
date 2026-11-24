@@ -2,7 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getApps, initializeApp } from "firebase/app";
-import { collectionGroup, getDocs, getFirestore, limit, query, where } from "firebase/firestore";
+import {
+  collection,
+  collectionGroup,
+  getDocs,
+  getFirestore,
+  limit,
+  orderBy,
+  query,
+  startAfter,
+  where,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
 import SiteChrome from "../site-chrome";
 
 type LeaderboardUser = {
@@ -24,6 +35,9 @@ const defaultAvatar = "/assets/icons/favicon.ico";
 const leaderboardDatabaseName = "mikoroku-leaderboard";
 const leaderboardStoreName = "cache";
 const leaderboardCacheKey = "top-comments";
+const leaderboardCacheTtl = 12 * 60 * 60 * 1000;
+const leaderboardVisibleLimit = 100;
+const leaderboardBatchSize = 100;
 const commentFirebaseConfig = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
   authDomain: "widget-comment.firebaseapp.com",
@@ -40,6 +54,7 @@ type LeaderboardCache = {
 
 const commentAvatarCache = new Map<string, string>();
 const pendingCommentAvatarRequests = new Map<string, Promise<string>>();
+let leaderboardFetchInFlight: Promise<LeaderboardCache> | null = null;
 
 function stringValue(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -283,11 +298,69 @@ async function readCachedLeaderboard(): Promise<LeaderboardCache | null> {
     const record = cached as Partial<LeaderboardCache>;
     if (typeof record.updatedAt !== "number" || !Array.isArray(record.users)) return null;
     const users = record.users.filter(isLeaderboardUser);
-    return users.length ? { users, updatedAt: record.updatedAt } : null;
+    return { users, updatedAt: record.updatedAt };
   } catch (error) {
     console.warn("Cache IndexedDB leaderboard tidak dapat dibaca.", error);
     return null;
   }
+}
+
+async function writeCachedLeaderboard(cache: LeaderboardCache): Promise<void> {
+  const database = await openLeaderboardDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const request = database
+        .transaction(leaderboardStoreName, "readwrite")
+        .objectStore(leaderboardStoreName)
+        .put(cache, leaderboardCacheKey);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error ?? new Error("Cache leaderboard gagal disimpan."));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+function fetchLeaderboardFromFirestore(): Promise<LeaderboardCache> {
+  if (leaderboardFetchInFlight) return leaderboardFetchInFlight;
+  const request = (async () => {
+    const firestore = getCommentFirestore();
+    const result: LeaderboardUser[] = [];
+    let lastDocument: QueryDocumentSnapshot | undefined;
+    do {
+      const leaderboardQuery = query(
+        collection(firestore, "userStats"),
+        orderBy("commentCount", "desc"),
+        ...(lastDocument ? [startAfter(lastDocument)] : []),
+        limit(leaderboardBatchSize),
+      );
+      const snapshot = await getDocs(leaderboardQuery);
+      snapshot.forEach((entry) => {
+        const data = entry.data();
+        result.push({
+          uid: entry.id,
+          name: stringValue(data.displayName),
+          username: stringValue(data.username),
+          avatar: stringValue(data.avatar, defaultAvatar),
+          commentCount: numberValue(data.commentCount),
+          hidden: data.leaderboardHidden === true,
+        });
+      });
+      lastDocument = snapshot.docs.at(-1);
+      if (snapshot.empty || result.filter((user) => !user.hidden).length >= leaderboardVisibleLimit) break;
+    } while (result.length < leaderboardVisibleLimit * 2);
+
+    return {
+      users: result.filter((user) => !user.hidden).slice(0, leaderboardVisibleLimit),
+      updatedAt: Date.now(),
+    };
+  })();
+  leaderboardFetchInFlight = request;
+  const clearInFlight = () => {
+    if (leaderboardFetchInFlight === request) leaderboardFetchInFlight = null;
+  };
+  void request.then(clearInFlight, clearInFlight);
+  return request;
 }
 
 function readLegacyCachedLeaderboard(): LeaderboardUser[] {
@@ -321,19 +394,73 @@ function getCommentFirestore() {
 export default function LeaderboardPage() {
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
-    void readCachedLeaderboard().then((cached) => {
-      if (active) setUsers(cached?.users ?? readLegacyCachedLeaderboard());
-    }).catch((cacheError: unknown) => {
-      console.warn("Cache leaderboard lokal gagal dimuat.", cacheError);
-      if (active) setUsers(readLegacyCachedLeaderboard());
-    }).finally(() => {
-      if (active) setLoading(false);
+    let hasCachedUsers = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshInFlight: Promise<LeaderboardCache> | null = null;
+
+    const refresh = async (showLoading: boolean) => {
+      if (refreshInFlight) return refreshInFlight;
+      if (showLoading) setLoading(true);
+      refreshInFlight = fetchLeaderboardFromFirestore();
+      try {
+        const freshCache = await refreshInFlight;
+        if (active) {
+          setUsers(freshCache.users);
+          setError("");
+          hasCachedUsers = freshCache.users.length > 0;
+        }
+        try {
+          await writeCachedLeaderboard(freshCache);
+        } catch (cacheError) {
+          console.warn("Data leaderboard berhasil dimuat, tetapi gagal disimpan di IndexedDB.", cacheError);
+        }
+      } catch (loadError) {
+        console.error("Leaderboard komentar gagal dimuat dari Firestore.", loadError);
+        if (active && !hasCachedUsers) {
+          setError("Leaderboard belum bisa dimuat. Silakan coba lagi nanti.");
+        }
+      } finally {
+        refreshInFlight = null;
+        if (active) {
+          setLoading(false);
+          refreshTimer = setTimeout(() => void refresh(false), leaderboardCacheTtl);
+        }
+      }
+    };
+
+    const loadCache = async () => {
+      const cached = await readCachedLeaderboard();
+      if (!active) return;
+      const cachedUsers = cached?.users ?? readLegacyCachedLeaderboard();
+      hasCachedUsers = cachedUsers.length > 0;
+      setUsers(cachedUsers);
+      setLoading(false);
+
+      const cacheAge = cached ? Date.now() - cached.updatedAt : Number.POSITIVE_INFINITY;
+      if (cached && cacheAge >= 0 && cacheAge < leaderboardCacheTtl) {
+        refreshTimer = setTimeout(
+          () => void refresh(false),
+          leaderboardCacheTtl - cacheAge,
+        );
+        return;
+      }
+      await refresh(!cachedUsers.length);
+    };
+
+    void loadCache().catch((cacheError: unknown) => {
+      console.error("Cache leaderboard lokal gagal dimuat.", cacheError);
+      if (!active) return;
+      setUsers(readLegacyCachedLeaderboard());
+      hasCachedUsers = false;
+      void refresh(true);
     });
     return () => {
       active = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, []);
 
@@ -392,10 +519,13 @@ export default function LeaderboardPage() {
               </ol>
             </section>
           </div>
+        ) : error && !topUsers.length ? (
+          <div role="alert" className="rounded-2xl border border-red-300/60 bg-red-50 p-6 text-center text-sm text-red-700 dark:border-red-400/30 dark:bg-red-950/30 dark:text-red-200">{error}</div>
         ) : !topUsers.length ? (
-          <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-10 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400">Belum ada data leaderboard tersimpan di browser ini.</div>
+          <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-10 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400">Belum ada data komentar.</div>
         ) : (
           <>
+            {error && <div role="alert" className="mb-4 rounded-2xl border border-red-300/60 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-400/30 dark:bg-red-950/30 dark:text-red-200">{error}</div>}
             <section aria-label="Top six commenters" className="mb-8 grid grid-cols-3 gap-2 min-[900px]:grid-cols-6 min-[900px]:gap-3">
               {topUsers.map((user, index) => (
                 <article
