@@ -1653,7 +1653,7 @@ export default function ReadingStatsPage({ uid }: { uid: string }) {
           try {
             await preserveLifetimeChapterCount(uid, totalChaptersRead);
           } catch (recoveryError) {
-            console.warn("The lifetime chapter count could not be restored to Firestore.", recoveryError);
+            console.warn("The lifetime chapter count could not be queued for synchronization.", recoveryError);
           }
         }
         if (!active) return;

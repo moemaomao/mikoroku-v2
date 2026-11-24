@@ -75,7 +75,8 @@ const HISTORY_STORE = "entries";
 const HISTORY_SYNC_COLLECTION = "userStats";
 const HISTORY_SYNC_ERROR_EVENT = "mikoroku:reading-history-sync-error";
 const HISTORY_SYNCED_EVENT = "mikoroku:reading-history-synced";
-const HISTORY_PROGRESS_SYNC_DELAY = 10 * 60 * 1000;
+const HISTORY_PROGRESS_SYNC_INTERVAL = 12 * 60 * 60 * 1000;
+const HISTORY_LAST_SYNC_PREFIX = "mikoroku:reading-history:last-sync:";
 const ACCOUNT_CHANGED_DURING_SYNC_ERROR =
   "The signed-in account changed during history synchronization.";
 
@@ -524,6 +525,11 @@ async function syncHistoryToCloud(
     readingStats,
   }, { merge: true });
 
+  try {
+    localStorage.setItem(`${HISTORY_LAST_SYNC_PREFIX}${uid}`, String(Date.now()));
+  } catch (error) {
+    console.warn("Reading history sync time could not be saved locally.", error);
+  }
   await writeLocalHistory(entries);
   window.dispatchEvent(new Event("mikoroku:reading-history-updated"));
   window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
@@ -537,11 +543,30 @@ function cancelPendingSync(): void {
   pendingSyncUid = "";
 }
 
-function scheduleProgressSync(): void {
+function historySyncTime(uid: string): number {
+  try {
+    const timestamp = Number(localStorage.getItem(`${HISTORY_LAST_SYNC_PREFIX}${uid}`));
+    return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0;
+  } catch (error) {
+    console.warn("Reading history sync time could not be read locally.", error);
+    return 0;
+  }
+}
+
+function hasUnsyncedHistory(entries: ReadingHistoryEntry[], uid: string): boolean {
+  const lastSyncedAt = historySyncTime(uid);
+  return entries.some((entry) => entryUpdatedAt(entry) > lastSyncedAt);
+}
+
+function scheduleProgressSync(uid?: string): void {
   const user = currentUser();
-  if (!user) return;
+  if (!user || (uid && uid !== user.uid)) return;
   if (pendingSyncTimer !== null) return;
   pendingSyncUid = user.uid;
+  const lastSyncedAt = historySyncTime(user.uid);
+  const delay = lastSyncedAt
+    ? Math.max(0, lastSyncedAt + HISTORY_PROGRESS_SYNC_INTERVAL - Date.now())
+    : HISTORY_PROGRESS_SYNC_INTERVAL;
   pendingSyncTimer = window.setTimeout(() => {
     const uid = pendingSyncUid;
     cancelPendingSync();
@@ -549,7 +574,7 @@ function scheduleProgressSync(): void {
     void readReadingHistory()
       .then((entries) => syncHistoryToCloud(uid, entries, { type: "sync" }))
       .catch(emitSyncError);
-  }, HISTORY_PROGRESS_SYNC_DELAY);
+  }, delay);
 }
 
 async function syncCurrentUser(
@@ -598,6 +623,11 @@ export async function syncReadingHistoryWithUser(uid: string): Promise<ReadingHi
   if (!uid) throw new Error("A signed-in user is required to synchronize reading history.");
   cancelPendingSync();
   const localEntries = await readReadingHistory();
+  const lastSyncedAt = historySyncTime(uid);
+  if (lastSyncedAt && Date.now() - lastSyncedAt < HISTORY_PROGRESS_SYNC_INTERVAL) {
+    if (hasUnsyncedHistory(localEntries, uid)) scheduleProgressSync(uid);
+    return localEntries;
+  }
   try {
     return await syncHistoryToCloud(uid, localEntries, { type: "sync" });
   } catch (error) {
@@ -624,13 +654,13 @@ export async function upsertReadingHistoryEntry(entry: ReadingHistoryEntry): Pro
     ...existing.filter((item) => item.url !== entry.url),
   ].slice(0, HISTORY_LIMIT);
   await writeLocalHistory(updated);
-  if (!previous) scheduleProgressSync();
+  scheduleProgressSync();
 }
 
 export async function updateReadingHistoryProgress(url: string, progress: number): Promise<void> {
   const existing = await readReadingHistory();
   if (!existing.some((entry) => entry.url === url)) return;
-  await writeLocalHistory(existing.map((entry) =>
+  const updated = existing.map((entry) =>
     entry.url === url
       ? {
           ...entry,
@@ -638,7 +668,9 @@ export async function updateReadingHistoryProgress(url: string, progress: number
           updatedAt: Date.now(),
         }
       : entry,
-  ));
+  );
+  await writeLocalHistory(updated);
+  scheduleProgressSync();
 }
 
 export async function deleteReadingHistoryEntry(url: string): Promise<void> {

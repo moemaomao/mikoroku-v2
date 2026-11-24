@@ -159,19 +159,19 @@ const LOCAL_CHAPTER_ACTIVITY_SUFFIX = ":activity";
 const LOCAL_READING_PROGRESS_PREFIX = "mikoroku:reading-stats:progress:";
 const LOCAL_READING_PROGRESS_LIMIT = 200;
 const LOCAL_READER_STATS_QUEUE_PREFIX = "mikoroku:reading-stats:pending:";
-const READER_STATS_FLUSH_INTERVAL_MS = 10 * 60 * 1000;
-const CHAPTER_READ_MARKS_SYNC_DELAY_MS = 30 * 1000;
-const CHAPTER_READ_MARKS_CACHE_TTL_MS = 15 * 60 * 1000;
-const CHAPTER_READ_MARKS_REFRESH_RETRY_MS = 60 * 1000;
+const READER_STATS_FLUSH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const CHAPTER_READ_MARKS_CACHE_TTL_MS = READER_STATS_FLUSH_INTERVAL_MS;
+const CHAPTER_READ_MARKS_REFRESH_RETRY_MS = READER_STATS_FLUSH_INTERVAL_MS;
 const CHAPTER_READ_MARKS_COLLECTION = "chapterReadMarks";
 const MAX_CHAPTER_READ_MARK_SERIES_PER_BATCH = 450;
 const LOCAL_READ_MARK_SYNC_PREFIX = "mikoroku:reading-stats:read-mark-sync:";
-const LOCAL_READ_MARK_SYNC_RETRY_MS = 60 * 60 * 1000;
 const pendingReadMarkSyncs = new Map<string, Promise<void>>();
 type PendingReaderStatsQueue = {
   progress: Record<string, Record<string, unknown>>;
   activityCounts: Record<string, number>;
   readMarks: Record<string, string[]>;
+  lifetimeChapterTotal?: number;
+  syncAfter?: number;
 };
 const pendingReaderStatsQueues = new Map<string, PendingReaderStatsQueue>();
 const pendingReaderStatsFlushTimers = new Map<string, number>();
@@ -403,7 +403,7 @@ function enqueueChapterReadMarks(uid: string, slug: string, chapters: string[]):
   ])];
   pendingReaderStatsQueues.set(uid, queue);
   writePendingReaderStatsQueue(uid, queue);
-  schedulePendingReaderStatsFlush(uid, CHAPTER_READ_MARKS_SYNC_DELAY_MS);
+  schedulePendingReaderStatsFlushIfNeeded(uid);
 }
 
 function schedulePendingReaderStatsFlushIfNeeded(uid: string): void {
@@ -413,12 +413,10 @@ function schedulePendingReaderStatsFlushIfNeeded(uid: string): void {
     Object.keys(queue.activityCounts).length ||
     Object.keys(queue.readMarks).length
   ) {
-    schedulePendingReaderStatsFlush(
-      uid,
-      Object.keys(queue.readMarks).length
-        ? CHAPTER_READ_MARKS_SYNC_DELAY_MS
-        : READER_STATS_FLUSH_INTERVAL_MS,
-    );
+    const delay = typeof queue.syncAfter === "number"
+      ? Math.max(0, queue.syncAfter - Date.now())
+      : READER_STATS_FLUSH_INTERVAL_MS;
+    schedulePendingReaderStatsFlush(uid, delay);
   }
 }
 
@@ -552,44 +550,24 @@ export async function ensureSeriesTracked(
       seriesProgress: 0,
       chapterPosition: 0,
       source: "",
-      updatedAt: 0,
+      updatedAt: Date.now(),
     };
   if (previousItem && trackedItem === previousItem && previousItem.updatedAt > 0) return;
   if (!previousItem || trackedItem !== previousItem) {
     writeLocalReadingProgress(uid, trackedItem);
   }
-
-  const firestore = await waitForFirestore();
-  const userReference = firestore.collection("userStats").doc(uid);
+  const queue = readPendingReaderStatsQueue(uid);
   const progressKey = safeDocumentId(input.slug);
-  const syncTransaction = async (transaction: StatsTransaction) => {
-    const snapshot = await transaction.get(userReference);
-    const remoteProgress = asRecord(asRecord(snapshot.data()?.readingStats).progress);
-    const existing = parseProgressItem(remoteProgress[progressKey]);
-    if (existing) return existing;
-
-    const updatedAt = new Date().toISOString();
-    const syncedItem = { ...trackedItem, updatedAt };
-    transaction.set(userReference, {
-      readingStats: { progress: { [progressKey]: syncedItem } },
-    }, { merge: true });
-    return parseProgressItem(syncedItem) || trackedItem;
-  };
-  const syncedItem = firestore.runTransaction
-    ? await firestore.runTransaction(syncTransaction)
-    : await (async () => {
-      const snapshot = await userReference.get();
-      const remoteProgress = asRecord(asRecord(snapshot.data()?.readingStats).progress);
-      const existing = parseProgressItem(remoteProgress[progressKey]);
-      if (existing) return existing;
-      const updatedAt = new Date().toISOString();
-      const item = { ...trackedItem, updatedAt };
-      await userReference.set({
-        readingStats: { progress: { [progressKey]: item } },
-      }, { merge: true });
-      return parseProgressItem(item) || trackedItem;
-    })();
-  writeLocalReadingProgress(uid, syncedItem, true);
+  if (!queue.progress[progressKey]) {
+    queue.progress[progressKey] = {
+      ...trackedItem,
+      updatedAt: new Date(trackedItem.updatedAt || Date.now()).toISOString(),
+    };
+  }
+  pendingReaderStatsQueues.set(uid, queue);
+  writePendingReaderStatsQueue(uid, queue);
+  schedulePendingReaderStatsFlushIfNeeded(uid);
+  window.dispatchEvent(new Event("mikoroku:reading-stats-local-updated"));
   window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
 }
 
@@ -764,9 +742,19 @@ function readPendingReaderStatsQueue(uid: string): PendingReaderStatsQueue {
           .map(([slug, chapters]) => [slug, readChapterMarkList(chapters)] as const)
           .filter(([, chapters]) => chapters.length > 0),
       ),
+      lifetimeChapterTotal: Number.isSafeInteger(data.lifetimeChapterTotal) &&
+        Number(data.lifetimeChapterTotal) > 0
+        ? Number(data.lifetimeChapterTotal)
+        : undefined,
+      syncAfter: Number.isFinite(data.syncAfter) && Number(data.syncAfter) > 0
+        ? Number(data.syncAfter)
+        : undefined,
     };
   } catch (error) {
     console.warn("Pending reading stats could not be read.", error);
+  }
+  if (hasPendingReaderStats(queue) && !queue.syncAfter) {
+    queue.syncAfter = Date.now();
   }
   pendingReaderStatsQueues.set(uid, queue);
   return queue;
@@ -776,16 +764,30 @@ function writePendingReaderStatsQueue(uid: string, queue: PendingReaderStatsQueu
   const hasProgress = Object.keys(queue.progress).length > 0;
   const hasActivity = Object.keys(queue.activityCounts).length > 0;
   const hasReadMarks = Object.keys(queue.readMarks).length > 0;
+  const hasLifetimeTotal = Number.isSafeInteger(queue.lifetimeChapterTotal) &&
+    Number(queue.lifetimeChapterTotal) > 0;
   try {
     const key = `${LOCAL_READER_STATS_QUEUE_PREFIX}${uid}`;
-    if (!hasProgress && !hasActivity && !hasReadMarks) {
+    if (!hasProgress && !hasActivity && !hasReadMarks && !hasLifetimeTotal) {
       localStorage.removeItem(key);
     } else {
+      if (!Number.isFinite(queue.syncAfter) || !queue.syncAfter) {
+        queue.syncAfter = Date.now() + READER_STATS_FLUSH_INTERVAL_MS;
+      }
       localStorage.setItem(key, JSON.stringify(queue));
     }
   } catch (error) {
     console.warn("Pending reading stats could not be saved.", error);
   }
+}
+
+function hasPendingReaderStats(queue: PendingReaderStatsQueue): boolean {
+  return Boolean(
+    Object.keys(queue.progress).length ||
+    Object.keys(queue.activityCounts).length ||
+    Object.keys(queue.readMarks).length ||
+    (Number.isSafeInteger(queue.lifetimeChapterTotal) && Number(queue.lifetimeChapterTotal) > 0),
+  );
 }
 
 function schedulePendingReaderStatsFlush(
@@ -813,11 +815,13 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
   if (existing) return existing;
 
   const queue = readPendingReaderStatsQueue(uid);
-  if (
-    !Object.keys(queue.progress).length &&
-    !Object.keys(queue.activityCounts).length &&
-    !Object.keys(queue.readMarks).length
-  ) return;
+  if (!hasPendingReaderStats(queue)) return;
+
+  const remainingDelay = (queue.syncAfter || 0) - Date.now();
+  if (remainingDelay > 0) {
+    schedulePendingReaderStatsFlush(uid, remainingDelay);
+    return;
+  }
 
   const sdk = getStatsWindow().firebase;
   const user = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
@@ -831,6 +835,7 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
   const queuedReadMarks = Object.fromEntries(
     Object.entries(queue.readMarks).slice(0, MAX_CHAPTER_READ_MARK_SERIES_PER_BATCH),
   );
+  const queuedLifetimeChapterTotal = queue.lifetimeChapterTotal;
   const timer = pendingReaderStatsFlushTimers.get(uid);
   if (timer !== undefined) {
     window.clearTimeout(timer);
@@ -918,7 +923,35 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
         if (remaining.length) currentQueue.readMarks[slug] = remaining;
         else delete currentQueue.readMarks[slug];
       });
+      if (hasPendingReaderStats(currentQueue) && !queuedLifetimeChapterTotal) {
+        currentQueue.syncAfter = Date.now() + READER_STATS_FLUSH_INTERVAL_MS;
+      } else if (!hasPendingReaderStats(currentQueue)) {
+        delete currentQueue.syncAfter;
+      }
       writePendingReaderStatsQueue(uid, currentQueue);
+
+      if (queuedLifetimeChapterTotal) {
+        await syncLifetimeChapterCountToFirestore(uid, queuedLifetimeChapterTotal);
+        const latestQueue = readPendingReaderStatsQueue(uid);
+        if (latestQueue.lifetimeChapterTotal === queuedLifetimeChapterTotal) {
+          delete latestQueue.lifetimeChapterTotal;
+          try {
+            localStorage.setItem(
+              `${LOCAL_READ_MARK_SYNC_PREFIX}${uid}`,
+              JSON.stringify({ syncedCount: queuedLifetimeChapterTotal }),
+            );
+          } catch (error) {
+            console.warn("Local chapter read sync state could not be saved.", error);
+          }
+          if (hasPendingReaderStats(latestQueue)) {
+            latestQueue.syncAfter = Date.now() + READER_STATS_FLUSH_INTERVAL_MS;
+          } else {
+            delete latestQueue.syncAfter;
+          }
+          pendingReaderStatsQueues.set(uid, latestQueue);
+          writePendingReaderStatsQueue(uid, latestQueue);
+        }
+      }
 
       const callbacks = pendingReaderStatsCallbacks.get(uid);
       Object.entries(queuedActivityCounts).forEach(([date, count]) => {
@@ -937,18 +970,7 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
 
       pendingReaderStatsRetryAttempts.delete(uid);
       window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
-      if (
-        Object.keys(currentQueue.progress).length ||
-        Object.keys(currentQueue.activityCounts).length ||
-        Object.keys(currentQueue.readMarks).length
-      ) {
-        schedulePendingReaderStatsFlush(
-          uid,
-          Object.keys(currentQueue.readMarks).length
-            ? CHAPTER_READ_MARKS_SYNC_DELAY_MS
-            : READER_STATS_FLUSH_INTERVAL_MS,
-        );
-      }
+      if (hasPendingReaderStats(currentQueue)) schedulePendingReaderStatsFlushIfNeeded(uid);
     } catch (error) {
       console.error("Reading stats remain queued locally and will retry synchronization.", error);
       const attempts = (pendingReaderStatsRetryAttempts.get(uid) || 0) + 1;
@@ -972,7 +994,7 @@ async function flushPendingReaderStats(uid: string): Promise<void> {
 function flushCurrentUserReaderStats(): void {
   const sdk = getStatsWindow().firebase;
   const user = sdk?.auth?.().currentUser || getStatsWindow().currentUser;
-  if (user?.uid) void flushPendingReaderStats(user.uid);
+  if (user?.uid) schedulePendingReaderStatsFlushIfNeeded(user.uid);
 }
 
 if (typeof window !== "undefined") {
@@ -998,10 +1020,6 @@ export async function saveReaderStats(
   }
   const activityDate = utcDateKey(new Date());
   recordLocalReadingProgress(user.uid, input);
-  const increment = sdk?.firestore?.FieldValue?.increment;
-  if (recordChapterActivity && sdk && typeof increment !== "function") {
-    throw new Error("Firestore atomic increment is unavailable.");
-  }
   const shouldRecordChapterActivity = recordChapterActivity
     ? await markChapterReadOnce(user.uid, input)
     : false;
@@ -1040,9 +1058,33 @@ export async function saveReaderStats(
 
   pendingReaderStatsQueues.set(user.uid, queue);
   writePendingReaderStatsQueue(user.uid, queue);
-  schedulePendingReaderStatsFlush(user.uid);
+  schedulePendingReaderStatsFlushIfNeeded(user.uid);
   window.dispatchEvent(new Event("mikoroku:reading-stats-updated"));
   return true;
+}
+
+async function syncLifetimeChapterCountToFirestore(uid: string, minimum: number): Promise<void> {
+  const firestore = await waitForFirestore();
+  if (!firestore.runTransaction) {
+    throw new Error("Firestore transactions are unavailable for chapter count synchronization.");
+  }
+  const firebase = getStatsWindow().firebase;
+  const reference = firestore.collection("userStats").doc(uid);
+  await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const user = firebase?.auth?.().currentUser || getStatsWindow().currentUser;
+    if (user?.uid !== uid) {
+      throw new Error("The signed-in account changed during chapter count synchronization.");
+    }
+    const currentTotal = numberValue(
+      asRecord(snapshot.data()?.readingStats).totalChaptersRead,
+    );
+    if (currentTotal < minimum) {
+      transaction.set(reference, {
+        readingStats: { totalChaptersRead: minimum },
+      }, { merge: true });
+    }
+  });
 }
 
 export async function preserveLifetimeChapterCount(uid: string, minimum: number): Promise<boolean> {
@@ -1055,27 +1097,14 @@ export async function preserveLifetimeChapterCount(uid: string, minimum: number)
     throw new Error("Sign in as the profile owner to restore the chapter count.");
   }
 
-  const firestore = await waitForFirestore();
-  if (!firestore.runTransaction) {
-    throw new Error("Firestore transactions are unavailable.");
-  }
-  const reference = firestore.collection("userStats").doc(uid);
-  return firestore.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(reference);
-    const activeUser = firebase.auth?.().currentUser || getStatsWindow().currentUser;
-    if (activeUser?.uid !== uid) {
-      throw new Error("The signed-in account changed during chapter count recovery.");
-    }
-    const profile = snapshot.exists ? snapshot.data() || {} : {};
-    const readingStats = asRecord(profile.readingStats);
-    if (numberValue(readingStats.totalChaptersRead) >= minimum) return false;
-    transaction.set(
-      reference,
-      { readingStats: { totalChaptersRead: minimum } },
-      { merge: true },
-    );
-    return true;
-  });
+  const queue = readPendingReaderStatsQueue(uid);
+  const currentMinimum = queue.lifetimeChapterTotal || 0;
+  if (currentMinimum >= minimum) return false;
+  queue.lifetimeChapterTotal = Math.floor(minimum);
+  pendingReaderStatsQueues.set(uid, queue);
+  writePendingReaderStatsQueue(uid, queue);
+  schedulePendingReaderStatsFlushIfNeeded(uid);
+  return true;
 }
 
 export async function syncLocalReadMarksWithUser(uid: string): Promise<void> {
@@ -1105,29 +1134,7 @@ export async function syncLocalReadMarksWithUser(uid: string): Promise<void> {
     }
 
     if (localReadMarks <= (syncState.syncedCount || 0)) return;
-    if (
-      localReadMarks <= (syncState.attemptedCount || 0) &&
-      (syncState.retryAfter || 0) > Date.now()
-    ) return;
-
-    try {
-      await preserveLifetimeChapterCount(uid, localReadMarks);
-      if ((firebase?.auth?.().currentUser || getStatsWindow().currentUser)?.uid !== uid) {
-        throw new Error("The signed-in account changed during local read mark synchronization.");
-      }
-      localStorage.setItem(syncKey, JSON.stringify({ syncedCount: localReadMarks }));
-    } catch (error) {
-      try {
-        localStorage.setItem(syncKey, JSON.stringify({
-          ...syncState,
-          attemptedCount: localReadMarks,
-          retryAfter: Date.now() + LOCAL_READ_MARK_SYNC_RETRY_MS,
-        }));
-      } catch (storageError) {
-        console.warn("Local chapter read sync retry state could not be saved.", storageError);
-      }
-      throw error;
-    }
+    await preserveLifetimeChapterCount(uid, localReadMarks);
   })();
   pendingReadMarkSyncs.set(uid, request);
   try {

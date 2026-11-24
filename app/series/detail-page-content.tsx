@@ -3,7 +3,7 @@
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
-import { addDoc, collection, doc, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, getFirestore, serverTimestamp } from "firebase/firestore";
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
@@ -909,19 +909,15 @@ async function loadBloggerChapterImages(
 }
 
 async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Promise<Chapter[]> {
-  const ready = await waitForFirestoreSdk(signal);
-  if (!ready || !window.firestore || !window.fs?.collection || !window.fs.getDocs) {
-    throw new Error("Firebase Firestore SDK tidak tersedia untuk membaca chapter.");
-  }
-
-  const reference = window.fs.collection(window.firestore, "manga", slug, "chapters");
-  const chapterSnapshot = await window.fs.getDocs(reference);
+  if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
+  const { firestore } = initializeFirebaseClient();
+  const chapterSnapshot = await getDocs(collection(firestore, "manga", slug, "chapters"));
+  if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
   const collectionChapters: Chapter[] = [];
   chapterSnapshot.forEach((document) => {
     const data = document.data();
     if (data.isDraft === true) return;
-    const snapshotUpdateTime = document.updateTime?.toDate?.().toISOString();
-    const createdAt = firestoreDate(data.createdAt || data.updatedAt || data.date || snapshotUpdateTime);
+    const createdAt = firestoreDate(data.createdAt || data.updatedAt || data.date);
     const chapterImages = extractChapterImages(data.images || data.content || data.html);
     const chapterText = data.content || data.text || data.html;
     collectionChapters.push({
@@ -933,8 +929,8 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
       isNovel: isNovelSeries(data) ||
         (typeof chapterText === "string" && Boolean(chapterText.trim()) && !chapterImages.length),
       createdAt,
-      updatedAt: firestoreDate(data.updatedAt || snapshotUpdateTime),
-      date: firestoreDate(data.date || data.createdAt || data.updatedAt || snapshotUpdateTime || createdAt),
+      updatedAt: firestoreDate(data.updatedAt),
+      date: firestoreDate(data.date || data.createdAt || data.updatedAt || createdAt),
       timestamp: typeof data.timestamp === "string" || typeof data.timestamp === "number" ? data.timestamp : undefined,
       order: Number(data.order ?? document.id) || 0,
       source: "firestore",
@@ -942,11 +938,8 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
   });
   if (collectionChapters.length) return collectionChapters;
 
-  if (!window.fs.doc || !window.fs.getDoc) {
-    throw new Error("API dokumen Firebase Firestore tidak tersedia.");
-  }
-  const mangaReference = window.fs.doc(window.firestore, "manga", slug);
-  const mangaSnapshot = await window.fs.getDoc(mangaReference);
+  const mangaSnapshot = await getDoc(doc(firestore, "manga", slug));
+  if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
   if (!mangaSnapshot.exists()) return [];
   const mangaData = mangaSnapshot.data();
   const chapterMap: Record<string, unknown> = {};
@@ -982,13 +975,6 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
       source: "firestore" as const,
     }];
   });
-}
-
-async function waitForFirestoreSdk(signal: AbortSignal): Promise<boolean> {
-  if (window.firestore && window.fs?.collection && window.fs.getDocs) return true;
-  if (signal.aborted) throw new DOMException("Permintaan Firestore dibatalkan.", "AbortError");
-  initializeFirebaseClient();
-  return Boolean(window.firestore && window.fs?.collection && window.fs.getDocs);
 }
 
 const CHAPTER_UI_BATCH = 48;
@@ -1267,18 +1253,15 @@ export default function DetailPageContent({
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
   const [detailCoverFailed, setDetailCoverFailed] = useState(false);
   const [metadataExpanded, setMetadataExpanded] = useState(false);
-  const [chapters, setChapters] = useState<Chapter[]>(() =>
-    initialChaptersManaged ? initialChapters : [],
-  );
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [managedChapterList, setManagedChapterList] = useState(
     () => initialChaptersManaged && initialChapters.length > 0,
   );
   const [commentCount, setCommentCount] = useState<number | null>(null);
-  const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">(
-    () => (initialChaptersManaged && initialChapters.length ? "ready" : "loading"),
-  );
+  const [chapterState, setChapterState] = useState<"loading" | "ready" | "error">("loading");
   const [chapterError, setChapterError] = useState("");
   const [source, setSource] = useState<ChapterSource>("blogger");
+  const [sourcePreferenceReady, setSourcePreferenceReady] = useState(false);
   const [chapterRetry, setChapterRetry] = useState(0);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [view, setView] = useState<"grid" | "list" | "text-grid">("text-grid");
@@ -1434,7 +1417,7 @@ export default function DetailPageContent({
     "--detail-max-width": "1250px",
   } as CSSProperties;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const sourcePreference = localStorage.getItem("chapterSourceMode");
     const sortPreference = localStorage.getItem("chapterSortMode");
     const viewPreference = localStorage.getItem("chapterViewMode");
@@ -1445,6 +1428,7 @@ export default function DetailPageContent({
     if (viewPreference === "list" || viewPreference === "text-grid" || viewPreference === "grid") {
       setView(viewPreference);
     }
+    setSourcePreferenceReady(true);
   }, [initialChaptersManaged]);
 
   useEffect(() => {
@@ -1520,6 +1504,7 @@ export default function DetailPageContent({
   }, [slug]);
 
   useLayoutEffect(() => {
+    if (!sourcePreferenceReady) return;
     const managedChapters = initialChaptersManaged
       ? initialChapters.filter((chapter) => chapter.source === "firestore" || chapter.source === source)
       : [];
@@ -1832,6 +1817,7 @@ export default function DetailPageContent({
     managedChapterList,
     initialChapters,
     initialChaptersManaged,
+    sourcePreferenceReady,
   ]);
 
   function changeChapterSource(nextSource: ChapterSource, preference: "sv1" | "sv2" | "es") {

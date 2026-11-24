@@ -5,7 +5,7 @@ const DB_VERSION = 1;
 const STORE_STATS = "readingStats";
 const STORE_MEDALS = "medalUnlocks";
 
-export const READING_STATS_CACHE_TTL_MS = 1000 * 60 * 30;
+export const READING_STATS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 type StatsCacheRecord = {
   uid: string;
   savedAt: number;
