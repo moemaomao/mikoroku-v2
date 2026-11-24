@@ -805,7 +805,7 @@ async function getBloggerChapterNumbers(
   source: "blogger" | "blogger2",
   signal: AbortSignal,
 ): Promise<string[]> {
-  const params = new URLSearchParams({ title: title.trim(), source, full: "1" });
+  const params = new URLSearchParams({ title: title.trim(), source, full: "0" });
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
     signal,
     headers: { Accept: "application/json" },

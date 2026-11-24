@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { default as handler } from "./.open-next/worker.js";
 import { firebaseConfig } from "./lib/firebase-config";
+import { normalizeChapterNumber } from "./lib/chapter-number";
 
 interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
@@ -43,7 +44,7 @@ const BLOGGER_DOMAINS = {
   blogger2: "https://www.yomidays.my.id",
 } as const;
 
-const BLOGGER_CHAPTERS_TTL = 5 * 60;
+const BLOGGER_CHAPTERS_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_STALE_TTL = 24 * 60 * 60;
 const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 const UPSTREAM_TIMEOUT_MS = 8_000;
@@ -1367,6 +1368,12 @@ async function fetchAndCacheBloggerChapters(
   kv: KVNamespace | undefined,
   source: keyof typeof BLOGGER_DOMAINS,
   title: string,
+  cached?: {
+    chapters: unknown[];
+    cachedAt?: unknown;
+    count?: number;
+    latestOnly?: boolean;
+  } | null,
 ) {
   const domain = BLOGGER_DOMAINS[source];
   const feedUrl = `${domain}/feeds/posts/default?alt=json&max-results=500&q=${encodeURIComponent(title)}`;
@@ -1389,9 +1396,19 @@ async function fetchAndCacheBloggerChapters(
     title,
   };
 
-  if (kv && chapters.length > 0) {
+  const latest = chapters[0];
+  const previousLatest = cached?.chapters?.[0];
+  const latestUnchanged = !!cached?.latestOnly &&
+    JSON.stringify(previousLatest) === JSON.stringify(latest);
+  const cacheIsFresh = bloggerCacheAge(cached?.cachedAt) <= BLOGGER_CHAPTERS_TTL * 1000;
+  if (kv && latest && (!latestUnchanged || !cacheIsFresh)) {
     try {
-      await kv.put(bloggerChaptersCacheKey(source, title), JSON.stringify(payload), {
+      await kv.put(bloggerChaptersCacheKey(source, title), JSON.stringify({
+        ...payload,
+        chapters: [latest],
+        count: chapters.length,
+        latestOnly: true,
+      }), {
         expirationTtl: BLOGGER_CHAPTERS_STALE_TTL,
       });
     } catch (error) {
@@ -1410,6 +1427,16 @@ function bloggerCacheAge(cachedAt: unknown): number {
         ? Date.parse(cachedAt)
         : Number.NaN;
   return Number.isFinite(timestamp) ? Date.now() - timestamp : Number.POSITIVE_INFINITY;
+}
+
+function findBloggerChapter(chapters: unknown[], chapterNum: string) {
+  const wanted = normalizeChapterNumber(chapterNum);
+  return chapters.find((chapter) => {
+    const candidate = normalizeChapterNumber(chapter?.num);
+    return wanted && candidate
+      ? wanted === candidate
+      : String(chapter?.num || "").trim().toLowerCase() === chapterNum.toLowerCase();
+  });
 }
 
 function corsFor(request: Request): HeadersInit {
@@ -1458,6 +1485,7 @@ async function handleBloggerChaptersProxy(
   const sourceRaw = (url.searchParams.get("source") || "blogger").trim();
   const forceRefresh = url.searchParams.get("refresh") === "1";
   const full = url.searchParams.get("full") === "1";
+  const requestedChapter = (url.searchParams.get("chapter") || "").trim();
   const requestedLimit = Number.parseInt(url.searchParams.get("limit") || "", 10);
   const listLimit = Number.isFinite(requestedLimit)
     ? Math.max(1, Math.min(50, requestedLimit))
@@ -1500,6 +1528,8 @@ async function handleBloggerChaptersProxy(
     cachedAt?: unknown;
     source?: string;
     title?: string;
+    count?: number;
+    latestOnly?: boolean;
   } | null = null;
 
   const shapeResponse = (body: {
@@ -1507,11 +1537,14 @@ async function handleBloggerChaptersProxy(
     [key: string]: unknown;
   }) => {
     if (!Array.isArray(body.chapters)) return body;
-    const chapters = full
-      ? body.chapters
-      : body.chapters
-          .slice(0, listLimit || undefined)
-          .map(({ images: _images, content: _content, html: _html, ...chapter }) => chapter);
+    let chapters = requestedChapter && full
+      ? [findBloggerChapter(body.chapters, requestedChapter)].filter(Boolean)
+      : body.chapters;
+    if (!full) {
+      chapters = chapters
+        .slice(0, listLimit || undefined)
+        .map(({ images: _images, content: _content, html: _html, ...chapter }) => chapter);
+    }
     return { ...body, chapters };
   };
   const respond = (body: unknown, cacheStatus: string, status = 200) =>
@@ -1522,7 +1555,7 @@ async function handleBloggerChaptersProxy(
         "cache-control":
           cacheStatus === "STALE"
             ? "public, max-age=0, s-maxage=0, stale-while-revalidate=60"
-            : `public, max-age=${BLOGGER_CHAPTERS_BROWSER_MAX_AGE}, s-maxage=${BLOGGER_CHAPTERS_TTL}, stale-while-revalidate=60`,
+            : `public, max-age=${BLOGGER_CHAPTERS_BROWSER_MAX_AGE}, s-maxage=${BLOGGER_CHAPTERS_BROWSER_MAX_AGE}, stale-while-revalidate=60`,
         "x-cache": cacheStatus,
         "x-content-type-options": "nosniff",
         ...corsFor(request),
@@ -1540,39 +1573,56 @@ async function handleBloggerChaptersProxy(
     }
   }
 
-  if (cached && !forceRefresh) {
-    const body = {
-      chapters: cached.chapters,
+  const cacheIsFresh = !!cached &&
+    bloggerCacheAge(cached.cachedAt) <= BLOGGER_CHAPTERS_TTL * 1000;
+  const cachedChapters = cached?.chapters || [];
+  const cachedLatest = requestedChapter
+    ? findBloggerChapter(cachedChapters, requestedChapter)
+    : undefined;
+
+  if (!forceRefresh && cached && cacheIsFresh && cached.latestOnly === true &&
+      full && requestedChapter && cachedLatest) {
+    return respond(shapeResponse({
+      chapters: [cachedLatest],
       source: cached.source ?? source,
       title: cached.title ?? title,
       cachedAt: cached.cachedAt,
-      count: cached.chapters.length,
-    };
+      count: cached.count ?? 1,
+    }), "HIT");
+  }
 
-    if (bloggerCacheAge(cached.cachedAt) <= BLOGGER_CHAPTERS_TTL * 1000) {
-      return respond(shapeResponse(body), "HIT");
-    }
-
-    try {
-      const payload = await fetchAndCacheBloggerChapters(kv, source, title);
-      return respond(
-        shapeResponse({
-          chapters: payload.chapters,
+  const legacyChapterMatch = requestedChapter
+    ? findBloggerChapter(cachedChapters, requestedChapter)
+    : undefined;
+  const canServeLegacy = cached && cacheIsFresh && cached.latestOnly !== true &&
+    (!requestedChapter || !full || legacyChapterMatch);
+  if (!forceRefresh && canServeLegacy) {
+    const latest = cachedChapters[0];
+    if (kv && latest) {
+      try {
+        await kv.put(bloggerChaptersCacheKey(source, title), JSON.stringify({
+          chapters: [latest],
+          cachedAt: cached.cachedAt,
           source,
           title,
-          cachedAt: payload.cachedAt,
-          count: payload.chapters.length,
-        }),
-        "MISS",
-      );
-    } catch (error) {
-      console.error("[worker blogger-proxy] refresh failed; serving stale chapters", error);
-      return respond(shapeResponse({ ...body, stale: true }), "STALE");
+          count: cached.count ?? cachedChapters.length,
+          latestOnly: true,
+        }), { expirationTtl: BLOGGER_CHAPTERS_STALE_TTL });
+      } catch (error) {
+        console.warn("[worker blogger-proxy] KV compact failed", error);
+      }
     }
+    return respond(shapeResponse({
+      chapters: cachedChapters,
+      source: cached.source ?? source,
+      title: cached.title ?? title,
+      cachedAt: cached.cachedAt,
+      count: cached.count ?? cachedChapters.length,
+    }), "HIT");
   }
 
   try {
-    const payload = await fetchAndCacheBloggerChapters(kv, source, title);
+    const payload = await fetchAndCacheBloggerChapters(kv, source, title, cached);
 
     return respond(
       shapeResponse({
@@ -1589,14 +1639,21 @@ async function handleBloggerChaptersProxy(
       error instanceof Error ? error.message : "Gagal memuat feed Blogger.";
     console.error("[worker blogger-proxy] upstream fetch failed", error);
 
-    if (cached) {
+    const staleChapter = requestedChapter
+      ? findBloggerChapter(cachedChapters, requestedChapter)
+      : undefined;
+    const canServeStale = cached &&
+      (requestedChapter && full
+        ? !!staleChapter
+        : cached.latestOnly !== true);
+    if (canServeStale) {
       return respond(
         shapeResponse({
-          chapters: cached.chapters,
+          chapters: requestedChapter && full ? [staleChapter] : cachedChapters,
           source: cached.source ?? source,
           title: cached.title ?? title,
           cachedAt: cached.cachedAt,
-          count: cached.chapters.length,
+          count: cached.count ?? cachedChapters.length,
           stale: true,
         }),
         "STALE",

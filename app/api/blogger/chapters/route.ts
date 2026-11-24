@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   BLOGGER_CHAPTERS_BROWSER_MAX_AGE,
+  BLOGGER_CHAPTERS_KV_TTL,
   BLOGGER_CHAPTERS_TTL,
   bloggerChaptersCacheKey,
   fetchBloggerChapters,
@@ -9,6 +10,7 @@ import {
   type BloggerChapter,
   type BloggerChapterSource,
 } from "../../../../lib/blogger-chapters";
+import { normalizeChapterNumber } from "../../../../lib/chapter-number";
 import { kvGet, kvSet } from "../../../../lib/kv-cache";
 
 export const runtime = "edge";
@@ -19,6 +21,8 @@ type CachedPayload = {
   cachedAt: string;
   source: BloggerChapterSource;
   title: string;
+  count?: number;
+  latestOnly?: boolean;
 };
 
 function corsHeaders(origin: string | null): HeadersInit {
@@ -63,6 +67,25 @@ function shapeChapters(chapters: BloggerChapter[], full: boolean, limit: number)
   return !full && limit > 0 ? shaped.slice(0, limit) : shaped;
 }
 
+function findChapter(chapters: BloggerChapter[], chapterNum: string) {
+  const wanted = normalizeChapterNumber(chapterNum);
+  return chapters.find((chapter) => {
+    const candidate = normalizeChapterNumber(chapter.num);
+    return wanted && candidate
+      ? wanted === candidate
+      : chapter.num.trim().toLowerCase() === chapterNum.trim().toLowerCase();
+  });
+}
+
+function isSameChapter(left: BloggerChapter | undefined, right: BloggerChapter): boolean {
+  return !!left &&
+    left.num === right.num &&
+    left.title === right.title &&
+    left.url === right.url &&
+    left.createdAt === right.createdAt &&
+    JSON.stringify(left.images) === JSON.stringify(right.images);
+}
+
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 204,
@@ -77,6 +100,7 @@ export async function GET(request: NextRequest) {
   const sourceRaw = (searchParams.get("source") || "blogger").trim();
   const forceRefresh = searchParams.get("refresh") === "1";
   const full = searchParams.get("full") === "1";
+  const requestedChapter = (searchParams.get("chapter") || "").trim();
   const requestedLimit = Number.parseInt(searchParams.get("limit") || "", 10);
   const listLimit = Number.isFinite(requestedLimit)
     ? Math.max(1, Math.min(50, requestedLimit))
@@ -102,51 +126,100 @@ export async function GET(request: NextRequest) {
   const source = sourceRaw;
   const cacheKey = bloggerChaptersCacheKey(source, title);
 
-  if (!forceRefresh) {
-    try {
-      const cached = await kvGet<CachedPayload>(cacheKey);
-      if (cached?.chapters && Array.isArray(cached.chapters)) {
-        return jsonResponse(
-          {
-            chapters: shapeChapters(cached.chapters, full, listLimit),
-            source: cached.source ?? source,
-            title: cached.title ?? title,
-            cachedAt: cached.cachedAt,
-            count: cached.chapters.length,
-            full,
-          },
-          { origin, cacheStatus: "HIT" },
-        );
-      }
-    } catch (error) {
-      console.warn("[api/blogger/chapters] KV get failed", error);
-    }
+  const cached = await kvGet<CachedPayload>(cacheKey);
+  const cachedChapters = Array.isArray(cached?.chapters) ? cached.chapters : [];
+  const cacheIsFresh = !!cached &&
+    Date.now() - Date.parse(cached.cachedAt) < BLOGGER_CHAPTERS_KV_TTL * 1000;
+  const cachedChapter = requestedChapter
+    ? findChapter(cachedChapters, requestedChapter)
+    : undefined;
+
+  if (!forceRefresh && cacheIsFresh && full && requestedChapter &&
+      cached?.latestOnly === true && cachedChapter) {
+    return jsonResponse(
+      {
+        chapters: [cachedChapter],
+        source: cached.source ?? source,
+        title: cached.title ?? title,
+        cachedAt: cached.cachedAt,
+        count: cached.count ?? 1,
+        full,
+      },
+      { origin, cacheStatus: "HIT" },
+    );
   }
 
-  try {
-    const chapters = await fetchBloggerChapters(title, source);
-    const payload: CachedPayload = {
-      chapters,
-      cachedAt: new Date().toISOString(),
-      source,
-      title,
-    };
-
-    if (chapters.length > 0) {
+  const cachedRequestedChapter = requestedChapter
+    ? findChapter(cachedChapters, requestedChapter)
+    : undefined;
+  if (!forceRefresh && cacheIsFresh && cachedChapters.length > 0 &&
+      cached?.latestOnly !== true &&
+      (!requestedChapter || !full || cachedRequestedChapter)) {
+    const responseChapters = requestedChapter && full && cachedRequestedChapter
+      ? [cachedRequestedChapter]
+      : cachedChapters;
+    const latest = cachedChapters[0];
+    if (latest) {
       try {
-        await kvSet(cacheKey, payload, BLOGGER_CHAPTERS_TTL);
+        await kvSet(cacheKey, {
+          chapters: [latest],
+          cachedAt: cached.cachedAt,
+          source,
+          title,
+          count: cached.count ?? cachedChapters.length,
+          latestOnly: true,
+        }, BLOGGER_CHAPTERS_KV_TTL);
       } catch (error) {
-        console.warn("[api/blogger/chapters] KV put failed", error);
+        console.warn("[api/blogger/chapters] KV compact failed", error);
       }
     }
 
     return jsonResponse(
       {
-        chapters: shapeChapters(chapters, full, listLimit),
+        chapters: shapeChapters(responseChapters, full, listLimit),
+        source: cached.source ?? source,
+        title: cached.title ?? title,
+        cachedAt: cached.cachedAt,
+        count: cached.count ?? cachedChapters.length,
+        full,
+      },
+      { origin, cacheStatus: "HIT" },
+    );
+  }
+
+  try {
+    const chapters = await fetchBloggerChapters(title, source);
+    const latest = chapters[0];
+    const payload: CachedPayload = {
+      chapters: latest ? [latest] : [],
+      cachedAt: new Date().toISOString(),
+      source,
+      title,
+      count: chapters.length,
+      latestOnly: true,
+    };
+
+    if (latest && (!cached?.latestOnly ||
+        !isSameChapter(cachedChapters[0], latest) || !cacheIsFresh)) {
+      try {
+        await kvSet(cacheKey, payload, BLOGGER_CHAPTERS_KV_TTL);
+      } catch (error) {
+        console.warn("[api/blogger/chapters] KV put failed", error);
+      }
+    }
+    const responseChapters = requestedChapter && full
+      ? [findChapter(chapters, requestedChapter)].filter(
+          (chapter): chapter is BloggerChapter => !!chapter,
+        )
+      : chapters;
+
+    return jsonResponse(
+      {
+        chapters: shapeChapters(responseChapters, full, listLimit),
         source,
         title,
         cachedAt: payload.cachedAt,
-        count: chapters.length,
+        count: requestedChapter && full ? responseChapters.length : chapters.length,
         full,
       },
       { origin, cacheStatus: forceRefresh ? "BYPASS" : "MISS" },
@@ -156,25 +229,25 @@ export async function GET(request: NextRequest) {
       error instanceof Error ? error.message : "Gagal memuat feed Blogger.";
     console.error("[api/blogger/chapters]", message);
 
-    try {
-      const stale = await kvGet<CachedPayload>(cacheKey);
-      if (stale?.chapters?.length) {
-        return jsonResponse(
-          {
-            chapters: shapeChapters(stale.chapters, full, listLimit),
-            source: stale.source ?? source,
-            title: stale.title ?? title,
-            cachedAt: stale.cachedAt,
-            count: stale.chapters.length,
-            stale: true,
-            warning: message,
-            full,
-          },
-          { origin, cacheStatus: "HIT" },
-        );
-      }
-    } catch {
-      /* ignore */
+    const staleResponseChapters = requestedChapter && full
+      ? [findChapter(cachedChapters, requestedChapter)].filter(
+          (chapter): chapter is BloggerChapter => !!chapter,
+        )
+      : cached?.latestOnly === true ? [] : cachedChapters;
+    if (cached && staleResponseChapters.length) {
+      return jsonResponse(
+        {
+          chapters: shapeChapters(staleResponseChapters, full, listLimit),
+          source: cached.source ?? source,
+          title: cached.title ?? title,
+          cachedAt: cached.cachedAt,
+          count: cached.count ?? staleResponseChapters.length,
+          stale: true,
+          warning: message,
+          full,
+        },
+        { origin, cacheStatus: "HIT" },
+      );
     }
 
     return jsonResponse(

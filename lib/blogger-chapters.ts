@@ -37,6 +37,7 @@ const BLOGGER_DOMAINS: Record<BloggerChapterSource, string> = {
 };
 
 export const BLOGGER_CHAPTERS_TTL = 20 * 60;
+export const BLOGGER_CHAPTERS_KV_TTL = 24 * 60 * 60;
 export const BLOGGER_CHAPTERS_BROWSER_MAX_AGE = 5 * 60;
 
 export function bloggerChaptersCacheKey(

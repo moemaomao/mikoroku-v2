@@ -888,6 +888,7 @@ async function loadBloggerChapterImages(
     title: title.trim(),
     source,
     full: "1",
+    chapter: String(chapterNum).trim(),
   });
   const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
     signal,
