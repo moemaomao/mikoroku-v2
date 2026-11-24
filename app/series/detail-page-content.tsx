@@ -2255,7 +2255,7 @@ export default function DetailPageContent({
   return (
     <>
       <div
-        className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-0 w-full bg-cover bg-center bg-no-repeat opacity-[0.22] transition-[background-image,opacity] duration-500 dark:opacity-100 max-md:!bg-none max-md:h-[100dvh] max-md:min-h-[100dvh]"
+        className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-0 w-full bg-cover bg-center bg-no-repeat opacity-[0.22] transition-[background-image,opacity] duration-500 dark:opacity-100 max-md:h-[100dvh] max-md:min-h-[100dvh]"
         id="bgLayer"
         aria-hidden="true"
         style={{ backgroundImage: !hideDetailCoverBackground && cover ? `url("${cover}")` : undefined }}
