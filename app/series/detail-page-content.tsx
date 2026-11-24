@@ -1903,8 +1903,6 @@ export default function DetailPageContent({
     mangaTitle,
     source,
     chapterRetry,
-    chapters.length,
-    managedChapterList,
     initialChapters,
     initialChaptersManaged,
     sourcePreferenceReady,
