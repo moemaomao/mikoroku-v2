@@ -12,12 +12,6 @@ const DetailPageContent = dynamic(() => import("./detail-page-content"), {
   loading: () => <SeriesLoadingContent />,
 });
 
-export function preloadDetailPageContent(): void {
-  void import("./detail-page-content").catch((error: unknown) => {
-    console.error("Could not preload series details.", error);
-  });
-}
-
 type DetailPageClientProps = {
   slug: string;
   initialManga?: SeriesManga | null;
