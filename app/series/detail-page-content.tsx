@@ -2668,7 +2668,7 @@ export default function DetailPageContent({
                       view === "list"
                         ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(255,255,255,0.1)] ![aspect-ratio:unset]${isRead ? " !bg-[rgba(0,0,0,0.24)] dark:!bg-[rgba(0,0,0,0.3)]" : ""}`
                         : view === "text-grid"
-                          ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(156,7,7,0.06)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
+                          ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(255,255,255,0.08)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
                           : ""
                     }`}
                     data-index={index}
@@ -2766,7 +2766,7 @@ export default function DetailPageContent({
                           )}
                         </svg>
                       </span>
-                      <span className={`chapter-source-badge text-[9px] font-extrabold uppercase leading-none tracking-[0.2px] [text-shadow:0_0_2px_rgba(0,0,0,0.9),0_1px_2px_rgba(0,0,0,0.85)] max-[480px]:text-[8px] ${chapter.source === "blogger" ? "text-[#60a5fa]" : chapter.source === "blogger2" ? "text-[#fbbf24]" : "text-[#ef4444]"} ${view === "list" ? "text-[10px] [text-shadow:none]" : ""}`}
+                      <span className={`chapter-source-badge text-[9px] font-extrabold uppercase leading-none tracking-[0.2px] max-[480px]:text-[8px] ${chapter.source === "blogger" ? "text-[#60a5fa]" : chapter.source === "blogger2" ? "text-[#fbbf24]" : "text-[#ef4444]"} ${view === "list" ? "text-[10px]" : ""}`}
                       >
                         {chapter.source === "blogger" ? "SV1" : chapter.source === "blogger2" ? "SV2" : "ES"}
                       </span>
