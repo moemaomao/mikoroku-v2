@@ -8,6 +8,7 @@
 
 import catalog from "../public/catalog/metadata.json";
 import chapterSummaryCatalog from "../public/catalog/chapter-summaries.json";
+import { CacheKeys, kvGet } from "./kv-cache";
 
 export type ChapterLink = {
   id?: string;
@@ -163,9 +164,19 @@ export async function getChapterSummaries(
   const series = (chapterSummaryCatalog as {
     series?: Record<string, SeriesChapterSummary[]>;
   }).series;
-  const chapters = (Array.isArray(series?.[slug]) ? series[slug] : [])
+  const cachedSummaries = await kvGet<unknown>(CacheKeys.chapterSummary(slug));
+  const summaries = Array.isArray(cachedSummaries)
+    ? cachedSummaries
+    : Array.isArray(series?.[slug])
+      ? series[slug]
+      : [];
+  const chapters = summaries
+    .filter((chapter): chapter is SeriesChapterSummary =>
+      !!chapter &&
+      typeof chapter === "object" &&
+      (typeof chapter.num === "string" || typeof chapter.num === "number"),
+    )
     .filter((chapter) =>
-      (typeof chapter.num === "string" || typeof chapter.num === "number") &&
       String(chapter.num).trim(),
     )
     .map((chapter, index) => ({

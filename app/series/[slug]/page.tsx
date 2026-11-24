@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import DetailPageClient from "../detail-page-client";
 import { getSeriesInitialData, getMangaFromCatalog } from "../../../lib/series-data";
-
-export const revalidate = 600;
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -57,6 +56,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function DetailRoute({ params }: PageProps) {
   const { slug } = await params;
+  await connection();
   const initial = await getSeriesInitialData(slug);
 
   return (
