@@ -53,6 +53,7 @@ const MANGA_CATALOG_SOURCE_KEY = "catalog:metadata:manga:source:v1";
 const MANGA_CATALOG_CACHE_TTL = 24 * 60 * 60;
 const MANGA_CATALOG_FRESH_TTL = 60 * 60 * 1000;
 const MANGA_CATALOG_FEED_FRESH_TTL = 60 * 60 * 1000;
+const MANGA_CATALOG_REFRESH_FAILURE_COOLDOWN_TTL = 60 * 60;
 const MANGA_CATALOG_URL = "/catalog/metadata.json";
 const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
 const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
@@ -76,6 +77,7 @@ const mangaCatalogMemoryFallbacks = new Map<
   string,
   { cachedAt: number; data: Record<string, unknown> }
 >();
+const mangaCatalogRefreshCooldowns = new Map<string, number>();
 
 function getCacheKv(env: CloudflareEnv): KVNamespace | undefined {
   return env.MIKOROKU_V2_CACHE || env.MIKOROKU_CACHE;
@@ -721,11 +723,36 @@ async function handleMangaCatalogProxy(
       }
     }
 
-    ctx.waitUntil(
-      refreshMangaCatalogOnce(env, request.url, kv, sourceMode, cacheKey).catch((error: unknown) => {
-        console.error("[worker manga-catalog] background refresh failed", error);
-      }),
-    );
+    const cooldownKey = `${cacheKey}:refresh-failure-cooldown`;
+    const memoryCooldownUntil = mangaCatalogRefreshCooldowns.get(cacheKey) || 0;
+    let sharedCooldown = false;
+    if (memoryCooldownUntil <= Date.now()) {
+      mangaCatalogRefreshCooldowns.delete(cacheKey);
+      try {
+        sharedCooldown = Boolean(await kv.get(cooldownKey, "text"));
+      } catch (error) {
+        console.warn("[worker manga-catalog] refresh cooldown could not be read from KV", error);
+      }
+    }
+
+    if (memoryCooldownUntil <= Date.now() && !sharedCooldown) {
+      ctx.waitUntil(
+        refreshMangaCatalogOnce(env, request.url, kv, sourceMode, cacheKey).catch(async (error: unknown) => {
+          console.error("[worker manga-catalog] background refresh failed", error);
+          const cooldownUntil = Date.now() + MANGA_CATALOG_REFRESH_FAILURE_COOLDOWN_TTL * 1_000;
+          mangaCatalogRefreshCooldowns.set(cacheKey, cooldownUntil);
+          try {
+            await kv.put(
+              cooldownKey,
+              String(cooldownUntil),
+              { expirationTtl: MANGA_CATALOG_REFRESH_FAILURE_COOLDOWN_TTL },
+            );
+          } catch (cooldownError) {
+            console.error("[worker manga-catalog] refresh failure cooldown could not be saved", cooldownError);
+          }
+        }),
+      );
+    }
     const responseBody = url.pathname === "/api/catalog/manga"
       ? cached.data.manga
       : cached.data;

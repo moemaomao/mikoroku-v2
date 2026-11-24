@@ -2502,6 +2502,75 @@ export default function AdminPage() {
     }
   }
 
+  async function exportAllStaticChapterSummaries() {
+    setBusy(true);
+    setSettingsStatus("Scanning all manga chapter collections...");
+    try {
+      const { firestore } = getAdminFirebase();
+      const mangaSnapshot = await getDocs(collection(firestore, "manga"));
+      const series: Record<string, AdminChapterLink[]> = {};
+      let scannedManga = 0;
+      let exportedChapterCount = 0;
+
+      for (const mangaDocument of mangaSnapshot.docs) {
+        const mangaData = mangaDocument.data();
+        if (mangaData.isCatalogTombstone === true) continue;
+
+        const chapterSnapshot = await getDocs(
+          collection(firestore, "manga", mangaDocument.id, "chapters"),
+        );
+        const chapters = chapterSnapshot.docs
+          .map((chapterDocument) => {
+            const data = chapterDocument.data();
+            return {
+              num: chapterDocument.id,
+              title: text(data.title) || `Chapter ${chapterDocument.id}`,
+              thumbnail: text(data.thumbnail),
+              images: stringList(data.images),
+              content: text(data.content),
+              isDraft: data.isDraft === true,
+              date: data.date || data.createdAt,
+              order: typeof data.order === "number" ? data.order : 0,
+            } satisfies AdminChapter;
+          })
+          .filter((chapter) => !chapter.isDraft)
+          .sort((left, right) => {
+            const difference = Number.parseFloat(right.num) - Number.parseFloat(left.num);
+            return Number.isFinite(difference) && difference !== 0
+              ? difference
+              : right.order - left.order;
+          });
+
+        if (chapters.length) {
+          series[mangaDocument.id] = chapters.map((chapter, order) =>
+            generatedChapterLink(
+              mangaDocument.id,
+              isNovelSeries(mangaData),
+              chapter,
+              order,
+            ),
+          );
+          exportedChapterCount += chapters.length;
+        }
+
+        scannedManga += 1;
+        setSettingsStatus(
+          `Scanned ${scannedManga}/${mangaSnapshot.size} manga; ${exportedChapterCount} chapters found...`,
+        );
+      }
+
+      downloadJson("chapter-summaries-all.json", { series });
+      setSettingsStatus(
+        `Static chapter export completed: ${Object.keys(series).length} manga and ${exportedChapterCount} chapters.`,
+      );
+    } catch (error) {
+      console.error("Failed to export static chapter summaries.", error);
+      setSettingsStatus(`Static chapter export failed: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggleTheme() {
     setIsLightMode((current) => {
       const next = !current;
@@ -4228,6 +4297,7 @@ export default function AdminPage() {
                 <div className={styles.panelActions}>
                   <button className={styles.secondaryButton} onClick={() => void backupFirestore(false)} disabled={busy}>Backup Metadata Manga</button>
                   <button className={styles.primaryButton} onClick={() => void backupFirestore(true)} disabled={busy}>Full Backup</button>
+                  <button className={styles.secondaryButton} onClick={() => void exportAllStaticChapterSummaries()} disabled={busy}>Export All Chapter JSON</button>
                 </div>
               </div>
               {settingsStatus && <p className={styles.inlineStatus}>{settingsStatus}</p>}

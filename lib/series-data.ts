@@ -6,8 +6,8 @@
  * (fetchMangaMetadataPayload, MIKOROKU_V2_CACHE, public/catalog/metadata.json, etc.).
  */
 
-import { CacheKeys, kvGet, kvSet } from "./kv-cache";
 import catalog from "../public/catalog/metadata.json";
+import chapterSummaryCatalog from "../public/catalog/chapter-summaries.json";
 
 export type ChapterLink = {
   id?: string;
@@ -60,10 +60,6 @@ export type SeriesInitialData = {
   chaptersManaged: boolean;
   fromCache: boolean;
 };
-
-const CHAPTER_SUMMARY_TTL = 60 * 60 * 24 * 30;
-const FIRESTORE_BASE =
-  "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : value == null ? fallback : String(value);
@@ -155,11 +151,7 @@ export function getMangaFromCatalog(slug: string): SeriesManga | null {
 }
 
 /**
- * Lightweight chapter list for first paint.
- * Read managed summaries from KV first, then the lightweight Firestore collection.
- *
- * IMPORTANT: do NOT call external Blogger with full=1 on the server
- * for every page view — that is what burns Workers quota.
+ * Load the published static archive. Blogger fills in newer chapters in the client.
  */
 export async function getChapterSummaries(
   slug: string,
@@ -168,81 +160,24 @@ export async function getChapterSummaries(
   source: SeriesInitialData["chapterSource"];
   managed: boolean;
 }> {
-  const cacheKey = CacheKeys.chapterSummary(slug);
-  try {
-    const cached = await kvGet<SeriesChapterSummary[]>(cacheKey);
-    if (cached && Array.isArray(cached)) {
-      const chapters = cached.map((chapter) => ({
-        ...chapter,
-        id: chapter.source === "firestore"
-          ? chapter.chapterId || String(chapter.num)
-          : chapter.id,
-      }));
-      return {
-        chapters,
-        source: chapters.length ? "firestore" : "cache",
-        managed: chapters.length > 0,
-      };
-    }
-  } catch (error) {
-    console.warn(`Chapter summary KV cache could not be read for ${slug}.`, error);
-  }
-
-  let chapters: SeriesChapterSummary[] = [];
-  try {
-    const response = await fetch(
-      `${FIRESTORE_BASE}/manga/${encodeURIComponent(slug)}/chapterLinks?pageSize=1000`,
-      { cache: "no-store" },
-    );
-    if (!response.ok && response.status !== 404) {
-      throw new Error(`Firestore chapter summary returned HTTP ${response.status}.`);
-    }
-    if (response.ok) {
-      const payload = await response.json() as {
-        documents?: Array<{ name?: string; fields?: Record<string, unknown> }>;
-      };
-      chapters = (payload.documents || []).flatMap((document) => {
-        const fields = document.fields || {};
-        const read = (key: string): unknown => {
-          const value = fields[key];
-          if (!value || typeof value !== "object") return undefined;
-          const field = value as Record<string, unknown>;
-          if ("stringValue" in field) return field.stringValue;
-          if ("integerValue" in field) return Number(field.integerValue);
-          if ("doubleValue" in field) return Number(field.doubleValue);
-          if ("timestampValue" in field) return field.timestampValue;
-          return undefined;
-        };
-        const num = read("num");
-        if (typeof num !== "string" && typeof num !== "number") return [];
-        const source = read("source");
-        const chapterId = read("chapterId");
-        const chapter: SeriesChapterSummary = {
-          id: source === "firestore"
-            ? String(chapterId || num)
-            : String(read("id") || document.name?.split("/").pop() || num),
-          chapterId: typeof chapterId === "string" ? chapterId : undefined,
-          num,
-          title: typeof read("title") === "string" ? read("title") as string : undefined,
-          url: typeof read("url") === "string" ? read("url") as string : undefined,
-          slug: typeof read("slug") === "string" ? read("slug") as string : undefined,
-          date: typeof read("date") === "string" ? read("date") as string : undefined,
-          thumbnail: typeof read("thumbnail") === "string" ? read("thumbnail") as string : undefined,
-          source: source === "blogger" || source === "blogger2" ? source : "firestore",
-          order: Number(read("order") || 0),
-        };
-        return [chapter];
-      }).sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
-    }
-  } catch (error) {
-    console.warn(`Managed chapter summaries could not be loaded for ${slug}.`, error);
-  }
-
-  try {
-    await kvSet(cacheKey, chapters, chapters.length ? CHAPTER_SUMMARY_TTL : 300);
-  } catch (error) {
-    console.warn(`Chapter summary KV cache could not be updated for ${slug}.`, error);
-  }
+  const series = (chapterSummaryCatalog as {
+    series?: Record<string, SeriesChapterSummary[]>;
+  }).series;
+  const chapters = (Array.isArray(series?.[slug]) ? series[slug] : [])
+    .filter((chapter) =>
+      (typeof chapter.num === "string" || typeof chapter.num === "number") &&
+      String(chapter.num).trim(),
+    )
+    .map((chapter, index) => ({
+      ...chapter,
+      id: chapter.source === "firestore"
+        ? chapter.chapterId || String(chapter.num)
+        : chapter.id || String(chapter.num),
+      source: chapter.source === "blogger" || chapter.source === "blogger2"
+        ? chapter.source
+        : "firestore" as const,
+      order: Number.isFinite(chapter.order) ? chapter.order : index,
+    }));
   return {
     chapters,
     source: chapters.length ? "firestore" : "cache",

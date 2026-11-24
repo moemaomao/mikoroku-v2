@@ -1619,7 +1619,8 @@ export default function DetailPageContent({
     if (
       cachedSelectedChapters.length > 0 &&
       cacheAge >= 0 &&
-      cacheAge < CHAPTER_CACHE_DURATION_MS
+      cacheAge < CHAPTER_CACHE_DURATION_MS &&
+      source === "firestore"
     ) {
       if (source === "firestore" || chaptersHaveThumbnails(cachedSelectedChapters)) {
         chapterSourceCacheRef.current.set(
@@ -1750,25 +1751,8 @@ export default function DetailPageContent({
       );
       if (selectedChapters.length) publishEarly(selectedChapters);
 
-      if (!chaptersNeedEmergencyFill(selectedChapters)) {
-        return selectedChapters;
-      }
-
-      let firestoreChapters: Chapter[] = [];
-      try {
-        firestoreChapters = await loadAndCache("firestore");
-      } catch (error) {
-        console.warn(`Chapter source firestore failed for ${slug}.`, error);
-      }
-
-      const mergedChapters = mergeChapterSources(selectedChapters, firestoreChapters);
-
-      if (mergedChapters.length) {
-        publishEarly(mergedChapters);
-        return mergedChapters;
-      }
       if (primaryError) throw primaryError;
-      return cachedSelectedChapters;
+      return selectedChapters;
     };
 
     loadSelectedAndSupplementalSources().then((result) => {
