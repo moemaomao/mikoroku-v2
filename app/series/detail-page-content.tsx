@@ -977,7 +977,7 @@ async function loadFirestoreChapterSource(slug: string, signal: AbortSignal): Pr
   });
 }
 
-const CHAPTER_UI_BATCH = 48;
+const CHAPTER_UI_BATCH = 24;
 const BLOGGER_LIST_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function chapterNumber(value: Chapter["num"]): number {
@@ -1120,7 +1120,7 @@ const detailPageClasses = `
   [&_.status]:mb-[6px] [&_.status]:flex [&_.status]:items-center [&_.status]:gap-1.5 [&_.status]:font-semibold [&_.status]:text-[11px] [&_.status_span]:font-bold [&_.status.ongoing]:text-green-500 [&_.status.completed]:text-sky-300 [&_.status.hiatus]:text-yellow-400 [&_.status.dropped]:text-orange-500 [&_.status.canceled]:text-orange-600 [&_.status.unknown]:text-gray-400 lg:[&_.status]:text-sm
   [&_.detail-item]:mb-[5px] [&_.detail-item]:flex [&_.detail-item]:items-center [&_.detail-item]:gap-[3px] [&_.detail-item]:text-[11px] [&_.detail-item]:text-[#050000] dark:[&_.detail-item]:text-white [&_.detail-item_i]:w-5 [&_.detail-item_i]:text-center [&_.detail-item_i]:text-[#444] dark:[&_.detail-item_i]:text-[#ddd]
   [&_.genres]:grid [&_.genres]:grid-cols-4 [&_.genres]:gap-2 [&_.genres]:rounded-[14px] [&_.genres]:px-[14px] [&_.genres]:py-[15px]
-  [&_.genre]:block [&_.genre]:overflow-hidden [&_.genre]:truncate [&_.genre]:whitespace-nowrap [&_.genre]:rounded-lg [&_.genre]:border [&_.genre]:border-[rgba(0,0,0,0.1)] [&_.genre]:bg-[rgba(0,0,0,0.06)] [&_.genre]:px-2 [&_.genre]:py-[6px] [&_.genre]:text-center [&_.genre]:text-[11px] [&_.genre]:text-[var(--genre-light-text)] [&_.genre]:no-underline [&_.genre]:backdrop-blur [&_.genre]:transition-[background,border-color,transform] [&_.genre]:duration-200 dark:[&_.genre]:border-[rgba(255,255,255,0.08)] dark:[&_.genre]:bg-[rgba(0,0,0,0.35)] dark:[&_.genre]:text-[var(--genre-accent)] [&_.genre:hover]:-translate-y-px [&_.genre:hover]:bg-[rgba(80,78,78,0.04)]
+  [&_.genre]:block [&_.genre]:overflow-hidden [&_.genre]:truncate [&_.genre]:whitespace-nowrap [&_.genre]:rounded-lg [&_.genre]:border [&_.genre]:border-[rgba(0,0,0,0.1)] [&_.genre]:bg-[rgba(0,0,0,0.06)] [&_.genre]:px-2 [&_.genre]:py-[6px] [&_.genre]:text-center [&_.genre]:text-[11px] [&_.genre]:text-[var(--genre-light-text)] [&_.genre]:no-underline [&_.genre]:transition-[background,border-color,transform] [&_.genre]:duration-200 dark:[&_.genre]:border-[rgba(255,255,255,0.08)] dark:[&_.genre]:bg-[rgba(0,0,0,0.35)] dark:[&_.genre]:text-[var(--genre-accent)] [&_.genre:hover]:-translate-y-px [&_.genre:hover]:bg-[rgba(80,78,78,0.04)]
   [&_.detail-extra-tags]:mx-3 [&_.detail-extra-tags]:mb-5 [&_.detail-extra-tags]:rounded-[14px] [&_.detail-extra-tags]:border [&_.detail-extra-tags]:border-[rgba(0,0,0,0.1)] [&_.detail-extra-tags]:bg-[rgba(184,174,174,0.329)] [&_.detail-extra-tags]:px-4 [&_.detail-extra-tags]:py-[18px] dark:[&_.detail-extra-tags]:border-[rgba(255,255,255,0.08)] dark:[&_.detail-extra-tags]:bg-[rgba(26,26,46,0.35)]
   [&_.detail-tag-row+_.detail-tag-row]:mt-[18px] [&_.detail-tag-label]:mb-2 [&_.detail-tag-label]:flex [&_.detail-tag-label]:items-center [&_.detail-tag-label]:gap-2 [&_.detail-tag-label]:pl-0.5 [&_.detail-tag-label]:text-[14.5px] [&_.detail-tag-label]:font-semibold [&_.detail-tag-label]:text-[#050000] dark:[&_.detail-tag-label]:text-white [&_.detail-tag-label_i]:w-4 [&_.detail-tag-label_i]:text-center
   [&_.detail-tag-list]:flex [&_.detail-tag-list]:flex-wrap [&_.detail-tag-list]:justify-start [&_.detail-tag-list]:gap-1.5 [&_.detail-tag-list]:pl-0.5
@@ -1961,10 +1961,7 @@ export default function DetailPageContent({
     const node = chapterSentinelRef.current;
     if (!node) return;
 
-    let cancelled = false;
-
     const expand = () => {
-      if (cancelled) return;
       setChapterWindow((current) => {
         const total = chapterTotalRef.current;
         if (current >= total) return current;
@@ -1972,13 +1969,23 @@ export default function DetailPageContent({
       });
     };
 
-    const alreadyVisible = (() => {
-      const rect = node.getBoundingClientRect();
-      const viewport = window.innerHeight || document.documentElement.clientHeight;
-      return rect.top < viewport + 240 && rect.bottom > -40;
-    })();
-    if (alreadyVisible) {
-      expand();
+    if (typeof IntersectionObserver === "undefined") {
+      let frame = 0;
+      const checkSentinel = () => {
+        if (frame) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = 0;
+          const rect = node.getBoundingClientRect();
+          const viewport = window.innerHeight || document.documentElement.clientHeight;
+          if (rect.top < viewport + 320 && rect.bottom > -40) expand();
+        });
+      };
+      window.addEventListener("scroll", checkSentinel, { passive: true });
+      checkSentinel();
+      return () => {
+        window.removeEventListener("scroll", checkSentinel);
+        if (frame) window.cancelAnimationFrame(frame);
+      };
     }
 
     const observer = new IntersectionObserver(
@@ -1989,20 +1996,10 @@ export default function DetailPageContent({
     );
     observer.observe(node);
 
-    const safety = window.setInterval(() => {
-      if (cancelled) return;
-      const rect = node.getBoundingClientRect();
-      const viewport = window.innerHeight || document.documentElement.clientHeight;
-      if (rect.top < viewport + 320 && rect.bottom > -40) expand();
-    }, 600);
-
     return () => {
-      cancelled = true;
       observer.disconnect();
-      window.clearInterval(safety);
     };
-
-  }, [hasMoreChapters, chapterState, filteredSortedChapters.length, chapterWindow]);
+  }, [hasMoreChapters, chapterState, filteredSortedChapters.length]);
   function selectDetailCover(url: string) {
     setSelectedCoverUrl(url);
     setCoverPreferenceError("");
@@ -2258,7 +2255,7 @@ export default function DetailPageContent({
   return (
     <>
       <div
-        className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-0 w-full bg-cover bg-center bg-no-repeat opacity-[0.22] transition-[background-image,opacity] duration-500 dark:opacity-100 max-md:h-[100dvh] max-md:min-h-[100dvh]"
+        className="pointer-events-none fixed top-0 left-0 right-0 bottom-0 z-0 w-full bg-cover bg-center bg-no-repeat opacity-[0.22] transition-[background-image,opacity] duration-500 dark:opacity-100 max-md:!bg-none max-md:h-[100dvh] max-md:min-h-[100dvh]"
         id="bgLayer"
         aria-hidden="true"
         style={{ backgroundImage: !hideDetailCoverBackground && cover ? `url("${cover}")` : undefined }}
@@ -2700,8 +2697,8 @@ export default function DetailPageContent({
                           className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 opacity-0 transition-opacity duration-150 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? (view === "list" ? "brightness-[0.82]" : "brightness-[0.65]") : ""}`}
                           style={{ opacity: 0 }}
                           alt=""
-                          loading={index < 12 ? "eager" : "lazy"}
-                          fetchPriority={index < 4 ? "high" : undefined}
+                          loading={index < 4 ? "eager" : "lazy"}
+                          fetchPriority={index < 2 ? "high" : undefined}
                           decoding="async"
                           src={thumbSrc}
                           data-thumb-index="0"
