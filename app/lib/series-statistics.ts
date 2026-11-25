@@ -1,0 +1,498 @@
+"use client";
+
+import {
+  collectionGroup,
+  doc,
+  getCountFromServer,
+  query,
+  runTransaction,
+  where,
+} from "firebase/firestore";
+import { getApps, initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+
+const STATISTICS_FIREBASE_APP_NAME = "mikoroku-series-statistics-widget-comment";
+const STATISTICS_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
+  authDomain: "widget-comment.firebaseapp.com",
+  projectId: "widget-comment",
+  storageBucket: "widget-comment.firebasestorage.app",
+  messagingSenderId: "249700505242",
+  appId: "1:249700505242:web:dab240af09caf30ad7f123",
+};
+
+const DATABASE_NAME = "widget-comment-series-statistics";
+const DATABASE_VERSION = 1;
+const STORE_NAME = "seriesStatistics";
+export const SERIES_STATISTICS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+export type SeriesStatistics = {
+  slug: string;
+  views: number;
+  bookmarks: number;
+  notifications: number;
+  syncedAt: number;
+  pendingViews?: number;
+  localUpdatedAt?: number;
+  lastSyncAttemptAt?: number;
+};
+
+export type CachedSeriesStatistics = {
+  data: SeriesStatistics;
+  stale: boolean;
+};
+
+export async function loadSharedSeriesStatistics(
+  slug: string,
+): Promise<CachedSeriesStatistics | null> {
+  const response = await fetch(
+    `/api/series-statistics?slug=${encodeURIComponent(slug)}`,
+    { cache: "no-store" },
+  );
+  if (response.status === 404 || response.status === 503) return null;
+  if (!response.ok) {
+    throw new Error(`Shared series statistics returned HTTP ${response.status}.`);
+  }
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || !isSeriesStatistics(payload.data, slug) || typeof payload.stale !== "boolean") {
+    throw new Error("Shared series statistics has an invalid response.");
+  }
+  return { data: payload.data, stale: payload.stale };
+}
+
+export async function saveSharedSeriesStatistics(
+  data: SeriesStatistics,
+): Promise<void> {
+  const response = await fetch("/api/series-statistics", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({
+      slug: data.slug,
+      views: Math.max(0, data.views - (data.pendingViews ?? 0)),
+      bookmarks: data.bookmarks,
+      notifications: data.notifications,
+      syncedAt: data.syncedAt,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Shared series statistics could not be saved (HTTP ${response.status}).`);
+  }
+}
+
+function statisticsFirestore() {
+  const app = getApps().find((candidate) =>
+    candidate.name === STATISTICS_FIREBASE_APP_NAME,
+  ) ?? initializeApp(STATISTICS_FIREBASE_CONFIG, STATISTICS_FIREBASE_APP_NAME);
+  return getFirestore(app);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isSeriesStatistics(value: unknown, slug: string): value is SeriesStatistics {
+  return isRecord(value) &&
+    value.slug === slug &&
+    isCount(value.views) &&
+    isCount(value.bookmarks) &&
+    isCount(value.notifications) &&
+    typeof value.syncedAt === "number" &&
+    Number.isFinite(value.syncedAt);
+}
+
+function openDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB is unavailable."));
+      return;
+    }
+
+    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    request.onerror = () => reject(request.error || new Error("Could not open the series statistics cache."));
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+        request.result.createObjectStore(STORE_NAME, { keyPath: "slug" });
+      }
+    };
+  });
+}
+
+function readRequest<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not read the series statistics cache."));
+  });
+}
+
+export async function getCachedSeriesStatistics(
+  slug: string,
+): Promise<CachedSeriesStatistics | null> {
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(STORE_NAME, "readonly");
+    const value: unknown = await readRequest(transaction.objectStore(STORE_NAME).get(slug));
+    if (
+      !isRecord(value) ||
+      value.slug !== slug ||
+      !isCount(value.views) ||
+      !isCount(value.bookmarks) ||
+      !isCount(value.notifications) ||
+      typeof value.syncedAt !== "number" ||
+      !Number.isFinite(value.syncedAt)
+    ) return null;
+
+    const data: SeriesStatistics = {
+      slug,
+      views: value.views,
+      bookmarks: value.bookmarks,
+      notifications: value.notifications,
+      syncedAt: value.syncedAt,
+      pendingViews: isCount(value.pendingViews) ? value.pendingViews : 0,
+      localUpdatedAt: isCount(value.localUpdatedAt) ? value.localUpdatedAt : 0,
+      lastSyncAttemptAt: isCount(value.lastSyncAttemptAt)
+        ? value.lastSyncAttemptAt
+        : value.syncedAt,
+    };
+    const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
+    return {
+      data,
+      stale: age < 0 || age >= SERIES_STATISTICS_CACHE_TTL_MS,
+    };
+  } finally {
+    database.close();
+  }
+}
+
+async function cacheSeriesStatistics(
+  data: SeriesStatistics,
+  preserveLocalAdjustmentsAfter = 0,
+  syncedPendingViews = 0,
+): Promise<SeriesStatistics> {
+  let cached = data;
+  try {
+    const database = await openDatabase();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(data.slug);
+        request.onsuccess = () => {
+          const previous: unknown = request.result;
+          const previousPendingViews = isRecord(previous) && isCount(previous.pendingViews)
+            ? previous.pendingViews
+            : 0;
+          const remainingPendingViews = Math.max(0, previousPendingViews - syncedPendingViews);
+          if (
+            isSeriesStatistics(previous, data.slug) &&
+            isCount(previous.localUpdatedAt) &&
+            previous.localUpdatedAt >= preserveLocalAdjustmentsAfter
+          ) {
+            cached = {
+              ...data,
+              bookmarks: previous.bookmarks,
+              notifications: previous.notifications,
+              localUpdatedAt: previous.localUpdatedAt,
+            };
+          }
+          cached = {
+            ...cached,
+            views: data.views + remainingPendingViews,
+            pendingViews: remainingPendingViews,
+            lastSyncAttemptAt: data.lastSyncAttemptAt ?? data.syncedAt,
+          };
+          store.put(cached);
+        };
+        request.onerror = () => reject(request.error || new Error("Could not read the series statistics cache."));
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error || new Error("Could not cache series statistics."));
+        transaction.onabort = () => reject(transaction.error || new Error("Caching series statistics was aborted."));
+      });
+    } finally {
+      database.close();
+    }
+  } catch (error) {
+    console.warn("Series statistics could not be cached in IndexedDB.", error);
+  }
+  return cached;
+}
+
+export async function recordSeriesViewInCache(
+  slug: string,
+): Promise<CachedSeriesStatistics> {
+  const database = await openDatabase();
+  try {
+    return await new Promise<CachedSeriesStatistics>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(slug);
+      let updated: SeriesStatistics;
+
+      request.onsuccess = () => {
+        const previous: unknown = request.result;
+        const validPrevious = isSeriesStatistics(previous, slug);
+        const data: SeriesStatistics = validPrevious
+          ? {
+              slug,
+              views: previous.views,
+              bookmarks: previous.bookmarks,
+              notifications: previous.notifications,
+              syncedAt: previous.syncedAt,
+              pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
+              localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
+              lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
+                ? previous.lastSyncAttemptAt
+                : previous.syncedAt,
+            }
+          : { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0, pendingViews: 0 };
+        updated = {
+          ...data,
+          views: data.views + 1,
+          pendingViews: (data.pendingViews ?? 0) + 1,
+        };
+        store.put(updated);
+      };
+      request.onerror = () => reject(request.error || new Error("Could not read the series statistics cache."));
+      transaction.oncomplete = () => {
+        const age = Date.now() - (updated.lastSyncAttemptAt ?? updated.syncedAt);
+        resolve({
+          data: updated,
+          stale: age < 0 || age >= SERIES_STATISTICS_CACHE_TTL_MS,
+        });
+      };
+      transaction.onerror = () => reject(transaction.error || new Error("Could not record a series view."));
+      transaction.onabort = () => reject(transaction.error || new Error("Recording a series view was aborted."));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function mergeSharedSeriesStatistics(
+  snapshot: SeriesStatistics,
+): Promise<SeriesStatistics> {
+  const database = await openDatabase();
+  try {
+    return await new Promise<SeriesStatistics>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(snapshot.slug);
+      let merged: SeriesStatistics = {
+        ...snapshot,
+        pendingViews: 0,
+        localUpdatedAt: 0,
+        lastSyncAttemptAt: snapshot.syncedAt,
+      };
+
+      request.onsuccess = () => {
+        const previous: unknown = request.result;
+        if (isSeriesStatistics(previous, snapshot.slug)) {
+          const pendingViews = isCount(previous.pendingViews) ? previous.pendingViews : 0;
+          const localUpdatedAt = isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0;
+          const localChangesAreNewer = localUpdatedAt > snapshot.syncedAt;
+          const lastSyncAttemptAt = isCount(previous.lastSyncAttemptAt)
+            ? Math.max(previous.lastSyncAttemptAt, snapshot.syncedAt)
+            : snapshot.syncedAt;
+          if (snapshot.syncedAt > previous.syncedAt) {
+            merged = {
+              ...snapshot,
+              views: snapshot.views + pendingViews,
+              bookmarks: localChangesAreNewer ? previous.bookmarks : snapshot.bookmarks,
+              notifications: localChangesAreNewer ? previous.notifications : snapshot.notifications,
+              pendingViews,
+              localUpdatedAt: localChangesAreNewer ? localUpdatedAt : 0,
+              lastSyncAttemptAt,
+            };
+          } else {
+            merged = {
+              ...previous,
+              pendingViews,
+              lastSyncAttemptAt,
+            };
+          }
+        }
+        store.put(merged);
+      };
+      request.onerror = () => reject(request.error || new Error("Could not read the local series statistics cache."));
+      transaction.oncomplete = () => resolve(merged);
+      transaction.onerror = () => reject(transaction.error || new Error("Could not merge shared series statistics."));
+      transaction.onabort = () => reject(transaction.error || new Error("Merging shared series statistics was aborted."));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function adjustCachedSeriesStatistic(
+  slug: string,
+  key: "bookmarks" | "notifications",
+  delta: number,
+): Promise<void> {
+  const database = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(slug);
+
+      request.onsuccess = () => {
+        const previous: unknown = request.result;
+        const data: SeriesStatistics = isRecord(previous) &&
+          isCount(previous.views) &&
+          isCount(previous.bookmarks) &&
+          isCount(previous.notifications) &&
+          typeof previous.syncedAt === "number" &&
+          Number.isFinite(previous.syncedAt)
+          ? {
+              slug,
+              views: previous.views,
+              bookmarks: previous.bookmarks,
+              notifications: previous.notifications,
+              syncedAt: previous.syncedAt,
+              pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
+              localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
+              lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
+                ? previous.lastSyncAttemptAt
+                : previous.syncedAt,
+            }
+          : { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0, pendingViews: 0 };
+
+        store.put({
+          ...data,
+          [key]: Math.max(0, data[key] + delta),
+          localUpdatedAt: Math.max(Date.now(), data.localUpdatedAt ?? 0),
+        });
+      };
+      request.onerror = () => reject(request.error || new Error("Could not update the local series statistics."));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error("Could not update the local series statistics."));
+      transaction.onabort = () => reject(transaction.error || new Error("Updating the local series statistics was aborted."));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function syncPendingSeriesViews(slug: string, pendingViews: number): Promise<number> {
+  const firestore = statisticsFirestore();
+  const statisticsRef = doc(firestore, "seriesStats", encodeURIComponent(slug));
+  return runTransaction(firestore, async (transaction) => {
+    const snapshot = await transaction.get(statisticsRef);
+    const storedViews: unknown = snapshot.exists() ? snapshot.data().views : 0;
+    if (!isCount(storedViews)) {
+      throw new Error(`The stored view count for "${slug}" is invalid.`);
+    }
+    const views = storedViews + pendingViews;
+    if (pendingViews > 0) transaction.set(statisticsRef, { views }, { merge: true });
+    return views;
+  });
+}
+
+async function claimStatisticsSync(
+  slug: string,
+): Promise<{ data: SeriesStatistics; shouldSync: boolean }> {
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(slug);
+      let result: { data: SeriesStatistics; shouldSync: boolean };
+      request.onsuccess = () => {
+        const previous: unknown = request.result;
+        if (
+          !isRecord(previous) ||
+          previous.slug !== slug ||
+          !isCount(previous.views) ||
+          !isCount(previous.bookmarks) ||
+          !isCount(previous.notifications) ||
+          typeof previous.syncedAt !== "number" ||
+          !Number.isFinite(previous.syncedAt)
+        ) {
+          reject(new Error("Series statistics must be cached before synchronization."));
+          return;
+        }
+        const data: SeriesStatistics = {
+          slug,
+          views: previous.views,
+          bookmarks: previous.bookmarks,
+          notifications: previous.notifications,
+          syncedAt: previous.syncedAt,
+          pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
+          localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
+          lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
+            ? previous.lastSyncAttemptAt
+            : previous.syncedAt,
+        };
+        const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
+        const shouldSync = age < 0 || age >= SERIES_STATISTICS_CACHE_TTL_MS;
+        if (shouldSync) {
+          data.lastSyncAttemptAt = Date.now();
+          store.put(data);
+        }
+        result = { data, shouldSync };
+      };
+      request.onerror = () => reject(request.error || new Error("Could not claim statistics synchronization."));
+      transaction.oncomplete = () => resolve(result);
+      transaction.onerror = () => reject(transaction.error || new Error("Could not claim statistics synchronization."));
+      transaction.onabort = () => reject(transaction.error || new Error("Statistics synchronization claim was aborted."));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function loadBookmarkAndNotificationCounts(
+  slug: string,
+): Promise<{ bookmarks: number; notifications: number }> {
+  const firestore = statisticsFirestore();
+  const bookmarks = collectionGroup(firestore, "bookmarks");
+  const allForSeries = query(bookmarks, where("slug", "==", slug));
+  const notificationsForSeries = query(
+    collectionGroup(firestore, "bookmarks"),
+    where("slug", "==", slug),
+    where("seriesNotification", "==", true),
+  );
+  const [allCount, notificationCount] = await Promise.all([
+    getCountFromServer(allForSeries).catch((error: unknown) => {
+      console.error("Bookmark collection-group count was denied or unavailable.", error);
+      throw error;
+    }),
+    getCountFromServer(notificationsForSeries).catch((error: unknown) => {
+      console.error("Notification collection-group count was denied or unavailable.", error);
+      throw error;
+    }),
+  ]);
+  const notifications = notificationCount.data().count;
+  return {
+    bookmarks: Math.max(0, allCount.data().count - notifications),
+    notifications,
+  };
+}
+
+export async function syncSeriesStatisticsForVisit(
+  slug: string,
+): Promise<SeriesStatistics> {
+  const claim = await claimStatisticsSync(slug);
+  if (!claim.shouldSync) return claim.data;
+  const syncStartedAt = claim.data.lastSyncAttemptAt ?? Date.now();
+  const pendingViews = claim.data.pendingViews ?? 0;
+  const counts = await loadBookmarkAndNotificationCounts(slug);
+  const views = await syncPendingSeriesViews(slug, pendingViews).catch((error: unknown) => {
+    console.error(`View count write was denied or unavailable for "${slug}".`, error);
+    throw error;
+  });
+  const updated: SeriesStatistics = {
+    slug,
+    views,
+    ...counts,
+    syncedAt: Date.now(),
+    lastSyncAttemptAt: syncStartedAt,
+  };
+  return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
+}

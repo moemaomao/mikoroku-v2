@@ -35,6 +35,10 @@ function getKv(): KVNamespace | null {
   );
 }
 
+export function hasKvBinding(): boolean {
+  return getKv() !== null;
+}
+
 export async function kvGet<T = unknown>(
   key: string,
   type: "json" | "text" = "json",

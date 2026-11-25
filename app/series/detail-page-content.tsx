@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getApps, initializeApp } from "firebase/app";
 import { addDoc, collection, doc, getDoc, getDocs, getDocsFromServer, getFirestore, serverTimestamp } from "firebase/firestore";
@@ -23,9 +23,31 @@ import SiteFooter from "../site-footer";
 import SeriesLoadingContent from "./series-loading-content";
 import GlobalAuth from "../global-auth";
 import {
+  getCachedFirestoreMangaCatalog,
   initializeFirebaseClient,
   loadFirestoreMangaCatalog,
 } from "../lib/firebase-client";
+import {
+  getSeriesNotificationUserId,
+  loadSeriesNotificationSubscriptions,
+  readSeriesNotificationSubscriptions,
+  removeSeriesNotificationSubscription,
+  saveLocalSeriesNotificationSubscription,
+  saveSeriesNotificationSubscription,
+  seriesUpdateVersion,
+  SERIES_NOTIFICATIONS_UPDATED_EVENT,
+  SERIES_NOTIFICATIONS_STORAGE_KEY,
+} from "../lib/series-notifications";
+import {
+  adjustCachedSeriesStatistic,
+  getCachedSeriesStatistics,
+  loadSharedSeriesStatistics,
+  mergeSharedSeriesStatistics,
+  recordSeriesViewInCache,
+  saveSharedSeriesStatistics,
+  syncSeriesStatisticsForVisit,
+  type SeriesStatistics,
+} from "../lib/series-statistics";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
 import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import {
@@ -1227,6 +1249,345 @@ function MetaTag({ label, value, icon }: { label: string; value?: string; icon: 
   );
 }
 
+function SeriesShareControl({ title, compact = false }: { title: string; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
+
+  function toggleShareOptions() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    setShareUrl(url.toString());
+    setCopyStatus("");
+    setOpen(true);
+  }
+
+  async function copyShareLink() {
+    setCopyStatus("Copying link...");
+    let copied = false;
+    if (navigator.clipboard?.writeText) {
+      let timeout: number | undefined;
+      try {
+        await Promise.race([
+          navigator.clipboard.writeText(shareUrl),
+          new Promise<void>((_resolve, reject) => {
+            timeout = window.setTimeout(() => reject(new Error("Clipboard API timed out.")), 1500);
+          }),
+        ]);
+        copied = true;
+      } catch (error) {
+        console.warn("Clipboard API could not copy the series link; trying the browser fallback.", error);
+      } finally {
+        if (timeout !== undefined) window.clearTimeout(timeout);
+      }
+    }
+
+    if (!copied) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = shareUrl;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        try {
+          textarea.select();
+          copied = document.execCommand("copy");
+        } finally {
+          textarea.remove();
+        }
+        if (!copied) throw new Error("Browser clipboard fallback failed.");
+      } catch (error) {
+        console.error("Could not copy the series link.", error);
+        setCopyStatus("Could not copy the link.");
+        return;
+      }
+    }
+    setCopyStatus("Link copied.");
+  }
+
+  const encodedUrl = encodeURIComponent(shareUrl);
+  const encodedTitle = encodeURIComponent(title);
+  const shareOptions = [
+    { label: "WhatsApp", href: `https://wa.me/?text=${encodeURIComponent(`${title} ${shareUrl}`)}` },
+    { label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
+    { label: "X / Twitter", href: `https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}` },
+    { label: "Telegram", href: `https://t.me/share/url?url=${encodedUrl}&text=${encodedTitle}` },
+  ];
+
+  return (
+    <div className="relative w-full">
+      <button
+        className={`inline-flex w-full items-center justify-center gap-2 rounded-lg ${compact ? "border-[0.5px]" : "border"} border-sky-500/45 bg-sky-500/10 font-semibold text-sky-700 transition hover:border-sky-500/70 hover:bg-sky-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:text-sky-200 ${
+          compact
+            ? "min-h-0 gap-1 px-2 py-[6px] text-[11px]"
+            : "min-h-10 px-3 py-2 text-xs max-[767px]:min-h-0 max-[767px]:gap-1 max-[767px]:px-[5px] max-[767px]:py-[3px] max-[767px]:text-[10px] md:text-sm"
+        }`}
+        type="button"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={toggleShareOptions}
+      >
+        <i className="fas fa-share-alt" aria-hidden="true" />
+        <span>Share</span>
+      </button>
+      {open && (
+        <div
+          id={menuId}
+          className="absolute left-0 top-full z-30 mt-2 grid w-full min-w-[220px] grid-cols-2 gap-2 rounded-xl border border-slate-300/70 bg-white p-2 shadow-xl dark:border-white/15 dark:bg-slate-900"
+          role="group"
+          aria-label="Share this series"
+        >
+          {shareOptions.map((option) => (
+            <a
+              key={option.label}
+              className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300/70 px-2 py-1.5 text-center text-xs font-semibold text-slate-700 no-underline transition hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:border-white/15 dark:text-slate-100 dark:hover:bg-white/10"
+              href={option.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+            >
+              {option.label}
+            </a>
+          ))}
+          <button
+            className="col-span-2 inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300/70 px-2 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:border-white/15 dark:text-slate-100 dark:hover:bg-white/10"
+            type="button"
+            onClick={() => void copyShareLink()}
+          >
+            <i className="fas fa-link" aria-hidden="true" />
+            <span>Copy link</span>
+          </button>
+          {copyStatus && (
+            <p className="col-span-2 m-0 text-center text-xs text-slate-600 dark:text-slate-300" role="status">
+              {copyStatus}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SeriesStatisticsBar({
+  slug,
+  bookmarked,
+  notificationsEnabled,
+  onToggleBookmark,
+  onToggleNotifications,
+  notificationError,
+}: {
+  slug: string;
+  bookmarked: boolean;
+  notificationsEnabled: boolean;
+  onToggleBookmark: () => void;
+  onToggleNotifications: () => void;
+  notificationError: string;
+}) {
+  const [statistics, setStatistics] = useState<SeriesStatistics>(() => ({
+    slug,
+    views: 0,
+    bookmarks: 0,
+    notifications: 0,
+    syncedAt: 0,
+  }));
+  const [syncError, setSyncError] = useState("");
+  const visitedSlugRef = useRef("");
+  const requestIdRef = useRef(0);
+  const statisticsRef = useRef(statistics);
+  const localInteractionVersionsRef = useRef({ bookmarks: 0, notifications: 0 });
+  statisticsRef.current = statistics;
+
+  function applyLoadedStatistics(
+    incoming: SeriesStatistics,
+    versionsAtLoadStart: { bookmarks: number; notifications: number },
+  ) {
+    const current = statisticsRef.current;
+    const merged = { ...incoming };
+    for (const key of ["bookmarks", "notifications"] as const) {
+      if (localInteractionVersionsRef.current[key] !== versionsAtLoadStart[key]) {
+        merged[key] = current[key];
+      }
+    }
+    statisticsRef.current = merged;
+    setStatistics(merged);
+  }
+
+  useEffect(() => {
+    if (!slug || visitedSlugRef.current === slug) return;
+    visitedSlugRef.current = slug;
+    const requestId = ++requestIdRef.current;
+    const initialStatistics = { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0 };
+    statisticsRef.current = initialStatistics;
+    localInteractionVersionsRef.current = { bookmarks: 0, notifications: 0 };
+    setStatistics(initialStatistics);
+    setSyncError("");
+    const versionsAtLoadStart = { ...localInteractionVersionsRef.current };
+
+    void (async () => {
+      let cached: Awaited<ReturnType<typeof getCachedSeriesStatistics>> = null;
+      try {
+        cached = await getCachedSeriesStatistics(slug);
+      } catch (error) {
+        console.warn("Series statistics cache could not be read.", error);
+      }
+
+      if (requestId !== requestIdRef.current) return;
+      if (cached) applyLoadedStatistics(cached.data, versionsAtLoadStart);
+
+      try {
+        const viewed = await recordSeriesViewInCache(slug);
+        if (requestId !== requestIdRef.current) return;
+        applyLoadedStatistics(viewed.data, versionsAtLoadStart);
+
+        try {
+          const shared = await loadSharedSeriesStatistics(slug);
+          if (requestId !== requestIdRef.current) return;
+          if (shared) {
+            const merged = await mergeSharedSeriesStatistics(shared.data);
+            applyLoadedStatistics(merged, versionsAtLoadStart);
+          }
+        } catch (error) {
+          console.warn(`Shared series statistics could not be loaded for "${slug}".`, error);
+        }
+
+        const updated = await syncSeriesStatisticsForVisit(slug);
+        if (requestId !== requestIdRef.current) return;
+        applyLoadedStatistics(updated, versionsAtLoadStart);
+        void saveSharedSeriesStatistics(updated).catch((error: unknown) => {
+          console.warn(`Shared series statistics could not be saved for "${slug}".`, error);
+        });
+      } catch (error) {
+        console.error(`Series statistics could not be synchronized for "${slug}".`, error);
+        if (requestId === requestIdRef.current) {
+          const errorCode = error && typeof error === "object" && "code" in error
+            ? error.code
+            : "";
+          setSyncError(errorCode === "failed-precondition"
+            ? "Firestore index belum tersedia. Deploy firestore.indexes.json ke project widget-comment."
+            : errorCode === "permission-denied"
+              ? "Firestore menolak akses statistik. Periksa rules di project widget-comment."
+              : "Statistik sementara tidak tersedia.");
+        }
+      }
+    })();
+  }, [slug]);
+
+  const items = [
+    { key: "views", label: "Views", icon: "fa-eye", value: statistics?.views, active: false, disabled: true },
+    { key: "bookmarks", label: bookmarked ? "Bookmarked" : "Bookmark", icon: bookmarked ? "fa-check" : "fa-bookmark", value: statistics?.bookmarks, active: bookmarked, disabled: false },
+    { key: "notifications", label: notificationsEnabled ? "Notifications on" : "Notify", icon: notificationsEnabled ? "fa-bell" : "fa-bell-slash", value: statistics?.notifications, active: notificationsEnabled, disabled: false },
+  ] as const;
+
+  function toggleStatistic(item: typeof items[number]) {
+    if (item.key === "views" || item.disabled) return;
+    const key = item.key;
+    const wasActive = item.active;
+    const next = {
+      ...statisticsRef.current,
+      [key]: Math.max(0, statisticsRef.current[key] + (wasActive ? -1 : 1)),
+    };
+    localInteractionVersionsRef.current[key] += 1;
+    statisticsRef.current = next;
+    setStatistics(next);
+    void adjustCachedSeriesStatistic(slug, key, wasActive ? -1 : 1).catch((error: unknown) => {
+      console.warn(`Cached series ${key} count could not be updated.`, error);
+    });
+    if (key === "bookmarks") {
+      onToggleBookmark();
+    } else {
+      void onToggleNotifications();
+    }
+  }
+
+  return (
+    <div className="my-1 w-full max-[767px]:mx-[14px] max-[767px]:w-auto">
+      <div
+        role="group"
+        aria-label="Series statistics"
+        style={{
+          display: "flex",
+          width: "100%",
+          gap: 0,
+          margin: 0,
+          padding: 0,
+          overflow: "hidden",
+          border: "1px solid rgba(151, 145, 145, 0.35)",
+          borderRadius: "10px",
+        }}
+        className="genres series-statistics-panel rounded-[2px] border border-gray-400/40 bg-black/10 dark:bg-white/10"
+      >
+        {items.map((item, index) => {
+          const sharedClassName = `genre series-statistic text-black dark:text-white${index ? " border-l border-l-[rgba(156,163,175,0.42)] dark:border-l-[rgba(255,255,255,0.2)]" : ""}`;
+          const sharedStyle = {
+            display: "flex",
+            minWidth: 0,
+            flex: "1 1 0",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+            padding: "8px 4px",
+            borderRadius: 0,
+            borderTop: 0,
+            borderRight: 0,
+            borderBottom: 0,
+            borderColor: "rgba(156, 163, 175, 0.35)",
+            backgroundColor: item.active
+              ? item.key === "notifications" ? "#af81ff" : "#ce9b00"
+              : "rgba(255, 255, 255, 0)",
+            fontSize: "11px",
+            cursor: item.key === "views" ? "default" : "pointer",
+          } as const;
+          const contents = (
+            <>
+              <i className={`fas ${item.icon} shrink-0`} aria-hidden="true" />
+              <span className="truncate">{item.label}</span>
+              <strong className="shrink-0">{item.value.toLocaleString("id-ID")}</strong>
+            </>
+          );
+          return item.key === "views" ? (
+            <span className={sharedClassName} key={item.key} style={sharedStyle}>
+              {contents}
+            </span>
+          ) : (
+            <button
+              className={sharedClassName}
+              key={item.key}
+              style={sharedStyle}
+              type="button"
+              aria-pressed={item.active}
+              disabled={item.disabled}
+              onClick={() => toggleStatistic(item)}
+            >
+              {contents}
+            </button>
+          );
+        })}
+      </div>
+      {(syncError || notificationError) && (
+        <p className="m-0 mt-1 text-[10px] text-red-600 dark:text-red-300" role="status">
+          {notificationError || syncError}
+        </p>
+      )}
+    </div>
+  );
+}
+
 type DetailPageContentProps = {
   slug: string;
   initialManga?: Manga | null;
@@ -1313,6 +1674,8 @@ export default function DetailPageContent({
   const [chapterWindow, setChapterWindow] = useState(CHAPTER_UI_BATCH);
   const chapterSentinelRef = useRef<HTMLDivElement | null>(null);
   const [bookmarked, setBookmarked] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationSyncError, setNotificationSyncError] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
   const [reportType, setReportType] = useState("");
   const [reportTypeOpen, setReportTypeOpen] = useState(false);
@@ -2155,6 +2518,112 @@ export default function DetailPageContent({
     return () => window.removeEventListener("mikoroku:chapter-read", refreshReadChapters);
   }, [manga]);
 
+  useEffect(() => {
+    let active = true;
+    const refreshSubscription = async () => {
+      const local = readSeriesNotificationSubscriptions();
+      setNotificationsEnabled(local.some((item) => item.slug === slug));
+      try {
+        const subscriptions = await loadSeriesNotificationSubscriptions();
+        if (active) {
+          setNotificationsEnabled(subscriptions.some((item) => item.slug === slug));
+          setNotificationSyncError("");
+        }
+      } catch (error) {
+        console.warn("Series notification preference could not be synchronized.", error);
+        if (active && getSeriesNotificationUserId()) {
+          setNotificationSyncError("Notifikasi tersimpan di perangkat, tetapi gagal disinkronkan.");
+        }
+      }
+    };
+    const handleNotificationUpdate = () => {
+      setNotificationsEnabled(
+        readSeriesNotificationSubscriptions().some((item) => item.slug === slug),
+      );
+    };
+    void refreshSubscription();
+    window.addEventListener(SERIES_NOTIFICATIONS_UPDATED_EVENT, handleNotificationUpdate);
+    const handleAccountChange = () => { void refreshSubscription(); };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === SERIES_NOTIFICATIONS_STORAGE_KEY) void refreshSubscription();
+    };
+    window.addEventListener(AUTH_USER_CHANGE_EVENT, handleAccountChange);
+    window.addEventListener("firebaseCompatReady", handleAccountChange);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      active = false;
+      window.removeEventListener(SERIES_NOTIFICATIONS_UPDATED_EVENT, handleNotificationUpdate);
+      window.removeEventListener(AUTH_USER_CHANGE_EVENT, handleAccountChange);
+      window.removeEventListener("firebaseCompatReady", handleAccountChange);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [slug]);
+
+  const toggleSeriesNotifications = useCallback(() => {
+    if (!manga) return;
+    setNotificationSyncError("");
+    const uid = getSeriesNotificationUserId();
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      void removeSeriesNotificationSubscription(slug, uid).catch((error: unknown) => {
+        console.error("Series notification preference could not be removed from Firestore.", error);
+        setNotificationSyncError(uid
+          ? "Perubahan notifikasi tersimpan lokal, tetapi gagal disinkronkan."
+          : "");
+      });
+      return;
+    }
+
+    setNotificationsEnabled(true);
+    const subscribedAt = Date.now();
+    const currentCatalogRecord = getCachedFirestoreMangaCatalog()
+      .find((item) => item.slug === slug);
+    const fallbackVersion = seriesUpdateVersion(
+      currentCatalogRecord ?? { ...manga.info, ...manga },
+    );
+    const subscription = {
+      slug,
+      title: manga.title,
+      cover: manga.cover || manga.img || "",
+      subscribedVersion: fallbackVersion,
+      lastSeenVersion: fallbackVersion,
+      subscribedAt,
+    };
+    try {
+      saveLocalSeriesNotificationSubscription(subscription);
+    } catch (error) {
+      console.error("Series notification preference could not be saved locally.", error);
+      setNotificationsEnabled(false);
+      setNotificationSyncError("Notifikasi tidak dapat disimpan di perangkat ini.");
+      return;
+    }
+
+    void (async () => {
+      let version = fallbackVersion;
+      try {
+        const catalog = await loadFirestoreMangaCatalog();
+        const match = catalog.find((item) => item.slug === slug);
+        if (match) version = seriesUpdateVersion(match);
+      } catch (error) {
+        console.warn("Current series update version could not be loaded from the catalog.", error);
+      }
+
+      const current = readSeriesNotificationSubscriptions()
+        .find((item) => item.slug === slug && item.subscribedAt === subscribedAt);
+      if (!current) return;
+      await saveSeriesNotificationSubscription({
+        ...current,
+        subscribedVersion: version,
+        lastSeenVersion: version,
+      }, uid);
+    })().catch((error: unknown) => {
+      console.error("Series notification preference could not be saved.", error);
+      setNotificationSyncError(uid
+        ? "Notifikasi tersimpan lokal, tetapi sinkronisasi akun gagal."
+        : "Notifikasi tersimpan di perangkat ini. Login untuk menyinkronkannya.");
+    });
+  }, [manga, notificationsEnabled, slug]);
+
   const toggleBookmark = useCallback(() => {
     if (!manga) return;
     const key = normalizedKey(manga.title);
@@ -2425,10 +2894,7 @@ export default function DetailPageContent({
                     <i className="fas fa-book-open" aria-hidden="true" />
                     <span>{chapterState === "loading" ? "Loading..." : "Read now"}</span>
                   </button>
-                  <button className={`bookmark-btn${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
-                    <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
-                    <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
-                  </button>
+                  <SeriesShareControl title={manga.title} />
                   <button
                     className="detail-report-btn inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-500/60 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] max-[767px]:text-[10px] md:text-sm"
                     type="button"
@@ -2505,19 +2971,16 @@ export default function DetailPageContent({
             </div>
 
             {!metadataExpanded && (
-              <div className="mx-3 mb-3 grid grid-cols-3 items-center gap-2 md:hidden">
-                <button className="start-reading-btn inline-flex min-h-9 w-full items-center justify-center gap-1 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-2 py-1.5 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => {
+              <div className="mx-[14px] mb-3 grid grid-cols-3 items-center gap-3 md:hidden">
+                <button className="start-reading-btn inline-flex min-h-0 w-full items-center justify-center gap-1 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-2 py-[6px] text-[11px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => {
                   if (latestChapter) void openChapter(latestChapter);
                 }} disabled={!latestChapter || chapterState !== "ready"}>
                   <i className="fas fa-book-open shrink-0" aria-hidden="true" />
                   <span className="whitespace-nowrap">{chapterState === "loading" ? "Loading..." : "Read now"}</span>
                 </button>
-                <button className={`bookmark-btn min-h-9 w-full gap-1 px-2 py-1.5 text-[10px]${bookmarked ? " bookmarked" : ""}`} type="button" onClick={toggleBookmark}>
-                  <i className={`fas ${bookmarked ? "fa-check" : "fa-bookmark"}`} aria-hidden="true" />
-                  <span className="whitespace-nowrap">{bookmarked ? "Bookmarked" : "Bookmark"}</span>
-                </button>
+                <SeriesShareControl title={manga.title} compact />
                 <button
-                  className="detail-report-btn inline-flex min-h-9 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-red-500/60 bg-red-500/15 px-2 py-1.5 text-[10px] font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
+                  className="detail-report-btn inline-flex min-h-0 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-red-500/60 bg-red-500/15 px-2 py-[6px] text-[11px] font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
                   type="button"
                   onClick={() => {
                     setReportMessage("");
@@ -2530,6 +2993,14 @@ export default function DetailPageContent({
               </div>
             )}
 
+            <SeriesStatisticsBar
+              slug={slug}
+              bookmarked={bookmarked}
+              notificationsEnabled={notificationsEnabled}
+              onToggleBookmark={toggleBookmark}
+              onToggleNotifications={toggleSeriesNotifications}
+              notificationError={notificationSyncError}
+            />
             <div className="genres">
               {genreList.map((genre, index) => {
                 const { accent, lightText } = genreAccentColors[index % genreAccentColors.length];

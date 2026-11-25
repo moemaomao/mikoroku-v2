@@ -12,6 +12,18 @@ import { CoverImage } from "./lib/cover-image";
 import { setLocalStorageCacheItem } from "./lib/local-storage-cache";
 import { isNsfwManga, useNsfwVisibility } from "./lib/nsfw";
 import { returnToHomepageIfPossible } from "./lib/home-navigation";
+import { loadFirestoreMangaCatalog } from "./lib/firebase-client";
+import {
+  MANGA_METADATA_CACHE_UPDATED_EVENT,
+  MANGA_METADATA_UPDATED_EVENT,
+} from "./lib/manga-metadata";
+import {
+  getSeriesNotificationUpdates,
+  getSeriesNotificationUserId,
+  loadSeriesNotificationSubscriptions,
+  SERIES_NOTIFICATIONS_UPDATED_EVENT,
+  SERIES_NOTIFICATIONS_STORAGE_KEY,
+} from "./lib/series-notifications";
 
 type MangaEntry = {
   title: string;
@@ -239,6 +251,7 @@ function HeaderContents() {
   const [authOpen, setAuthOpen] = useState(false);
   const [unreadAnnouncements, setUnreadAnnouncements] = useState(0);
   const [announcementLabel, setAnnouncementLabel] = useState("Announcements");
+  const [unreadSeriesUpdates, setUnreadSeriesUpdates] = useState(0);
   const searchArea = useRef<HTMLDivElement>(null);
   const bookmarkArea = useRef<HTMLDivElement>(null);
   const authArea = useRef<HTMLDivElement>(null);
@@ -715,6 +728,59 @@ function HeaderContents() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    let loading = false;
+    const refreshSeriesUpdates = async (force = false) => {
+      if (loading) return;
+      loading = true;
+      try {
+        const subscriptions = await loadSeriesNotificationSubscriptions(
+          getSeriesNotificationUserId() || user?.uid || "",
+        );
+        if (!active) return;
+        if (!subscriptions.length) {
+          setUnreadSeriesUpdates(0);
+          return;
+        }
+        const records = await loadFirestoreMangaCatalog({ force });
+        if (!active) return;
+        const unread = getSeriesNotificationUpdates(subscriptions, records)
+          .filter((update) => update.unread).length;
+        setUnreadSeriesUpdates(unread);
+      } catch (error) {
+        console.warn("Update notifikasi seri gagal dimuat.", error);
+      } finally {
+        loading = false;
+      }
+    };
+    const refresh = () => { void refreshSeriesUpdates(); };
+    const refreshLatest = () => { void refreshSeriesUpdates(true); };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === SERIES_NOTIFICATIONS_STORAGE_KEY) refresh();
+    };
+    void refreshSeriesUpdates();
+    const interval = window.setInterval(refreshLatest, 5 * 60 * 1000);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(SERIES_NOTIFICATIONS_UPDATED_EVENT, refresh);
+    window.addEventListener(AUTH_USER_CHANGE_EVENT, refresh);
+    window.addEventListener("firebaseCompatReady", refresh);
+    window.addEventListener(MANGA_METADATA_UPDATED_EVENT, refreshLatest);
+    window.addEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, refreshLatest);
+    window.addEventListener("focus", refreshLatest);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(SERIES_NOTIFICATIONS_UPDATED_EVENT, refresh);
+      window.removeEventListener(AUTH_USER_CHANGE_EVENT, refresh);
+      window.removeEventListener("firebaseCompatReady", refresh);
+      window.removeEventListener(MANGA_METADATA_UPDATED_EVENT, refreshLatest);
+      window.removeEventListener(MANGA_METADATA_CACHE_UPDATED_EVENT, refreshLatest);
+      window.removeEventListener("focus", refreshLatest);
+    };
+  }, [user?.uid]);
+
   const selectManga = (title: string) => {
     setSearchOpen(false);
     setSearchExpanded(false);
@@ -1036,6 +1102,24 @@ function HeaderContents() {
               </div>
             )}
           </div>
+
+          <a
+            id="headerSeriesNotifications"
+            href="/bookmark?view=notifications"
+            aria-label={unreadSeriesUpdates
+              ? `Notifikasi update seri, ${unreadSeriesUpdates} belum dibaca`
+              : "Notifikasi update seri"}
+            title="Notifikasi update seri"
+            className={`${desktopActionClass} relative min-[769px]:border-violet-300/30 min-[769px]:bg-violet-500/10 min-[769px]:hover:border-violet-300/55 min-[769px]:hover:bg-violet-500/20`}
+          >
+            <Icon name="bell" />
+            <span className="hidden min-[769px]:inline">Updates</span>
+            {unreadSeriesUpdates > 0 && (
+              <span className="absolute right-0 top-0 min-w-4 rounded-full border-2 border-white bg-red-600 px-1 text-center text-[9px] font-bold leading-3 text-white dark:border-zinc-950" aria-hidden="true">
+                {unreadSeriesUpdates > 99 ? "99+" : unreadSeriesUpdates}
+              </span>
+            )}
+          </a>
 
           <div className="relative" ref={authArea}>
             <button

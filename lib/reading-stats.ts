@@ -1464,7 +1464,9 @@ export async function loadPublicReadingStats(uid: string): Promise<PublicReading
     try {
       const bookmarks = await firestore.collection("users").doc(uid).collection("bookmarks").limit(1000).get();
       let count = 0;
-      bookmarks.forEach(() => { count += 1; });
+      bookmarks.forEach((document) => {
+        if (document.data().seriesNotification !== true) count += 1;
+      });
       return count;
     } catch (error) {
       console.warn("Bookmark count is not publicly available for this user.", error);

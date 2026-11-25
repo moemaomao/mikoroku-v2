@@ -7,6 +7,18 @@ import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
 import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
+import {
+  getSeriesNotificationUpdates,
+  getSeriesNotificationUserId,
+  loadSeriesNotificationSubscriptions,
+  markSeriesNotificationUpdatesRead,
+  readSeriesNotificationSubscriptions,
+  removeSeriesNotificationSubscription,
+  SERIES_NOTIFICATIONS_UPDATED_EVENT,
+  SERIES_NOTIFICATIONS_STORAGE_KEY,
+  type SeriesNotificationSubscription,
+  type SeriesNotificationUpdate,
+} from "../lib/series-notifications";
 import MangaDataProvider from "../manga-data-provider";
 import UserModals from "../user-modals";
 import SiteFooter from "../site-footer";
@@ -45,6 +57,7 @@ type FirestoreBookmark = {
   slug?: string;
   addedAt?: number | FirestoreTimestamp;
   updatedAt?: number | FirestoreTimestamp;
+  seriesNotification?: boolean;
 };
 
 type FirestoreSnapshot = {
@@ -249,7 +262,7 @@ function bookmarkFromFirestore(document: {
   data: () => FirestoreBookmark;
 }): Bookmark | null {
   const data = document.data();
-  if (!data.title) return null;
+  if (!data.title || data.seriesNotification === true) return null;
   return {
     title: data.title,
     img: data.img || "",
@@ -287,6 +300,12 @@ async function migrateLocalBookmarks(user: AuthUser, local: Bookmark[]): Promise
 
 export default function BookmarkPage() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [activeView, setActiveView] = useState<"bookmarks" | "notifications">("bookmarks");
+  const [notificationSubscriptions, setNotificationSubscriptions] = useState<SeriesNotificationSubscription[]>([]);
+  const [displayedUpdates, setDisplayedUpdates] = useState<SeriesNotificationUpdate[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
+  const [notificationRemoving, setNotificationRemoving] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [syncError, setSyncError] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
@@ -298,17 +317,38 @@ export default function BookmarkPage() {
 
   useEffect(() => {
     refreshLocalBookmarks();
+    setNotificationSubscriptions(readSeriesNotificationSubscriptions());
     const onStorage = (event: StorageEvent) => {
       if (event.key === "mangaBookmarks") refreshLocalBookmarks();
+      if (event.key === SERIES_NOTIFICATIONS_STORAGE_KEY) {
+        setNotificationSubscriptions(readSeriesNotificationSubscriptions());
+      }
     };
     const onBookmarkUpdate = () => refreshLocalBookmarks();
+    const onNotificationUpdate = () => {
+      const local = readSeriesNotificationSubscriptions();
+      setNotificationSubscriptions(local);
+      setDisplayedUpdates((current) =>
+        current
+          .filter((update) => local.some((item) => item.slug === update.subscription.slug))
+          .map((update) => ({ ...update, unread: false })),
+      );
+    };
     window.addEventListener("storage", onStorage);
     window.addEventListener("bookmarkUpdated", onBookmarkUpdate);
+    window.addEventListener(SERIES_NOTIFICATIONS_UPDATED_EVENT, onNotificationUpdate);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("bookmarkUpdated", onBookmarkUpdate);
+      window.removeEventListener(SERIES_NOTIFICATIONS_UPDATED_EVENT, onNotificationUpdate);
     };
   }, [refreshLocalBookmarks]);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "notifications") {
+      setActiveView("notifications");
+    }
+  }, []);
 
   useEffect(() => {
     if (coverLookupAttempted.current || !bookmarks.some((bookmark) => !bookmark.img)) return;
@@ -352,16 +392,33 @@ export default function BookmarkPage() {
     let unsubscribe: (() => void) | undefined;
     let authTimeout: number | undefined;
     let active = true;
+    const loadAccountNotifications = async (uid?: string) => {
+      setNotificationSubscriptions(readSeriesNotificationSubscriptions());
+      try {
+        const subscriptions = await loadSeriesNotificationSubscriptions(uid || "");
+        if (active) {
+          setNotificationSubscriptions(subscriptions);
+          setNotificationError("");
+        }
+      } catch (error) {
+        console.error("Notifikasi seri gagal disinkronkan.", error);
+        if (active) {
+          setNotificationError("Notifikasi lokal tetap tersedia, tetapi sinkronisasi akun gagal.");
+        }
+      }
+    };
     const loadAccountBookmarks = async (user: AuthUser | null) => {
       if (!active) return;
       setSyncError("");
       if (!user) {
         setAuthStatus("guest");
         refreshLocalBookmarks();
+        void loadAccountNotifications();
         return;
       }
 
       setAuthStatus("logged-in");
+      void loadAccountNotifications(user.uid);
       const local = readLocalBookmarks();
       try {
         await migrateLocalBookmarks(user, local);
@@ -408,6 +465,7 @@ export default function BookmarkPage() {
       if (active) {
         setAuthStatus("unavailable");
         setSyncError("Layanan akun tidak tersedia. Bookmark lokal tetap dapat digunakan.");
+        void loadAccountNotifications();
       }
     });
 
@@ -417,6 +475,68 @@ export default function BookmarkPage() {
       unsubscribe?.();
     };
   }, [refreshLocalBookmarks]);
+
+  useEffect(() => {
+    if (activeView !== "notifications" || authStatus === "loading") return;
+    let active = true;
+    const loadNotifications = async () => {
+      setNotificationLoading(true);
+      setNotificationError("");
+      let subscriptions = readSeriesNotificationSubscriptions();
+      try {
+        subscriptions = await loadSeriesNotificationSubscriptions(getSeriesNotificationUserId() || "");
+        if (active) setNotificationSubscriptions(subscriptions);
+      } catch (error) {
+        console.error("Daftar notifikasi seri gagal dimuat dari Firestore.", error);
+        if (active) setNotificationError("Gagal menyinkronkan notifikasi. Data lokal tetap ditampilkan.");
+      }
+
+      if (!subscriptions.length) {
+        if (active) {
+          setDisplayedUpdates([]);
+          setNotificationLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const records = await loadFirestoreMangaCatalog({ force: true });
+        if (!active) return;
+        const updates = getSeriesNotificationUpdates(subscriptions, records);
+        setDisplayedUpdates(updates);
+        const markedRead = await markSeriesNotificationUpdatesRead(
+          subscriptions,
+          records,
+          getSeriesNotificationUserId() || "",
+        );
+        if (active) setNotificationSubscriptions(markedRead);
+      } catch (error) {
+        console.error("Update seri gagal dimuat.", error);
+        if (active) setNotificationError("Data update terbaru tidak dapat dimuat saat ini.");
+      } finally {
+        if (active) setNotificationLoading(false);
+      }
+    };
+    void loadNotifications();
+    return () => {
+      active = false;
+    };
+  }, [activeView, authStatus]);
+
+  useEffect(() => {
+    if (activeView === "notifications" || !notificationSubscriptions.length) return;
+    let active = true;
+    void loadFirestoreMangaCatalog()
+      .then((records) => {
+        if (active) setDisplayedUpdates(getSeriesNotificationUpdates(notificationSubscriptions, records));
+      })
+      .catch((error: unknown) => {
+        console.warn("Update seri untuk badge bookmark tidak dapat dimuat.", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeView, notificationSubscriptions]);
 
   useEffect(() => {
     window.saveBookmarkSync = async (value) => {
@@ -470,6 +590,44 @@ export default function BookmarkPage() {
       slug: bookmark.slug || slugify(bookmark.title),
     }));
     window.location.href = `/series/${encodeURIComponent(bookmark.slug || slugify(bookmark.title))}`;
+  }, []);
+
+  const selectView = useCallback((nextView: "bookmarks" | "notifications") => {
+    setActiveView(nextView);
+    const url = new URL(window.location.href);
+    if (nextView === "notifications") url.searchParams.set("view", "notifications");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  const openNotificationSeries = useCallback((subscription: SeriesNotificationSubscription) => {
+    setLocalStorageCacheItem("currentManga", JSON.stringify({
+      title: subscription.title,
+      img: subscription.cover,
+      cover: subscription.cover,
+      slug: subscription.slug,
+    }));
+    window.location.href = `/series/${encodeURIComponent(subscription.slug)}`;
+  }, []);
+
+  const removeNotification = useCallback(async (subscription: SeriesNotificationSubscription) => {
+    setNotificationRemoving(subscription.slug);
+    setNotificationError("");
+    try {
+      const next = await removeSeriesNotificationSubscription(
+        subscription.slug,
+        getSeriesNotificationUserId() || "",
+      );
+      setNotificationSubscriptions(next);
+      setDisplayedUpdates((current) =>
+        current.filter((update) => update.subscription.slug !== subscription.slug),
+      );
+    } catch (error) {
+      console.error("Notifikasi seri gagal dihapus.", error);
+      setNotificationError("Notifikasi dihapus dari perangkat, tetapi gagal disinkronkan.");
+    } finally {
+      setNotificationRemoving(null);
+    }
   }, []);
 
   const removeBookmark = useCallback(async (bookmark: Bookmark) => {
@@ -527,42 +685,132 @@ export default function BookmarkPage() {
           </div>
 
           {syncError && <p className="bookmark-sync-error" role="alert">{syncError}</p>}
+          <nav className="bookmark-tabs" aria-label="Bookmark and notifications">
+            <button
+              type="button"
+              className={`bookmark-tab${activeView === "bookmarks" ? " active" : ""}`}
+              aria-pressed={activeView === "bookmarks"}
+              onClick={() => selectView("bookmarks")}
+            >
+              <i className="fas fa-bookmark" aria-hidden="true" />
+              <span>Seri bookmark</span>
+              <span className="bookmark-tab-count">{visibleBookmarks.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`bookmark-tab${activeView === "notifications" ? " active" : ""}`}
+              aria-pressed={activeView === "notifications"}
+              onClick={() => selectView("notifications")}
+            >
+              <i className="fas fa-bell" aria-hidden="true" />
+              <span>Notifikasi</span>
+              {displayedUpdates.some((update) => update.unread) && (
+                <span className="bookmark-tab-badge" aria-label={`${displayedUpdates.filter((update) => update.unread).length} update belum dibaca`}>
+                  {displayedUpdates.filter((update) => update.unread).length}
+                </span>
+              )}
+            </button>
+          </nav>
 
-          {visibleBookmarks.length === 0 ? (
-            <div className="bookmark-empty">
-              <i className="far fa-bookmark" aria-hidden="true" />
-              <h2>Bookmark kosong</h2>
-            </div>
+          {activeView === "bookmarks" ? (
+            visibleBookmarks.length === 0 ? (
+              <div className="bookmark-empty">
+                <i className="far fa-bookmark" aria-hidden="true" />
+                <h2>Bookmark kosong</h2>
+              </div>
+            ) : (
+              <ul className="bookmark-list">
+                {visibleBookmarks.map((bookmark) => (
+                  <li className="bookmark-card" key={normalizeTitle(bookmark.title)}>
+                    <button className="bookmark-open" type="button" onClick={() => openBookmark(bookmark)}>
+                      <span className="bookmark-cover">
+                        <CoverImage
+                          src={bookmark.img || "/assets/icons/favicon.ico"}
+                          alt=""
+                          nsfw={isNsfwManga(bookmark.slug, bookmark.title)}
+                          showNsfwBadge={false}
+                          onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
+                        />
+                      </span>
+                      <span className="bookmark-info">
+                        <span className="bookmark-title">{bookmark.title}</span>
+                      </span>
+                    </button>
+                    <button
+                      className="bookmark-remove"
+                      type="button"
+                      aria-label={`Hapus bookmark ${bookmark.title}`}
+                      disabled={removing === bookmark.title}
+                      onClick={() => void removeBookmark(bookmark)}
+                    >
+                      <i className={`fas ${removing === bookmark.title ? "fa-spinner fa-spin" : "fa-trash"}`} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
           ) : (
-            <ul className="bookmark-list">
-              {visibleBookmarks.map((bookmark) => (
-                <li className="bookmark-card" key={normalizeTitle(bookmark.title)}>
-                  <button className="bookmark-open" type="button" onClick={() => openBookmark(bookmark)}>
-                    <span className="bookmark-cover">
-                      <CoverImage
-                        src={bookmark.img || "/assets/icons/favicon.ico"}
-                        alt=""
-                        nsfw={isNsfwManga(bookmark.slug, bookmark.title)}
-                        showNsfwBadge={false}
-                        onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
-                      />
-                    </span>
-                    <span className="bookmark-info">
-                      <span className="bookmark-title">{bookmark.title}</span>
-                    </span>
-                  </button>
-                  <button
-                    className="bookmark-remove"
-                    type="button"
-                    aria-label={`Hapus bookmark ${bookmark.title}`}
-                    disabled={removing === bookmark.title}
-                    onClick={() => void removeBookmark(bookmark)}
-                  >
-                    <i className={`fas ${removing === bookmark.title ? "fa-spinner fa-spin" : "fa-trash"}`} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              {notificationError && <p className="bookmark-sync-error" role="alert">{notificationError}</p>}
+              {notificationLoading ? (
+                <div className="bookmark-empty" role="status">
+                  <i className="fas fa-spinner fa-spin" aria-hidden="true" />
+                  <h2>Memuat notifikasi...</h2>
+                </div>
+              ) : notificationSubscriptions.length === 0 ? (
+                <div className="bookmark-empty">
+                  <i className="far fa-bell" aria-hidden="true" />
+                  <h2>Belum mengikuti notifikasi seri</h2>
+                  <p>Aktifkan tombol “Notify updates” pada halaman seri untuk mengikuti update.</p>
+                </div>
+              ) : (
+                <ul className="bookmark-list">
+                  {notificationSubscriptions.map((subscription) => {
+                    const update = displayedUpdates.find((item) => item.subscription.slug === subscription.slug);
+                    const image = subscription.cover ||
+                      (typeof update?.record.cover === "string" ? update.record.cover : "") ||
+                      (typeof update?.record.img === "string" ? update.record.img : "");
+                    return (
+                      <li className="bookmark-card" key={subscription.slug}>
+                        <button className="bookmark-open" type="button" onClick={() => openNotificationSeries(subscription)}>
+                          <span className="bookmark-cover">
+                            <CoverImage
+                              src={image || "/assets/icons/favicon.ico"}
+                              alt=""
+                              nsfw={isNsfwManga(subscription.slug, subscription.title)}
+                              showNsfwBadge={false}
+                              onError={(event) => { event.currentTarget.src = "/assets/icons/favicon.ico"; }}
+                            />
+                          </span>
+                          <span className="bookmark-info">
+                            <span className="bookmark-title">{subscription.title}</span>
+                            <span className={`bookmark-notification-status${update?.unread ? " unread" : ""}`}>
+                              {update?.unread
+                                ? "Update terbaru"
+                                : update
+                                  ? update.hasUpdate
+                                    ? "Update tersedia"
+                                    : "Diikuti"
+                                  : "Data update belum tersedia"}
+                              {update?.updatedAt ? ` · ${new Date(update.updatedAt).toLocaleDateString("id-ID")}` : ""}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          className="bookmark-remove"
+                          type="button"
+                          aria-label={`Matikan notifikasi ${subscription.title}`}
+                          disabled={notificationRemoving === subscription.slug}
+                          onClick={() => void removeNotification(subscription)}
+                        >
+                          <i className={`fas ${notificationRemoving === subscription.slug ? "fa-spinner fa-spin" : "fa-bell-slash"}`} aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
           )}
         </section>
       </main>

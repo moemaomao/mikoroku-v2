@@ -18,6 +18,7 @@ export function Icon({ name, className = "h-6 w-6" }: { name: string; className?
     case "book": return <svg {...common}><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 0 0-5H20" /></svg>;
     case "grid": return <svg {...common}><path d="M7 7h10v10H7zM7 3v4m10-4v4M7 17v4m10-4v4" /></svg>;
     case "bookmark": return <svg {...common}><path d="M6 4h12v18l-6-4-6 4V4z" /></svg>;
+    case "library": return <svg {...common}><path d="M4 5h4v15H4zM10 3h4v17h-4zM16 6h4v14h-4z" /><path d="M4 9h4m2-2h4m2 3h4M4 17h4m2-1h4m2 1h4" /></svg>;
     case "history": return <svg {...common}><path d="M3 12a9 9 0 1 0 3-6.7M3 4v6h6M12 7v5l3 2" /></svg>;
     case "commission": return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6m-4 5H8m8 4H8" /></svg>;
     case "trophy": return <svg {...common}><path d="M8 3h8v4a4 4 0 0 1-8 0V3Zm4 8v5m-4 5h8M5 5H3v2a4 4 0 0 0 4 4m12-6h2v2a4 4 0 0 1-4 4" /></svg>;
@@ -139,7 +140,7 @@ export function SiteSidebar({
           <SidebarLink href="/novel-list" icon="book" onClick={closeOnMobile}>Novel List</SidebarLink>
           <SidebarLink href="/hentai-list" icon="book" onClick={closeOnMobile}>Hentai List</SidebarLink>
           <SidebarLink href="/genre-list" icon="grid" onClick={closeOnMobile}>Genre List</SidebarLink>
-          <SidebarLink href="/bookmark" icon="bookmark" onClick={closeOnMobile}>Bookmark</SidebarLink>
+          <SidebarLink href="/bookmark" icon="library" onClick={closeOnMobile}>Library</SidebarLink>
           <SidebarLink href="/history" icon="history" onClick={closeOnMobile}>History</SidebarLink>
           <SidebarLink href="/commission" icon="commission" onClick={closeOnMobile}>Commission</SidebarLink>
           <SidebarLink href="/leaderboard" icon="trophy" onClick={closeOnMobile}>Top Comments</SidebarLink>

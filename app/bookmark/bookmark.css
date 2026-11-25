@@ -97,6 +97,89 @@ html.dark .bookmark-route .bookmark-notice.logged-in {
   font-size: 13px;
 }
 
+.bookmark-route .bookmark-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 15px;
+  padding: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.035);
+}
+
+html.dark .bookmark-route .bookmark-tabs {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.bookmark-route .bookmark-tab {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--bookmark-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bookmark-route .bookmark-tab.active {
+  border-color: rgba(139, 92, 246, 0.25);
+  background: #ffffff;
+  color: #6d28d9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html.dark .bookmark-route .bookmark-tab.active {
+  border-color: rgba(167, 139, 250, 0.25);
+  background: #1b1b2b;
+  color: #c4b5fd;
+}
+
+.bookmark-route .bookmark-tab-count,
+.bookmark-route .bookmark-tab-badge {
+  display: inline-flex;
+  min-width: 19px;
+  height: 19px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #6d28d9;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.bookmark-route .bookmark-tab-badge {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.bookmark-route .bookmark-notification-status {
+  display: block;
+  margin-top: 5px;
+  color: var(--bookmark-muted);
+  font-size: 12px;
+}
+
+.bookmark-route .bookmark-notification-status.unread {
+  color: #7c3aed;
+  font-weight: 700;
+}
+
+html.dark .bookmark-route .bookmark-notification-status.unread {
+  color: #c4b5fd;
+}
+
 .bookmark-route .bookmark-list {
   display: grid;
   grid-template-columns: 1fr;
