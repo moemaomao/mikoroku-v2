@@ -190,16 +190,22 @@ export async function clearSharedChapterCache(): Promise<void> {
 
 function compactChapterRecords(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter((record): record is Record<string, unknown> =>
-      !!record && typeof record === "object" && !Array.isArray(record) && record.isDraft !== true,
-    )
-    .map((record) => Object.fromEntries(
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const record of value) {
+    if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+    const data = record as Record<string, unknown>;
+    if (data.isDraft === true) continue;
+    const chapter = normalizeChapterNumber(data.num ?? data.chapter ?? data.id);
+    if (!chapter) continue;
+    const compacted = Object.fromEntries(
       cachedChapterFields.flatMap((field) =>
-        record[field] === undefined ? [] : [[field, record[field]]],
+        data[field] === undefined ? [] : [[field, data[field]]],
       ),
-    ))
-    .slice(0, MAX_CACHED_CHAPTERS_PER_SERIES);
+    );
+    compacted.num = chapter;
+    merged.set(chapter, { ...merged.get(chapter), ...compacted });
+  }
+  return [...merged.values()].slice(0, MAX_CACHED_CHAPTERS_PER_SERIES);
 }
 
 export function compactChapterCache(records: unknown): Record<string, unknown>[] {

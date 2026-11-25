@@ -67,6 +67,27 @@ function shapeChapters(chapters: BloggerChapter[], full: boolean, limit: number)
   return !full && limit > 0 ? shaped.slice(0, limit) : shaped;
 }
 
+function normalizeAndDeduplicateChapters(
+  chapters: BloggerChapter[],
+): BloggerChapter[] {
+  const merged = new Map<string, BloggerChapter>();
+  for (const chapter of chapters) {
+    const num = normalizeChapterNumber(chapter.num);
+    if (!num) continue;
+    const normalized = { ...chapter, num };
+    const previous = merged.get(num);
+    merged.set(num, previous
+      ? {
+          ...previous,
+          ...normalized,
+          images: normalized.images.length ? normalized.images : previous.images,
+          thumbnail: normalized.thumbnail || previous.thumbnail,
+        }
+      : normalized);
+  }
+  return [...merged.values()];
+}
+
 function findChapter(chapters: BloggerChapter[], chapterNum: string) {
   const wanted = normalizeChapterNumber(chapterNum);
   return chapters.find((chapter) => {
@@ -127,7 +148,9 @@ export async function GET(request: NextRequest) {
   const cacheKey = bloggerChaptersCacheKey(source, title);
 
   const cached = await kvGet<CachedPayload>(cacheKey);
-  const cachedChapters = Array.isArray(cached?.chapters) ? cached.chapters : [];
+  const cachedChapters = normalizeAndDeduplicateChapters(
+    Array.isArray(cached?.chapters) ? cached.chapters : [],
+  );
   const cacheIsFresh = !!cached &&
     Date.now() - Date.parse(cached.cachedAt) < BLOGGER_CHAPTERS_KV_TTL * 1000;
   const cachedChapter = requestedChapter
@@ -188,7 +211,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const chapters = await fetchBloggerChapters(title, source);
+    const chapters = normalizeAndDeduplicateChapters(
+      await fetchBloggerChapters(title, source),
+    );
     const latest = chapters[0];
     const payload: CachedPayload = {
       chapters: latest ? [latest] : [],

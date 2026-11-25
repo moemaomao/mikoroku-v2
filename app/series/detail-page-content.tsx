@@ -7,7 +7,7 @@ import { addDoc, collection, doc, getDoc, getDocs, getDocsFromServer, getFiresto
 import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
-import { chapterNumberFromRecord } from "../../lib/chapter-number";
+import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapter-number";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
@@ -475,7 +475,8 @@ function getBloggerChapterNumber(title: string, url: string): string {
     || title.match(/#\s*(\d+(?:[.,．]\d+)?)/)
     || [...title.matchAll(/(\d+(?:[.,．]\d+)?)/g)].at(-1)
     || url.match(/(?:chapter|ch)[_-]?(\d+(?:[.-]\d+)?)/i);
-  return match?.[1]?.replace(/[,_．]/g, ".").replace(/-/g, ".") || "?";
+  const raw = match?.[1]?.replace(/[,_．]/g, ".").replace(/-/g, ".");
+  return raw ? normalizeChapterNumber(raw) || "?" : "?";
 }
 
 function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source: ChapterSource): Chapter[] {
@@ -1026,9 +1027,8 @@ function chapterNumber(value: Chapter["num"]): number {
 }
 
 function chapterKey(chapter: Chapter): string {
-  const raw = String(chapter.num).trim().toLowerCase().replace(",", ".");
-  const numeric = Number.parseFloat(raw);
-  return Number.isFinite(numeric) ? String(numeric) : raw;
+  return normalizeChapterNumber(chapter.num) ||
+    String(chapter.num).trim().toLowerCase();
 }
 
 function mergeChapterSources(primary: Chapter[], supplemental: Chapter[]): Chapter[] {

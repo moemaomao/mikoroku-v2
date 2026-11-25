@@ -57,14 +57,17 @@ export function getBloggerChapterNumber(title: string, url: string): string {
     title.match(/#\s*(\d+(?:[.,．]\d+)?)/) ||
     [...title.matchAll(/(\d+(?:[.,．]\d+)?)/g)].at(-1) ||
     url.match(/(?:chapter|ch)[_-]?(\d+(?:[.-]\d+)?)/i);
-  return match?.[1]?.replace(/[,_．]/g, ".").replace(/-/g, ".") || "?";
+  const raw = match?.[1]?.replace(/[,_．]/g, ".").replace(/-/g, ".");
+  if (!raw) return "?";
+  const number = Number(raw);
+  return Number.isFinite(number) ? String(number) : "?";
 }
 
 export function parseBloggerEntries(
   data: BloggerFeed,
   source: BloggerChapterSource,
 ): BloggerChapter[] {
-  return (data.feed?.entry || []).map((entry) => {
+  const chapters = (data.feed?.entry || []).map((entry) => {
     const title = entry.title?.$t || "";
     const url =
       entry.link?.find((link) => link.rel === "alternate")?.href || "";
@@ -82,6 +85,27 @@ export function parseBloggerEntries(
       source,
     };
   });
+
+  const merged = new Map<string, BloggerChapter>();
+  for (const chapter of chapters) {
+    const num = Number.isFinite(Number(chapter.num))
+      ? String(Number(chapter.num))
+      : chapter.num.trim();
+    if (!num || num === "?") continue;
+    const normalized = { ...chapter, num };
+    const previous = merged.get(num);
+    if (!previous) {
+      merged.set(num, normalized);
+      continue;
+    }
+    merged.set(num, {
+      ...previous,
+      ...normalized,
+      images: normalized.images.length ? normalized.images : previous.images,
+      thumbnail: normalized.thumbnail || previous.thumbnail,
+    });
+  }
+  return [...merged.values()];
 }
 
 export function toListChapters(
