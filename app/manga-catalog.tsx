@@ -737,21 +737,21 @@ function MangaCard({
   return (
     <a
       href={href}
-      className={animate ? cardClass : cardClassStatic}
+      className={cardClassStatic}
       data-slug={slug}
+      style={
+        animate
+          ? {
+              animation: "fade-in-up 0.35s ease both",
+              animationDelay: `${Math.min(index, 24) * 0.04}s`,
+            }
+          : undefined
+      }
       onClick={(event) => {
         navigateToSeries(event, href, manga);
       }}
     >
-      <div
-        data-key={normalize(item.title)}
-        data-slug={slug}
-        style={
-          animate
-            ? { animationDelay: `${Math.min(index, 24) * 0.04}s` }
-            : undefined
-        }
-      >
+      <div data-key={normalize(item.title)} data-slug={slug}>
         <div className={cardCoverClass}>
           {(Boolean(item.isUp) || isRecentUpdate(updatedAt)) && (
             <div className={upBadgeClass}>UP</div>
