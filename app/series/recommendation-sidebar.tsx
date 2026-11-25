@@ -263,6 +263,10 @@ export default function RecommendationSidebar({
   const [visible, setVisible] = useState(readVisibility);
 
   useEffect(() => {
+    document.documentElement.dataset.recommendationsHidden = String(!visible);
+  }, [visible]);
+
+  useEffect(() => {
     if (!visible) return;
     let active = true;
     const controller = new AbortController();
@@ -435,14 +439,13 @@ export default function RecommendationSidebar({
   const toggleVisibility = () => {
     const nextVisible = !visible;
     setVisible(nextVisible);
-    document.documentElement.dataset.recommendationsHidden = String(!nextVisible);
     try {
       localStorage.setItem(VISIBILITY_KEY, String(!nextVisible));
     } catch (error) {
       console.warn("Preferensi tampilan rekomendasi tidak dapat disimpan.", error);
     }
     requestAnimationFrame(() => {
-      document.getElementById(visible ? "rec-sidebar-show-button" : "rec-sidebar-hide-button")?.focus();
+      document.getElementById(nextVisible ? "rec-sidebar-hide-button" : "rec-sidebar-show-button")?.focus();
     });
   };
 
