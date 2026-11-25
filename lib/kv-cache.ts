@@ -1,3 +1,5 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
 interface KVNamespace {
   get(
     key: string,
@@ -13,7 +15,6 @@ interface KVNamespace {
 
 function getKv(): KVNamespace | null {
   try {
-    const { getCloudflareContext } = require("@opennextjs/cloudflare");
     const ctx = getCloudflareContext();
     const env = ctx?.env as Record<string, unknown> | undefined;
     if (env?.MIKOROKU_V2_CACHE) {
