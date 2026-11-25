@@ -180,15 +180,29 @@ service cloud.firestore {
       allow read: if resource.data.slug is string;
     }
 
+    function validSeriesStats(data) {
+      return data.keys().hasOnly(['views', 'bookmarks', 'notifications']) &&
+             data.views is number && data.views >= 0 &&
+             data.bookmarks is number && data.bookmarks >= 0 &&
+             data.notifications is number && data.notifications >= 0;
+    }
+
+    function counterChangesByOne(field) {
+      return request.resource.data[field] == resource.data.get(field, 0) ||
+             request.resource.data[field] == resource.data.get(field, 0) + 1 ||
+             request.resource.data[field] == resource.data.get(field, 0) - 1;
+    }
+
     match /seriesStats/{slug} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasOnly(['views']) &&
-                    request.resource.data.views is number &&
-                    request.resource.data.views == 1;
-      allow update: if request.resource.data.keys().hasOnly(['views']) &&
-                    resource.data.views is number &&
-                    request.resource.data.views is number &&
-                    request.resource.data.views == resource.data.views + 1;
+      allow create: if validSeriesStats(request.resource.data);
+      allow update: if validSeriesStats(request.resource.data) &&
+                    request.resource.data.diff(resource.data)
+                      .affectedKeys()
+                      .hasOnly(['views', 'bookmarks', 'notifications']) &&
+                    request.resource.data.views >= resource.data.get('views', 0) &&
+                    counterChangesByOne('bookmarks') &&
+                    counterChangesByOne('notifications');
       allow delete: if false;
     }
 

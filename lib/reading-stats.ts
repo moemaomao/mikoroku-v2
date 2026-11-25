@@ -57,7 +57,7 @@ type StatsTransaction = {
     reference: StatsDocumentReference,
     data: Record<string, unknown>,
     options?: { merge?: boolean },
-  ) => StatsTransaction;
+  ) => void;
 };
 
 type StatsWriteBatch = {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
 import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
+import { adjustCachedSeriesStatistic } from "../lib/series-statistics";
 import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
@@ -81,6 +82,15 @@ type FirestoreCollection = {
   };
 };
 
+type FirestoreTransaction = {
+  get: (reference: unknown) => Promise<{
+    exists: boolean;
+    data: () => Record<string, unknown> | undefined;
+  }>;
+  set: (reference: unknown, data: Record<string, unknown>, options?: { merge?: boolean }) => void;
+  delete: (reference: unknown) => void;
+};
+
 type FirebaseCompatApp = {
   name?: string;
   firestore?: () => unknown;
@@ -103,6 +113,7 @@ type FirebaseCompat = {
   };
   firestore: (() => {
     collection: (name: string) => FirestoreCollection;
+    runTransaction: <T>(update: (transaction: FirestoreTransaction) => Promise<T>) => Promise<T>;
     batch: () => {
       set: (reference: unknown, data: Record<string, unknown>) => void;
       commit: () => Promise<void>;
@@ -110,6 +121,7 @@ type FirebaseCompat = {
   }) & {
     FieldValue: {
       serverTimestamp: () => unknown;
+      increment: (value: number) => unknown;
     };
   };
 };
@@ -208,6 +220,72 @@ function getFirestoreCollection(user: AuthUser): FirestoreCollection {
   return firebase.firestore().collection("users").doc(user.uid).collection("bookmarks");
 }
 
+async function syncBookmarkDocument(
+  user: AuthUser,
+  bookmark: Bookmark,
+  remove = false,
+): Promise<number> {
+  const firebase = window.firebase;
+  if (!firebase) throw new Error("Firebase belum tersedia.");
+  const firestore = firebase.firestore();
+  const reference = getFirestoreCollection(user).doc(normalizeTitle(bookmark.title));
+  const statisticsReference = firestore.collection("seriesStats")
+    .doc(encodeURIComponent(bookmark.slug));
+
+  const delta = await firestore.runTransaction(async (transaction) => {
+    const [bookmarkSnapshot, statisticsSnapshot] = await Promise.all([
+      transaction.get(reference),
+      transaction.get(statisticsReference),
+    ]);
+    const previousBookmark = bookmarkSnapshot.exists
+      ? bookmarkSnapshot.data() ?? {}
+      : {};
+    const wasCounted = bookmarkSnapshot.exists &&
+      previousBookmark.slug === bookmark.slug &&
+      previousBookmark.seriesNotification !== true;
+    const willBeCounted = !remove && previousBookmark.seriesNotification !== true;
+    const countDelta = Number(willBeCounted) - Number(wasCounted);
+    const previousStatistics = statisticsSnapshot.exists
+      ? statisticsSnapshot.data() ?? {}
+      : {};
+    const count = (field: "views" | "bookmarks" | "notifications") => {
+      const value = previousStatistics[field];
+      return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : 0;
+    };
+    const currentBookmarks = count("bookmarks");
+
+    if (remove) {
+      if (bookmarkSnapshot.exists) transaction.delete(reference);
+    } else {
+      transaction.set(reference, {
+        ...bookmark,
+        addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    if (countDelta !== 0 || !statisticsSnapshot.exists) {
+      transaction.set(statisticsReference, {
+        views: count("views"),
+        bookmarks: countDelta && currentBookmarks + countDelta >= 0
+          ? firebase.firestore.FieldValue.increment(countDelta)
+          : Math.max(0, currentBookmarks + countDelta),
+        notifications: count("notifications"),
+      }, { merge: true });
+    }
+    return countDelta;
+  });
+
+  if (delta !== 0) {
+    void adjustCachedSeriesStatistic(bookmark.slug, "bookmarks", delta).catch((error: unknown) => {
+      console.warn("Cached series bookmark count could not be updated.", error);
+    });
+  }
+  return delta;
+}
+
 function scriptAlreadyExecuted(src: string): boolean {
   if (src.includes("firebase-app-compat.js")) return !!window.firebase?.initializeApp;
   if (src.includes("firebase-auth-compat.js")) return !!window.firebase?.auth;
@@ -284,18 +362,12 @@ async function migrateLocalBookmarks(user: AuthUser, local: Bookmark[]): Promise
   const missing = local.filter((item) => !existing.has(normalizeTitle(item.title)));
   if (!missing.length) return;
 
-  const firestore = window.firebase.firestore();
-  const batch = firestore.batch();
   for (const item of missing) {
-    batch.set(collection.doc(normalizeTitle(item.title)), {
-      title: item.title,
-      img: item.img,
+    await syncBookmarkDocument(user, {
+      ...item,
       slug: item.slug || slugify(item.title),
-      addedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     });
   }
-  await batch.commit();
 }
 
 export default function BookmarkPage() {
@@ -561,11 +633,7 @@ export default function BookmarkPage() {
       if (!user || !window.firebase) return;
       void setCachedBookmarkCount(user.uid, next.length);
       try {
-        await getFirestoreCollection(user).doc(normalizeTitle(title)).set({
-          ...nextBookmark,
-          addedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        await syncBookmarkDocument(user, nextBookmark);
       } catch (error) {
         console.error("Bookmark gagal disimpan ke Firestore.", error);
         setAuthStatus("unavailable");
@@ -647,7 +715,7 @@ export default function BookmarkPage() {
     }
     void setCachedBookmarkCount(user.uid, next.length);
     try {
-      await getFirestoreCollection(user).doc(normalizeTitle(bookmark.title)).delete();
+      await syncBookmarkDocument(user, bookmark, true);
     } catch (error) {
       console.error("Bookmark gagal dihapus dari Firestore.", error);
       setAuthStatus("unavailable");

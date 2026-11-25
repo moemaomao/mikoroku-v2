@@ -28,10 +28,22 @@ export type SeriesNotificationUpdate = {
   unread: boolean;
 };
 
+type FirestoreSnapshot = {
+  exists: boolean;
+  data: () => Record<string, unknown> | undefined;
+};
+
 type FirestoreReference = {
   collection: (name: string) => FirestoreCollection;
+  get: () => Promise<FirestoreSnapshot>;
   set: (data: Record<string, unknown>, options?: { merge?: boolean }) => Promise<void>;
   delete: () => Promise<void>;
+};
+
+type FirestoreTransaction = {
+  get: (reference: FirestoreReference) => Promise<FirestoreSnapshot>;
+  set: (reference: FirestoreReference, data: Record<string, unknown>, options?: { merge?: boolean }) => void;
+  delete: (reference: FirestoreReference) => void;
 };
 
 type FirestoreCollection = {
@@ -41,10 +53,7 @@ type FirestoreCollection = {
   };
 };
 
-type FirebaseCompat = {
-  auth?: () => { currentUser?: { uid?: string } | null };
-  firestore?: () => { collection: (name: string) => FirestoreCollection };
-};
+type FirebaseCompat = NonNullable<Window["firebase"]>;
 
 type NotificationWindow = Window & {
   currentUser?: { uid?: string } | null;
@@ -114,6 +123,12 @@ function notificationCollection(uid: string): FirestoreCollection {
   return firestore.collection("users").doc(uid).collection("bookmarks");
 }
 
+function notificationFirestore() {
+  const firestore = browserWindow().firebase?.firestore?.();
+  if (!firestore) throw new Error("Firestore untuk notifikasi tidak tersedia.");
+  return firestore;
+}
+
 function notificationDocumentId(slug: string): string {
   return `${FIRESTORE_ID_PREFIX}${encodeURIComponent(normalizeSlug(slug))}`;
 }
@@ -165,7 +180,7 @@ export async function loadSeriesNotificationSubscriptions(
   for (const item of local) {
     if (merged.has(item.slug)) continue;
     merged.set(item.slug, item);
-    await collection.doc(notificationDocumentId(item.slug)).set(subscriptionPayload(item), { merge: true });
+    await persistNotificationSubscription(item, uid);
   }
 
   if ((localStorage.getItem(SERIES_NOTIFICATIONS_STORAGE_KEY) || "[]") !== localStorageValue) {
@@ -186,9 +201,7 @@ export async function saveSeriesNotificationSubscription(
   const next = saveLocalSeriesNotificationSubscription(subscription);
   try {
     if (uid) {
-      await notificationCollection(uid)
-        .doc(notificationDocumentId(subscription.slug))
-        .set(subscriptionPayload(subscription), { merge: true });
+      await persistNotificationSubscription(subscription, uid);
     }
   } catch (error) {
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
@@ -196,6 +209,49 @@ export async function saveSeriesNotificationSubscription(
   }
   window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
   return next;
+}
+
+async function persistNotificationSubscription(
+  subscription: SeriesNotificationSubscription,
+  uid: string,
+): Promise<void> {
+  const firebase = browserWindow().firebase;
+  const fieldValue = firebase?.firestore?.FieldValue;
+  if (!fieldValue) throw new Error("Firestore counters are unavailable.");
+  const firestore = notificationFirestore();
+  const reference = notificationCollection(uid)
+    .doc(notificationDocumentId(subscription.slug));
+  const statisticsReference = firestore.collection("seriesStats")
+    .doc(encodeURIComponent(subscription.slug));
+  await firestore.runTransaction(async (transaction) => {
+    const [existingSubscription, existingStatistics] = await Promise.all([
+      transaction.get(reference),
+      transaction.get(statisticsReference),
+    ]);
+    const wasCounted = existingSubscription.exists &&
+      existingSubscription.data()?.[FIRESTORE_MARKER] === true;
+    const delta = wasCounted ? 0 : 1;
+    const statistics = existingStatistics.exists ? existingStatistics.data() ?? {} : {};
+    const count = (field: "views" | "bookmarks" | "notifications") => {
+      const value = statistics[field];
+      return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : 0;
+    };
+    const currentNotifications = count("notifications");
+    const nextNotifications = currentNotifications + delta;
+
+    transaction.set(reference, subscriptionPayload(subscription), { merge: true });
+    if (delta !== 0 || !existingStatistics.exists) {
+      transaction.set(statisticsReference, {
+        views: count("views"),
+        bookmarks: count("bookmarks"),
+        notifications: delta
+          ? fieldValue.increment(delta)
+          : nextNotifications,
+      }, { merge: true });
+    }
+  });
 }
 
 export async function removeSeriesNotificationSubscription(
@@ -207,7 +263,7 @@ export async function removeSeriesNotificationSubscription(
   writeLocalSubscriptions(next, false);
   try {
     if (uid) {
-      await notificationCollection(uid).doc(notificationDocumentId(normalizedSlug)).delete();
+      await removeNotificationSubscription(normalizedSlug, uid);
     }
   } catch (error) {
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
@@ -215,6 +271,43 @@ export async function removeSeriesNotificationSubscription(
   }
   window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
   return next;
+}
+
+async function removeNotificationSubscription(slug: string, uid: string): Promise<void> {
+  const firebase = browserWindow().firebase;
+  const fieldValue = firebase?.firestore?.FieldValue;
+  if (!fieldValue) throw new Error("Firestore counters are unavailable.");
+  const firestore = notificationFirestore();
+  const reference = notificationCollection(uid).doc(notificationDocumentId(slug));
+  const statisticsReference = firestore.collection("seriesStats")
+    .doc(encodeURIComponent(slug));
+  await firestore.runTransaction(async (transaction) => {
+    const [existingSubscription, existingStatistics] = await Promise.all([
+      transaction.get(reference),
+      transaction.get(statisticsReference),
+    ]);
+    const wasCounted = existingSubscription.exists &&
+      existingSubscription.data()?.[FIRESTORE_MARKER] === true;
+    const statistics = existingStatistics.exists ? existingStatistics.data() ?? {} : {};
+    const count = (field: "views" | "bookmarks" | "notifications") => {
+      const value = statistics[field];
+      return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : 0;
+    };
+    const currentNotifications = count("notifications");
+
+    if (existingSubscription.exists) transaction.delete(reference);
+    if (wasCounted || !existingStatistics.exists) {
+      transaction.set(statisticsReference, {
+        views: count("views"),
+        bookmarks: count("bookmarks"),
+        notifications: wasCounted && currentNotifications > 0
+          ? fieldValue.increment(-1)
+          : currentNotifications,
+      }, { merge: true });
+    }
+  });
 }
 
 function timestampValue(value: unknown): number {

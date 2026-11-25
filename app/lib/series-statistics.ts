@@ -1,12 +1,10 @@
 "use client";
 
 import {
-  collectionGroup,
   doc,
-  getCountFromServer,
-  query,
+  getDoc,
   runTransaction,
-  where,
+  setDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
@@ -35,6 +33,7 @@ export type SeriesStatistics = {
   pendingViews?: number;
   localUpdatedAt?: number;
   lastSyncAttemptAt?: number;
+  syncRetryAfter?: number;
 };
 
 export type CachedSeriesStatistics = {
@@ -85,6 +84,10 @@ function statisticsFirestore() {
     candidate.name === STATISTICS_FIREBASE_APP_NAME,
   ) ?? initializeApp(STATISTICS_FIREBASE_CONFIG, STATISTICS_FIREBASE_APP_NAME);
   return getFirestore(app);
+}
+
+export function getSeriesStatsRef(slug: string) {
+  return doc(statisticsFirestore(), "seriesStats", encodeURIComponent(slug));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -158,6 +161,7 @@ export async function getCachedSeriesStatistics(
       lastSyncAttemptAt: isCount(value.lastSyncAttemptAt)
         ? value.lastSyncAttemptAt
         : value.syncedAt,
+      syncRetryAfter: isCount(value.syncRetryAfter) ? value.syncRetryAfter : 0,
     };
     const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
     return {
@@ -248,6 +252,7 @@ export async function recordSeriesViewInCache(
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
                 : previous.syncedAt,
+              syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
             }
           : { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0, pendingViews: 0 };
         updated = {
@@ -287,6 +292,7 @@ export async function mergeSharedSeriesStatistics(
         pendingViews: 0,
         localUpdatedAt: 0,
         lastSyncAttemptAt: snapshot.syncedAt,
+        syncRetryAfter: 0,
       };
 
       request.onsuccess = () => {
@@ -307,12 +313,14 @@ export async function mergeSharedSeriesStatistics(
               pendingViews,
               localUpdatedAt: localChangesAreNewer ? localUpdatedAt : 0,
               lastSyncAttemptAt,
+              syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
             };
           } else {
             merged = {
               ...previous,
               pendingViews,
               lastSyncAttemptAt,
+              syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
             };
           }
         }
@@ -359,6 +367,7 @@ export async function adjustCachedSeriesStatistic(
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
                 : previous.syncedAt,
+              syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
             }
           : { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0, pendingViews: 0 };
 
@@ -378,18 +387,37 @@ export async function adjustCachedSeriesStatistic(
   }
 }
 
-async function syncPendingSeriesViews(slug: string, pendingViews: number): Promise<number> {
-  const firestore = statisticsFirestore();
-  const statisticsRef = doc(firestore, "seriesStats", encodeURIComponent(slug));
-  return runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(statisticsRef);
-    const storedViews: unknown = snapshot.exists() ? snapshot.data().views : 0;
-    if (!isCount(storedViews)) {
-      throw new Error(`The stored view count for "${slug}" is invalid.`);
+type StatisticsCounters = Pick<SeriesStatistics, "views" | "bookmarks" | "notifications">;
+
+function readStatisticsCountersWithFallback(
+  value: unknown,
+  fallback: StatisticsCounters,
+): StatisticsCounters {
+  const record = isRecord(value) ? value : {};
+  return {
+    views: isCount(record.views) ? record.views : 0,
+    bookmarks: isCount(record.bookmarks) ? record.bookmarks : fallback.bookmarks,
+    notifications: isCount(record.notifications) ? record.notifications : fallback.notifications,
+  };
+}
+
+async function syncPendingSeriesViews(
+  slug: string,
+  pendingViews: number,
+  fallback: StatisticsCounters,
+): Promise<StatisticsCounters> {
+  const statisticsRef = getSeriesStatsRef(slug);
+  return runTransaction(statisticsRef.firestore, async (transaction) => {
+    const stored = await transaction.get(statisticsRef);
+    const counters = readStatisticsCountersWithFallback(
+      stored.exists() ? stored.data() : undefined,
+      fallback,
+    );
+    const updated = { ...counters, views: counters.views + pendingViews };
+    if (pendingViews > 0 || !stored.exists()) {
+      transaction.set(statisticsRef, updated, { merge: true });
     }
-    const views = storedViews + pendingViews;
-    if (pendingViews > 0) transaction.set(statisticsRef, { views }, { merge: true });
-    return views;
+    return updated;
   });
 }
 
@@ -428,11 +456,16 @@ async function claimStatisticsSync(
           lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
             ? previous.lastSyncAttemptAt
             : previous.syncedAt,
+          syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
         };
         const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
-        const shouldSync = age < 0 || age >= SERIES_STATISTICS_CACHE_TTL_MS;
+        const hasPendingViews = (data.pendingViews ?? 0) > 0;
+        const shouldSync = age < 0 ||
+          age >= SERIES_STATISTICS_CACHE_TTL_MS ||
+          (hasPendingViews && Date.now() >= (data.syncRetryAfter ?? 0));
         if (shouldSync) {
           data.lastSyncAttemptAt = Date.now();
+          data.syncRetryAfter = 0;
           store.put(data);
         }
         result = { data, shouldSync };
@@ -447,32 +480,20 @@ async function claimStatisticsSync(
   }
 }
 
-async function loadBookmarkAndNotificationCounts(
+async function loadSeriesStatisticsDocument(
   slug: string,
-): Promise<{ bookmarks: number; notifications: number }> {
-  const firestore = statisticsFirestore();
-  const bookmarks = collectionGroup(firestore, "bookmarks");
-  const allForSeries = query(bookmarks, where("slug", "==", slug));
-  const notificationsForSeries = query(
-    collectionGroup(firestore, "bookmarks"),
-    where("slug", "==", slug),
-    where("seriesNotification", "==", true),
+  fallback: StatisticsCounters,
+): Promise<StatisticsCounters> {
+  const statisticsRef = getSeriesStatsRef(slug);
+  const snapshot = await getDoc(statisticsRef);
+  const counters = readStatisticsCountersWithFallback(
+    snapshot.exists() ? snapshot.data() : undefined,
+    fallback,
   );
-  const [allCount, notificationCount] = await Promise.all([
-    getCountFromServer(allForSeries).catch((error: unknown) => {
-      console.error("Bookmark collection-group count was denied or unavailable.", error);
-      throw error;
-    }),
-    getCountFromServer(notificationsForSeries).catch((error: unknown) => {
-      console.error("Notification collection-group count was denied or unavailable.", error);
-      throw error;
-    }),
-  ]);
-  const notifications = notificationCount.data().count;
-  return {
-    bookmarks: Math.max(0, allCount.data().count - notifications),
-    notifications,
-  };
+  if (!snapshot.exists()) {
+    await setDoc(statisticsRef, counters, { merge: true });
+  }
+  return counters;
 }
 
 export async function syncSeriesStatisticsForVisit(
@@ -482,17 +503,36 @@ export async function syncSeriesStatisticsForVisit(
   if (!claim.shouldSync) return claim.data;
   const syncStartedAt = claim.data.lastSyncAttemptAt ?? Date.now();
   const pendingViews = claim.data.pendingViews ?? 0;
-  const counts = await loadBookmarkAndNotificationCounts(slug);
-  const views = await syncPendingSeriesViews(slug, pendingViews).catch((error: unknown) => {
-    console.error(`View count write was denied or unavailable for "${slug}".`, error);
+  try {
+    const counters = pendingViews > 0
+      ? await syncPendingSeriesViews(slug, pendingViews, claim.data)
+      : await loadSeriesStatisticsDocument(slug, claim.data);
+    const updated: SeriesStatistics = {
+      slug,
+      ...counters,
+      syncedAt: Date.now(),
+      lastSyncAttemptAt: syncStartedAt,
+      syncRetryAfter: 0,
+    };
+    return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
+  } catch (error) {
+    const errorCode = error && typeof error === "object" && "code" in error
+      ? error.code
+      : "";
+    const now = Date.now();
+    const fallback: SeriesStatistics = {
+      ...claim.data,
+      views: Math.max(0, claim.data.views - pendingViews),
+      syncedAt: now,
+      lastSyncAttemptAt: syncStartedAt,
+      syncRetryAfter: now + SERIES_STATISTICS_CACHE_TTL_MS,
+    };
+    if (errorCode === "permission-denied" || errorCode === "not-found") {
+      console.warn(`Series statistics are unavailable for "${slug}"; cached counts will be used.`);
+      return cacheSeriesStatistics(fallback, syncStartedAt, 0);
+    }
+    await cacheSeriesStatistics(fallback, syncStartedAt, 0);
+    console.error(`Series statistics could not be synchronized for "${slug}".`, error);
     throw error;
-  });
-  const updated: SeriesStatistics = {
-    slug,
-    views,
-    ...counts,
-    syncedAt: Date.now(),
-    lastSyncAttemptAt: syncStartedAt,
-  };
-  return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
+  }
 }

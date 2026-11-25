@@ -125,24 +125,7 @@ type Chapter = {
 type DetailState = "loading" | "ready" | "not-found" | "error";
 type ChapterSource = Chapter["source"];
 
-type SeriesBookmarkReference = {
-  set: (data: Record<string, unknown>, options?: { merge?: boolean }) => Promise<void>;
-  delete: () => Promise<void>;
-};
-
-type SeriesBookmarkFirebase = {
-  auth?: () => {
-    currentUser?: { uid?: string } | null;
-    onAuthStateChanged?: (callback: (user: { uid?: string } | null) => void) => () => void;
-  };
-  firestore?: () => {
-    collection: (name: string) => {
-      doc: (id: string) => {
-        collection: (name: string) => { doc: (id: string) => SeriesBookmarkReference };
-      };
-    };
-  };
-};
+type SeriesBookmarkFirebase = NonNullable<Window["firebase"]>;
 
 const COMMENT_COUNT_FIREBASE_APP_NAME = "mikoroku-series-comment-count";
 const COMMENT_COUNT_FIREBASE_CONFIG = {
@@ -1455,15 +1438,17 @@ function SeriesStatisticsBar({
         if (requestId !== requestIdRef.current) return;
         applyLoadedStatistics(viewed.data, versionsAtLoadStart);
 
-        try {
-          const shared = await loadSharedSeriesStatistics(slug);
-          if (requestId !== requestIdRef.current) return;
-          if (shared) {
-            const merged = await mergeSharedSeriesStatistics(shared.data);
-            applyLoadedStatistics(merged, versionsAtLoadStart);
+        if (viewed.stale) {
+          try {
+            const shared = await loadSharedSeriesStatistics(slug);
+            if (requestId !== requestIdRef.current) return;
+            if (shared) {
+              const merged = await mergeSharedSeriesStatistics(shared.data);
+              applyLoadedStatistics(merged, versionsAtLoadStart);
+            }
+          } catch (error) {
+            console.warn(`Shared series statistics could not be loaded for "${slug}".`, error);
           }
-        } catch (error) {
-          console.warn(`Shared series statistics could not be loaded for "${slug}".`, error);
         }
 
         const updated = await syncSeriesStatisticsForVisit(slug);
@@ -2656,18 +2641,57 @@ export default function DetailPageContent({
       void (async () => {
         const firestore = firebaseWindow.firebase?.firestore?.();
         if (!firestore) throw new Error("Bookmark synchronization is unavailable.");
-        const reference = firestore.collection("users").doc(uid).collection("bookmarks").doc(key);
-        if (isSaved) {
-          await reference.set({
-            title: manga.title,
-            img: manga.cover || manga.img || "",
-            slug,
-            addedAt: Date.now(),
-            updatedAt: Date.now(),
-          }, { merge: true });
-        } else {
-          await reference.delete();
-        }
+        const fieldValue = firebaseWindow.firebase?.firestore?.FieldValue;
+        if (!fieldValue) throw new Error("Firestore counters are unavailable.");
+        const bookmarkReference = firestore.collection("users").doc(uid)
+          .collection("bookmarks").doc(key);
+        const statisticsReference = firestore.collection("seriesStats")
+          .doc(encodeURIComponent(slug));
+        await firestore.runTransaction(async (transaction) => {
+          const [bookmarkSnapshot, statisticsSnapshot] = await Promise.all([
+            transaction.get(bookmarkReference),
+            transaction.get(statisticsReference),
+          ]);
+          const previousBookmark = bookmarkSnapshot.exists ? bookmarkSnapshot.data() ?? {} : {};
+          const wasCounted = bookmarkSnapshot.exists &&
+            previousBookmark.slug === slug &&
+            previousBookmark.seriesNotification !== true;
+          const willBeCounted = isSaved && previousBookmark.seriesNotification !== true;
+          const delta = Number(willBeCounted) - Number(wasCounted);
+
+          if (isSaved) {
+            transaction.set(bookmarkReference, {
+              title: manga.title,
+              img: manga.cover || manga.img || "",
+              slug,
+              addedAt: Date.now(),
+              updatedAt: Date.now(),
+            }, { merge: true });
+          } else if (bookmarkSnapshot.exists) {
+            transaction.delete(bookmarkReference);
+          }
+
+          const previousStatistics = statisticsSnapshot.exists
+            ? statisticsSnapshot.data() ?? {}
+            : {};
+          const count = (field: "views" | "bookmarks" | "notifications") => {
+            const value = previousStatistics[field];
+            return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+              ? value
+              : 0;
+          };
+          const currentBookmarks = count("bookmarks");
+          const nextBookmarks = Math.max(0, currentBookmarks + delta);
+          if (delta !== 0 || !statisticsSnapshot.exists) {
+            transaction.set(statisticsReference, {
+              views: count("views"),
+              bookmarks: delta !== 0 && currentBookmarks + delta >= 0
+                ? fieldValue.increment(delta)
+                : nextBookmarks,
+              notifications: count("notifications"),
+            }, { merge: true });
+          }
+        });
       })().catch((syncError: unknown) => {
         console.warn("Bookmark is saved locally and will need cloud synchronization.", syncError);
       });
