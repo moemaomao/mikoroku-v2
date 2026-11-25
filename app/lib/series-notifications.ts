@@ -5,6 +5,8 @@ export const SERIES_NOTIFICATIONS_STORAGE_KEY = "mikoroku_series_notifications_v
 
 const FIRESTORE_MARKER = "seriesNotification";
 const FIRESTORE_ID_PREFIX = "series-notification-";
+const NOTIFICATION_MIGRATION_RETRY_MS = 12 * 60 * 60 * 1000;
+const NOTIFICATION_MIGRATION_ATTEMPT_KEY = "mikoroku_series_notification_migration_attempt_v1";
 
 export type SeriesNotificationSubscription = {
   slug: string;
@@ -133,6 +135,31 @@ function notificationDocumentId(slug: string): string {
   return `${FIRESTORE_ID_PREFIX}${encodeURIComponent(normalizeSlug(slug))}`;
 }
 
+function claimNotificationMigration(uid: string): boolean {
+  const key = `${NOTIFICATION_MIGRATION_ATTEMPT_KEY}:${uid}`;
+  const now = Date.now();
+  try {
+    const lastAttempt = Number(localStorage.getItem(key)) || 0;
+    if (now - lastAttempt < NOTIFICATION_MIGRATION_RETRY_MS) return false;
+    localStorage.setItem(key, String(now));
+    return true;
+  } catch (error) {
+    console.warn("Status percobaan sinkronisasi notifikasi tidak dapat disimpan.", error);
+    return false;
+  }
+}
+
+function deferNotificationMigration(uid: string): void {
+  try {
+    localStorage.setItem(
+      `${NOTIFICATION_MIGRATION_ATTEMPT_KEY}:${uid}`,
+      String(Date.now()),
+    );
+  } catch (error) {
+    console.warn("Sinkronisasi notifikasi tidak dapat ditunda di perangkat ini.", error);
+  }
+}
+
 function subscriptionFromFirestore(document: { id: string }): SeriesNotificationSubscription | null {
   const data = (document as { id: string; data: () => Record<string, unknown> }).data();
   if (data[FIRESTORE_MARKER] !== true) return null;
@@ -177,10 +204,16 @@ export async function loadSeriesNotificationSubscriptions(
     .map(subscriptionFromFirestore)
     .filter((item): item is SeriesNotificationSubscription => item !== null);
   const merged = new Map(remote.map((item) => [item.slug, item]));
-  for (const item of local) {
-    if (merged.has(item.slug)) continue;
-    merged.set(item.slug, item);
-    await persistNotificationSubscription(item, uid);
+  const missing = local.filter((item) => !merged.has(item.slug));
+  for (const item of missing) merged.set(item.slug, item);
+  if (missing.length && claimNotificationMigration(uid)) {
+    try {
+      for (const item of missing) {
+        await persistNotificationSubscription(item, uid);
+      }
+    } catch (error) {
+      console.warn("Preferensi notifikasi lokal belum dapat dimigrasikan ke Firestore.", error);
+    }
   }
 
   if ((localStorage.getItem(SERIES_NOTIFICATIONS_STORAGE_KEY) || "[]") !== localStorageValue) {
@@ -204,6 +237,7 @@ export async function saveSeriesNotificationSubscription(
       await persistNotificationSubscription(subscription, uid);
     }
   } catch (error) {
+    if (uid) deferNotificationMigration(uid);
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
     throw error;
   }
