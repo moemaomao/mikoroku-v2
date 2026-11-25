@@ -1149,17 +1149,28 @@ function HeaderContents() {
                     </div>
                   </>
                 ) : (
-                  <div className="p-4">
-                    <p className="mb-3 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100">Continue with</p>
-                    <div className="grid grid-cols-2 gap-2">
+                  <>
+                    <div className="flex items-center gap-3 border-b border-black/10 px-3.5 py-3 dark:border-white/10">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]">
+                        <Icon name="user" className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1 text-left">
+                        <h2 className="text-sm font-bold">Welcome to Mikoroku</h2>
+                        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                          Sign in to sync your reading and bookmarks.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-2">
                       {(
                         [
                           {
                             provider: "email",
                             label: "Email",
-                            style: "bg-indigo-600 text-white hover:bg-indigo-500",
+                            description: "Use your email and password",
+                            iconStyle: "bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]",
                             icon: (
-                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" aria-hidden="true">
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                                 <rect x="3" y="5" width="18" height="14" rx="2" />
                                 <path d="m3 7 9 6 9-6" />
                               </svg>
@@ -1168,7 +1179,8 @@ function HeaderContents() {
                           {
                             provider: "google",
                             label: "Google",
-                            style: "border border-zinc-300 bg-zinc-50 text-zinc-900 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
+                            description: "Continue with your Google account",
+                            iconStyle: "border border-black/10 bg-white dark:border-white/10",
                             icon: (
                               <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="#EA4335" d="M12 10.2v3.6h5.1c-.2 1.2-.9 2.3-1.9 3l3.1 2.4c1.8-1.7 2.9-4.1 2.9-7 0-.7-.1-1.3-.2-1.9H12z" />
@@ -1181,7 +1193,8 @@ function HeaderContents() {
                           {
                             provider: "github",
                             label: "GitHub",
-                            style: "bg-zinc-800 text-white hover:bg-zinc-700",
+                            description: "Continue with your GitHub account",
+                            iconStyle: "bg-zinc-800 text-white dark:bg-white/10",
                             icon: (
                               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true">
                                 <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.35 6.84 9.7.5.1.68-.22.68-.48 0-.24-.01-.87-.01-1.7-2.78.62-3.37-1.37-3.37-1.37-.46-1.2-1.12-1.52-1.12-1.52-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.58 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.28 2.75 1.05A9.3 9.3 0 0 1 12 6.8c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.95.68 1.92 0 1.38-.01 2.5-.01 2.84 0 .26.18.59.69.48A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2z" />
@@ -1191,9 +1204,10 @@ function HeaderContents() {
                           {
                             provider: "facebook",
                             label: "Facebook",
-                            style: "bg-blue-600 text-white hover:bg-blue-500",
+                            description: "Continue with your Facebook account",
+                            iconStyle: "bg-blue-500/10 text-blue-500",
                             icon: (
-                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true">
+                              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                 <path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14C17.17 2.09 16.02 2 14.79 2 12.24 2 10.5 3.66 10.5 6.7V9.5H8v4h2.5V22h3.5v-8.5z" />
                               </svg>
                             ),
@@ -1201,7 +1215,8 @@ function HeaderContents() {
                           {
                             provider: "twitter",
                             label: "X (Twitter)",
-                            style: "bg-black text-white hover:bg-zinc-900",
+                            description: "Continue with your X account",
+                            iconStyle: "bg-zinc-900 text-white dark:bg-white/10",
                             icon: (
                               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true">
                                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
@@ -1209,7 +1224,7 @@ function HeaderContents() {
                             ),
                           },
                         ] as const
-                      ).map(({ provider, label, style, icon }) => (
+                      ).map(({ provider, label, description, iconStyle, icon }) => (
                         <button
                           key={provider}
                           type="button"
@@ -1221,14 +1236,20 @@ function HeaderContents() {
                               console.error(`Login ${provider} gagal.`, error);
                             });
                           }}
-                          className={`flex min-h-[76px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-black/10 px-3 py-2.5 text-xs font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mikoroku-accent)] dark:border-white/10 ${style}`}
+                          className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm text-inherit transition hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--mikoroku-accent)] dark:hover:bg-white/[0.07]"
                         >
-                          <span className="grid size-9 place-items-center rounded-lg bg-black/10">{icon}</span>
-                          <span>{label}</span>
+                          <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${iconStyle}`}>{icon}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-semibold">{label}</span>
+                            <span className="mt-0.5 block truncate text-xs text-zinc-500 dark:text-zinc-400">{description}</span>
+                          </span>
                         </button>
                       ))}
                     </div>
-                  </div>
+                    <div className="border-t border-black/10 px-3.5 py-2.5 text-center text-[11px] text-zinc-500 dark:border-white/10 dark:text-zinc-400">
+                      Your account keeps your reading progress in sync.
+                    </div>
+                  </>
                 )}
               </div>
             )}

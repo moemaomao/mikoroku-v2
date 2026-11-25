@@ -171,7 +171,7 @@ html.light {
       color-mix(in srgb, var(--mikoroku-sidebar-gradient-end) 48%, transparent) 100%
     ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(248, 250, 252, 0.84) 100%),
-    url("https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg") !important;
+    url("/assets/Melody.webp") !important;
   background-position: center, center, center !important;
   background-repeat: no-repeat !important;
   background-size: 100% 100%, 100% 100%, cover !important;
@@ -185,7 +185,7 @@ html.dark #siteSidebar {
       color-mix(in srgb, var(--mikoroku-sidebar-gradient-end) 68%, transparent) 100%
     ),
     linear-gradient(180deg, rgba(11, 16, 32, 0.22) 0%, rgba(11, 16, 32, 0.68) 100%),
-    url("https://i.ibb.co/DgLF7wgr/5da90ce5b424.jpg") !important;
+    url("/assets/Melody.webp") !important;
 }
 
 html,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
+import { readCachedMangaMetadataPayload } from "../lib/manga-metadata";
 import styles from "./login.module.css";
 
 type CompatAuth = {
@@ -110,6 +111,25 @@ function normalizeCover(url: string): string {
   return url.startsWith("/") ? url : `/${url}`;
 }
 
+function getLoginCovers(items: readonly Record<string, unknown>[]): LoginCover[] {
+  const seen = new Set<string>();
+  const covers: LoginCover[] = [];
+
+  for (const item of items) {
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    const rawCover =
+      [item.cover, item.img].find(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      ) || "";
+    const cover = normalizeCover(rawCover);
+    if (!title || !cover || seen.has(cover)) continue;
+    seen.add(cover);
+    covers.push({ title, cover });
+  }
+
+  return covers;
+}
+
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -123,34 +143,25 @@ export default function LoginPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let catalogResolved = false;
+
+    void readCachedMangaMetadataPayload()
+      .then((payload) => {
+        if (controller.signal.aborted || catalogResolved || !payload) return;
+        const cachedCovers = getLoginCovers(payload.manga);
+        if (cachedCovers.length) setCovers(shuffle(cachedCovers));
+      })
+      .catch((cacheError: unknown) => {
+        if (!controller.signal.aborted) {
+          console.warn("Could not read cached manga covers for the login page.", cacheError);
+        }
+      });
 
     void loadFirestoreMangaCatalog()
       .then((items) => {
         if (controller.signal.aborted) return;
-        const seen = new Set<string>();
-        const allCovers: LoginCover[] = [];
-
-        for (const item of items) {
-          const record = item;
-
-          const title = typeof record.title === "string" ? record.title.trim() : "";
-          const rawCover =
-            [record.cover, record.img].find(
-              (v): v is string => typeof v === "string" && v.trim().length > 0,
-            ) || "";
-
-          const cover = normalizeCover(rawCover);
-          if (!title || !cover) continue;
-
-          // deduplicate by cover URL
-          if (seen.has(cover)) continue;
-          seen.add(cover);
-
-          allCovers.push({ title, cover });
-        }
-
-        // acak semua, tanpa filter genre
-        setCovers(shuffle(allCovers));
+        catalogResolved = true;
+        setCovers(shuffle(getLoginCovers(items)));
       })
       .catch((loadError: unknown) => {
         if (!controller.signal.aborted) {
@@ -250,7 +261,8 @@ export default function LoginPage() {
                     >
                       <img
                         alt=""
-                        loading="eager"
+                        decoding="async"
+                        loading="lazy"
                         src={cover.cover}
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = "none";
