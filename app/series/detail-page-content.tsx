@@ -1490,7 +1490,7 @@ function SeriesStatisticsBar({
 
   const items = [
     { key: "views", label: "Views", icon: "fa-eye", value: statistics?.views, active: false, disabled: true },
-    { key: "bookmarks", label: bookmarked ? "Bookmarked" : "Bookmark", icon: bookmarked ? "fa-check" : "fa-bookmark", value: statistics?.bookmarks, active: bookmarked, disabled: false },
+    { key: "bookmarks", label: bookmarked ? "Bookmarked" : "Bookmark", icon: bookmarked ? "fa-check" : "fa-bookmark", value: bookmarked ? Math.max(statistics.bookmarks, 1) : statistics.bookmarks, active: bookmarked, disabled: false },
     { key: "notifications", label: notificationsEnabled ? "Notifications on" : "Notify", icon: notificationsEnabled ? "fa-bell" : "fa-bell-slash", value: statistics?.notifications, active: notificationsEnabled, disabled: false },
   ] as const;
 
