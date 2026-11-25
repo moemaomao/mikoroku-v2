@@ -142,6 +142,7 @@ export default function NotFound() {
           </Link>
           <Link
             href="/manga-list"
+            prefetch={false}
             className={`inline-flex items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-semibold no-underline transition hover:border-[var(--mikoroku-accent,#9d1018)] hover:text-[var(--mikoroku-accent,#9d1018)] ${
               isDark
                 ? "border-white/12 bg-white/[0.04] text-zinc-100"

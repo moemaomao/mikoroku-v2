@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { returnToHomepageIfPossible } from "./lib/home-navigation";
 
 export function Icon({ name, className = "h-6 w-6" }: { name: string; className?: string }) {
@@ -48,7 +47,7 @@ export function SidebarLink({ href, icon, children, onClick, external = false }:
   const content = <><Icon name={icon} className="h-5 w-5 shrink-0" />{children}</>;
   return external
     ? <a className={className} href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{content}</a>
-    : <Link className={className} href={href} prefetch={false} onClick={onClick}>{content}</Link>;
+    : <a className={className} href={href} onClick={onClick}>{content}</a>;
 }
 
 export function SiteSidebar({
