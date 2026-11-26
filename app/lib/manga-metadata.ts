@@ -273,7 +273,7 @@ export async function fetchMangaCatalogSourceMode(
     if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const response = await fetch("/api/catalog/source", {
       signal: force ? signal : undefined,
-      cache: "no-store",
+      cache: force ? "no-store" : "default",
     });
     if (response.status === 404 || response.status === 405) return null;
     if (!response.ok) {
