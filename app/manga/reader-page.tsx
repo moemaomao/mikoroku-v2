@@ -1408,6 +1408,22 @@ export default function ReaderPage({
   const [readerNotice, setReaderNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const readerSettingsPanelRef = useRef<HTMLElement | null>(null);
+  const readerSettingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [readerSettingsButtonTop, setReaderSettingsButtonTop] = useState<number | null>(null);
+  const readerSettingsButtonTopRef = useRef<number | null>(null);
+  const readerSettingsButtonDragRef = useRef<{ pointerId: number; startY: number; startTop: number } | null>(null);
+  const readerSettingsButtonDraggedRef = useRef(false);
+  const clampReaderSettingsButtonTop = useCallback((top: number) => {
+    const buttonHeight = readerSettingsButtonRef.current?.offsetHeight ?? 44;
+    const halfButtonHeight = buttonHeight / 2;
+    const viewportMin = halfButtonHeight + 8;
+    const viewportMax = Math.max(viewportMin, window.innerHeight - halfButtonHeight - 8);
+    const headerBottom = document.getElementById("mainHeader")?.offsetHeight ?? 0;
+    const backToTop = document.querySelector<HTMLElement>(".reader-floating-controls button[aria-label='Back to top']");
+    const minTop = Math.min(viewportMax, Math.max(viewportMin, headerBottom + halfButtonHeight + 8));
+    const maxTop = Math.max(minTop, Math.min(viewportMax, (backToTop?.getBoundingClientRect().top ?? window.innerHeight) - halfButtonHeight - 8));
+    return Math.min(maxTop, Math.max(minTop, top));
+  }, []);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [floatingHidden, setFloatingHidden] = useState(false);
   const lastScrollYRef = useRef(0);
@@ -1553,7 +1569,7 @@ export default function ReaderPage({
     const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", syncFullscreen);
     return () => document.removeEventListener("fullscreenchange", syncFullscreen);
-  }, []);
+  }, [clampReaderSettingsButtonTop]);
 
   useEffect(() => {
     const storedSpeed = Number(localStorage.getItem("readerAutoScrollSpeed") || localStorage.getItem("novelAutoScrollSpeed"));
@@ -2004,6 +2020,30 @@ export default function ReaderPage({
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
     };
   }, [settingsOpen]);
+
+  useEffect(() => {
+    const savedTop = localStorage.getItem("readerSettingsButtonTop");
+    if (savedTop !== null) {
+      const parsedTop = Number(savedTop);
+      if (Number.isFinite(parsedTop)) {
+        const top = clampReaderSettingsButtonTop(parsedTop);
+        readerSettingsButtonTopRef.current = top;
+        setReaderSettingsButtonTop(top);
+      }
+    }
+
+    function keepButtonInViewport() {
+      const currentTop = readerSettingsButtonTopRef.current;
+      if (currentTop === null) return;
+      const top = clampReaderSettingsButtonTop(currentTop);
+      readerSettingsButtonTopRef.current = top;
+      setReaderSettingsButtonTop(top);
+      localStorage.setItem("readerSettingsButtonTop", String(top));
+    }
+
+    window.addEventListener("resize", keepButtonInViewport);
+    return () => window.removeEventListener("resize", keepButtonInViewport);
+  }, [clampReaderSettingsButtonTop]);
 
   useEffect(() => {
     if (!data) return;
@@ -2894,12 +2934,60 @@ export default function ReaderPage({
         }} aria-label="Back to top" title="Back to top"><i className="fas fa-arrow-up" aria-hidden="true" /></button>
         <button className="grid size-[38px] place-items-center rounded-xl border border-black/10 bg-white text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 dark:bg-[#191a20] min-[761px]:size-11 min-[761px]:rounded-[14px]" type="button" onClick={() => setReportOpen(true)} aria-label="Report chapter" title="Report chapter"><i className="fas fa-flag" aria-hidden="true" /></button>
       </div>
-      <button className={`fixed right-0 top-1/2 z-[50] grid size-11 -translate-y-1/2 place-items-center rounded-l-xl border border-r-0 border-black/10 text-lg text-[var(--mikoroku-accent)] shadow-lg transition-[opacity,transform,visibility,width] duration-200 hover:w-[52px] dark:border-white/10 ${floatingHidden || settingsOpen ? "invisible translate-x-full opacity-0 pointer-events-none" : "bg-white dark:bg-[#191a20]"}`} type="button" onClick={() => {
-        setSettingsOpen((open) => !open);
-      }} aria-label="Reader settings" aria-expanded={settingsOpen} aria-controls="reader-settings-sidebar" title="Reader settings">
+      <button
+        ref={readerSettingsButtonRef}
+        id="reader-settings-toggle"
+        className={`fixed right-0 z-[50] grid size-11 -translate-y-1/2 touch-none select-none place-items-center rounded-l-xl border border-r-0 border-black/10 text-lg text-[var(--mikoroku-accent)] shadow-lg transition-[opacity,transform,visibility,width] duration-200 hover:w-[52px] active:cursor-grabbing dark:border-white/10 ${floatingHidden || settingsOpen ? "invisible translate-x-full opacity-0 pointer-events-none" : ""} cursor-grab`}
+        style={{ top: readerSettingsButtonTop ?? "50%" }}
+        type="button"
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          readerSettingsButtonDraggedRef.current = false;
+          readerSettingsButtonDragRef.current = {
+            pointerId: event.pointerId,
+            startY: event.clientY,
+            startTop: readerSettingsButtonTopRef.current ?? window.innerHeight / 2,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const drag = readerSettingsButtonDragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          const delta = event.clientY - drag.startY;
+          if (!readerSettingsButtonDraggedRef.current && Math.abs(delta) < 4) return;
+          readerSettingsButtonDraggedRef.current = true;
+          const top = clampReaderSettingsButtonTop(drag.startTop + delta);
+          readerSettingsButtonTopRef.current = top;
+          setReaderSettingsButtonTop(top);
+          event.preventDefault();
+        }}
+        onPointerUp={(event) => {
+          const drag = readerSettingsButtonDragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          if (readerSettingsButtonDraggedRef.current && readerSettingsButtonTopRef.current !== null) {
+            localStorage.setItem("readerSettingsButtonTop", String(readerSettingsButtonTopRef.current));
+          }
+          readerSettingsButtonDragRef.current = null;
+        }}
+        onPointerCancel={() => {
+          readerSettingsButtonDragRef.current = null;
+          readerSettingsButtonDraggedRef.current = false;
+        }}
+        onClick={() => {
+          if (readerSettingsButtonDraggedRef.current) {
+            readerSettingsButtonDraggedRef.current = false;
+            return;
+          }
+          setSettingsOpen((open) => !open);
+        }}
+        aria-label="Reader settings"
+        aria-expanded={settingsOpen}
+        aria-controls="reader-settings-sidebar"
+        title="Drag to reposition; click to open reader settings"
+      >
         <i className="fas fa-sliders" aria-hidden="true" />
       </button>
-      {settingsOpen && <aside ref={readerSettingsPanelRef} id="reader-settings-sidebar" className="reader-settings-panel fixed inset-y-0 right-0 z-[10000] h-dvh max-h-dvh w-[var(--sidebar-width)] max-w-[85vw] overflow-auto rounded-none border-y-0 border-r-0 border-l border-black/10 bg-white p-[18px] pt-[calc(14px+env(safe-area-inset-top))] pb-[calc(18px+env(safe-area-inset-bottom))] text-inherit shadow-2xl dark:border-white/10 dark:bg-[#191a20]" role="dialog" aria-label="Reader settings" aria-modal="true">
+      {settingsOpen && <aside ref={readerSettingsPanelRef} id="reader-settings-sidebar" className="reader-settings-panel fixed inset-y-0 right-0 z-[10000] h-dvh max-h-dvh w-[var(--sidebar-width)] max-w-[85vw] overflow-x-hidden overflow-y-auto rounded-none border-y-0 border-r-0 border-l border-black/10 bg-white p-[18px] pt-[calc(14px+env(safe-area-inset-top))] pb-[calc(18px+env(safe-area-inset-bottom))] text-inherit shadow-2xl dark:border-white/10 dark:bg-[#191a20]" role="dialog" aria-label="Reader settings" aria-modal="true">
         <div className="reader-settings-heading relative mb-0 flex min-h-10 items-center pl-[52px]">
           <button className="absolute left-0 top-[-10px] flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/10 bg-black/[0.04] text-slate-800 transition hover:border-[var(--mikoroku-accent)]/40 hover:bg-[var(--mikoroku-accent-soft)] hover:text-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/[0.06] dark:text-indigo-50 dark:hover:text-[var(--mikoroku-accent)]" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">
             <svg className="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

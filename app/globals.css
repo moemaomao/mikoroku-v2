@@ -639,9 +639,24 @@ body.light #mainFooter p {
 
 .reader-settings-panel {
   border-color: rgba(255, 255, 255, .28) !important;
-  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 96%, transparent) !important;
-  background-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, .68) 100%) !important;
+  background-color: color-mix(in srgb, var(--mikoroku-reader-accent-surface, #631b29) 78%, transparent) !important;
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, .04) 0%, rgba(0, 0, 0, .4) 100%) !important;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   color: var(--mikoroku-reader-accent-foreground, #ffffff) !important;
+  overscroll-behavior-y: contain;
+  scrollbar-color: rgba(255, 255, 255, .42) transparent;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reader-settings-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.reader-settings-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, .42);
 }
 
 .reader-settings-panel,
@@ -717,6 +732,15 @@ body.light #mainFooter p {
 
 .reader-settings-panel .reader-settings-divider {
   background-color: rgba(255, 255, 255, .38) !important;
+}
+
+#reader-settings-toggle,
+#reader-settings-toggle:hover {
+  background-color: rgba(0, 0, 0, .24) !important;
+}
+
+#reader-settings-toggle:hover {
+  background-color: rgba(0, 0, 0, .34) !important;
 }
 
 .reader-bottom-nav {
