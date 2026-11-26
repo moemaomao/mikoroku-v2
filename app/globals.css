@@ -360,17 +360,33 @@ html.light .reader-page .reader-accent-toolbar .reader-accent-header-button:hove
 .leaderboard-loading-skeleton .animate-pulse,
 .series-loading-skeleton .animate-pulse,
 .reader-image-skeleton {
+  background-color: rgb(15 23 42 / 8%) !important;
+}
+
+.dark .stats-loading-skeleton .animate-pulse,
+.dark .leaderboard-loading-skeleton .animate-pulse,
+.dark .series-loading-skeleton .animate-pulse,
+.dark .reader-image-skeleton {
   background-color: rgb(255 255 255 / 8%) !important;
 }
 
 .leaderboard-loading-skeleton section > div,
 .leaderboard-loading-skeleton section > ol > li {
+  background-color: rgb(15 23 42 / 4%) !important;
+}
+
+.dark .leaderboard-loading-skeleton section > div,
+.dark .leaderboard-loading-skeleton section > ol > li {
   background-color: rgb(255 255 255 / 4%) !important;
 }
 
 .homepage-catalog-skeleton {
   position: relative;
   isolation: isolate;
+  background-color: rgb(15 23 42 / 8%) !important;
+}
+
+.dark .homepage-catalog-skeleton {
   background-color: rgb(255 255 255 / 8%) !important;
 }
 
@@ -381,13 +397,22 @@ html.light .reader-page .reader-accent-toolbar .reader-accent-header-button:hove
   background: linear-gradient(
     100deg,
     transparent 20%,
-    rgb(255 255 255 / 12%) 50%,
+    rgb(15 23 42 / 5%) 50%,
     transparent 80%
   );
   background-size: 200% 100%;
   animation: homepage-catalog-shimmer 1.8s ease-in-out infinite;
   content: "";
   pointer-events: none;
+}
+
+.dark .homepage-catalog-skeleton::after {
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(255 255 255 / 12%) 50%,
+    transparent 80%
+  );
 }
 
 @keyframes homepage-catalog-shimmer {

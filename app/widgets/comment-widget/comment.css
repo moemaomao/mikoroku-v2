@@ -766,6 +766,24 @@ html.no-animations .comment.transcendent,
       width: 56%;
     }
 
+    html.light .comment-loading-skeleton-card,
+    body.light .comment-loading-skeleton-card {
+      border-color: rgba(15, 23, 42, 0.1);
+      background: rgba(15, 23, 42, 0.04);
+    }
+
+    html.light .comment-loading-skeleton-avatar,
+    html.light .comment-loading-skeleton-line,
+    body.light .comment-loading-skeleton-avatar,
+    body.light .comment-loading-skeleton-line {
+      background: linear-gradient(
+        90deg,
+        rgba(15, 23, 42, 0.04),
+        rgba(15, 23, 42, 0.12),
+        rgba(15, 23, 42, 0.04)
+      );
+    }
+
     @keyframes comment-skeleton-shimmer {
       to {
         background-position: -200% 0;
