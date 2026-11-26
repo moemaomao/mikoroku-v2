@@ -41,10 +41,7 @@ import {
 import {
   adjustCachedSeriesStatistic,
   getCachedSeriesStatistics,
-  loadSharedSeriesStatistics,
-  mergeSharedSeriesStatistics,
   recordSeriesViewInCache,
-  saveSharedSeriesStatistics,
   syncSeriesStatisticsForVisit,
   type SeriesStatistics,
 } from "../lib/series-statistics";
@@ -1430,34 +1427,16 @@ function SeriesStatisticsBar({
       }
 
       if (requestId !== requestIdRef.current) return;
-      if (cached) applyLoadedStatistics(cached.data, versionsAtLoadStart);
+      if (cached) applyLoadedStatistics(cached, versionsAtLoadStart);
 
       try {
         const viewed = await recordSeriesViewInCache(slug);
         if (requestId !== requestIdRef.current) return;
-        applyLoadedStatistics(viewed.data, versionsAtLoadStart);
+        applyLoadedStatistics(viewed, versionsAtLoadStart);
 
-        if (viewed.stale) {
-          try {
-            const shared = await loadSharedSeriesStatistics(slug);
-            if (requestId !== requestIdRef.current) return;
-            if (shared) {
-              const merged = await mergeSharedSeriesStatistics(shared.data);
-              applyLoadedStatistics(merged, versionsAtLoadStart);
-            }
-          } catch (error) {
-            console.warn(`Shared series statistics could not be loaded for "${slug}".`, error);
-          }
-        }
-
-        const syncResult = await syncSeriesStatisticsForVisit(slug);
+        const updated = await syncSeriesStatisticsForVisit(slug);
         if (requestId !== requestIdRef.current) return;
-        applyLoadedStatistics(syncResult.data, versionsAtLoadStart);
-        if (syncResult.synchronized) {
-          void saveSharedSeriesStatistics(syncResult.data).catch((error: unknown) => {
-            console.warn(`Shared series statistics could not be saved for "${slug}".`, error);
-          });
-        }
+        applyLoadedStatistics(updated, versionsAtLoadStart);
       } catch (error) {
         console.error(`Series statistics could not be synchronized for "${slug}".`, error);
         if (requestId === requestIdRef.current) {

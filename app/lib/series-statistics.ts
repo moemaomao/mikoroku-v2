@@ -36,54 +36,6 @@ export type SeriesStatistics = {
   syncRetryAfter?: number;
 };
 
-export type CachedSeriesStatistics = {
-  data: SeriesStatistics;
-  stale: boolean;
-};
-
-export type SeriesStatisticsSyncResult = {
-  data: SeriesStatistics;
-  synchronized: boolean;
-};
-
-export async function loadSharedSeriesStatistics(
-  slug: string,
-): Promise<CachedSeriesStatistics | null> {
-  const response = await fetch(
-    `/api/series-statistics?slug=${encodeURIComponent(slug)}`,
-    { cache: "default" },
-  );
-  if (response.status === 404 || response.status === 503) return null;
-  if (!response.ok) {
-    throw new Error(`Shared series statistics returned HTTP ${response.status}.`);
-  }
-  const payload: unknown = await response.json();
-  if (!isRecord(payload) || !isSeriesStatistics(payload.data, slug) || typeof payload.stale !== "boolean") {
-    throw new Error("Shared series statistics has an invalid response.");
-  }
-  return { data: payload.data, stale: payload.stale };
-}
-
-export async function saveSharedSeriesStatistics(
-  data: SeriesStatistics,
-): Promise<void> {
-  const response = await fetch("/api/series-statistics", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    cache: "no-store",
-    body: JSON.stringify({
-      slug: data.slug,
-      views: Math.max(0, data.views - (data.pendingViews ?? 0)),
-      bookmarks: data.bookmarks,
-      notifications: data.notifications,
-      syncedAt: data.syncedAt,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Shared series statistics could not be saved (HTTP ${response.status}).`);
-  }
-}
-
 function statisticsFirestore() {
   const app = getApps().find((candidate) =>
     candidate.name === STATISTICS_FIREBASE_APP_NAME,
@@ -140,7 +92,7 @@ function readRequest<T>(request: IDBRequest<T>): Promise<T> {
 
 export async function getCachedSeriesStatistics(
   slug: string,
-): Promise<CachedSeriesStatistics | null> {
+): Promise<SeriesStatistics | null> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, "readonly");
@@ -168,11 +120,7 @@ export async function getCachedSeriesStatistics(
         : value.syncedAt,
       syncRetryAfter: isCount(value.syncRetryAfter) ? value.syncRetryAfter : 0,
     };
-    const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
-    return {
-      data,
-      stale: age < 0 || age >= SERIES_STATISTICS_CACHE_TTL_MS,
-    };
+    return data;
   } finally {
     database.close();
   }
@@ -233,10 +181,10 @@ async function cacheSeriesStatistics(
 
 export async function recordSeriesViewInCache(
   slug: string,
-): Promise<CachedSeriesStatistics> {
+): Promise<SeriesStatistics> {
   const database = await openDatabase();
   try {
-    return await new Promise<CachedSeriesStatistics>((resolve, reject) => {
+    return await new Promise<SeriesStatistics>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readwrite");
       const store = transaction.objectStore(STORE_NAME);
       const request = store.get(slug);
@@ -269,72 +217,10 @@ export async function recordSeriesViewInCache(
       };
       request.onerror = () => reject(request.error || new Error("Could not read the series statistics cache."));
       transaction.oncomplete = () => {
-        const age = Date.now() - (updated.lastSyncAttemptAt ?? updated.syncedAt);
-        resolve({
-          data: updated,
-          stale: age < 0 || age >= SERIES_STATISTICS_CACHE_TTL_MS,
-        });
+        resolve(updated);
       };
       transaction.onerror = () => reject(transaction.error || new Error("Could not record a series view."));
       transaction.onabort = () => reject(transaction.error || new Error("Recording a series view was aborted."));
-    });
-  } finally {
-    database.close();
-  }
-}
-
-export async function mergeSharedSeriesStatistics(
-  snapshot: SeriesStatistics,
-): Promise<SeriesStatistics> {
-  const database = await openDatabase();
-  try {
-    return await new Promise<SeriesStatistics>((resolve, reject) => {
-      const transaction = database.transaction(STORE_NAME, "readwrite");
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(snapshot.slug);
-      let merged: SeriesStatistics = {
-        ...snapshot,
-        pendingViews: 0,
-        localUpdatedAt: 0,
-        lastSyncAttemptAt: snapshot.syncedAt,
-        syncRetryAfter: 0,
-      };
-
-      request.onsuccess = () => {
-        const previous: unknown = request.result;
-        if (isSeriesStatistics(previous, snapshot.slug)) {
-          const pendingViews = isCount(previous.pendingViews) ? previous.pendingViews : 0;
-          const localUpdatedAt = isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0;
-          const localChangesAreNewer = localUpdatedAt > snapshot.syncedAt;
-          const lastSyncAttemptAt = isCount(previous.lastSyncAttemptAt)
-            ? Math.max(previous.lastSyncAttemptAt, snapshot.syncedAt)
-            : snapshot.syncedAt;
-          if (snapshot.syncedAt > previous.syncedAt) {
-            merged = {
-              ...snapshot,
-              views: snapshot.views + pendingViews,
-              bookmarks: localChangesAreNewer ? previous.bookmarks : snapshot.bookmarks,
-              notifications: localChangesAreNewer ? previous.notifications : snapshot.notifications,
-              pendingViews,
-              localUpdatedAt: localChangesAreNewer ? localUpdatedAt : 0,
-              lastSyncAttemptAt,
-              syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
-            };
-          } else {
-            merged = {
-              ...previous,
-              pendingViews,
-              lastSyncAttemptAt,
-              syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
-            };
-          }
-        }
-        store.put(merged);
-      };
-      request.onerror = () => reject(request.error || new Error("Could not read the local series statistics cache."));
-      transaction.oncomplete = () => resolve(merged);
-      transaction.onerror = () => reject(transaction.error || new Error("Could not merge shared series statistics."));
-      transaction.onabort = () => reject(transaction.error || new Error("Merging shared series statistics was aborted."));
     });
   } finally {
     database.close();
@@ -503,9 +389,9 @@ async function loadSeriesStatisticsDocument(
 
 export async function syncSeriesStatisticsForVisit(
   slug: string,
-): Promise<SeriesStatisticsSyncResult> {
+): Promise<SeriesStatistics> {
   const claim = await claimStatisticsSync(slug);
-  if (!claim.shouldSync) return { data: claim.data, synchronized: false };
+  if (!claim.shouldSync) return claim.data;
   const syncStartedAt = claim.data.lastSyncAttemptAt ?? Date.now();
   const pendingViews = claim.data.pendingViews ?? 0;
   try {
@@ -519,10 +405,7 @@ export async function syncSeriesStatisticsForVisit(
       lastSyncAttemptAt: syncStartedAt,
       syncRetryAfter: 0,
     };
-    return {
-      data: await cacheSeriesStatistics(updated, syncStartedAt, pendingViews),
-      synchronized: true,
-    };
+    return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
   } catch (error) {
     const errorCode = error && typeof error === "object" && "code" in error
       ? error.code
@@ -537,10 +420,7 @@ export async function syncSeriesStatisticsForVisit(
     };
     if (errorCode === "permission-denied" || errorCode === "not-found") {
       console.warn(`Series statistics are unavailable for "${slug}"; cached counts will be used.`);
-      return {
-        data: await cacheSeriesStatistics(fallback, syncStartedAt, 0),
-        synchronized: false,
-      };
+      return cacheSeriesStatistics(fallback, syncStartedAt, 0);
     }
     await cacheSeriesStatistics(fallback, syncStartedAt, 0);
     console.error(`Series statistics could not be synchronized for "${slug}".`, error);
