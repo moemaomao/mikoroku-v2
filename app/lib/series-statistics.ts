@@ -51,7 +51,7 @@ export async function loadSharedSeriesStatistics(
 ): Promise<CachedSeriesStatistics | null> {
   const response = await fetch(
     `/api/series-statistics?slug=${encodeURIComponent(slug)}`,
-    { cache: "no-store" },
+    { cache: "default" },
   );
   if (response.status === 404 || response.status === 503) return null;
   if (!response.ok) {

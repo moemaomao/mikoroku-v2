@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       stale: Date.now() - snapshot.syncedAt >= CACHE_FRESH_TTL_MS,
     }, {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": "public, max-age=43200",
         "X-Content-Type-Options": "nosniff",
       },
     });
