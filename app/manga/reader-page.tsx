@@ -401,11 +401,11 @@ function ReaderImage({
   showSkeleton?: boolean;
 }) {
   const imageSrc = src;
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => loadedReaderImageSources.has(imageSrc));
   const [failed, setFailed] = useState(false);
   const [displayState, setDisplayState] = useState(() => ({
     source: imageSrc,
-    src: "",
+    src: imageSrc,
   }));
   const isCurrentSource = displayState.source === imageSrc;
   const sourceWasLoaded = loadedReaderImageSources.has(imageSrc);
@@ -418,54 +418,10 @@ function ReaderImage({
   const currentImageFailed = isCurrentSource && failed;
 
   useEffect(() => {
-    let active = true;
-    let objectUrl = "";
-    if (sourceWasLoaded) {
-      setDisplayState({ source: imageSrc, src: imageSrc });
-      setLoaded(true);
-      setFailed(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    setDisplayState({ source: imageSrc, src: "" });
-    setLoaded(false);
+    setDisplayState({ source: imageSrc, src: imageSrc });
+    setLoaded(loadedReaderImageSources.has(imageSrc));
     setFailed(false);
-
-    if (!("caches" in window)) {
-      setDisplayState({ source: imageSrc, src: imageSrc });
-      return () => {
-        active = false;
-      };
-    }
-
-    void window.caches.open(READER_IMAGE_CACHE_NAME)
-      .then((cache) => cache.match(imageSrc))
-      .then(async (response) => {
-        if (!response) {
-          if (active) setDisplayState({ source: imageSrc, src: imageSrc });
-          return;
-        }
-        const blob = await response.blob();
-        if (blob.size < 100) {
-          if (active) setDisplayState({ source: imageSrc, src: imageSrc });
-          return;
-        }
-        objectUrl = URL.createObjectURL(blob);
-        if (active) setDisplayState({ source: imageSrc, src: objectUrl });
-        else URL.revokeObjectURL(objectUrl);
-      })
-      .catch((cacheError: unknown) => {
-        console.warn("Could not read the cached reader image; loading its URL directly.", cacheError);
-        if (active) setDisplayState({ source: imageSrc, src: imageSrc });
-      });
-
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [imageSrc, sourceWasLoaded]);
+  }, [imageSrc]);
 
   function handleError(event: React.SyntheticEvent<HTMLImageElement>) {
     const image = event.currentTarget;
@@ -488,7 +444,7 @@ function ReaderImage({
 
   return (
     <span
-      className={`reader-image-frame relative block ${showSkeleton ? "min-h-[55vh]" : ""} ${wrapperClassName}`}
+      className={`reader-image-frame relative block ${showSkeleton && !currentImageLoaded && !currentImageFailed ? "min-h-[55vh]" : ""} ${wrapperClassName}`}
       aria-busy={!currentImageLoaded && !currentImageFailed}
     >
       {currentImageFailed ? (
@@ -2676,6 +2632,7 @@ export default function ReaderPage({
                   loading={index < 6 ? "eager" : "lazy"}
                   fetchPriority={index < 3 ? "high" : "auto"}
                   concealNsfw={concealReaderPages}
+                  showSkeleton
                 />
               );
             }) : mode === "single" ? (
@@ -2728,6 +2685,7 @@ export default function ReaderPage({
                             loading="eager"
                             fetchPriority="high"
                             concealNsfw={concealReaderPages}
+                            showSkeleton
                           />
                         )}
                         <span className={`reader-image-nav pointer-events-none absolute ${slotIndex === 0 ? "left-2 sm:left-5" : "right-2 sm:right-5"} top-1/2 grid h-14 w-11 -translate-y-1/2 place-items-center border-0 bg-transparent text-lg text-[var(--mikoroku-accent)] opacity-80 shadow-none transition`} aria-hidden="true">
