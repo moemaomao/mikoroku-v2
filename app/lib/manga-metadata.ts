@@ -22,7 +22,7 @@ const MANGA_METADATA_CACHE_KEY = "active";
 const DEVELOPMENT_MANGA_CATALOG_SOURCE_KEY = "mikoroku_dev_manga_catalog_source";
 const MANGA_CATALOG_SOURCE_STORAGE_KEY = "mikoroku_manga_catalog_source_mode";
 const MANGA_METADATA_REVALIDATE_AFTER = 10 * 60 * 1000;
-const MANGA_CATALOG_SOURCE_CACHE_TTL = 5 * 60 * 1000;
+const MANGA_CATALOG_SOURCE_CACHE_TTL = 10 * 60 * 1000;
 type MangaCatalogSourceMode = "effective" | "baseline";
 
 type CachedMangaMetadataPayload = {
