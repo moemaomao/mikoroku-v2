@@ -34,6 +34,7 @@ import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
 
 type ReaderKind = "manga" | "novel";
 type ReaderMode = "long-strip" | "single" | "double";
+type MangaImageFit = "fit_width" | "fit_height" | "fit_screen";
 type ReadingDirection = "ltr" | "rtl";
 type NovelPattern = "vine-scroll" | "lotus-vines" | "kawung-blossom" | "fantasy-flora" | "megamendung-rose" | "garden-flowers";
 type NovelPatternColor = "white" | "rose" | "purple" | "gold" | "cyan";
@@ -1365,6 +1366,7 @@ export default function ReaderPage({
   const [page, setPage] = useState(1);
   const pageChapterKeyRef = useRef("");
   const [mode, setMode] = useState<ReaderMode>("long-strip");
+  const [imageFit, setImageFit] = useState<MangaImageFit>("fit_width");
   const [readingDirection, setReadingDirection] = useState<ReadingDirection>("ltr");
   const [fontSize, setFontSize] = useState(18);
   const [fontFamily, setFontFamily] = useState("Georgia, serif");
@@ -1405,6 +1407,7 @@ export default function ReaderPage({
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [readerNotice, setReaderNotice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const readerSettingsPanelRef = useRef<HTMLElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [floatingHidden, setFloatingHidden] = useState(false);
   const lastScrollYRef = useRef(0);
@@ -1553,10 +1556,16 @@ export default function ReaderPage({
   }, []);
 
   useEffect(() => {
+    const storedSpeed = Number(localStorage.getItem("readerAutoScrollSpeed") || localStorage.getItem("novelAutoScrollSpeed"));
+    if (storedSpeed >= 10 && storedSpeed <= 100) setAutoScrollSpeed(storedSpeed);
     if (activeKind === "manga") {
       const storedMode = localStorage.getItem("readerMode");
+      const storedImageFit = localStorage.getItem("mangaImageFit");
       setMode(storedMode === "page" ? "single" : storedMode === "double" ? "double" : "long-strip");
       setReadingDirection(localStorage.getItem("readerReadingDirection") === "rtl" ? "rtl" : "ltr");
+      if (storedImageFit === "fit_width" || storedImageFit === "fit_height" || storedImageFit === "fit_screen") {
+        setImageFit(storedImageFit);
+      }
       return;
     }
     const storedFontSize = Number(localStorage.getItem("novelFontSize"));
@@ -1566,8 +1575,6 @@ export default function ReaderPage({
     if (storedColumn === "narrow" || storedColumn === "medium" || storedColumn === "wide") {
       setColumnWidth(storedColumn);
     }
-    const storedSpeed = Number(localStorage.getItem("novelAutoScrollSpeed"));
-    if (storedSpeed >= 10 && storedSpeed <= 100) setAutoScrollSpeed(storedSpeed);
   }, [activeKind]);
 
   useEffect(() => {
@@ -1977,13 +1984,25 @@ export default function ReaderPage({
 
   useEffect(() => {
     if (!settingsOpen) return;
+    document.documentElement.dataset.readerSettingsOpen = "true";
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setSettingsOpen(false);
       }
     }
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const panel = readerSettingsPanelRef.current;
+      if (panel && event.target instanceof Node && !panel.contains(event.target)) {
+        setSettingsOpen(false);
+      }
+    }
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      delete document.documentElement.dataset.readerSettingsOpen;
+      window.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
   }, [settingsOpen]);
 
   useEffect(() => {
@@ -2239,17 +2258,64 @@ export default function ReaderPage({
   }, [activeReaderData, data, hasInfiniteContent, slug]);
 
   useEffect(() => {
-    if (!autoScrolling || kind !== "novel") return;
-    const timer = window.setInterval(() => {
-      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-      if (atBottom) {
+    if (!autoScrolling) return;
+    if (kind === "novel") {
+      const timer = window.setInterval(() => {
+        const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+        if (atBottom) {
+          setAutoScrolling(false);
+          return;
+        }
+        window.scrollBy(0, 1);
+      }, 101 - autoScrollSpeed);
+      return () => window.clearInterval(timer);
+    }
+
+    if (!data || data.kind !== "manga") return;
+    if (mode !== "long-strip") {
+      const timer = window.setInterval(() => {
+        const currentPage = pageRef.current;
+        const nextPage = mode === "double" ? (currentPage === 1 ? 2 : currentPage + 2) : currentPage + 1;
+        if (nextPage > data.images.length) {
+          setAutoScrolling(false);
+          return;
+        }
+        setPage(nextPage);
+      }, Math.max(750, (101 - autoScrollSpeed) * 100));
+      return () => window.clearInterval(timer);
+    }
+
+    const readerRoot = document.querySelector<HTMLElement>(".reader-page");
+    const scrollContainer = readerRoot && document.fullscreenElement === readerRoot ? readerRoot : null;
+    let previousTimestamp = 0;
+    let accumulatedScrollPosition = scrollContainer ? scrollContainer.scrollTop : window.scrollY;
+    let animationFrame = 0;
+    const scroll = (timestamp: number) => {
+      if (!previousTimestamp) previousTimestamp = timestamp;
+      const elapsed = Math.min(timestamp - previousTimestamp, 100);
+      previousTimestamp = timestamp;
+      const scrollPosition = scrollContainer ? scrollContainer.scrollTop : window.scrollY;
+      const maxScroll = scrollContainer
+        ? scrollContainer.scrollHeight - scrollContainer.clientHeight
+        : document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollPosition >= maxScroll - 1) {
         setAutoScrolling(false);
         return;
       }
-      window.scrollBy(0, 1);
-    }, 101 - autoScrollSpeed);
-    return () => window.clearInterval(timer);
-  }, [autoScrollSpeed, autoScrolling, kind]);
+      if (Math.abs(scrollPosition - accumulatedScrollPosition) > 2) {
+        accumulatedScrollPosition = scrollPosition;
+      }
+      accumulatedScrollPosition = Math.min(
+        maxScroll,
+        accumulatedScrollPosition + (autoScrollSpeed * elapsed) / 1000,
+      );
+      if (scrollContainer) scrollContainer.scrollTop = accumulatedScrollPosition;
+      else window.scrollTo(window.scrollX, accumulatedScrollPosition);
+      animationFrame = window.requestAnimationFrame(scroll);
+    };
+    animationFrame = window.requestAnimationFrame(scroll);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [autoScrollSpeed, autoScrolling, data, isFullscreen, kind, mode]);
 
   useEffect(() => () => {
     window.speechSynthesis?.cancel();
@@ -2272,7 +2338,13 @@ export default function ReaderPage({
 
   function updateAutoScrollSpeed(value: number) {
     setAutoScrollSpeed(value);
+    localStorage.setItem("readerAutoScrollSpeed", String(value));
     localStorage.setItem("novelAutoScrollSpeed", String(value));
+  }
+
+  function updateImageFit(value: MangaImageFit) {
+    setImageFit(value);
+    localStorage.setItem("mangaImageFit", value);
   }
 
   function toggleSpeech() {
@@ -2622,10 +2694,20 @@ export default function ReaderPage({
           <section className={`reader-images ${mode} mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6 shadow-[0_0_0_1px_rgba(128,128,140,.08)] ${mode !== "long-strip" ? "grid min-h-[calc(100vh-190px)] content-center p-2 sm:p-[18px]" : ""}`} data-reader-chapter={data.chapter}>
             {mode === "long-strip" ? data.images.map((image, index) => {
               const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
+              const imageClassName = imageFit === "fit_width"
+                ? "block h-auto w-full"
+                : imageFit === "fit_height"
+                  ? "mx-auto block h-[calc(100dvh_-_140px)] w-auto max-w-full object-contain"
+                  : "block h-auto w-full max-w-none";
+              const imageWrapperClassName = imageFit === "fit_height"
+                ? "grid w-full place-items-center"
+                : imageFit === "fit_screen"
+                  ? "relative left-1/2 w-screen max-w-none -translate-x-1/2"
+                  : "w-full";
               return (
                 <ReaderImage
-                  className="block h-auto w-full"
-                  wrapperClassName="w-full"
+                  className={imageClassName}
+                  wrapperClassName={imageWrapperClassName}
                   key={`${src}:${index}`}
                   src={src}
                   alt={`Page ${index + 1}`}
@@ -2637,9 +2719,13 @@ export default function ReaderPage({
               );
             }) : mode === "single" ? (
               <>
-                <div className="reader-single-page-frame relative grid w-full justify-items-center">
+                <div className={`reader-single-page-frame relative grid ${imageFit === "fit_screen" ? "reader-single-page-fullscreen" : "w-full"} justify-items-center`}>
                   <ReaderImage
-                    className="w-full max-w-full object-contain [max-height:calc(100vh-250px)]"
+                    className={imageFit === "fit_width"
+                      ? "h-auto w-full max-w-full object-contain"
+                      : imageFit === "fit_height"
+                        ? "h-[calc(100dvh_-_250px)] w-auto max-w-full object-contain"
+                        : "h-auto w-full max-w-full object-contain"}
                     wrapperClassName="grid w-full justify-items-center"
                     src={readerPageImageUrl(data.images[page - 1], dataSaver, imageQuality, mangaNsfw, showNsfw)}
                     alt={`Page ${page}`}
@@ -2659,7 +2745,7 @@ export default function ReaderPage({
               </>
             ) : (
               <>
-                <div className="reader-double-page-frame relative grid w-full grid-cols-2 items-center gap-0">
+                <div className={`reader-double-page-frame relative grid ${imageFit === "fit_screen" ? "reader-double-page-fullscreen" : "w-full"} grid-cols-2 items-center gap-0`}>
                   {doublePageSlots.map((imageIndex, slotIndex) => {
                     const isNextSide = slotIndex === (nextPageOnLeft ? 0 : 1);
                     const disabled = isNextSide ? !hasNextPage : !hasPreviousPage;
@@ -2678,7 +2764,11 @@ export default function ReaderPage({
                           <span className="min-h-[30vh] w-full" aria-hidden="true" />
                         ) : (
                           <ReaderImage
-                            className="block h-auto max-h-[calc(100dvh-190px)] w-full max-w-full object-contain"
+                            className={imageFit === "fit_width"
+                              ? "block h-auto w-full max-w-full object-contain"
+                              : imageFit === "fit_height"
+                                ? "block h-[calc(100dvh_-_190px)] w-auto max-w-full object-contain"
+                                : "block h-auto w-full max-w-full object-contain"}
                             wrapperClassName="grid min-h-[30vh] min-w-0 w-full place-items-center"
                             src={readerPageImageUrl(data.images[imageIndex], dataSaver, imageQuality, mangaNsfw, showNsfw)}
                             alt={`Page ${imageIndex + 1}`}
@@ -2802,38 +2892,54 @@ export default function ReaderPage({
           if (reader && document.fullscreenElement === reader) reader.scrollTo({ top: 0, behavior: "smooth" });
           else window.scrollTo({ top: 0, behavior: "smooth" });
         }} aria-label="Back to top" title="Back to top"><i className="fas fa-arrow-up" aria-hidden="true" /></button>
-        <button className={`grid size-[38px] place-items-center rounded-xl border border-black/10 text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 min-[761px]:size-11 min-[761px]:rounded-[14px] ${settingsOpen ? "bg-[var(--mikoroku-accent-soft)]" : "bg-white dark:bg-[#191a20]"}`} type="button" onClick={() => {
-          setSettingsOpen((open) => !open);
-        }} aria-label="Reader settings" aria-expanded={settingsOpen} title="Reader settings">
-          <i className="fas fa-sliders" aria-hidden="true" />
-        </button>
         <button className="grid size-[38px] place-items-center rounded-xl border border-black/10 bg-white text-[var(--mikoroku-accent)] shadow-md transition hover:-translate-y-0.5 hover:bg-[var(--mikoroku-accent-soft)] dark:border-white/10 dark:bg-[#191a20] min-[761px]:size-11 min-[761px]:rounded-[14px]" type="button" onClick={() => setReportOpen(true)} aria-label="Report chapter" title="Report chapter"><i className="fas fa-flag" aria-hidden="true" /></button>
       </div>
-      {settingsOpen && <div className="reader-settings-backdrop fixed inset-0 z-40 flex items-end justify-center p-3 min-[761px]:justify-end min-[761px]:p-[18px_76px_18px_18px]" onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          setSettingsOpen(false);
-        }
-      }}>
-      <div className="reader-settings-panel pointer-events-auto max-h-[min(76vh,640px)] w-full max-w-[480px] overflow-auto rounded-[18px] border border-black/10 bg-white p-[18px] text-inherit shadow-2xl min-[761px]:max-h-[min(78vh,680px)] min-[761px]:max-w-[360px] min-[761px]:rounded-[20px] dark:border-white/10 dark:bg-[#191a20]" role="dialog" aria-label="Reader settings" aria-modal="true">
-        <div className="reader-settings-heading mb-3.5 flex items-start justify-between">
+      <button className={`fixed right-0 top-1/2 z-[50] grid size-11 -translate-y-1/2 place-items-center rounded-l-xl border border-r-0 border-black/10 text-lg text-[var(--mikoroku-accent)] shadow-lg transition-[opacity,transform,visibility,width] duration-200 hover:w-[52px] dark:border-white/10 ${floatingHidden || settingsOpen ? "invisible translate-x-full opacity-0 pointer-events-none" : "bg-white dark:bg-[#191a20]"}`} type="button" onClick={() => {
+        setSettingsOpen((open) => !open);
+      }} aria-label="Reader settings" aria-expanded={settingsOpen} aria-controls="reader-settings-sidebar" title="Reader settings">
+        <i className="fas fa-sliders" aria-hidden="true" />
+      </button>
+      {settingsOpen && <aside ref={readerSettingsPanelRef} id="reader-settings-sidebar" className="reader-settings-panel fixed inset-y-0 right-0 z-[10000] h-dvh max-h-dvh w-[var(--sidebar-width)] max-w-[85vw] overflow-auto rounded-none border-y-0 border-r-0 border-l border-black/10 bg-white p-[18px] pt-[calc(14px+env(safe-area-inset-top))] pb-[calc(18px+env(safe-area-inset-bottom))] text-inherit shadow-2xl dark:border-white/10 dark:bg-[#191a20]" role="dialog" aria-label="Reader settings" aria-modal="true">
+        <div className="reader-settings-heading relative mb-0 flex min-h-10 items-center pl-[52px]">
+          <button className="absolute left-0 top-[-10px] flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/10 bg-black/[0.04] text-slate-800 transition hover:border-[var(--mikoroku-accent)]/40 hover:bg-[var(--mikoroku-accent-soft)] hover:text-[var(--mikoroku-accent)] dark:border-white/15 dark:bg-white/[0.06] dark:text-indigo-50 dark:hover:text-[var(--mikoroku-accent)]" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">
+            <svg className="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m18 6-12 12M6 6l12 12" />
+            </svg>
+          </button>
           <div className="grid gap-[3px]"><span className="text-[10px] font-extrabold tracking-[.12em] text-[var(--mikoroku-accent)]">READER</span><strong className="text-[17px]">Reading settings</strong></div>
-          <button className="size-[34px] rounded-[10px] bg-black/5 text-[22px] dark:bg-white/10" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
         </div>
+        <div aria-hidden="true" className="mb-3.5 -mx-[18px] h-px" style={{ backgroundColor: "var(--mikoroku-accent-border, color-mix(in srgb, var(--mikoroku-accent, #9d1018) 40%, transparent))" }} />
         <label className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
           <span className="grid gap-[3px]"><strong className="text-[13px]">Infinite read</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Automatically continue with the next chapter</small></span>
-          <input className="size-[18px] accent-[var(--mikoroku-accent)]" type="checkbox" checked={infiniteRead} onChange={toggleInfiniteRead} />
+          <span className="relative inline-flex h-5 w-9 shrink-0 items-center">
+            <input className="peer sr-only" type="checkbox" role="switch" checked={infiniteRead} onChange={toggleInfiniteRead} />
+            <span aria-hidden="true" className="absolute inset-0 rounded-full bg-white/20 transition-colors peer-checked:bg-cyan-400" />
+            <span aria-hidden="true" className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </span>
         </label>
         {activeKind === "manga" ? <>
+          <label className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
+            <span className="grid gap-[3px]"><strong className="text-[13px]">Data saver</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Reduce image quality</small></span>
+            <span className="relative inline-flex h-5 w-9 shrink-0 items-center">
+              <input className="peer sr-only" type="checkbox" role="switch" checked={dataSaver} onChange={toggleDataSaver} />
+              <span aria-hidden="true" className="absolute inset-0 rounded-full bg-white/20 transition-colors peer-checked:bg-cyan-400" />
+              <span aria-hidden="true" className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+            </span>
+          </label>
+          {dataSaver && <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
+            <span className="grid gap-[3px]"><strong className="text-[13px]">Image quality</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{imageQuality}px</small></span>
+            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="600" max="2000" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
+          </label>}
           <div className="reader-setting-block w-full border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <div className="grid gap-[3px]"><strong className="text-[13px]">Reading mode</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose how pages are displayed</small></div>
-            <div className="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Reading mode">
+            <div className="reader-setting-segmented mt-2 grid grid-cols-3" role="group" aria-label="Reading mode">
               {([
                 ["long-strip", "Long strip"],
                 ["single", "Page by page"],
                 ["double", "Double page"],
               ] as const).map(([layout, label]) => (
                 <button
-                  className={`reader-setting-option min-h-[36px] rounded-lg border px-1 text-[10px] font-bold sm:text-[11px] ${mode === layout ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                  className={`reader-setting-option reader-setting-segmented-option relative flex min-h-[36px] min-w-0 items-center justify-center px-1 text-[10px] font-bold sm:text-[11px] ${mode === layout ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
                   type="button"
                   key={layout}
                   aria-pressed={mode === layout}
@@ -2849,9 +2955,9 @@ export default function ReaderPage({
           </div>
           {mode !== "long-strip" && <div className="reader-setting-block w-full border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <div className="grid gap-[3px]"><strong className="text-[13px]">Reading direction</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose the page-turn direction</small></div>
-            <div className="mt-2 grid grid-cols-2 gap-1" role="group" aria-label="Reading direction">
+            <div className="reader-setting-segmented mt-2 grid grid-cols-2" role="group" aria-label="Reading direction">
               <button
-                className={`reader-setting-option grid min-h-[48px] content-center rounded-lg border px-2 text-left ${readingDirection === "ltr" ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                className={`reader-setting-option reader-setting-segmented-option relative grid min-h-[48px] content-center px-2 text-left ${readingDirection === "ltr" ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
                 type="button"
                 aria-pressed={readingDirection === "ltr"}
                 onClick={() => changeReadingDirection("ltr")}
@@ -2860,7 +2966,7 @@ export default function ReaderPage({
                 <small className="text-[10px] opacity-70">Tap right to go on</small>
               </button>
               <button
-                className={`reader-setting-option grid min-h-[48px] content-center rounded-lg border px-2 text-left ${readingDirection === "rtl" ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                className={`reader-setting-option reader-setting-segmented-option relative grid min-h-[48px] content-center px-2 text-left ${readingDirection === "rtl" ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
                 type="button"
                 aria-pressed={readingDirection === "rtl"}
                 onClick={() => changeReadingDirection("rtl")}
@@ -2870,20 +2976,41 @@ export default function ReaderPage({
               </button>
             </div>
           </div>}
+          <div className="reader-setting-block w-full border-b border-black/10 py-2.5 text-left dark:border-white/10">
+            <div className="grid gap-[3px]"><strong className="text-[13px]">Image fit</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Choose how manga pages fit the screen</small></div>
+            <div className="reader-setting-segmented mt-2 grid grid-cols-3" role="group" aria-label="Image fit">
+              {([
+                ["fit_width", "Fit width"],
+                ["fit_height", "Fit height"],
+                ["fit_screen", "Fit screen"],
+              ] as const).map(([fit, label]) => (
+                <button
+                  className={`reader-setting-option reader-setting-segmented-option relative flex min-h-[36px] min-w-0 items-center justify-center px-1 text-[9px] font-bold sm:text-[10px] ${imageFit === fit ? "border-[var(--mikoroku-accent-border)] bg-[var(--mikoroku-accent-soft)] text-[var(--mikoroku-accent)]" : "border-black/10 bg-black/[.03] text-inherit dark:border-white/10 dark:bg-white/[.04]"}`}
+                  type="button"
+                  key={fit}
+                  aria-pressed={imageFit === fit}
+                  onClick={() => updateImageFit(fit)}
+                >
+                  {imageFit === fit && <i className="fas fa-check mr-1 text-[9px]" aria-hidden="true" />}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 py-2.5 text-left hover:text-[var(--mikoroku-accent)]" onClick={() => setAutoScrolling((active) => !active)}>
+            <div className="grid gap-[3px]"><strong className="text-[13px]">{autoScrolling ? "Stop auto-scroll" : "Start auto-scroll"}</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{mode === "long-strip" ? "Scroll down automatically" : "Advance to the next page automatically"}</small></div>
+            <i className={`fas ${autoScrolling ? "fa-pause" : "fa-play"}`} aria-hidden="true" />
+          </button>
+          <label className="reader-setting-block grid w-full gap-2 border-b border-black/10 py-2.5 text-left dark:border-white/10">
+            <span className="flex items-center justify-between gap-3"><strong className="text-[13px]">Auto-scroll speed</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{autoScrollSpeed}</small></span>
+            <input className="w-full accent-[var(--mikoroku-accent)]" type="range" min="10" max="100" value={autoScrollSpeed} onChange={(event) => updateAutoScrollSpeed(Number(event.target.value))} />
+          </label>
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="grid gap-[3px]"><strong className="text-[13px]">Go to page</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{activeReaderData ? `${page} of ${activeImageCount}` : "Loading pages"}</small></span>
             <select className="min-h-9 max-w-[150px] rounded-lg border border-black/15 bg-white px-2.5 text-xs dark:border-white/15 dark:bg-[#191a20]" aria-label="Select page" value={page} disabled={!activeReaderData || activeImageCount === 0} onChange={(event) => goToPage(Number(event.target.value))}>
               {activeReaderData?.images.map((_, index) => <option key={index + 1} value={index + 1}>Page {index + 1}</option>)}
             </select>
           </label>
-          <label className="reader-setting-row flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
-            <div className="grid gap-[3px]"><strong className="text-[13px]">Data saver</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Reduce image quality</small></div>
-            <input className="size-[18px] accent-[var(--mikoroku-accent)]" type="checkbox" checked={dataSaver} onChange={toggleDataSaver} />
-          </label>
-          {dataSaver && <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
-            <span className="grid gap-[3px]"><strong className="text-[13px]">Image quality</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{imageQuality}px</small></span>
-            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="600" max="2000" step="100" value={imageQuality} onChange={(event) => updateImageQuality(Number(event.target.value))} />
-          </label>}
         </> : <>
           <section className="reader-setting-block border-b border-black/10 py-2.5 text-left dark:border-white/10" aria-label="Novel background settings">
             <div className="mb-2">
@@ -2989,9 +3116,9 @@ export default function ReaderPage({
               </div>
             </div>
           </section>
-          <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
-            <span className="grid gap-[3px]"><strong className="text-[13px]">Font size</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{fontSize}px</small></span>
-            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="14" max="28" value={fontSize} onChange={(event) => updateFontSize(Number(event.target.value))} />
+          <label className="reader-setting-block grid w-full gap-2 py-2.5 text-left">
+            <span className="flex items-center justify-between gap-3"><strong className="text-[13px]">Font size</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{fontSize}px</small></span>
+            <input className="w-full accent-[var(--mikoroku-accent)]" type="range" min="14" max="28" value={fontSize} onChange={(event) => updateFontSize(Number(event.target.value))} />
           </label>
           <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
             <span className="text-[13px] font-semibold">Font family</span>
@@ -3015,29 +3142,38 @@ export default function ReaderPage({
               <option value="wide">Wide</option>
             </select>
           </label>
-          <label className="reader-setting-block flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left dark:border-white/10">
-            <span className="grid gap-[3px]"><strong className="text-[13px]">Auto-scroll speed</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{autoScrollSpeed}</small></span>
-            <input className="w-[138px] accent-[var(--mikoroku-accent)]" type="range" min="10" max="100" value={autoScrollSpeed} onChange={(event) => updateAutoScrollSpeed(Number(event.target.value))} />
-          </label>
-          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left hover:text-[var(--mikoroku-accent)] dark:border-white/10" onClick={() => setAutoScrolling((active) => !active)}>
+          <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 py-2.5 text-left hover:text-[var(--mikoroku-accent)]" onClick={() => setAutoScrolling((active) => !active)}>
             <div className="grid gap-[3px]"><strong className="text-[13px]">{autoScrolling ? "Stop auto-scroll" : "Start auto-scroll"}</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Scroll through the text automatically</small></div>
             <i className={`fas ${autoScrolling ? "fa-pause" : "fa-play"}`} aria-hidden="true" />
           </button>
+          <label className="reader-setting-block grid w-full gap-2 border-b border-black/10 py-2.5 text-left dark:border-white/10">
+            <span className="flex items-center justify-between gap-3"><strong className="text-[13px]">Auto-scroll speed</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">{autoScrollSpeed}</small></span>
+            <input className="w-full accent-[var(--mikoroku-accent)]" type="range" min="10" max="100" value={autoScrollSpeed} onChange={(event) => updateAutoScrollSpeed(Number(event.target.value))} />
+          </label>
           <button type="button" className="reader-setting-row reader-setting-button flex min-h-[54px] w-full items-center justify-between gap-3.5 border-b border-black/10 py-2.5 text-left hover:text-[var(--mikoroku-accent)] dark:border-white/10" onClick={toggleSpeech}>
             <div className="grid gap-[3px]"><strong className="text-[13px]">{speaking ? "Stop text-to-speech" : "Text-to-speech"}</strong><small className="text-[11px] text-[#83858f] dark:text-[#a6a8b1]">Listen to the chapter</small></div>
             <i className={`fas ${speaking ? "fa-stop" : "fa-volume-high"}`} aria-hidden="true" />
           </button>
         </>}
-      </div>
-      </div>}
+      </aside>}
       {infiniteChapters.map((nextData) => nextData.kind === "manga" ? (
         <section key={nextData.chapter} className="reader-images long-strip mx-auto min-h-[40vh] w-full max-w-[1000px] bg-transparent py-3.5 pb-6" data-reader-chapter={nextData.chapter}>
           <h2 className="mx-3 mb-3 rounded-xl border border-black/10 bg-white/80 px-4 py-3 text-center text-sm font-bold dark:border-white/10 dark:bg-[#191a20]/80">{nextData.chapterTitle}</h2>
           {nextData.images.map((image, index) => {
             const src = readerPageImageUrl(image, dataSaver, imageQuality, mangaNsfw, showNsfw);
+            const imageClassName = imageFit === "fit_width"
+              ? "block h-auto w-full"
+              : imageFit === "fit_height"
+                ? "mx-auto block h-[calc(100dvh_-_140px)] w-auto max-w-full object-contain"
+                : "block h-auto w-full max-w-none";
+            const imageWrapperClassName = imageFit === "fit_height"
+              ? "grid w-full place-items-center"
+              : imageFit === "fit_screen"
+                ? "relative left-1/2 w-screen max-w-none -translate-x-1/2"
+                : "w-full";
             return <ReaderImage
-              className="block h-auto w-full"
-              wrapperClassName="w-full"
+              className={imageClassName}
+              wrapperClassName={imageWrapperClassName}
               key={`${src}:${index}`}
               src={src}
               alt={`${nextData.chapterTitle}, page ${index + 1}`}

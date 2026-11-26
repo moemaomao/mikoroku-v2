@@ -885,7 +885,7 @@ function HeaderContents() {
   const desktopActionClass =
     `${classButton} min-[769px]:w-auto min-[769px]:gap-2 min-[769px]:border min-[769px]:px-2.5 min-[769px]:text-xs min-[769px]:font-medium`;
   const mainHeaderClass = [
-    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-200 bg-transparent px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-transform duration-300 sm:px-5 dark:border-zinc-700 dark:bg-transparent dark:text-white",
+    "fixed inset-x-0 top-0 z-[9999] flex h-14 items-center justify-between border-b border-zinc-200 bg-transparent px-2 py-2 text-zinc-900 shadow-sm backdrop-blur-sm transition-[transform,padding-right] duration-300 sm:px-5 dark:border-zinc-700 dark:bg-transparent dark:text-white",
     !mobile && sidebarOpen ? "min-[769px]:!pl-[calc(var(--sidebar-width)+1.25rem)]" : "",
     headerHidden ? "-translate-y-full" : "translate-y-0",
   ].join(" ");
