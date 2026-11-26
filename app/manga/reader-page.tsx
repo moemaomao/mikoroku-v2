@@ -24,6 +24,10 @@ import {
   readCachedReaderData,
   writeCachedReaderData,
 } from "../lib/reader-data-cache";
+import {
+  fetchBloggerFeed,
+  type BloggerFeedEntry,
+} from "../lib/blogger-feed-client";
 import { updateCachedReaderStats } from "../lib/reading-stats-cache";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
 import { isNsfwManga, useNsfwVisibility } from "../lib/nsfw";
@@ -84,8 +88,8 @@ function getReaderStatsInput(data: ReaderData, slug: string, progress: number): 
 }
 
 const bloggerChapterSources = [
-  { source: "blogger", domain: "https://www.mikodrive.my.id" },
-  { source: "blogger2", domain: "https://www.yomidays.my.id" },
+  { source: "blogger" },
+  { source: "blogger2" },
 ] as const;
 const mangaReportTypes = [
   { value: "Chapter Tidak Muncul", label: "Chapter Not Showing" },
@@ -627,48 +631,6 @@ function getCachedReaderData(
   };
 }
 
-type BloggerFeedEntry = {
-  title?: { $t?: string };
-  link?: Array<{ rel?: string; href?: string }>;
-  content?: { $t?: string };
-};
-
-function getJsonp<T>(url: string, signal: AbortSignal): Promise<T> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("Chapter request was superseded.", "AbortError"));
-      return;
-    }
-
-    const callbackName = `mikorokuReaderJsonp${Date.now()}${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement("script");
-    const globalWindow = window as typeof window & Record<string, unknown>;
-    let settled = false;
-    const finish = (error?: Error, data?: T) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      signal.removeEventListener("abort", onAbort);
-      script.remove();
-      delete globalWindow[callbackName];
-      if (error) reject(error);
-      else resolve(data as T);
-    };
-    const onAbort = () => finish(new DOMException("Chapter request was superseded.", "AbortError"));
-    const timeout = window.setTimeout(
-      () => finish(new Error("Timed out while loading the chapter from Blogger.")),
-      15000,
-    );
-    globalWindow[callbackName] = (data: T) => finish(undefined, data);
-    script.onerror = () => finish(new Error("Failed to load the chapter from Blogger."));
-    signal.addEventListener("abort", onAbort, { once: true });
-    const feedUrl = new URL(url);
-    feedUrl.searchParams.set("callback", callbackName);
-    script.src = feedUrl.href;
-    document.head.appendChild(script);
-  });
-}
-
 function normalizePostUrl(value: string): string {
   try {
     const url = new URL(value);
@@ -759,6 +721,7 @@ async function loadBloggerChapterFromFeeds(
   preferredSource: "blogger" | "blogger2" | undefined,
   signal: AbortSignal,
 ): Promise<ChapterRecord | null> {
+  if (signal.aborted) throw new DOMException("Chapter request was superseded.", "AbortError");
   const sources = preferredSource
     ? [
         ...bloggerChapterSources.filter((item) => item.source === preferredSource),
@@ -767,12 +730,16 @@ async function loadBloggerChapterFromFeeds(
     : bloggerChapterSources;
   const seriesKeys = [normalizedSearchKey(seriesTitle), normalizedSearchKey(slug)]
     .filter((key) => key.length >= 5);
-  const settled = await Promise.allSettled(sources.map(async ({ source, domain }) => {
-    const feedUrl = new URL("/feeds/posts/default", domain);
-    feedUrl.searchParams.set("alt", "json-in-script");
-    feedUrl.searchParams.set("max-results", "500");
-    feedUrl.searchParams.set("q", seriesTitle || slug.replace(/-/g, " "));
-    const feed = await getJsonp<{ feed?: { entry?: BloggerFeedEntry[] } }>(feedUrl.href, signal);
+  const findChapterOnSource = async (
+    { source }: typeof bloggerChapterSources[number],
+    requestSignal = signal,
+  ) => {
+    const feed = await fetchBloggerFeed(
+      source,
+      seriesTitle || slug.replace(/-/g, " "),
+      requestSignal,
+      { maxResults: 500 },
+    );
     return (feed.feed?.entry || []).flatMap((entry) => {
       const postTitle = entry.title?.$t?.trim() || "";
       const postKey = normalizedSearchKey(postTitle);
@@ -791,13 +758,49 @@ async function loadBloggerChapterFromFeeds(
         source,
       }];
     });
-  }));
-  for (const [index, result] of settled.entries()) {
-    if (result.status === "rejected" && !signal.aborted) {
-      console.warn(`Blogger ${sources[index].source} lookup failed for ${slug} chapter ${chapter}.`, result.reason);
+  };
+  if (preferredSource) {
+    for (const source of sources) {
+      try {
+        const [match] = await findChapterOnSource(source);
+        if (match) return match;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        console.warn(`Blogger ${source.source} lookup failed for ${slug} chapter ${chapter}.`, error);
+      }
     }
+    return null;
   }
-  return settled.flatMap((result) => result.status === "fulfilled" ? result.value : [])[0] || null;
+
+  const controllers = sources.map(() => new AbortController());
+  const abortSearches = () => controllers.forEach((controller) => controller.abort());
+  signal.addEventListener("abort", abortSearches, { once: true });
+  const searches = sources.map(async (source, index) => {
+    try {
+      const [match] = await findChapterOnSource(source, controllers[index].signal);
+      if (match) {
+        controllers.forEach((controller, otherIndex) => {
+          if (otherIndex !== index) controller.abort();
+        });
+        return match;
+      }
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (!controllers[index].signal.aborted) {
+        console.warn(`Blogger ${source.source} lookup failed for ${slug} chapter ${chapter}.`, error);
+      }
+    }
+    throw new Error(`Chapter ${chapter} was not found on ${source.source}.`);
+  });
+  try {
+    return await Promise.any(searches);
+  } catch {
+    if (signal.aborted) throw new DOMException("Chapter request was superseded.", "AbortError");
+    return null;
+  } finally {
+    signal.removeEventListener("abort", abortSearches);
+    abortSearches();
+  }
 }
 
 async function getBloggerChapterNumbers(
@@ -805,17 +808,15 @@ async function getBloggerChapterNumbers(
   source: "blogger" | "blogger2",
   signal: AbortSignal,
 ): Promise<string[]> {
-  const params = new URLSearchParams({ title: title.trim(), source, full: "0" });
-  const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) {
-    throw new Error(`Blogger chapter list returned HTTP ${response.status}.`);
-  }
-  const payload = await response.json() as { chapters?: Array<{ num?: unknown }> };
-  return [...new Set((payload.chapters || [])
-    .map(({ num }) => normalizeChapterNumber(num))
+  const payload = await fetchBloggerFeed(source, title, signal, { maxResults: 500 });
+  return [...new Set((payload.feed?.entry || [])
+    .map((entry) => {
+      const titleNumber = chapterNumberFromPostTitle(entry.title?.$t || "");
+      const url = entry.link?.find((link) => link.rel === "alternate")?.href || "";
+      const urlNumber = url.match(/(?:chapter|ch)[_-]?(\d+(?:[.-]\d+)?)/i)?.[1];
+      return titleNumber || normalizeChapterNumber(urlNumber);
+    })
+    .map((num) => normalizeChapterNumber(num))
     .filter((num): num is string => Boolean(num)))];
 }
 
@@ -826,14 +827,12 @@ async function getBloggerChapterImages(
   if (chapter.source !== "blogger" && chapter.source !== "blogger2") return [];
   const title = String(chapter.postTitle || chapter.label || chapter.title || "").trim();
   if (!title) return [];
-  const domain = chapter.source === "blogger"
-    ? "https://www.mikodrive.my.id"
-    : "https://www.yomidays.my.id";
-  const feedUrl = new URL("/feeds/posts/default", domain);
-  feedUrl.searchParams.set("alt", "json-in-script");
-  feedUrl.searchParams.set("max-results", "20");
-  feedUrl.searchParams.set("q", title);
-  const feed = await getJsonp<{ feed?: { entry?: BloggerFeedEntry[] } }>(feedUrl.href, signal);
+  const feed = await fetchBloggerFeed(
+    chapter.source,
+    title,
+    signal,
+    { maxResults: 20 },
+  );
   const targetUrl = chapter.url ? normalizePostUrl(chapter.url) : "";
   const entry = (feed.feed?.entry || []).find((item) => {
     const alternateUrl = item.link?.find((link) => link.rel === "alternate")?.href || "";
@@ -920,6 +919,7 @@ async function loadReaderData(
   kind: ReaderKind,
   signal: AbortSignal,
   forceSource?: "sv1" | "sv2" | "es" | null,
+  onPartialData?: (data: ReaderData) => void,
 ): Promise<ReaderData> {
   const cachedCurrent = getCurrentChapterCache(slug);
   const cachedChapters = getCachedChapters(slug);
@@ -964,6 +964,51 @@ async function loadReaderData(
       matchingCachedChapters.find(hasChapterPayload) ||
       matchingCachedChapters.find((item) => item.source === "firestore") ||
       matchingCachedChapters[0];
+  const cachedCurrentHasTargetPayload = canUseCachedCurrent &&
+    String(cachedCurrent?.num) === targetChapter &&
+    hasChapterPayload(cachedCurrent);
+  const canLoadBloggerEarly = kind === "manga" &&
+    sourcePreference !== "es" &&
+    !hasChapterPayload(cachedMatch) &&
+    !cachedCurrentHasTargetPayload;
+  const earlyBloggerTitle = String(cachedCurrent?.title || slug.replace(/-/g, " "));
+  const earlyBloggerChapter = canLoadBloggerEarly
+    ? loadBloggerChapterFromFeeds(
+        slug,
+        earlyBloggerTitle,
+        targetChapter,
+        selectedSource === "blogger" || selectedSource === "blogger2" ? selectedSource : undefined,
+        signal,
+      ).then((record) => {
+        if (!record || signal.aborted || !onPartialData) return record;
+        const partialTitle = String(record.title || earlyBloggerTitle);
+        const images = [...new Set([...chapterImages(record), ...imageList(record.content, true)])];
+        if (images.length) {
+          onPartialData({
+            kind: "manga",
+            id: record.id,
+            title: partialTitle,
+            cover: String(cachedCurrent?.cover || ""),
+            chapterTitle: String(record.label || record.title || `Chapter ${targetChapter}`),
+            images,
+            text: "",
+            chapters: [...new Set([
+              ...cachedChapters.map((item) => chapterNumberFromRecord(item, item.id || "")),
+              targetChapter,
+            ].filter(Boolean))],
+            chapter: targetChapter,
+            source: record.source,
+            nsfw: isNsfwManga(slug, partialTitle),
+          });
+        }
+        return record;
+      }).catch((error: unknown) => {
+        if (!signal.aborted) {
+          console.warn(`Early Blogger image lookup failed for ${slug} chapter ${targetChapter}.`, error);
+        }
+        return null;
+      })
+    : null;
   let chapterDocumentId = cachedMatch?.id ||
     (canUseCachedCurrent ? cachedCurrent?.id : undefined) ||
     targetChapter;
@@ -1057,13 +1102,29 @@ async function loadReaderData(
 
   if (kind === "manga" && !hasChapterPayload(chapterData) && sourcePreference !== "es") {
     try {
-      const bloggerChapter = await loadBloggerChapterFromFeeds(
-        slug,
-        String(manga?.title || manga?.name || slug.replace(/-/g, " ")),
-        targetChapter,
-        selectedSource === "blogger" || selectedSource === "blogger2" ? selectedSource : undefined,
-        signal,
-      );
+      const resolvedBloggerTitle = String(manga?.title || manga?.name || slug.replace(/-/g, " "));
+      let bloggerChapter = earlyBloggerChapter
+        ? await earlyBloggerChapter
+        : await loadBloggerChapterFromFeeds(
+            slug,
+            resolvedBloggerTitle,
+            targetChapter,
+            selectedSource === "blogger" || selectedSource === "blogger2" ? selectedSource : undefined,
+            signal,
+          );
+      if (
+        !bloggerChapter &&
+        earlyBloggerChapter &&
+        normalizedSearchKey(earlyBloggerTitle) !== normalizedSearchKey(resolvedBloggerTitle)
+      ) {
+        bloggerChapter = await loadBloggerChapterFromFeeds(
+          slug,
+          resolvedBloggerTitle,
+          targetChapter,
+          selectedSource === "blogger" || selectedSource === "blogger2" ? selectedSource : undefined,
+          signal,
+        );
+      }
       if (bloggerChapter) {
         chapterData = bloggerChapter;
         if (bloggerChapter.source === "blogger" || bloggerChapter.source === "blogger2") {
@@ -1095,7 +1156,12 @@ async function loadReaderData(
     };
   }
   const cachedContent = chapterData?.content || chapterData?.text || chapterData?.html;
-  if (resolvedKind === "manga" && isBloggerSource) {
+  if (
+    resolvedKind === "manga" &&
+    isBloggerSource &&
+    !chapterImages(chapterData).length &&
+    !imageList(chapterData?.content || chapterData?.html, true).length
+  ) {
     try {
       const bloggerImages = await getBloggerChapterImages(chapterData || {}, signal);
       if (bloggerImages.length) chapterData = { ...chapterData, images: bloggerImages };
@@ -1604,7 +1670,22 @@ export default function ReaderPage({
         });
     }
 
-    loadReaderData(slug, targetChapter, kind, controller.signal, forcedServer)
+    loadReaderData(
+      slug,
+      targetChapter,
+      kind,
+      controller.signal,
+      forcedServer,
+      (partialData) => {
+        if (controller.signal.aborted || hasUsableData || partialData.kind !== kind) return;
+        hasUsableData = true;
+        setData(partialData);
+        setMangaNsfw(partialData.nsfw === true);
+        void writeCachedReaderData(slug, { ...partialData, kind: "manga" }).catch((cacheError: unknown) => {
+          console.warn("Could not cache the early chapter images.", cacheError);
+        });
+      },
+    )
       .then((result) => {
         if (controller.signal.aborted) return;
         hasFreshData = true;

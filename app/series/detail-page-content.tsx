@@ -8,6 +8,10 @@ import CommunityWidgets from "../community-widgets";
 import { BannerAdSlot } from "../advertisement-manager";
 import { CoverImage, useCoverImageSource } from "../lib/cover-image";
 import { chapterNumberFromRecord, normalizeChapterNumber } from "../../lib/chapter-number";
+import {
+  fetchBloggerFeed,
+  type BloggerFeedEntry,
+} from "../lib/blogger-feed-client";
 import { imageProxyUrl } from "../../lib/image-proxy";
 import { originalReaderImageUrl } from "../../lib/reader-image-url";
 import { isNovelSeries } from "../../lib/reader-kind";
@@ -149,14 +153,6 @@ const genreAccentColors = [
   { accent: "#59d7cf", lightText: "#14786f" },
 ] as const;
 
-
-type BloggerEntry = {
-  title?: { $t?: string };
-  link?: Array<{ rel?: string; href?: string }>;
-  content?: { $t?: string };
-  updated?: { $t?: string };
-  published?: { $t?: string };
-};
 
 declare global {
   interface Window {
@@ -481,7 +477,7 @@ function getBloggerChapterNumber(title: string, url: string): string {
   return raw ? normalizeChapterNumber(raw) || "?" : "?";
 }
 
-function parseBloggerEntries(data: { feed?: { entry?: BloggerEntry[] } }, source: ChapterSource): Chapter[] {
+function parseBloggerEntries(data: { feed?: { entry?: BloggerFeedEntry[] } }, source: ChapterSource): Chapter[] {
   return (data.feed?.entry || []).map((entry) => {
     const title = entry.title?.$t || "";
     const url = entry.link?.find((link) => link.rel === "alternate")?.href || "";
@@ -836,40 +832,8 @@ async function loadBloggerChapterSource(
   if (source === "firestore") return [];
 
   const bloggerSource = source === "blogger2" ? "blogger2" : "blogger";
-  const params = new URLSearchParams({
-    title: title.trim(),
-    source: bloggerSource,
-    full: "0",
-  });
-
-  const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(
-      body?.error ||
-      `Proxy chapter Blogger gagal (HTTP ${response.status}).`,
-    );
-  }
-
-  const data = (await response.json()) as {
-    chapters?: Array<{
-      num: string;
-      title: string;
-      url: string;
-      images?: string[];
-      thumbnail?: string;
-      createdAt?: string;
-      source: "blogger" | "blogger2";
-    }>;
-  };
-
-  return (data.chapters || []).map((chapter, order) => {
+  const data = await fetchBloggerFeed(bloggerSource, title, signal, { maxResults: 500 });
+  return parseBloggerEntries(data, bloggerSource).map((chapter, order) => {
     return {
       num: chapter.num,
       title: chapter.title,
@@ -889,22 +853,15 @@ async function loadBloggerChapterImages(
   chapterNum: string | number,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const params = new URLSearchParams({
-    title: title.trim(),
+  const data = await fetchBloggerFeed(
     source,
-    full: "1",
-    chapter: String(chapterNum).trim(),
-  });
-  const response = await fetch(`/api/blogger/chapters?${params.toString()}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) return [];
-  const data = (await response.json()) as {
-    chapters?: Array<{ num: string; images?: string[] }>;
-  };
+    title,
+    signal ?? new AbortController().signal,
+    { maxResults: 500 },
+  );
+  const chapters = parseBloggerEntries(data, source);
   const want = String(chapterNum).trim().toLowerCase().replace(",", ".");
-  const match = (data.chapters || []).find((item) => {
+  const match = chapters.find((item) => {
     const raw = String(item.num).trim().toLowerCase().replace(",", ".");
     const n = Number.parseFloat(raw);
     const w = Number.parseFloat(want);
