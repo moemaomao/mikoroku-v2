@@ -3223,8 +3223,8 @@ export default function DetailPageContent({
                   {chapterState === "ready" && visibleChapters.map((chapter, index) => {
                     const isRead = readChapters.includes(String(chapter.num).match(/(\d+(?:\.\d+)?)/)?.[0] || "");
                     return (
-                      <button
-                        className={`chapter-item relative aspect-square w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] border-0 bg-[rgba(0,0,0,0.25)] p-0 transition-[transform,box-shadow,filter] duration-200 hover:z-[2] hover:scale-105 active:scale-[0.97]${isRead ? " read" : ""} ${view === "list"
+                      <a
+                        className={`chapter-item relative aspect-square w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] border-0 bg-[rgba(0,0,0,0.25)] p-0 text-left text-inherit no-underline transition-[transform,box-shadow,filter] duration-200 hover:z-[2] hover:scale-105 active:scale-[0.97]${isRead ? " read" : ""} ${view === "list"
                             ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(255,255,255,0.1)] ![aspect-ratio:unset]${isRead ? " !bg-[rgba(0,0,0,0.24)] dark:!bg-[rgba(0,0,0,0.3)]" : ""}`
                             : view === "text-grid"
                               ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(255,255,255,0.08)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
@@ -3232,8 +3232,7 @@ export default function DetailPageContent({
                           }`}
                         data-index={index}
                         key={`${chapter.source}-${chapter.num}-${chapter.url || chapter.id || index}`}
-                        onClick={() => openChapter(chapter)}
-                        type="button"
+                          href={`/${chapter.isNovel || isNovelSeries(manga) ? "novel" : "manga"}/${encodeURIComponent(slug)}/${encodeURIComponent(String(chapter.num))}`}
                       >
                         {view !== "text-grid" && (() => {
                           const pageImages = (chapter.images || []).filter(
@@ -3359,7 +3358,7 @@ export default function DetailPageContent({
                             {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
                           </span>
                         </span>
-                      </button>
+                      </a>
                     );
                   })}
                   {chapterState === "ready" && hasMoreChapters && (
