@@ -41,6 +41,11 @@ export type CachedSeriesStatistics = {
   stale: boolean;
 };
 
+export type SeriesStatisticsSyncResult = {
+  data: SeriesStatistics;
+  synchronized: boolean;
+};
+
 export async function loadSharedSeriesStatistics(
   slug: string,
 ): Promise<CachedSeriesStatistics | null> {
@@ -498,9 +503,9 @@ async function loadSeriesStatisticsDocument(
 
 export async function syncSeriesStatisticsForVisit(
   slug: string,
-): Promise<SeriesStatistics> {
+): Promise<SeriesStatisticsSyncResult> {
   const claim = await claimStatisticsSync(slug);
-  if (!claim.shouldSync) return claim.data;
+  if (!claim.shouldSync) return { data: claim.data, synchronized: false };
   const syncStartedAt = claim.data.lastSyncAttemptAt ?? Date.now();
   const pendingViews = claim.data.pendingViews ?? 0;
   try {
@@ -514,7 +519,10 @@ export async function syncSeriesStatisticsForVisit(
       lastSyncAttemptAt: syncStartedAt,
       syncRetryAfter: 0,
     };
-    return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
+    return {
+      data: await cacheSeriesStatistics(updated, syncStartedAt, pendingViews),
+      synchronized: true,
+    };
   } catch (error) {
     const errorCode = error && typeof error === "object" && "code" in error
       ? error.code
@@ -529,7 +537,10 @@ export async function syncSeriesStatisticsForVisit(
     };
     if (errorCode === "permission-denied" || errorCode === "not-found") {
       console.warn(`Series statistics are unavailable for "${slug}"; cached counts will be used.`);
-      return cacheSeriesStatistics(fallback, syncStartedAt, 0);
+      return {
+        data: await cacheSeriesStatistics(fallback, syncStartedAt, 0),
+        synchronized: false,
+      };
     }
     await cacheSeriesStatistics(fallback, syncStartedAt, 0);
     console.error(`Series statistics could not be synchronized for "${slug}".`, error);

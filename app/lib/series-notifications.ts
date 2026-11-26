@@ -1,5 +1,7 @@
 "use client";
 
+import { adjustCachedSeriesStatistic } from "./series-statistics";
+
 export const SERIES_NOTIFICATIONS_UPDATED_EVENT = "mikoroku:series-notifications-updated";
 export const SERIES_NOTIFICATIONS_STORAGE_KEY = "mikoroku_series_notifications_v1";
 
@@ -131,6 +133,12 @@ function notificationFirestore() {
   return firestore;
 }
 
+function adjustCachedNotificationCount(slug: string, delta: number): void {
+  void adjustCachedSeriesStatistic(slug, "notifications", delta).catch((error: unknown) => {
+    console.warn("Cached series notification count could not be updated.", error);
+  });
+}
+
 function notificationDocumentId(slug: string): string {
   return `${FIRESTORE_ID_PREFIX}${encodeURIComponent(normalizeSlug(slug))}`;
 }
@@ -235,6 +243,8 @@ export async function saveSeriesNotificationSubscription(
   try {
     if (uid) {
       await persistNotificationSubscription(subscription, uid);
+    } else {
+      adjustCachedNotificationCount(subscription.slug, 1);
     }
   } catch (error) {
     if (uid) deferNotificationMigration(uid);
@@ -257,7 +267,7 @@ async function persistNotificationSubscription(
     .doc(notificationDocumentId(subscription.slug));
   const statisticsReference = firestore.collection("seriesStats")
     .doc(encodeURIComponent(subscription.slug));
-  await firestore.runTransaction(async (transaction) => {
+  const delta = await firestore.runTransaction(async (transaction) => {
     const [existingSubscription, existingStatistics] = await Promise.all([
       transaction.get(reference),
       transaction.get(statisticsReference),
@@ -285,7 +295,11 @@ async function persistNotificationSubscription(
           : nextNotifications,
       }, { merge: true });
     }
+    return delta;
   });
+  if (delta !== 0) {
+    adjustCachedNotificationCount(subscription.slug, delta);
+  }
 }
 
 export async function removeSeriesNotificationSubscription(
@@ -298,6 +312,8 @@ export async function removeSeriesNotificationSubscription(
   try {
     if (uid) {
       await removeNotificationSubscription(normalizedSlug, uid);
+    } else {
+      adjustCachedNotificationCount(normalizedSlug, -1);
     }
   } catch (error) {
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
@@ -315,7 +331,7 @@ async function removeNotificationSubscription(slug: string, uid: string): Promis
   const reference = notificationCollection(uid).doc(notificationDocumentId(slug));
   const statisticsReference = firestore.collection("seriesStats")
     .doc(encodeURIComponent(slug));
-  await firestore.runTransaction(async (transaction) => {
+  const delta = await firestore.runTransaction(async (transaction) => {
     const [existingSubscription, existingStatistics] = await Promise.all([
       transaction.get(reference),
       transaction.get(statisticsReference),
@@ -341,7 +357,11 @@ async function removeNotificationSubscription(slug: string, uid: string): Promis
           : currentNotifications,
       }, { merge: true });
     }
+    return wasCounted && currentNotifications > 0 ? -1 : 0;
   });
+  if (delta !== 0) {
+    adjustCachedNotificationCount(slug, delta);
+  }
 }
 
 function timestampValue(value: unknown): number {

@@ -756,50 +756,50 @@ async function loadManga(
     : null;
   let manga = catalogManga && metadataManga
     ? {
-        ...catalogManga,
-        desc: preferMetadata(metadataManga.desc, catalogManga.desc),
-        genres: preferMetadata(metadataManga.genres, catalogManga.genres),
-        rating: preferMetadata(metadataManga.rating, catalogManga.rating),
-        status: preferMetadata(metadataManga.status, catalogManga.status),
-        type: metadataManga.type === "Manga" ? catalogManga.type : metadataManga.type,
-        altTitle: preferMetadata(metadataManga.altTitle, catalogManga.altTitle),
-        author: preferMetadata(metadataManga.author, catalogManga.author),
-        artist: preferMetadata(metadataManga.artist, catalogManga.artist),
-        publication: preferMetadata(metadataManga.publication, catalogManga.publication),
-        serialization: preferMetadata(metadataManga.serialization, catalogManga.serialization),
-        demographic: preferMetadata(metadataManga.demographic, catalogManga.demographic),
-        series: preferMetadata(metadataManga.series, catalogManga.series),
-        characters: preferMetadata(metadataManga.characters, catalogManga.characters),
-        circle: preferMetadata(metadataManga.circle, catalogManga.circle),
-        group: preferMetadata(metadataManga.group, catalogManga.group),
-        femaleTags: preferMetadata(metadataManga.femaleTags, catalogManga.femaleTags),
-        maleTags: preferMetadata(metadataManga.maleTags, catalogManga.maleTags),
-        covers: metadataManga.covers?.length
-          ? metadataManga.covers
-          : cachedManga?.covers?.length
-            ? cachedManga.covers
-            : catalogManga.covers,
-        coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
-          ? metadataManga.coverNumbers
-          : cachedManga?.coverNumbers || catalogManga.coverNumbers,
-        coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || catalogManga.coverUpdatedAt,
-      }
+      ...catalogManga,
+      desc: preferMetadata(metadataManga.desc, catalogManga.desc),
+      genres: preferMetadata(metadataManga.genres, catalogManga.genres),
+      rating: preferMetadata(metadataManga.rating, catalogManga.rating),
+      status: preferMetadata(metadataManga.status, catalogManga.status),
+      type: metadataManga.type === "Manga" ? catalogManga.type : metadataManga.type,
+      altTitle: preferMetadata(metadataManga.altTitle, catalogManga.altTitle),
+      author: preferMetadata(metadataManga.author, catalogManga.author),
+      artist: preferMetadata(metadataManga.artist, catalogManga.artist),
+      publication: preferMetadata(metadataManga.publication, catalogManga.publication),
+      serialization: preferMetadata(metadataManga.serialization, catalogManga.serialization),
+      demographic: preferMetadata(metadataManga.demographic, catalogManga.demographic),
+      series: preferMetadata(metadataManga.series, catalogManga.series),
+      characters: preferMetadata(metadataManga.characters, catalogManga.characters),
+      circle: preferMetadata(metadataManga.circle, catalogManga.circle),
+      group: preferMetadata(metadataManga.group, catalogManga.group),
+      femaleTags: preferMetadata(metadataManga.femaleTags, catalogManga.femaleTags),
+      maleTags: preferMetadata(metadataManga.maleTags, catalogManga.maleTags),
+      covers: metadataManga.covers?.length
+        ? metadataManga.covers
+        : cachedManga?.covers?.length
+          ? cachedManga.covers
+          : catalogManga.covers,
+      coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
+        ? metadataManga.coverNumbers
+        : cachedManga?.coverNumbers || catalogManga.coverNumbers,
+      coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt || catalogManga.coverUpdatedAt,
+    }
     : metadataManga
       ? {
-          ...metadataManga,
-          covers: metadataManga.covers?.length ? metadataManga.covers : cachedManga?.covers,
-          coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
-            ? metadataManga.coverNumbers
-            : cachedManga?.coverNumbers,
-          coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
-        }
+        ...metadataManga,
+        covers: metadataManga.covers?.length ? metadataManga.covers : cachedManga?.covers,
+        coverNumbers: Object.keys(metadataManga.coverNumbers || {}).length
+          ? metadataManga.coverNumbers
+          : cachedManga?.coverNumbers,
+        coverUpdatedAt: metadataManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
+      }
       : catalogManga
         ? {
-            ...catalogManga,
-            covers: catalogManga.covers?.length ? catalogManga.covers : cachedManga?.covers,
-            coverNumbers: catalogManga.coverNumbers || cachedManga?.coverNumbers,
-            coverUpdatedAt: catalogManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
-          }
+          ...catalogManga,
+          covers: catalogManga.covers?.length ? catalogManga.covers : cachedManga?.covers,
+          coverNumbers: catalogManga.coverNumbers || cachedManga?.coverNumbers,
+          coverUpdatedAt: catalogManga.coverUpdatedAt || cachedManga?.coverUpdatedAt,
+        }
         : cachedManga || currentManga;
   if (manga && catalogSourceMode) manga.catalogSourceMode = catalogSourceMode;
   if (manga) {
@@ -856,7 +856,7 @@ async function loadBloggerChapterSource(
     } | null;
     throw new Error(
       body?.error ||
-        `Proxy chapter Blogger gagal (HTTP ${response.status}).`,
+      `Proxy chapter Blogger gagal (HTTP ${response.status}).`,
     );
   }
 
@@ -1316,11 +1316,10 @@ function SeriesShareControl({ title, compact = false }: { title: string; compact
   return (
     <div className="relative w-full">
       <button
-        className={`inline-flex w-full items-center justify-center gap-2 rounded-lg ${compact ? "border-[0.5px]" : "border"} border-sky-500/45 bg-sky-500/10 font-semibold text-sky-700 transition hover:border-sky-500/70 hover:bg-sky-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:text-sky-200 ${
-          compact
-            ? "min-h-0 gap-1 px-2 py-[6px] text-[11px]"
-            : "min-h-10 px-3 py-2 text-xs max-[767px]:min-h-0 max-[767px]:gap-1 max-[767px]:px-[5px] max-[767px]:py-[3px] max-[767px]:text-[10px] md:text-sm"
-        }`}
+        className={`inline-flex w-full items-center justify-center rounded-lg border border-sky-500/45 bg-sky-500/10 font-semibold text-sky-700 transition hover:border-sky-500/70 hover:bg-sky-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:text-sky-200 ${compact
+            ? "h-8 gap-1.5 px-1 text-[10px]"
+            : "h-8 gap-1.5 px-1 text-[10px] md:h-11 md:gap-2 md:px-3 md:text-[13px]"
+          }`}
         type="button"
         aria-expanded={open}
         aria-controls={menuId}
@@ -1451,12 +1450,14 @@ function SeriesStatisticsBar({
           }
         }
 
-        const updated = await syncSeriesStatisticsForVisit(slug);
+        const syncResult = await syncSeriesStatisticsForVisit(slug);
         if (requestId !== requestIdRef.current) return;
-        applyLoadedStatistics(updated, versionsAtLoadStart);
-        void saveSharedSeriesStatistics(updated).catch((error: unknown) => {
-          console.warn(`Shared series statistics could not be saved for "${slug}".`, error);
-        });
+        applyLoadedStatistics(syncResult.data, versionsAtLoadStart);
+        if (syncResult.synchronized) {
+          void saveSharedSeriesStatistics(syncResult.data).catch((error: unknown) => {
+            console.warn(`Shared series statistics could not be saved for "${slug}".`, error);
+          });
+        }
       } catch (error) {
         console.error(`Series statistics could not be synchronized for "${slug}".`, error);
         if (requestId === requestIdRef.current) {
@@ -1476,7 +1477,7 @@ function SeriesStatisticsBar({
   const items = [
     { key: "views", label: "Views", icon: "fa-eye", value: statistics?.views, active: false, disabled: true },
     { key: "bookmarks", label: bookmarked ? "Bookmarked" : "Bookmark", icon: bookmarked ? "fa-check" : "fa-bookmark", value: bookmarked ? Math.max(statistics.bookmarks, 1) : statistics.bookmarks, active: bookmarked, disabled: false },
-    { key: "notifications", label: notificationsEnabled ? "Notifications on" : "Notify", icon: notificationsEnabled ? "fa-bell" : "fa-bell-slash", value: statistics?.notifications, active: notificationsEnabled, disabled: false },
+    { key: "notifications", label: notificationsEnabled ? "Notifications on" : "Notify", icon: notificationsEnabled ? "fa-bell" : "fa-bell-slash", value: notificationsEnabled ? Math.max(statistics.notifications, 1) : statistics.notifications, active: notificationsEnabled, disabled: false },
   ] as const;
 
   function toggleStatistic(item: typeof items[number]) {
@@ -1490,9 +1491,11 @@ function SeriesStatisticsBar({
     localInteractionVersionsRef.current[key] += 1;
     statisticsRef.current = next;
     setStatistics(next);
-    void adjustCachedSeriesStatistic(slug, key, wasActive ? -1 : 1).catch((error: unknown) => {
-      console.warn(`Cached series ${key} count could not be updated.`, error);
-    });
+    if (key === "bookmarks") {
+      void adjustCachedSeriesStatistic(slug, key, wasActive ? -1 : 1).catch((error: unknown) => {
+        console.warn(`Cached series ${key} count could not be updated.`, error);
+      });
+    }
     if (key === "bookmarks") {
       onToggleBookmark();
     } else {
@@ -1518,7 +1521,26 @@ function SeriesStatisticsBar({
         className="genres series-statistics-panel rounded-[2px] border border-gray-400/40 bg-black/10 dark:bg-white/10"
       >
         {items.map((item, index) => {
-          const sharedClassName = `genre series-statistic text-black dark:text-white${index ? " border-l border-l-[rgba(156,163,175,0.42)] dark:border-l-[rgba(255,255,255,0.2)]" : ""}`;
+          const colorMap = {
+            views: {
+              accent: "#a0cbff",
+              lightText: "#1d4ed8",
+            },
+            bookmarks: {
+              accent: "#ffcc00",
+              lightText: "#a16207",
+            },
+            notifications: {
+              accent: "#cfa0ff",
+              lightText: "#7c3aed",
+            },
+          }[item.key];
+
+          const sharedClassName = [
+            "genre series-statistic",
+            index ? "border-l border-l-[rgba(156,163,175,0.42)] dark:border-l-[rgba(255,255,255,0.2)]" : "",
+          ].filter(Boolean).join(" ");
+
           const sharedStyle = {
             display: "flex",
             minWidth: 0,
@@ -1533,18 +1555,27 @@ function SeriesStatisticsBar({
             borderBottom: 0,
             borderColor: "rgba(156, 163, 175, 0.35)",
             backgroundColor: item.active
-              ? item.key === "notifications" ? "#af81ff" : "#ce9b00"
-              : "rgba(255, 255, 255, 0)",
+              ? colorMap.accent
+              : `${colorMap.accent}22`,
+            "--genre-accent": colorMap.accent,
+            "--genre-light-text": colorMap.lightText,
             fontSize: "11px",
             cursor: item.key === "views" ? "default" : "pointer",
-          } as const;
+            ...(item.active ? { color: "#000000" } : {}),
+          } as React.CSSProperties;
+
           const contents = (
             <>
-              <i className={`fas ${item.icon} shrink-0`} aria-hidden="true" />
+              <i
+                className={`fas ${item.icon} shrink-0`}
+                style={item.active ? { color: "#000000" } : undefined}
+                aria-hidden="true"
+              />
               <span className="truncate">{item.label}</span>
               <strong className="shrink-0">{item.value.toLocaleString("id-ID")}</strong>
             </>
           );
+
           return item.key === "views" ? (
             <span className={sharedClassName} key={item.key} style={sharedStyle}>
               {contents}
@@ -1634,7 +1665,7 @@ export default function DetailPageContent({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [coverPreviewOpen]);
-    const [state, setState] = useState<DetailState>(() =>
+  const [state, setState] = useState<DetailState>(() =>
     manga || initialManga ? "ready" : "loading",
   );
   const [detailCoverLoaded, setDetailCoverLoaded] = useState(false);
@@ -1900,7 +1931,7 @@ export default function DetailPageContent({
       ? initialChapters.filter((chapter) => chapter.source === "firestore" || chapter.source === source)
       : [];
     if (initialChaptersManaged && initialChapters.length > 0 &&
-        source === initialChapterSource && !shouldLoadLiveChapterLinks) {
+      source === initialChapterSource && !shouldLoadLiveChapterLinks) {
       setChapters(initialChapters);
       setManagedChapterList(true);
       setChapterState("ready");
@@ -1944,7 +1975,7 @@ export default function DetailPageContent({
       }
     }
     if (managedChapterList && chapters.length > 0 &&
-        source === initialChapterSource && !shouldLoadLiveChapterLinks) {
+      source === initialChapterSource && !shouldLoadLiveChapterLinks) {
       setChapterState("ready");
       return;
     }
@@ -2156,12 +2187,12 @@ export default function DetailPageContent({
 
       const liveManagedChapterLinksPromise = shouldLoadLiveChapterLinks && source !== "firestore"
         ? loadAndCache("firestore", true).then(
-            (chapters) => {
-              if (chapters.length) publishEarly(chapters);
-              return { chapters };
-            },
-            (error: unknown) => ({ chapters: [] as Chapter[], error }),
-          )
+          (chapters) => {
+            if (chapters.length) publishEarly(chapters);
+            return { chapters };
+          },
+          (error: unknown) => ({ chapters: [] as Chapter[], error }),
+        )
         : null;
 
       if (source === "firestore") {
@@ -2911,24 +2942,34 @@ export default function DetailPageContent({
                   </div>
                   <div className="rating-number">{ratingValue === undefined ? "N/A" : ratingValue.toFixed(1)}</div>
                 </div>
-                <div className={`flex w-full flex-col gap-3 ${metadataExpanded ? "max-[767px]:flex" : "max-[767px]:hidden"}`}>
-                  <button className="start-reading-btn mb-1 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-1 py-2 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] lg:px-3 lg:text-sm" type="button" onClick={() => {
-                    if (latestChapter) void openChapter(latestChapter);
-                  }} disabled={!latestChapter || chapterState !== "ready"}>
-                    <i className="fas fa-book-open" aria-hidden="true" />
-                    <span>{chapterState === "loading" ? "Loading..." : "Read now"}</span>
-                  </button>
-                  <SeriesShareControl title={manga.title} />
+                <div className={`flex w-full flex-col gap-2.5 md:gap-3 ${metadataExpanded ? "max-[767px]:flex" : "max-[767px]:hidden"}`}>
+                  {/* Read now */}
                   <button
-                    className="detail-report-btn inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-500/60 bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 max-[767px]:min-h-0 max-[767px]:px-[5px] max-[767px]:py-[3px] max-[767px]:text-[10px] md:text-sm"
+                    className="start-reading-btn inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(229,154,0,0.65)] bg-[rgba(229,154,0,0.2)] px-1 text-[10px] font-semibold text-[#e59a00] transition hover:bg-[rgba(229,154,0,0.32)] disabled:cursor-not-allowed disabled:opacity-50 md:h-11 md:gap-2 md:px-3 md:text-[13px]"
+                    type="button"
+                    onClick={() => {
+                      if (latestChapter) void openChapter(latestChapter);
+                    }}
+                    disabled={!latestChapter || chapterState !== "ready"}
+                  >
+                    <i className="fas fa-book-open shrink-0 text-[10px] md:text-[13px]" aria-hidden="true" />
+                    <span className="truncate">{chapterState === "loading" ? "Loading..." : "Read now"}</span>
+                  </button>
+
+                  {/* Share */}
+                  <SeriesShareControl title={manga.title} />
+
+                  {/* Report */}
+                  <button
+                    className="detail-report-btn inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/60 bg-red-500/15 px-1 text-[10px] font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:border-red-400/50 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25 md:h-11 md:gap-2 md:px-3 md:text-[13px]"
                     type="button"
                     onClick={() => {
                       setReportMessage("");
                       setReportOpen(true);
                     }}
                   >
-                    <i className="fas fa-flag" aria-hidden="true" />
-                    <span>Report</span>
+                    <i className="fas fa-flag shrink-0 text-[10px] md:text-[13px]" aria-hidden="true" />
+                    <span className="truncate">Report</span>
                   </button>
                 </div>
               </div>
@@ -3078,17 +3119,16 @@ export default function DetailPageContent({
                 ["chapters", `Chapters (${chapters.length})`],
                 ["synopsis", "Synopsis"],
                 ["covers", `Volumes (${coverOptions.length})`],
-                ["discussion", `Comments (${commentCount ?? "…" })`],
+                ["discussion", `Comments (${commentCount ?? "…"})`],
               ] as const).map(([tab, label]) => {
                 const isActive = detailTab === tab;
                 return (
                   <button
                     key={tab}
-                    className={`relative min-h-8 shrink-0 origin-center border-0 bg-transparent px-0.5 py-1 text-center font-medium leading-tight transition-all duration-300 ease-out will-change-transform sm:px-1 md:text-left ${
-                      isActive
+                    className={`relative min-h-8 shrink-0 origin-center border-0 bg-transparent px-0.5 py-1 text-center font-medium leading-tight transition-all duration-300 ease-out will-change-transform sm:px-1 md:text-left ${isActive
                         ? "scale-110 text-[var(--mikoroku-detail-tab-accent)] font-bold underline underline-offset-4 sm:scale-125"
                         : "scale-95 text-[#333] opacity-80 hover:scale-100 hover:opacity-100 hover:text-[var(--mikoroku-detail-tab-accent)] dark:text-white sm:scale-90"
-                    }`}
+                      }`}
                     type="button"
                     id={`detail-tab-${tab}`}
                     role="tab"
@@ -3143,277 +3183,271 @@ export default function DetailPageContent({
             </div>}
 
             {detailTab === "chapters" && <>
-            <BannerAdSlot placement="series-before-chapters" />
-            <ReaderServerNotice />
-            <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
-              <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 max-[767px]:mt-3 md:mx-[30px]">
-                <i className="fas fa-search text-xs" aria-hidden="true" />
-                <input
-                  className="min-w-0 flex-1 bg-transparent text-sm text-inherit outline-none placeholder:text-inherit"
-                  type="search"
-                  value={chapterSearch}
-                  onChange={(event) => setChapterSearch(event.target.value)}
-                  placeholder="Search chapter number or title"
-                  aria-label="Search chapters"
-                />
-              </label>
-              <div className="chapter-header">
-                <h2 className="section-title">
-                  <span className="whitespace-nowrap rounded-[15px] border border-[#aaa] bg-transparent px-[10px] py-1">
-                    Chapters
-                  </span>
-                </h2>
-                <div className="chapter-header-right">
-                  <div className="source-toggle" aria-label="Sumber chapter">
-                    <button id="sourceSv1Btn" className={`view-btn server-btn${source === "blogger" ? " active" : ""}`} type="button" title="Server 1 — Mikodrive" aria-label="Server 1 — Mikodrive" aria-pressed={source === "blogger"} onClick={() => changeChapterSource("blogger", "sv1")}>
-                      <span className="server-icon-wrap">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="2" y="2" width="20" height="8" rx="2" />
-                          <rect x="2" y="14" width="20" height="8" rx="2" />
-                          <line x1="6" y1="6" x2="6.01" y2="6" />
-                          <line x1="6" y1="18" x2="6.01" y2="18" />
-                        </svg>
-                        <span className="server-number">1</span>
-                      </span>
-                    </button>
-                    <button id="sourceSv2Btn" className={`view-btn server-btn${source === "blogger2" ? " active" : ""}`} type="button" title="Server 2 — Yomidays" aria-label="Server 2 — Yomidays" aria-pressed={source === "blogger2"} onClick={() => changeChapterSource("blogger2", "sv2")}>
-                      <span className="server-icon-wrap">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <rect x="2" y="2" width="20" height="8" rx="2" />
-                          <rect x="2" y="14" width="20" height="8" rx="2" />
-                          <line x1="6" y1="6" x2="6.01" y2="6" />
-                          <line x1="6" y1="18" x2="6.01" y2="18" />
-                        </svg>
-                        <span className="server-number">2</span>
-                      </span>
-                    </button>
-                    <button id="sourceEsBtn" className={`view-btn server-btn emergency-server-btn${source === "firestore" ? " active" : ""}`} type="button" title="Emergency Server — Firestore" aria-label="Emergency Server — Firestore" aria-pressed={source === "firestore"} onClick={() => changeChapterSource("firestore", "es")}>
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M12 2 2 7l10 5 10-5-10-5Z" />
-                        <path d="m2 17 10 5 10-5" />
-                        <path d="m2 12 10 5 10-5" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="view-toggle">
-                    <button id="sortChapterBtn" className={`view-btn${sort === "oldest" ? " active-oldest" : " active-newest"}`} type="button" title={`Urutan: ${sort}`} aria-label={`Sort chapters ${sort === "newest" ? "oldest first" : "newest first"}`} onClick={() => { const next = sort === "newest" ? "oldest" : "newest"; localStorage.setItem("chapterSortMode", next); setSort(next); }}>
-                      <i className={`fas ${sort === "newest" ? "fa-arrow-down-wide-short" : "fa-arrow-up-wide-short"}`} aria-hidden="true" />
-                    </button>
-                    <button id="textGridViewBtn" className={`view-btn${view === "text-grid" ? " active" : ""}`} type="button" title="Text grid" aria-label="Text grid" onClick={() => { localStorage.setItem("chapterViewMode", "text-grid"); setView("text-grid"); }}>
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                        <rect x="3" y="4" width="18" height="4" rx="1" />
-                        <rect x="3" y="10" width="18" height="4" rx="1" />
-                        <rect x="3" y="16" width="18" height="4" rx="1" />
-                      </svg>
-                    </button>
-                    <button id="gridViewBtn" className={`view-btn${view === "grid" ? " active" : ""}`} type="button" title="Thumbnail grid" aria-label="Thumbnail grid" onClick={() => { localStorage.setItem("chapterViewMode", "grid"); setView("grid"); }}>
-                      <i className="fas fa-th-large" aria-hidden="true" />
-                    </button>
-                    <button id="listViewBtn" className={`view-btn${view === "list" ? " active" : ""}`} type="button" title="List" aria-label="List" onClick={() => { localStorage.setItem("chapterViewMode", "list"); setView("list"); }}>
-                      <i className="fas fa-list" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div
-                className={`chapter-grid grid grid-cols-[repeat(4,minmax(0,1fr))] content-start justify-stretch gap-2 px-4 pt-0 pb-[30px] md:grid-cols-[repeat(6,minmax(0,1fr))] md:gap-[10px] md:px-6 md:pb-10 lg:grid-cols-[repeat(8,minmax(0,1fr))] lg:px-8 lg:pb-[50px] ${
-                  chapterState === "loading"
-                    ? "!flex min-h-[220px] !grid-cols-none flex-col items-center justify-center gap-3"
-                    : view === "list"
-                      ? "list-mode !flex flex-col !gap-[10px]"
-                      : view === "text-grid"
-                        ? "text-grid-mode !grid-cols-[repeat(auto-fill,minmax(120px,1fr))] !gap-[10px] max-[767px]:!grid-cols-3 max-[767px]:!gap-2 md:!grid-cols-[repeat(auto-fill,minmax(160px,1fr))] lg:!grid-cols-[repeat(auto-fill,minmax(170px,1fr))]"
-                        : ""
-                }`}
-                aria-busy={chapterState === "loading"}
-              >
-                {chapterState === "loading" && (
-                  <div className="chapter-loading-inner flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
-                    <i className="fas fa-spinner fa-spin fa-2x mb-3" aria-hidden="true" />
-                    <span>Loading chapters...</span>
-                  </div>
-                )}
-                {chapterState === "error" && (
-                  <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
-                    <p>Chapter gagal dimuat.</p>
-                    {chapterError && <p>{chapterError}</p>}
-                    <button type="button" onClick={retryChapterLoad}>Coba lagi</button>
-                  </div>
-                )}
-                {chapterState === "ready" && visibleChapters.length === 0 && (
-                  <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
-                    {chapterSearch.trim() ? "No matching chapters." : "Belum ada chapter."}
-                  </div>
-                )}
-                {chapterState === "ready" && visibleChapters.map((chapter, index) => {
-                  const isRead = readChapters.includes(String(chapter.num).match(/(\d+(?:\.\d+)?)/)?.[0] || "");
-                  return (
-                    <button
-                    className={`chapter-item relative aspect-square w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] border-0 bg-[rgba(0,0,0,0.25)] p-0 transition-[transform,box-shadow,filter] duration-200 hover:z-[2] hover:scale-105 active:scale-[0.97]${isRead ? " read" : ""} ${
-                      view === "list"
-                        ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(255,255,255,0.1)] ![aspect-ratio:unset]${isRead ? " !bg-[rgba(0,0,0,0.24)] dark:!bg-[rgba(0,0,0,0.3)]" : ""}`
-                        : view === "text-grid"
-                          ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(255,255,255,0.08)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
-                          : ""
-                    }`}
-                    data-index={index}
-                    key={`${chapter.source}-${chapter.num}-${chapter.url || chapter.id || index}`}
-                    onClick={() => openChapter(chapter)}
-                    type="button"
-                  >
-                    {view !== "text-grid" && (() => {
-                      const pageImages = (chapter.images || []).filter(
-                        (src): src is string => typeof src === "string" && src.length > 8,
-                      );
-                    
-                      const candidates = [
-                        pageImages[2],
-                        pageImages[1],
-                        pageImages[0],
-                        chapter.thumbnail,
-                        chapter.source === "firestore" ? cover : "",
-                      ].filter((src): src is string => typeof src === "string" && src.length > 8);
-                      const unique = [...new Set(candidates)];
-                      const proxied = unique.map(chapterThumbProxyUrl);
-                      const thumbSrc = proxied[0] || "";
-                      return thumbSrc ? (
-                        <img
-                          key={thumbSrc}
-                          className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 opacity-0 transition-opacity duration-150 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? (view === "list" ? "brightness-[0.82]" : "brightness-[0.65]") : ""}`}
-                          style={{ opacity: 0 }}
-                          alt=""
-                          loading={index < 4 ? "eager" : "lazy"}
-                          fetchPriority={index < 2 ? "high" : undefined}
-                          decoding="async"
-                          src={thumbSrc}
-                          data-thumb-index="0"
-                          referrerPolicy="no-referrer"
-                          onLoad={(event) => {
-                            event.currentTarget.style.opacity = "1";
-                          }}
-                          onError={(event) => {
-                            const image = event.currentTarget;
-                            const next = Number(image.dataset.thumbIndex || "0") + 1;
-                            if (next < proxied.length) {
-                              image.style.opacity = "0";
-                              image.dataset.thumbIndex = String(next);
-                              image.src = proxied[next];
-                              return;
-                            }
-                            image.style.visibility = "hidden";
-                          }}
-                        />
-                      ) : (
-                        <span
-                          className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br from-zinc-800 to-zinc-950 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""}`}
-                          aria-hidden="true"
-                        />
-                      );
-                    })()}
-                    {isRead && (
-                      <span
-                        className={`pointer-events-none absolute inset-0 z-[1] ${view === "list" ? "bg-[rgba(0,0,0,0.08)]" : "bg-[rgba(0,0,0,0.22)]"}`}
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span
-                      className={`pointer-events-none absolute z-[6] flex flex-col items-end gap-1 ${
-                        view === "list"
-                          ? "right-[10px] top-1/2 -translate-y-1/2"
-                          : view === "text-grid"
-                            ? "right-2 top-2"
-                            : "right-1 top-1"
-                      }`}
-                      aria-hidden="true"
-                    >
-                      <span className={`inline-flex ${isRead ? "text-[#22c55e]" : "text-[#f59e0b]"}`}>
-                        <svg
-                          viewBox="0 0 32 32"
-                          width="18"
-                          height="18"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          {isRead ? (
-                            <>
-                              <path d="M7 10 3 6M16 9V3M25 10l4-4" />
-                              <path d="M3 17Q16 5 29 17Q16 29 3 17Z" />
-                              <circle cx="16" cy="17" r="3" />
-                            </>
-                          ) : (
-                            <>
-                              <path d="M4 14Q16 27 28 14" />
-                              <path d="M7 21 5 26M16 21v7M25 21l2 5" />
-                            </>
-                          )}
-                        </svg>
-                      </span>
-                      <span className={`chapter-source-badge text-[9px] font-extrabold uppercase leading-none tracking-[0.2px] max-[480px]:text-[8px] ${chapter.source === "blogger" ? "text-[#60a5fa]" : chapter.source === "blogger2" ? "text-[#fbbf24]" : "text-[#ef4444]"} ${view === "list" ? "text-[10px]" : ""}`}
-                      >
-                        {chapter.source === "blogger" ? "SV1" : chapter.source === "blogger2" ? "SV2" : "ES"}
-                      </span>
+              <BannerAdSlot placement="series-before-chapters" />
+              <ReaderServerNotice />
+              <section className="chapters" role="tabpanel" aria-labelledby="detail-tab-chapters">
+                <label className="chapter-search mx-[14px] mb-2 flex min-h-10 items-center gap-2 rounded-lg border border-black/15 bg-black/[0.03] px-3 text-[#555] dark:border-white/15 dark:bg-white/[0.04] dark:text-white/60 max-[767px]:mt-3 md:mx-[30px]">
+                  <i className="fas fa-search text-xs" aria-hidden="true" />
+                  <input
+                    className="min-w-0 flex-1 bg-transparent text-sm text-inherit outline-none placeholder:text-inherit"
+                    type="search"
+                    value={chapterSearch}
+                    onChange={(event) => setChapterSearch(event.target.value)}
+                    placeholder="Search chapter number or title"
+                    aria-label="Search chapters"
+                  />
+                </label>
+                <div className="chapter-header">
+                  <h2 className="section-title">
+                    <span className="whitespace-nowrap rounded-[15px] border border-[#aaa] bg-transparent px-[10px] py-1">
+                      Chapters
                     </span>
-                    <span className={`chapter-label absolute right-0 bottom-0 left-0 z-[2] flex flex-col items-center gap-1 bg-[rgba(0,0,0,0.85)] px-[3px] pt-1 pb-[3px] text-center text-[9px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.5)] ${
-                      view === "list"
-                        ? "!static !min-w-0 !flex-1 !items-start !justify-center !gap-[5px] !bg-transparent !px-[14px] !py-3 !pr-12 !text-left !text-inherit"
-                        : view === "text-grid"
-                          ? "!static !items-start !gap-[5px] !bg-transparent !p-0 !pr-8 !text-left !text-inherit ![text-shadow:none]"
-                          : ""
-                    }`}>
-                      <span className={`chapter-title block font-bold leading-[1.15] ${
-                        view === "list"
-                            ? `!text-sm ${isRead ? "!text-[#a1a1aa] dark:!text-[#71717a]" : "text-[#111] dark:text-white"}`
-                          : view === "text-grid"
-                              ? `text-[12px] md:text-[12px] ${isRead ? "!text-[#a1a1aa] dark:!text-[#71717a]" : "text-[#111] dark:text-white"}`
-                              : `text-[9px] ${isRead ? "opacity-60" : ""}`
-                      }`}>
-                        {view === "text-grid" ? (
-                          <>
-                            <span className="md:hidden">Ch {chapter.num}</span>
-                            <span className="hidden md:inline">Chapter {chapter.num}</span>
-                          </>
-                        ) : (
-                          <>Chapter {chapter.num}</>
-                        )}
-                      </span>
-                      <span className={`chapter-date mt-0 block opacity-80 ${
-                        view === "list"
-                            ? `text-[11px] ${isRead ? "!text-[#71717a] dark:!text-[#52525b]" : "text-[#444] dark:text-[#ddd]"}`
-                          : view === "text-grid"
-                              ? `text-[10px] opacity-70 md:text-[10px] ${isRead ? "!text-[#71717a] dark:!text-[#52525b]" : "text-[#444] dark:text-[#ddd]"}`
-                              : `text-[7px] ${isRead ? "opacity-60" : ""}`
-                      }`}>
-                        {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
-                      </span>
-                    </span>
-                    </button>
-                  );
-                })}
-                {chapterState === "ready" && hasMoreChapters && (
-                  <>
-                    <div
-                      ref={chapterSentinelRef}
-                      className="col-span-full h-px w-full"
-                      aria-hidden="true"
-                    />
-                    <div className="col-span-full flex w-full justify-center py-4">
-                      <button
-                        type="button"
-                        className="rounded-lg border border-[rgba(128,128,128,0.35)] px-4 py-2 text-sm font-semibold text-current transition-colors hover:bg-[rgba(128,128,128,0.12)]"
-                        onClick={() => setChapterWindow((current) =>
-                          Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
-                        )}
-                      >
-                        Load more chapters
+                  </h2>
+                  <div className="chapter-header-right">
+                    <div className="source-toggle" aria-label="Sumber chapter">
+                      <button id="sourceSv1Btn" className={`view-btn server-btn${source === "blogger" ? " active" : ""}`} type="button" title="Server 1 — Mikodrive" aria-label="Server 1 — Mikodrive" aria-pressed={source === "blogger"} onClick={() => changeChapterSource("blogger", "sv1")}>
+                        <span className="server-icon-wrap">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <rect x="2" y="2" width="20" height="8" rx="2" />
+                            <rect x="2" y="14" width="20" height="8" rx="2" />
+                            <line x1="6" y1="6" x2="6.01" y2="6" />
+                            <line x1="6" y1="18" x2="6.01" y2="18" />
+                          </svg>
+                          <span className="server-number">1</span>
+                        </span>
+                      </button>
+                      <button id="sourceSv2Btn" className={`view-btn server-btn${source === "blogger2" ? " active" : ""}`} type="button" title="Server 2 — Yomidays" aria-label="Server 2 — Yomidays" aria-pressed={source === "blogger2"} onClick={() => changeChapterSource("blogger2", "sv2")}>
+                        <span className="server-icon-wrap">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <rect x="2" y="2" width="20" height="8" rx="2" />
+                            <rect x="2" y="14" width="20" height="8" rx="2" />
+                            <line x1="6" y1="6" x2="6.01" y2="6" />
+                            <line x1="6" y1="18" x2="6.01" y2="18" />
+                          </svg>
+                          <span className="server-number">2</span>
+                        </span>
+                      </button>
+                      <button id="sourceEsBtn" className={`view-btn server-btn emergency-server-btn${source === "firestore" ? " active" : ""}`} type="button" title="Emergency Server — Firestore" aria-label="Emergency Server — Firestore" aria-pressed={source === "firestore"} onClick={() => changeChapterSource("firestore", "es")}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+                          <path d="m2 17 10 5 10-5" />
+                          <path d="m2 12 10 5 10-5" />
+                        </svg>
                       </button>
                     </div>
-                  </>
-                )}
-              </div>
-            </section>
+                    <div className="view-toggle">
+                      <button id="sortChapterBtn" className={`view-btn${sort === "oldest" ? " active-oldest" : " active-newest"}`} type="button" title={`Urutan: ${sort}`} aria-label={`Sort chapters ${sort === "newest" ? "oldest first" : "newest first"}`} onClick={() => { const next = sort === "newest" ? "oldest" : "newest"; localStorage.setItem("chapterSortMode", next); setSort(next); }}>
+                        <i className={`fas ${sort === "newest" ? "fa-arrow-down-wide-short" : "fa-arrow-up-wide-short"}`} aria-hidden="true" />
+                      </button>
+                      <button id="textGridViewBtn" className={`view-btn${view === "text-grid" ? " active" : ""}`} type="button" title="Text grid" aria-label="Text grid" onClick={() => { localStorage.setItem("chapterViewMode", "text-grid"); setView("text-grid"); }}>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                          <rect x="3" y="4" width="18" height="4" rx="1" />
+                          <rect x="3" y="10" width="18" height="4" rx="1" />
+                          <rect x="3" y="16" width="18" height="4" rx="1" />
+                        </svg>
+                      </button>
+                      <button id="gridViewBtn" className={`view-btn${view === "grid" ? " active" : ""}`} type="button" title="Thumbnail grid" aria-label="Thumbnail grid" onClick={() => { localStorage.setItem("chapterViewMode", "grid"); setView("grid"); }}>
+                        <i className="fas fa-th-large" aria-hidden="true" />
+                      </button>
+                      <button id="listViewBtn" className={`view-btn${view === "list" ? " active" : ""}`} type="button" title="List" aria-label="List" onClick={() => { localStorage.setItem("chapterViewMode", "list"); setView("list"); }}>
+                        <i className="fas fa-list" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={`chapter-grid grid grid-cols-[repeat(4,minmax(0,1fr))] content-start justify-stretch gap-2 px-4 pt-0 pb-[30px] md:grid-cols-[repeat(6,minmax(0,1fr))] md:gap-[10px] md:px-6 md:pb-10 lg:grid-cols-[repeat(8,minmax(0,1fr))] lg:px-8 lg:pb-[50px] ${chapterState === "loading"
+                      ? "!flex min-h-[220px] !grid-cols-none flex-col items-center justify-center gap-3"
+                      : view === "list"
+                        ? "list-mode !flex flex-col !gap-[10px]"
+                        : view === "text-grid"
+                          ? "text-grid-mode !grid-cols-[repeat(auto-fill,minmax(120px,1fr))] !gap-[10px] max-[767px]:!grid-cols-3 max-[767px]:!gap-2 md:!grid-cols-[repeat(auto-fill,minmax(160px,1fr))] lg:!grid-cols-[repeat(auto-fill,minmax(170px,1fr))]"
+                          : ""
+                    }`}
+                  aria-busy={chapterState === "loading"}
+                >
+                  {chapterState === "loading" && (
+                    <div className="chapter-loading-inner flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
+                      <i className="fas fa-spinner fa-spin fa-2x mb-3" aria-hidden="true" />
+                      <span>Loading chapters...</span>
+                    </div>
+                  )}
+                  {chapterState === "error" && (
+                    <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
+                      <p>Chapter gagal dimuat.</p>
+                      {chapterError && <p>{chapterError}</p>}
+                      <button type="button" onClick={retryChapterLoad}>Coba lagi</button>
+                    </div>
+                  )}
+                  {chapterState === "ready" && visibleChapters.length === 0 && (
+                    <div className="chapter-empty-inner col-span-full flex w-full flex-col items-center justify-center px-5 py-10 text-center text-[#050000] dark:text-white">
+                      {chapterSearch.trim() ? "No matching chapters." : "Belum ada chapter."}
+                    </div>
+                  )}
+                  {chapterState === "ready" && visibleChapters.map((chapter, index) => {
+                    const isRead = readChapters.includes(String(chapter.num).match(/(\d+(?:\.\d+)?)/)?.[0] || "");
+                    return (
+                      <button
+                        className={`chapter-item relative aspect-square w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] border-0 bg-[rgba(0,0,0,0.25)] p-0 transition-[transform,box-shadow,filter] duration-200 hover:z-[2] hover:scale-105 active:scale-[0.97]${isRead ? " read" : ""} ${view === "list"
+                            ? `!flex !h-20 !w-full !items-center !rounded-xl !bg-[rgba(255,255,255,0.1)] ![aspect-ratio:unset]${isRead ? " !bg-[rgba(0,0,0,0.24)] dark:!bg-[rgba(0,0,0,0.3)]" : ""}`
+                            : view === "text-grid"
+                              ? `!flex !h-auto !min-h-[60px] !flex-col !justify-center !rounded-[10px] !border !border-[rgba(0,0,0,0.1)] !bg-[rgba(80,78,78,0.04)] !p-3 !text-[#111] ![aspect-ratio:unset] ![box-shadow:none] dark:!border-[rgba(255,255,255,0.18)] dark:!bg-[rgba(255,255,255,0.08)] dark:!text-white${isRead ? " !bg-[rgba(0,0,0,0.5)] !text-white dark:!bg-[rgba(0,0,0,0.58)]" : ""}`
+                              : ""
+                          }`}
+                        data-index={index}
+                        key={`${chapter.source}-${chapter.num}-${chapter.url || chapter.id || index}`}
+                        onClick={() => openChapter(chapter)}
+                        type="button"
+                      >
+                        {view !== "text-grid" && (() => {
+                          const pageImages = (chapter.images || []).filter(
+                            (src): src is string => typeof src === "string" && src.length > 8,
+                          );
+
+                          const candidates = [
+                            pageImages[2],
+                            pageImages[1],
+                            pageImages[0],
+                            chapter.thumbnail,
+                            chapter.source === "firestore" ? cover : "",
+                          ].filter((src): src is string => typeof src === "string" && src.length > 8);
+                          const unique = [...new Set(candidates)];
+                          const proxied = unique.map(chapterThumbProxyUrl);
+                          const thumbSrc = proxied[0] || "";
+                          return thumbSrc ? (
+                            <img
+                              key={thumbSrc}
+                              className={`absolute inset-0 m-0 h-full w-full rounded-[inherit] border-0 object-cover object-center p-0 opacity-0 transition-opacity duration-150 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""} ${isRead ? (view === "list" ? "brightness-[0.82]" : "brightness-[0.65]") : ""}`}
+                              style={{ opacity: 0 }}
+                              alt=""
+                              loading={index < 4 ? "eager" : "lazy"}
+                              fetchPriority={index < 2 ? "high" : undefined}
+                              decoding="async"
+                              src={thumbSrc}
+                              data-thumb-index="0"
+                              referrerPolicy="no-referrer"
+                              onLoad={(event) => {
+                                event.currentTarget.style.opacity = "1";
+                              }}
+                              onError={(event) => {
+                                const image = event.currentTarget;
+                                const next = Number(image.dataset.thumbIndex || "0") + 1;
+                                if (next < proxied.length) {
+                                  image.style.opacity = "0";
+                                  image.dataset.thumbIndex = String(next);
+                                  image.src = proxied[next];
+                                  return;
+                                }
+                                image.style.visibility = "hidden";
+                              }}
+                            />
+                          ) : (
+                            <span
+                              className={`absolute inset-0 rounded-[inherit] bg-gradient-to-br from-zinc-800 to-zinc-950 ${view === "list" ? "!static !h-full !w-[90px] shrink-0 !rounded-none" : ""}`}
+                              aria-hidden="true"
+                            />
+                          );
+                        })()}
+                        {isRead && (
+                          <span
+                            className={`pointer-events-none absolute inset-0 z-[1] ${view === "list" ? "bg-[rgba(0,0,0,0.08)]" : "bg-[rgba(0,0,0,0.22)]"}`}
+                            aria-hidden="true"
+                          />
+                        )}
+                        <span
+                          className={`pointer-events-none absolute z-[6] flex flex-col items-end gap-1 ${view === "list"
+                              ? "right-[10px] top-1/2 -translate-y-1/2"
+                              : view === "text-grid"
+                                ? "right-2 top-2"
+                                : "right-1 top-1"
+                            }`}
+                          aria-hidden="true"
+                        >
+                          <span className={`inline-flex ${isRead ? "text-[#22c55e]" : "text-[#f59e0b]"}`}>
+                            <svg
+                              viewBox="0 0 32 32"
+                              width="18"
+                              height="18"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              {isRead ? (
+                                <>
+                                  <path d="M7 10 3 6M16 9V3M25 10l4-4" />
+                                  <path d="M3 17Q16 5 29 17Q16 29 3 17Z" />
+                                  <circle cx="16" cy="17" r="3" />
+                                </>
+                              ) : (
+                                <>
+                                  <path d="M4 14Q16 27 28 14" />
+                                  <path d="M7 21 5 26M16 21v7M25 21l2 5" />
+                                </>
+                              )}
+                            </svg>
+                          </span>
+                          <span className={`chapter-source-badge text-[9px] font-extrabold uppercase leading-none tracking-[0.2px] max-[480px]:text-[8px] ${chapter.source === "blogger" ? "text-[#60a5fa]" : chapter.source === "blogger2" ? "text-[#fbbf24]" : "text-[#ef4444]"} ${view === "list" ? "text-[10px]" : ""}`}
+                          >
+                            {chapter.source === "blogger" ? "SV1" : chapter.source === "blogger2" ? "SV2" : "ES"}
+                          </span>
+                        </span>
+                        <span className={`chapter-label absolute right-0 bottom-0 left-0 z-[2] flex flex-col items-center gap-1 bg-[rgba(0,0,0,0.85)] px-[3px] pt-1 pb-[3px] text-center text-[9px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.5)] ${view === "list"
+                            ? "!static !min-w-0 !flex-1 !items-start !justify-center !gap-[5px] !bg-transparent !px-[14px] !py-3 !pr-12 !text-left !text-inherit"
+                            : view === "text-grid"
+                              ? "!static !items-start !gap-[5px] !bg-transparent !p-0 !pr-8 !text-left !text-inherit ![text-shadow:none]"
+                              : ""
+                          }`}>
+                          <span className={`chapter-title block font-bold leading-[1.15] ${view === "list"
+                              ? `!text-sm ${isRead ? "!text-[#a1a1aa] dark:!text-[#71717a]" : "text-[#111] dark:text-white"}`
+                              : view === "text-grid"
+                                ? `text-[12px] md:text-[12px] ${isRead ? "!text-[#a1a1aa] dark:!text-[#71717a]" : "text-[#111] dark:text-white"}`
+                                : `text-[9px] ${isRead ? "opacity-60" : ""}`
+                            }`}>
+                            {view === "text-grid" ? (
+                              <>
+                                <span className="md:hidden">Ch {chapter.num}</span>
+                                <span className="hidden md:inline">Chapter {chapter.num}</span>
+                              </>
+                            ) : (
+                              <>Chapter {chapter.num}</>
+                            )}
+                          </span>
+                          <span className={`chapter-date mt-0 block opacity-80 ${view === "list"
+                              ? `text-[11px] ${isRead ? "!text-[#71717a] dark:!text-[#52525b]" : "text-[#444] dark:text-[#ddd]"}`
+                              : view === "text-grid"
+                                ? `text-[10px] opacity-70 md:text-[10px] ${isRead ? "!text-[#71717a] dark:!text-[#52525b]" : "text-[#444] dark:text-[#ddd]"}`
+                                : `text-[7px] ${isRead ? "opacity-60" : ""}`
+                            }`}>
+                            {formatDate(chapter.createdAt || chapter.updatedAt || chapter.date)}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {chapterState === "ready" && hasMoreChapters && (
+                    <>
+                      <div
+                        ref={chapterSentinelRef}
+                        className="col-span-full h-px w-full"
+                        aria-hidden="true"
+                      />
+                      <div className="col-span-full flex w-full justify-center py-4">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-[rgba(128,128,128,0.35)] px-4 py-2 text-sm font-semibold text-current transition-colors hover:bg-[rgba(128,128,128,0.12)]"
+                          onClick={() => setChapterWindow((current) =>
+                            Math.min(current + CHAPTER_UI_BATCH, filteredSortedChapters.length),
+                          )}
+                        >
+                          Load more chapters
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
             </>}
           </div>
         </div>
