@@ -1472,11 +1472,11 @@ function ProfileFollowControls({
 }
 
 function StatsLoadingSkeleton() {
-  const shimmer = "animate-pulse rounded bg-slate-200 dark:bg-white/10";
-  const panel = "rounded-3xl border border-black/10 bg-white/80 p-4 shadow-lg shadow-slate-900/5 dark:border-white/10 dark:bg-[#15151d]/85 sm:p-6";
+  const shimmer = "animate-pulse rounded bg-white/[0.08]";
+  const panel = "rounded-3xl border border-black/10 bg-white/[0.04] p-4 shadow-lg shadow-slate-900/5 dark:border-white/10 dark:bg-white/[0.04] sm:p-6";
 
   return (
-    <div role="status" aria-label="Loading reader stats" aria-busy="true" className="space-y-5">
+    <div role="status" aria-label="Loading reader stats" aria-busy="true" className="stats-loading-skeleton space-y-5">
       <span className="sr-only">Loading reader stats...</span>
 
       <section className={`${panel} flex min-h-40 items-start gap-4 sm:p-7`}>

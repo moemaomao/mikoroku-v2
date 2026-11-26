@@ -494,7 +494,7 @@ function ReaderImage({
       ) : displaySrc ? (
         <>
           {showSkeleton && !currentImageLoaded && (
-            <span className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-md bg-black/10 dark:bg-white/10" aria-hidden="true" />
+            <span className="reader-image-skeleton pointer-events-none absolute inset-0 z-10 animate-pulse rounded-md" aria-hidden="true" />
           )}
           <img
             className={`${className} relative ${showSkeleton && !currentImageLoaded ? "opacity-0" : ""}`}
@@ -527,7 +527,7 @@ function ReaderImage({
           )}
         </>
       ) : showSkeleton ? (
-        <span className="pointer-events-none absolute inset-0 animate-pulse rounded-md bg-black/10 dark:bg-white/10" aria-hidden="true" />
+        <span className="reader-image-skeleton pointer-events-none absolute inset-0 animate-pulse rounded-md" aria-hidden="true" />
       ) : (
         <span className="grid min-h-[20vh] place-items-center" aria-hidden="true">
           <span className="size-8 animate-spin rounded-full border-2 border-[var(--mikoroku-accent)]/25 border-t-[var(--mikoroku-accent)]" />

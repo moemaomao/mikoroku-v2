@@ -10,7 +10,7 @@ export default function SeriesLoadingContent() {
 
   return (
     <main
-      className="detail-route route-page-background relative isolate z-[2] min-h-screen bg-transparent text-[#050000] dark:text-white"
+      className="detail-route series-loading-skeleton route-page-background relative isolate z-[2] min-h-screen bg-transparent text-[#050000] dark:text-white"
       style={detailLayoutStyle}
       aria-busy="true"
       aria-label="Memuat detail manga"
@@ -115,16 +115,16 @@ export default function SeriesLoadingContent() {
         }}
         aria-hidden="true"
       >
-        <div className="mb-3 h-8 rounded-lg bg-black/10 dark:bg-white/[0.08]" />
+        <div className="mb-3 h-8 rounded-lg bg-white/[0.08]" />
         {Array.from({ length: 7 }, (_, index) => (
           <div
             key={index}
-            className="mb-2 flex h-[72px] items-center gap-2 rounded-lg border border-white/10 bg-black/10 p-2 dark:bg-black/25"
+            className="mb-2 flex h-[72px] items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-2"
           >
-            <div className="h-[56px] w-[42px] shrink-0 rounded-md bg-white/10" />
+            <div className="h-[56px] w-[42px] shrink-0 rounded-md bg-white/[0.08]" />
             <div className="flex-1 space-y-2">
-              <div className="h-2.5 w-full rounded bg-white/10" />
-              <div className="h-2.5 w-3/4 rounded bg-white/10" />
+              <div className="h-2.5 w-full rounded bg-white/[0.08]" />
+              <div className="h-2.5 w-3/4 rounded bg-white/[0.08]" />
             </div>
           </div>
         ))}

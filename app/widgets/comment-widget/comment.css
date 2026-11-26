@@ -713,9 +713,9 @@ html.no-animations .comment.transcendent,
       gap: 12px;
       margin-bottom: 8px;
       padding: 16px 20px;
-      border: 1px solid #a1a1a1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 10px;
-      background: rgba(0, 0, 0, 0.1);
+      background: rgba(255, 255, 255, 0.04);
     }
 
     .comment-loading-skeleton-header {
@@ -727,9 +727,14 @@ html.no-animations .comment.transcendent,
     .comment-loading-skeleton-avatar,
     .comment-loading-skeleton-line {
       display: block;
-      background: linear-gradient(90deg, rgba(148, 163, 184, 0.12), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.12));
+      background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.04),
+        rgba(255, 255, 255, 0.12),
+        rgba(255, 255, 255, 0.04)
+      );
       background-size: 200% 100%;
-      animation: comment-skeleton-shimmer 1.4s ease-in-out infinite;
+      animation: comment-skeleton-shimmer 1.6s ease-in-out infinite;
     }
 
     .comment-loading-skeleton-avatar {
@@ -761,16 +766,6 @@ html.no-animations .comment.transcendent,
       width: 56%;
     }
 
-    .comment-loading-retry {
-      justify-self: center;
-      padding: 7px 16px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: rgba(0, 0, 0, 0.16);
-      color: var(--text);
-      cursor: pointer;
-    }
-
     @keyframes comment-skeleton-shimmer {
       to {
         background-position: -200% 0;
@@ -784,6 +779,15 @@ html.no-animations .comment.transcendent,
       }
     }
 
+    .comment-loading-retry {
+      justify-self: center;
+      padding: 7px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.16);
+      color: var(--text);
+      cursor: pointer;
+    }
 
 .font-anime { 
   font-family: 'Comic Sans MS', cursive; 

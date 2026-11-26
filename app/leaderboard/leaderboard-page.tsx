@@ -479,7 +479,7 @@ export default function LeaderboardPage() {
         </header>
 
         {loading ? (
-          <div role="status" aria-label="Loading comment leaderboard" aria-busy="true">
+          <div role="status" aria-label="Loading comment leaderboard" aria-busy="true" className="leaderboard-loading-skeleton">
             <span className="sr-only">Loading leaderboard...</span>
             <section aria-hidden="true" className="mb-8 grid grid-cols-3 gap-2 min-[900px]:grid-cols-6 min-[900px]:gap-3">
               {Array.from({ length: 6 }, (_, index) => (
