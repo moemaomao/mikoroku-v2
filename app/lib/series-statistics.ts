@@ -2,8 +2,6 @@
 
 import {
   doc,
-  increment,
-  setDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
@@ -23,6 +21,8 @@ const DATABASE_VERSION = 1;
 const STORE_NAME = "seriesStatistics";
 export const SERIES_STATISTICS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const SERIES_STATISTICS_JSON_URL = "/series-statistics.json";
+
+const VIEWS_API = "https://mikoroku-og.vercel.app//api/views";
 
 export type SeriesStatistics = {
   slug: string;
@@ -346,7 +346,7 @@ function parseStatisticsCatalog(value: unknown): SeriesStatisticsCatalog {
       !isCount(rawCounters.bookmarks) ||
       !isCount(rawCounters.notifications)
     ) {
-      throw new Error(`The series statistics JSON contains invalid counters for "${slug}".`);
+      throw new Error('The series statistics JSON contains invalid counters for "' + slug + '".');
     }
     series[slug] = {
       views: rawCounters.views,
@@ -363,7 +363,7 @@ async function loadStatisticsCatalog(): Promise<SeriesStatisticsCatalog> {
     statisticsCatalogRequest = fetch(SERIES_STATISTICS_JSON_URL, { cache: "no-cache" })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(`Could not load series statistics JSON (${response.status}).`);
+          throw new Error("Could not load series statistics JSON (" + response.status + ").");
         }
         return parseStatisticsCatalog(await response.json());
       })
@@ -387,17 +387,35 @@ function statisticsForSlug(
   return catalog.series[slug] ?? { views: 0, bookmarks: 0, notifications: 0 };
 }
 
+// Kirim view ke server Vercel (bukan Firestore lagi).
+// Server yang dedupe: maksimal 1 view per pengunjung per series per 6 jam.
 async function syncPendingSeriesViews(
   slug: string,
   pendingViews: number,
 ): Promise<void> {
-  const statisticsRef = getSeriesStatsRef(slug);
-  if (pendingViews > 0) {
-    await setDoc(statisticsRef, {
-      views: increment(pendingViews),
-      bookmarks: increment(0),
-      notifications: increment(0),
-    }, { merge: true });
+  if (pendingViews <= 0) return;
+  try {
+    await fetch(VIEWS_API, {
+      method: "POST",
+      keepalive: true,
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ slug }),
+    });
+  } catch {
+    // gagal kirim tidak masalah, view ini saja yang tidak terhitung
+  }
+}
+
+// Ambil tambahan view dari Redis. Mengembalikan null kalau gagal.
+async function fetchExtraViews(slug: string): Promise<number | null> {
+  try {
+    const response = await fetch(VIEWS_API + "?slugs=" + encodeURIComponent(slug));
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, number>;
+    const value = Number(data[slug] ?? 0);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  } catch {
+    return null;
   }
 }
 
@@ -444,10 +462,13 @@ async function claimStatisticsSync(
         };
         const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
         const hasNewJsonSnapshot = catalogExportedAtMs > (data.sourceExportedAtMs ?? 0);
+        // Hormati syncRetryAfter supaya tidak retry terus saat gagal
+        const retryBlocked = (data.syncRetryAfter ?? 0) > Date.now();
         const shouldSync =
-          age < 0 ||
-          age >= SERIES_STATISTICS_CACHE_TTL_MS ||
-          hasNewJsonSnapshot;
+          !retryBlocked &&
+          (age < 0 ||
+            age >= SERIES_STATISTICS_CACHE_TTL_MS ||
+            hasNewJsonSnapshot);
         if (shouldSync) {
           data.lastSyncAttemptAt = Date.now();
           data.syncRetryAfter = 0;
@@ -478,16 +499,27 @@ export async function syncSeriesStatisticsForVisit(
     const useCachedCounters = catalog.exportedAtMs <= (claim.data.sourceExportedAtMs ?? 0);
     const baseline = useCachedCounters
       ? {
-          views: Math.max(0, claim.data.views - pendingViews),
           bookmarks: claim.data.bookmarks,
           notifications: claim.data.notifications,
         }
-      : jsonCounters;
+      : {
+          bookmarks: jsonCounters.bookmarks,
+          notifications: jsonCounters.notifications,
+        };
+
     await syncPendingSeriesViews(slug, pendingViews);
+    const extraViews = await fetchExtraViews(slug);
+    const fallbackViews = useCachedCounters
+      ? Math.max(0, claim.data.views - pendingViews)
+      : jsonCounters.views;
+    const views = extraViews === null
+      ? fallbackViews
+      : jsonCounters.views + extraViews;
+
     const updated: SeriesStatistics = {
       slug,
       ...baseline,
-      views: baseline.views + pendingViews,
+      views,
       syncedAt: Date.now(),
       sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
@@ -495,23 +527,17 @@ export async function syncSeriesStatisticsForVisit(
     };
     return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
   } catch (error) {
-    const errorCode = error && typeof error === "object" && "code" in error
-      ? error.code
-      : "";
     const now = Date.now();
     const fallback: SeriesStatistics = {
       ...claim.data,
       views: Math.max(0, claim.data.views - pendingViews),
       syncedAt: now,
+      sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
       syncRetryAfter: now + SERIES_STATISTICS_CACHE_TTL_MS,
     };
-    if (errorCode === "permission-denied" || errorCode === "not-found") {
-      console.warn(`Series statistics could not be refreshed for "${slug}"; cached counts will be used.`);
-      return cacheSeriesStatistics(fallback, syncStartedAt, 0);
-    }
     await cacheSeriesStatistics(fallback, syncStartedAt, 0);
-    console.error(`Series statistics could not be synchronized for "${slug}".`, error);
-    throw error;
+    console.warn('Series statistics could not be synchronized for "' + slug + '".', error);
+    return fallback;
   }
 }
