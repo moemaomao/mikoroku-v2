@@ -37,7 +37,7 @@ import {
   type QueryDocumentSnapshot,
   type QuerySnapshot,
 } from "firebase/firestore";
-import { normalizeChapterNumber } from "../../../lib/chapter-number";
+import { normalizeChapterNumber } from "../../lib/chapter-number";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
@@ -327,7 +327,13 @@ async function scanPostComments(
   return commentsByPost;
 }
 
-export default function ModerationPage() {
+export default function ModerationPage({
+  embedded = false,
+  isLightMode = false,
+}: {
+  embedded?: boolean;
+  isLightMode?: boolean;
+}) {
   const [services, setServices] = useState<ModeratorServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -371,6 +377,8 @@ export default function ModerationPage() {
   );
 
   useEffect(() => {
+    if (embedded) return;
+
     const applySavedTheme = () => {
       let isDark = true;
       try {
@@ -394,7 +402,7 @@ export default function ModerationPage() {
     applySavedTheme();
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+  }, [embedded]);
 
   useEffect(() => {
     try {
@@ -1212,8 +1220,15 @@ export default function ModerationPage() {
     }
   };
 
+  const PageContainer = embedded ? "section" : "main";
+  const themeClasses = embedded
+    ? isLightMode
+      ? "bg-[#f4f5f8] text-slate-900"
+      : "dark bg-[#0d0e12] text-slate-100"
+    : "bg-[#f4f5f8] text-slate-900 dark:bg-[#0d0e12] dark:text-slate-100";
+
   return (
-    <main className="min-h-screen bg-[#f4f5f8] px-4 py-8 text-slate-900 dark:bg-[#0d0e12] dark:text-slate-100 sm:px-6 lg:px-8">
+    <PageContainer className={`min-h-screen ${themeClasses} px-4 py-8 sm:px-6 lg:px-8`}>
       <div className="mx-auto max-w-7xl">
         <header className="relative mb-6 flex flex-col gap-4 overflow-hidden rounded-3xl border border-black/5 bg-white p-6 shadow-[0_18px_60px_-35px_rgba(15,23,42,.3)] dark:border-white/[0.08] dark:bg-[#17181e] sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl" />
@@ -1680,6 +1695,6 @@ export default function ModerationPage() {
           </>
         )}
       </div>
-    </main>
+    </PageContainer>
   );
 }

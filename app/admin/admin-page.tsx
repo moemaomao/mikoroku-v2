@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   getApps,
   initializeApp,
@@ -54,6 +55,12 @@ import {
   type ReaderServerNoticeConfig,
 } from "../series/reader-server-notice-config";
 import { isNovelSeries } from "../../lib/reader-kind";
+import { getSeriesStatisticsFirestore } from "../lib/series-statistics";
+
+const ModerationPage = dynamic(() => import("./moderation-page"), {
+  ssr: false,
+  loading: () => <div className="p-6 text-sm">Loading moderation tools...</div>,
+});
 
 const firebaseConfig = {
   apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
@@ -1064,7 +1071,7 @@ export default function AdminPage() {
   const metadataJsonOriginalRef = useRef("");
   const [queryText, setQueryText] = useState("");
   const [activeSection, setActiveSection] = useState<
-    "dashboard" | "manga-list" | "editor" | "manga-detail" | "metadata-json" | "reports" | "announcements" | "genres" | "advertisements" | "settings" | "og-cover"
+    "dashboard" | "manga-list" | "editor" | "manga-detail" | "metadata-json" | "reports" | "announcements" | "moderation" | "genres" | "advertisements" | "settings" | "og-cover"
   >("dashboard");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [editing, setEditing] = useState<MangaRecord | null>(null);
@@ -1125,6 +1132,12 @@ export default function AdminPage() {
 
   useEffect(() => {
     setIsLightMode(window.localStorage.getItem("theme") === "light");
+  }, []);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("section") === "moderation") {
+      setActiveSection("moderation");
+    }
   }, []);
 
   // Swallow benign AbortErrors (Next.js / fetch cancellation) so they don't show as red overlays
@@ -2571,6 +2584,59 @@ export default function AdminPage() {
     }
   }
 
+  async function exportSeriesStatisticsJson() {
+    setBusy(true);
+    setSettingsStatus("Loading series statistics from Firestore...");
+    try {
+      const firestore = getSeriesStatisticsFirestore();
+      const snapshot = await getDocs(collection(firestore, "seriesStats"));
+      const series: Record<string, {
+        views: number;
+        bookmarks: number;
+        notifications: number;
+      }> = {};
+
+      for (const statisticsDocument of snapshot.docs) {
+        let slug: string;
+        try {
+          slug = decodeURIComponent(statisticsDocument.id);
+        } catch {
+          throw new Error(`Invalid encoded series statistics document ID: ${statisticsDocument.id}`);
+        }
+        if (!slug) {
+          throw new Error(`Series statistics document "${statisticsDocument.id}" has no series slug.`);
+        }
+        const data = statisticsDocument.data();
+        const count = (key: "views" | "bookmarks" | "notifications") =>
+          typeof data[key] === "number" &&
+            Number.isSafeInteger(data[key]) &&
+            data[key] >= 0
+            ? data[key]
+            : 0;
+        series[slug] = {
+          views: count("views"),
+          bookmarks: count("bookmarks"),
+          notifications: count("notifications"),
+        };
+      }
+
+      const exportedAt = new Date();
+      downloadJson("series-statistics.json", {
+        exportedAt: exportedAt.toISOString(),
+        exportedAtMs: exportedAt.getTime(),
+        series,
+      });
+      setSettingsStatus(
+        `Series statistics JSON exported: ${Object.keys(series).length} series. Replace public/series-statistics.json with this file and deploy it to publish the counts.`,
+      );
+    } catch (error) {
+      console.error("Failed to export series statistics JSON.", error);
+      setSettingsStatus(`Series statistics export failed: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggleTheme() {
     setIsLightMode((current) => {
       const next = !current;
@@ -3468,6 +3534,10 @@ export default function AdminPage() {
     );
   }
 
+  if (!user && activeSection === "moderation") {
+    return <ModerationPage />;
+  }
+
   if (!user) {
     return (
       <main className={styles.loginPage}>
@@ -3579,6 +3649,19 @@ export default function AdminPage() {
             Announcements
           </button>
           <button
+            className={activeSection === "moderation" ? styles.activeNav : ""}
+            onClick={() => {
+              setActiveSection("moderation");
+              setMobileNavOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+            Moderation
+          </button>
+          <button
             className={activeSection === "advertisements" ? styles.activeNav : ""}
             onClick={() => {
               setActiveSection("advertisements");
@@ -3673,17 +3756,19 @@ export default function AdminPage() {
               Back to Manga List
             </button>
           )}
-          <label className={styles.searchBox}>
-            <input
-              aria-label="Search manga"
-              placeholder="Search title or slug..."
-              value={queryText}
-              onChange={(event) => {
-                setQueryText(event.target.value);
-                if (event.target.value) setActiveSection("manga-list");
-              }}
-            />
-          </label>
+          {activeSection !== "moderation" && (
+            <label className={styles.searchBox}>
+              <input
+                aria-label="Search manga"
+                placeholder="Search title or slug..."
+                value={queryText}
+                onChange={(event) => {
+                  setQueryText(event.target.value);
+                  if (event.target.value) setActiveSection("manga-list");
+                }}
+              />
+            </label>
+          )}
         </div>
 
         <div className={styles.content}>
@@ -4225,6 +4310,9 @@ export default function AdminPage() {
               )}
             </section>
           )}
+          {activeSection === "moderation" && (
+            <ModerationPage embedded isLightMode={isLightMode} />
+          )}
 
           {activeSection === "genres" && (
             <section className={styles.panel}>
@@ -4298,7 +4386,9 @@ export default function AdminPage() {
                   <button className={styles.secondaryButton} onClick={() => void backupFirestore(false)} disabled={busy}>Backup Metadata Manga</button>
                   <button className={styles.primaryButton} onClick={() => void backupFirestore(true)} disabled={busy}>Full Backup</button>
                   <button className={styles.secondaryButton} onClick={() => void exportAllStaticChapterSummaries()} disabled={busy}>Export All Chapter JSON</button>
+                  <button className={styles.secondaryButton} onClick={() => void exportSeriesStatisticsJson()} disabled={busy}>Export Series Statistics JSON</button>
                 </div>
+                <p>To publish the latest counts, replace <code>public/series-statistics.json</code> with the downloaded file and deploy the site.</p>
               </div>
               {settingsStatus && <p className={styles.inlineStatus}>{settingsStatus}</p>}
             </section>

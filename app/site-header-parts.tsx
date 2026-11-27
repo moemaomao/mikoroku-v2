@@ -147,7 +147,7 @@ export function SiteSidebar({
           <div className="my-3 h-px bg-gradient-to-r from-transparent via-black/15 to-transparent dark:via-white/15" />
           <SidebarLink href="https://discord.gg/kkt669knaG" icon="discord" external>Discord</SidebarLink>
           <SidebarLink href="https://trakteer.id/mikorokuscan" icon="donation" external>Donation</SidebarLink>
-          {canAccessAdminPanels && <><SidebarLink href="/admin" icon="shield" onClick={closeOnMobile}>Admin Panel</SidebarLink><SidebarLink href="/admin/moderation" icon="shield" onClick={closeOnMobile}>Moderator Panel</SidebarLink></>}
+          {canAccessAdminPanels && <SidebarLink href="/admin" icon="shield" onClick={closeOnMobile}>Admin Panel</SidebarLink>}
         </nav>
       </aside>
     </>

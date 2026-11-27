@@ -2,8 +2,7 @@
 
 import {
   doc,
-  getDoc,
-  runTransaction,
+  increment,
   setDoc,
 } from "firebase/firestore";
 import { getApps, initializeApp } from "firebase/app";
@@ -23,6 +22,7 @@ const DATABASE_NAME = "widget-comment-series-statistics";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "seriesStatistics";
 export const SERIES_STATISTICS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const SERIES_STATISTICS_JSON_URL = "/series-statistics.json";
 
 export type SeriesStatistics = {
   slug: string;
@@ -32,6 +32,7 @@ export type SeriesStatistics = {
   syncedAt: number;
   pendingViews?: number;
   localUpdatedAt?: number;
+  sourceExportedAtMs?: number;
   lastSyncAttemptAt?: number;
   syncRetryAfter?: number;
 };
@@ -41,6 +42,10 @@ function statisticsFirestore() {
     candidate.name === STATISTICS_FIREBASE_APP_NAME,
   ) ?? initializeApp(STATISTICS_FIREBASE_CONFIG, STATISTICS_FIREBASE_APP_NAME);
   return getFirestore(app);
+}
+
+export function getSeriesStatisticsFirestore() {
+  return statisticsFirestore();
 }
 
 export function getSeriesStatsRef(slug: string) {
@@ -115,6 +120,7 @@ export async function getCachedSeriesStatistics(
       syncedAt: value.syncedAt,
       pendingViews: isCount(value.pendingViews) ? value.pendingViews : 0,
       localUpdatedAt: isCount(value.localUpdatedAt) ? value.localUpdatedAt : 0,
+      sourceExportedAtMs: isCount(value.sourceExportedAtMs) ? value.sourceExportedAtMs : 0,
       lastSyncAttemptAt: isCount(value.lastSyncAttemptAt)
         ? value.lastSyncAttemptAt
         : value.syncedAt,
@@ -202,12 +208,23 @@ export async function recordSeriesViewInCache(
               syncedAt: previous.syncedAt,
               pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
               localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
+              sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
+                ? previous.sourceExportedAtMs
+                : 0,
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
                 : previous.syncedAt,
               syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
             }
-          : { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0, pendingViews: 0 };
+          : {
+              slug,
+              views: 0,
+              bookmarks: 0,
+              notifications: 0,
+              syncedAt: 0,
+              pendingViews: 0,
+              sourceExportedAtMs: 0,
+            };
         updated = {
           ...data,
           views: data.views + 1,
@@ -255,12 +272,23 @@ export async function adjustCachedSeriesStatistic(
               syncedAt: previous.syncedAt,
               pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
               localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
+              sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
+                ? previous.sourceExportedAtMs
+                : 0,
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
                 : previous.syncedAt,
               syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
             }
-          : { slug, views: 0, bookmarks: 0, notifications: 0, syncedAt: 0, pendingViews: 0 };
+          : {
+              slug,
+              views: 0,
+              bookmarks: 0,
+              notifications: 0,
+              syncedAt: 0,
+              pendingViews: 0,
+              sourceExportedAtMs: 0,
+            };
 
         store.put({
           ...data,
@@ -280,40 +308,102 @@ export async function adjustCachedSeriesStatistic(
 
 type StatisticsCounters = Pick<SeriesStatistics, "views" | "bookmarks" | "notifications">;
 
-function readStatisticsCountersWithFallback(
-  value: unknown,
-  fallback: StatisticsCounters,
+type SeriesStatisticsCatalog = {
+  exportedAtMs: number;
+  series: Record<string, StatisticsCounters>;
+};
+
+let statisticsCatalogRequest: Promise<SeriesStatisticsCatalog> | null = null;
+
+function parseStatisticsCatalog(value: unknown): SeriesStatisticsCatalog {
+  if (!isRecord(value) || !isRecord(value.series)) {
+    throw new Error("The series statistics JSON has an invalid format.");
+  }
+  const exportedAtFromIso = typeof value.exportedAt === "string"
+    ? Date.parse(value.exportedAt)
+    : Number.NaN;
+  const exportedAtMs =
+    typeof value.exportedAtMs === "number" &&
+      Number.isFinite(value.exportedAtMs) &&
+      value.exportedAtMs > 0
+      ? value.exportedAtMs
+      : Number.isFinite(exportedAtFromIso) && exportedAtFromIso >= 0
+        ? exportedAtFromIso
+        : value.exportedAtMs === 0
+          ? 0
+          : Number.NaN;
+  if (!Number.isFinite(exportedAtMs)) {
+    throw new Error("The series statistics JSON has an invalid export timestamp.");
+  }
+
+  const series: Record<string, StatisticsCounters> = {};
+  for (const [slug, rawCounters] of Object.entries(value.series)) {
+    if (!slug || !isRecord(rawCounters)) {
+      throw new Error("The series statistics JSON contains an invalid series entry.");
+    }
+    if (
+      !isCount(rawCounters.views) ||
+      !isCount(rawCounters.bookmarks) ||
+      !isCount(rawCounters.notifications)
+    ) {
+      throw new Error(`The series statistics JSON contains invalid counters for "${slug}".`);
+    }
+    series[slug] = {
+      views: rawCounters.views,
+      bookmarks: rawCounters.bookmarks,
+      notifications: rawCounters.notifications,
+    };
+  }
+
+  return { exportedAtMs, series };
+}
+
+async function loadStatisticsCatalog(): Promise<SeriesStatisticsCatalog> {
+  if (!statisticsCatalogRequest) {
+    statisticsCatalogRequest = fetch(SERIES_STATISTICS_JSON_URL, { cache: "no-cache" })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Could not load series statistics JSON (${response.status}).`);
+        }
+        return parseStatisticsCatalog(await response.json());
+      })
+      .catch((error: unknown) => {
+        statisticsCatalogRequest = null;
+        throw error;
+      });
+  }
+  const request = statisticsCatalogRequest;
+  try {
+    return await request;
+  } finally {
+    if (statisticsCatalogRequest === request) statisticsCatalogRequest = null;
+  }
+}
+
+function statisticsForSlug(
+  catalog: SeriesStatisticsCatalog,
+  slug: string,
 ): StatisticsCounters {
-  const record = isRecord(value) ? value : {};
-  return {
-    views: isCount(record.views) ? record.views : 0,
-    bookmarks: isCount(record.bookmarks) ? record.bookmarks : fallback.bookmarks,
-    notifications: isCount(record.notifications) ? record.notifications : fallback.notifications,
-  };
+  return catalog.series[slug] ?? { views: 0, bookmarks: 0, notifications: 0 };
 }
 
 async function syncPendingSeriesViews(
   slug: string,
   pendingViews: number,
-  fallback: StatisticsCounters,
-): Promise<StatisticsCounters> {
+): Promise<void> {
   const statisticsRef = getSeriesStatsRef(slug);
-  return runTransaction(statisticsRef.firestore, async (transaction) => {
-    const stored = await transaction.get(statisticsRef);
-    const counters = readStatisticsCountersWithFallback(
-      stored.exists() ? stored.data() : undefined,
-      fallback,
-    );
-    const updated = { ...counters, views: counters.views + pendingViews };
-    if (pendingViews > 0 || !stored.exists()) {
-      transaction.set(statisticsRef, updated, { merge: true });
-    }
-    return updated;
-  });
+  if (pendingViews > 0) {
+    await setDoc(statisticsRef, {
+      views: increment(pendingViews),
+      bookmarks: increment(0),
+      notifications: increment(0),
+    }, { merge: true });
+  }
 }
 
 async function claimStatisticsSync(
   slug: string,
+  catalogExportedAtMs: number,
 ): Promise<{ data: SeriesStatistics; shouldSync: boolean }> {
   const database = await openDatabase();
   try {
@@ -344,16 +434,20 @@ async function claimStatisticsSync(
           syncedAt: previous.syncedAt,
           pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
           localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
+          sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
+            ? previous.sourceExportedAtMs
+            : 0,
           lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
             ? previous.lastSyncAttemptAt
             : previous.syncedAt,
           syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
         };
         const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
-        const hasPendingViews = (data.pendingViews ?? 0) > 0;
+        const hasNewJsonSnapshot = catalogExportedAtMs > (data.sourceExportedAtMs ?? 0);
         const shouldSync =
           age < 0 ||
-          age >= SERIES_STATISTICS_CACHE_TTL_MS;
+          age >= SERIES_STATISTICS_CACHE_TTL_MS ||
+          hasNewJsonSnapshot;
         if (shouldSync) {
           data.lastSyncAttemptAt = Date.now();
           data.syncRetryAfter = 0;
@@ -371,37 +465,31 @@ async function claimStatisticsSync(
   }
 }
 
-async function loadSeriesStatisticsDocument(
-  slug: string,
-  fallback: StatisticsCounters,
-): Promise<StatisticsCounters> {
-  const statisticsRef = getSeriesStatsRef(slug);
-  const snapshot = await getDoc(statisticsRef);
-  const counters = readStatisticsCountersWithFallback(
-    snapshot.exists() ? snapshot.data() : undefined,
-    fallback,
-  );
-  if (!snapshot.exists()) {
-    await setDoc(statisticsRef, counters, { merge: true });
-  }
-  return counters;
-}
-
 export async function syncSeriesStatisticsForVisit(
   slug: string,
 ): Promise<SeriesStatistics> {
-  const claim = await claimStatisticsSync(slug);
+  const catalog = await loadStatisticsCatalog();
+  const claim = await claimStatisticsSync(slug, catalog.exportedAtMs);
   if (!claim.shouldSync) return claim.data;
   const syncStartedAt = claim.data.lastSyncAttemptAt ?? Date.now();
   const pendingViews = claim.data.pendingViews ?? 0;
   try {
-    const counters = pendingViews > 0
-      ? await syncPendingSeriesViews(slug, pendingViews, claim.data)
-      : await loadSeriesStatisticsDocument(slug, claim.data);
+    const jsonCounters = statisticsForSlug(catalog, slug);
+    const useCachedCounters = catalog.exportedAtMs <= (claim.data.sourceExportedAtMs ?? 0);
+    const baseline = useCachedCounters
+      ? {
+          views: Math.max(0, claim.data.views - pendingViews),
+          bookmarks: claim.data.bookmarks,
+          notifications: claim.data.notifications,
+        }
+      : jsonCounters;
+    await syncPendingSeriesViews(slug, pendingViews);
     const updated: SeriesStatistics = {
       slug,
-      ...counters,
+      ...baseline,
+      views: baseline.views + pendingViews,
       syncedAt: Date.now(),
+      sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
       syncRetryAfter: 0,
     };
@@ -419,7 +507,7 @@ export async function syncSeriesStatisticsForVisit(
       syncRetryAfter: now + SERIES_STATISTICS_CACHE_TTL_MS,
     };
     if (errorCode === "permission-denied" || errorCode === "not-found") {
-      console.warn(`Series statistics are unavailable for "${slug}"; cached counts will be used.`);
+      console.warn(`Series statistics could not be refreshed for "${slug}"; cached counts will be used.`);
       return cacheSeriesStatistics(fallback, syncStartedAt, 0);
     }
     await cacheSeriesStatistics(fallback, syncStartedAt, 0);

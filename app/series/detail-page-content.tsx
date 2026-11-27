@@ -128,6 +128,17 @@ type ChapterSource = Chapter["source"];
 
 type SeriesBookmarkFirebase = NonNullable<Window["firebase"]>;
 
+const compactStatisticCountFormatter = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 0,
+});
+
+function formatStatisticCount(value: number): string {
+  return value < 1_000
+    ? value.toLocaleString("id-ID")
+    : compactStatisticCountFormatter.format(value).toLowerCase();
+}
+
 const COMMENT_COUNT_FIREBASE_APP_NAME = "mikoroku-series-comment-count";
 const COMMENT_COUNT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
@@ -1400,11 +1411,9 @@ function SeriesStatisticsBar({
           const errorCode = error && typeof error === "object" && "code" in error
             ? error.code
             : "";
-          setSyncError(errorCode === "failed-precondition"
-            ? "Firestore index belum tersedia. Deploy firestore.indexes.json ke project widget-comment."
-            : errorCode === "permission-denied"
-              ? "Firestore menolak akses statistik. Periksa rules di project widget-comment."
-              : "Statistik sementara tidak tersedia.");
+          setSyncError(errorCode === "permission-denied"
+            ? "Firestore menolak akses statistik. Periksa rules di project widget-comment."
+            : "Statistik sementara tidak tersedia.");
         }
       }
     })();
@@ -1508,7 +1517,7 @@ function SeriesStatisticsBar({
                 aria-hidden="true"
               />
               <span className="truncate">{item.label}</span>
-              <strong className="shrink-0">{item.value.toLocaleString("id-ID")}</strong>
+              <strong className="shrink-0">{formatStatisticCount(item.value)}</strong>
             </>
           );
 
