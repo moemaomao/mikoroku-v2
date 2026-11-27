@@ -19,6 +19,7 @@ const STATISTICS_FIREBASE_CONFIG = {
 const DATABASE_NAME = "widget-comment-series-statistics";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "seriesStatistics";
+const PENDING_STATISTIC_DELTAS_KEY = "mikoroku_pending_series_statistic_deltas_v1";
 export const SERIES_STATISTICS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const SERIES_STATISTICS_JSON_URL = "/series-statistics.json";
 
@@ -248,9 +249,10 @@ export async function adjustCachedSeriesStatistic(
   slug: string,
   key: "bookmarks" | "notifications",
   delta: number,
-): Promise<void> {
+): Promise<number> {
   const database = await openDatabase();
   try {
+    let appliedDelta = 0;
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readwrite");
       const store = transaction.objectStore(STORE_NAME);
@@ -290,9 +292,11 @@ export async function adjustCachedSeriesStatistic(
               sourceExportedAtMs: 0,
             };
 
+        const nextCount = Math.max(0, data[key] + delta);
+        appliedDelta = nextCount - data[key];
         store.put({
           ...data,
-          [key]: Math.max(0, data[key] + delta),
+          [key]: nextCount,
           localUpdatedAt: Math.max(Date.now(), data.localUpdatedAt ?? 0),
         });
       };
@@ -301,8 +305,88 @@ export async function adjustCachedSeriesStatistic(
       transaction.onerror = () => reject(transaction.error || new Error("Could not update the local series statistics."));
       transaction.onabort = () => reject(transaction.error || new Error("Updating the local series statistics was aborted."));
     });
+    return appliedDelta;
   } finally {
     database.close();
+  }
+}
+
+function statisticDeltaKey(
+  slug: string,
+  key: "bookmarks" | "notifications",
+): string {
+  return JSON.stringify([slug, key]);
+}
+
+function readPendingStatisticDeltas(): Record<string, number> {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(PENDING_STATISTIC_DELTAS_KEY) || "{}");
+    if (!isRecord(stored)) return {};
+    return Object.fromEntries(
+      Object.entries(stored).filter((entry): entry is [string, number] =>
+        isCount(entry[1]) || (typeof entry[1] === "number" &&
+          Number.isSafeInteger(entry[1]) && entry[1] < 0),
+      ),
+    );
+  } catch (error) {
+    console.warn("Pending series statistic adjustments could not be read.", error);
+    return {};
+  }
+}
+
+function writePendingStatisticDeltas(deltas: Record<string, number>): void {
+  if (Object.keys(deltas).length) {
+    localStorage.setItem(PENDING_STATISTIC_DELTAS_KEY, JSON.stringify(deltas));
+  } else {
+    localStorage.removeItem(PENDING_STATISTIC_DELTAS_KEY);
+  }
+}
+
+export async function recordPendingSeriesStatisticCount(
+  slug: string,
+  key: "bookmarks" | "notifications",
+  delta: number,
+): Promise<void> {
+  if (!delta) return;
+  const deltaKey = statisticDeltaKey(slug, key);
+  const pending = readPendingStatisticDeltas();
+  pending[deltaKey] = (pending[deltaKey] || 0) + delta;
+  writePendingStatisticDeltas(pending);
+
+  try {
+    const appliedDelta = await adjustCachedSeriesStatistic(slug, key, delta);
+    const latest = readPendingStatisticDeltas();
+    const adjustedPendingDelta = (latest[deltaKey] || 0) + appliedDelta - delta;
+    if (adjustedPendingDelta) latest[deltaKey] = adjustedPendingDelta;
+    else delete latest[deltaKey];
+    writePendingStatisticDeltas(latest);
+  } catch (error) {
+    const latest = readPendingStatisticDeltas();
+    const restoredDelta = (latest[deltaKey] || 0) - delta;
+    if (restoredDelta) latest[deltaKey] = restoredDelta;
+    else delete latest[deltaKey];
+    writePendingStatisticDeltas(latest);
+    throw error;
+  }
+}
+
+export async function reconcilePendingSeriesStatisticCount(
+  slug: string,
+  key: "bookmarks" | "notifications",
+  actualDelta: number,
+): Promise<void> {
+  const deltaKey = statisticDeltaKey(slug, key);
+  const pending = readPendingStatisticDeltas();
+  const optimisticDelta = pending[deltaKey] || 0;
+  const correction = actualDelta - optimisticDelta;
+  try {
+    if (correction) await adjustCachedSeriesStatistic(slug, key, correction);
+    if (optimisticDelta) {
+      delete pending[deltaKey];
+      writePendingStatisticDeltas(pending);
+    }
+  } catch (error) {
+    console.warn(`Cached series ${key} count could not be reconciled.`, error);
   }
 }
 

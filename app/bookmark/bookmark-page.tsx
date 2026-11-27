@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
 import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
-import { adjustCachedSeriesStatistic } from "../lib/series-statistics";
+import {
+  reconcilePendingSeriesStatisticCount,
+  recordPendingSeriesStatisticCount,
+} from "../lib/series-statistics";
 import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
@@ -232,6 +235,16 @@ async function syncBookmarkDocument(
   const statisticsReference = firestore.collection("seriesStats")
     .doc(encodeURIComponent(bookmark.slug));
 
+  try {
+    await recordPendingSeriesStatisticCount(
+      bookmark.slug,
+      "bookmarks",
+      remove ? -1 : 1,
+    );
+  } catch (error) {
+    console.warn("Cached series bookmark count could not be updated.", error);
+  }
+
   const delta = await firestore.runTransaction(async (transaction) => {
     const [bookmarkSnapshot, statisticsSnapshot] = await Promise.all([
       transaction.get(reference),
@@ -278,11 +291,7 @@ async function syncBookmarkDocument(
     return countDelta;
   });
 
-  if (delta !== 0) {
-    void adjustCachedSeriesStatistic(bookmark.slug, "bookmarks", delta).catch((error: unknown) => {
-      console.warn("Cached series bookmark count could not be updated.", error);
-    });
-  }
+  await reconcilePendingSeriesStatisticCount(bookmark.slug, "bookmarks", delta);
   return delta;
 }
 

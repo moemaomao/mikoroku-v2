@@ -1,6 +1,6 @@
 "use client";
 
-import { adjustCachedSeriesStatistic } from "./series-statistics";
+import { reconcilePendingSeriesStatisticCount } from "./series-statistics";
 
 export const SERIES_NOTIFICATIONS_UPDATED_EVENT = "mikoroku:series-notifications-updated";
 export const SERIES_NOTIFICATIONS_STORAGE_KEY = "mikoroku_series_notifications_v1";
@@ -8,6 +8,7 @@ export const SERIES_NOTIFICATIONS_STORAGE_KEY = "mikoroku_series_notifications_v
 const FIRESTORE_MARKER = "seriesNotification";
 const FIRESTORE_ID_PREFIX = "series-notification-";
 const PENDING_NOTIFICATION_DELETIONS_KEY = "mikoroku_series_notification_deletions_v1";
+const NOTIFICATION_SYNC_RETRY_DELAY_MS = 30_000;
 
 export type SeriesNotificationSubscription = {
   slug: string;
@@ -68,6 +69,9 @@ type NotificationWindow = Window & {
   currentUser?: { uid?: string } | null;
   firebase?: FirebaseCompat;
 };
+
+const notificationLoadRequests = new Map<string, Promise<SeriesNotificationSubscription[]>>();
+const notificationLoadRetryAfter = new Map<string, { at: number; error: unknown }>();
 
 function browserWindow(): NotificationWindow {
   return window as NotificationWindow;
@@ -138,12 +142,6 @@ function notificationFirestore() {
   const firestore = browserWindow().firebase?.firestore?.();
   if (!firestore) throw new Error("Firestore untuk notifikasi tidak tersedia.");
   return firestore;
-}
-
-function adjustCachedNotificationCount(slug: string, delta: number): void {
-  void adjustCachedSeriesStatistic(slug, "notifications", delta).catch((error: unknown) => {
-    console.warn("Cached series notification count could not be updated.", error);
-  });
 }
 
 function notificationDocumentId(slug: string): string {
@@ -238,12 +236,40 @@ export function saveLocalSeriesNotificationSubscription(
   return next;
 }
 
-export async function loadSeriesNotificationSubscriptions(
+export function loadSeriesNotificationSubscriptions(
   uid = getSeriesNotificationUserId(),
+): Promise<SeriesNotificationSubscription[]> {
+  const local = readLocalSubscriptions();
+  if (!uid) return Promise.resolve(local);
+  const pendingRequest = notificationLoadRequests.get(uid);
+  if (pendingRequest) return pendingRequest;
+  const retry = notificationLoadRetryAfter.get(uid);
+  if (retry && retry.at > Date.now()) return Promise.reject(retry.error);
+
+  const request = loadAndSyncSeriesNotificationSubscriptions(uid)
+    .then((subscriptions) => {
+      notificationLoadRetryAfter.delete(uid);
+      return subscriptions;
+    })
+    .catch((error: unknown) => {
+      notificationLoadRetryAfter.set(uid, {
+        at: Date.now() + NOTIFICATION_SYNC_RETRY_DELAY_MS,
+        error,
+      });
+      throw error;
+    })
+    .finally(() => {
+      notificationLoadRequests.delete(uid);
+    });
+  notificationLoadRequests.set(uid, request);
+  return request;
+}
+
+async function loadAndSyncSeriesNotificationSubscriptions(
+  uid: string,
 ): Promise<SeriesNotificationSubscription[]> {
   const localStorageValue = localStorage.getItem(SERIES_NOTIFICATIONS_STORAGE_KEY) || "[]";
   const local = readLocalSubscriptions();
-  if (!uid) return local;
 
   const collection = notificationCollection(uid);
   const snapshot = await collection.where(FIRESTORE_MARKER, "==", true).get();
@@ -309,8 +335,9 @@ export async function saveSeriesNotificationSubscription(
     if (uid) {
       clearNotificationDeletion(uid, subscription.slug);
       await persistNotificationSubscription(saved, uid);
+      notificationLoadRetryAfter.delete(uid);
     } else {
-      adjustCachedNotificationCount(subscription.slug, 1);
+      await reconcilePendingSeriesStatisticCount(subscription.slug, "notifications", 1);
     }
   } catch (error) {
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
@@ -362,9 +389,7 @@ async function persistNotificationSubscription(
     }
     return delta;
   });
-  if (delta !== 0) {
-    adjustCachedNotificationCount(subscription.slug, delta);
-  }
+  await reconcilePendingSeriesStatisticCount(subscription.slug, "notifications", delta);
 }
 
 export async function removeSeriesNotificationSubscription(
@@ -384,8 +409,9 @@ export async function removeSeriesNotificationSubscription(
     if (uid) {
       await removeNotificationSubscription(normalizedSlug, uid);
       clearNotificationDeletion(uid, normalizedSlug);
+      notificationLoadRetryAfter.delete(uid);
     } else {
-      adjustCachedNotificationCount(normalizedSlug, -1);
+      await reconcilePendingSeriesStatisticCount(normalizedSlug, "notifications", -1);
     }
   } catch (error) {
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
@@ -431,9 +457,7 @@ async function removeNotificationSubscription(slug: string, uid: string): Promis
     }
     return wasCounted && currentNotifications > 0 ? -1 : 0;
   });
-  if (delta !== 0) {
-    adjustCachedNotificationCount(slug, delta);
-  }
+  await reconcilePendingSeriesStatisticCount(slug, "notifications", delta);
 }
 
 function timestampValue(value: unknown): number {

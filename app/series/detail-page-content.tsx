@@ -43,8 +43,9 @@ import {
   SERIES_NOTIFICATIONS_STORAGE_KEY,
 } from "../lib/series-notifications";
 import {
-  adjustCachedSeriesStatistic,
   getCachedSeriesStatistics,
+  reconcilePendingSeriesStatisticCount,
+  recordPendingSeriesStatisticCount,
   recordSeriesViewInCache,
   syncSeriesStatisticsForVisit,
   type SeriesStatistics,
@@ -1437,11 +1438,6 @@ function SeriesStatisticsBar({
     statisticsRef.current = next;
     setStatistics(next);
     if (key === "bookmarks") {
-      void adjustCachedSeriesStatistic(slug, key, wasActive ? -1 : 1).catch((error: unknown) => {
-        console.warn(`Cached series ${key} count could not be updated.`, error);
-      });
-    }
-    if (key === "bookmarks") {
       onToggleBookmark();
     } else {
       void onToggleNotifications();
@@ -2526,7 +2522,14 @@ export default function DetailPageContent({
     const uid = getSeriesNotificationUserId();
     if (notificationsEnabled) {
       setNotificationsEnabled(false);
-      void removeSeriesNotificationSubscription(slug, uid).catch((error: unknown) => {
+      void (async () => {
+        try {
+          await recordPendingSeriesStatisticCount(slug, "notifications", -1);
+        } catch (error) {
+          console.warn("Cached series notification count could not be updated.", error);
+        }
+        await removeSeriesNotificationSubscription(slug, uid);
+      })().catch((error: unknown) => {
         console.error("Series notification preference could not be removed from Firestore.", error);
         setNotificationSyncError(uid
           ? "Perubahan notifikasi tersimpan lokal, tetapi gagal disinkronkan."
@@ -2560,6 +2563,11 @@ export default function DetailPageContent({
     }
 
     void (async () => {
+      try {
+        await recordPendingSeriesStatisticCount(slug, "notifications", 1);
+      } catch (error) {
+        console.warn("Cached series notification count could not be updated.", error);
+      }
       let version = fallbackVersion;
       try {
         const catalog = await loadFirestoreMangaCatalog();
@@ -2610,11 +2618,25 @@ export default function DetailPageContent({
       firebase?: SeriesBookmarkFirebase;
     };
     const uid = firebaseWindow.firebase?.auth?.().currentUser?.uid || firebaseWindow.currentUser?.uid;
-    if (uid) {
-      void setCachedBookmarkCount(uid, next.length).catch((cacheError: unknown) => {
+    const countDelta = isSaved ? 1 : -1;
+    void (async () => {
+      try {
+        await recordPendingSeriesStatisticCount(slug, "bookmarks", countDelta);
+      } catch (cacheError) {
+        console.warn("Cached series bookmark count could not be updated.", cacheError);
+      }
+
+      if (!uid) {
+        await reconcilePendingSeriesStatisticCount(slug, "bookmarks", countDelta);
+        return;
+      }
+
+      try {
+        await setCachedBookmarkCount(uid, next.length);
+      } catch (cacheError) {
         console.warn("Bookmark count could not be updated in the Stats cache.", cacheError);
-      });
-      void (async () => {
+      }
+      try {
         const firestore = firebaseWindow.firebase?.firestore?.();
         if (!firestore) throw new Error("Bookmark synchronization is unavailable.");
         const fieldValue = firebaseWindow.firebase?.firestore?.FieldValue;
@@ -2623,7 +2645,7 @@ export default function DetailPageContent({
           .collection("bookmarks").doc(key);
         const statisticsReference = firestore.collection("seriesStats")
           .doc(encodeURIComponent(slug));
-        await firestore.runTransaction(async (transaction) => {
+        const firestoreDelta = await firestore.runTransaction(async (transaction) => {
           const [bookmarkSnapshot, statisticsSnapshot] = await Promise.all([
             transaction.get(bookmarkReference),
             transaction.get(statisticsReference),
@@ -2667,11 +2689,13 @@ export default function DetailPageContent({
               notifications: count("notifications"),
             }, { merge: true });
           }
+          return delta;
         });
-      })().catch((syncError: unknown) => {
+        await reconcilePendingSeriesStatisticCount(slug, "bookmarks", firestoreDelta);
+      } catch (syncError) {
         console.warn("Bookmark is saved locally and will need cloud synchronization.", syncError);
-      });
-    }
+      }
+    })();
   }, [manga, slug]);
 
   async function submitDetailReport(event: FormEvent<HTMLFormElement>) {
