@@ -735,9 +735,9 @@ function HeaderContents() {
       if (loading) return;
       loading = true;
       try {
-        const subscriptions = await loadSeriesNotificationSubscriptions(
-          getSeriesNotificationUserId() || user?.uid || "",
-        );
+        const uid = getSeriesNotificationUserId();
+        if (uid && typeof window.firebase?.firestore !== "function") return;
+        const subscriptions = await loadSeriesNotificationSubscriptions(uid);
         if (!active) return;
         if (!subscriptions.length) {
           setUnreadSeriesUpdates(0);
