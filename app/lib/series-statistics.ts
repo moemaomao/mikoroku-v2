@@ -351,9 +351,9 @@ async function claimStatisticsSync(
         };
         const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
         const hasPendingViews = (data.pendingViews ?? 0) > 0;
-        const shouldSync = age < 0 ||
-          age >= SERIES_STATISTICS_CACHE_TTL_MS ||
-          (hasPendingViews && Date.now() >= (data.syncRetryAfter ?? 0));
+        const shouldSync =
+          age < 0 ||
+          age >= SERIES_STATISTICS_CACHE_TTL_MS;
         if (shouldSync) {
           data.lastSyncAttemptAt = Date.now();
           data.syncRetryAfter = 0;
