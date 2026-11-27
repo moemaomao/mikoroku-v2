@@ -1055,7 +1055,7 @@
 
 .chapterGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1066,7 +1066,7 @@
   min-height: 0;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   background: rgba(22, 28, 48, 0.88);
@@ -1091,7 +1091,6 @@
   align-items: baseline;
   gap: 3px;
   min-width: 0;
-  padding-right: 56px; /* room for icon actions */
 }
 
 .chapterCardHeading strong {
@@ -1116,21 +1115,19 @@
 }
 
 .chapterCard .rowActions {
-  position: absolute;
-  top: 4px;
-  right: 8px;
+  position: static;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0;
+  gap: 4px;
   margin: 0;
 }
 
-.chapterCard .rowActions button {
+.chapterCard .rowActions button,
+.chapterCard .rowActions a {
   display: grid;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
   padding: 0;
   border: none;
@@ -1139,9 +1136,15 @@
   background: transparent;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
+  text-decoration: none;
 }
 
 .chapterCard .rowActions button:hover {
+  color: #d6e4ff;
+  background: rgb(107 155 255 / 14%);
+}
+
+.chapterCard .rowActions a:hover {
   color: #d6e4ff;
   background: rgb(107 155 255 / 14%);
 }
@@ -1158,7 +1161,8 @@
   background: rgb(248 113 113 / 14%);
 }
 
-.chapterCard .rowActions button svg {
+.chapterCard .rowActions button svg,
+.chapterCard .rowActions a svg {
   width: 15px;
   height: 15px;
   fill: none;
@@ -1168,7 +1172,8 @@
   stroke-width: 1.8;
 }
 
-.chapterCard .rowActions button:focus-visible {
+.chapterCard .rowActions button:focus-visible,
+.chapterCard .rowActions a:focus-visible {
   outline: 2px solid #82a7ff;
   outline-offset: 1px;
 }
@@ -1769,10 +1774,8 @@
 
 .uploadedImageGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 8px;
-  max-height: 420px;
-  overflow-y: auto;
   margin: 12px 0;
   padding: 2px;
 }
@@ -2465,13 +2468,15 @@
   color: #66718a;
 }
 
-.lightMode .chapterCard .rowActions button:not(.deleteButton) {
+.lightMode .chapterCard .rowActions button:not(.deleteButton),
+.lightMode .chapterCard .rowActions a {
   border: none;
   color: #6b7c9c;
   background: transparent;
 }
 
-.lightMode .chapterCard .rowActions button:not(.deleteButton):hover {
+.lightMode .chapterCard .rowActions button:not(.deleteButton):hover,
+.lightMode .chapterCard .rowActions a:hover {
   border: none;
   color: #3959a3;
   background: rgb(57 89 163 / 12%);
@@ -2765,6 +2770,10 @@
     grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
     gap: 8px;
   }
+
+  .uploadedImageGrid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -2789,6 +2798,10 @@
   .chapterGrid {
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
+
+  .uploadedImageGrid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -2798,7 +2811,7 @@
   }
 
   .chapterGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -2833,10 +2846,6 @@
     padding: 6px;
   }
 
-  .chapterCardHeading {
-    padding-right: 27px;
-  }
-
   .chapterCardHeading strong {
     font-size: 11px;
   }
@@ -2846,13 +2855,12 @@
   }
 
   .chapterCard .rowActions {
-    top: 6px;
-    right: 6px;
-    flex-direction: column;
+    justify-content: flex-start;
     gap: 2px;
   }
 
-  .chapterCard .rowActions button {
+  .chapterCard .rowActions button,
+  .chapterCard .rowActions a {
     width: 24px;
     height: 24px;
     flex-basis: 24px;
@@ -2982,7 +2990,7 @@
   }
 
   .chapterGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .uploadedImageGrid {

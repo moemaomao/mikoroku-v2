@@ -41,6 +41,7 @@ import RichTextEditor from "./rich-text-editor";
 import MangaMetadataEditor from "./manga-metadata-editor";
 import MetadataJsonEditor from "./metadata-json-editor";
 import { loadFirestoreMangaCatalog } from "../lib/firebase-client";
+import { imageProxyUrl } from "../../lib/image-proxy";
 import {
   fetchMangaMetadataPayload,
   MANGA_METADATA_SOURCE_PATH,
@@ -634,22 +635,21 @@ function imageFileName(url: string): string {
   }
 }
 
-/** Admin preview src. Prefer direct URL; optional cache-bust. */
+/** Use a resized preview so large chapter pages load faster in the editor. */
 function adminPreviewSrc(url: string, bust = 0): string {
   try {
-    // Normalize common Blogger size tokens to a reliable variant
+    const sourceUrl = new URL(url);
     let src = url;
-    try {
-      const u = new URL(url);
-      if (/(^|\.)googleusercontent\.com$/i.test(u.hostname)) {
-        u.pathname = u.pathname
-          .replace(/\/s\d+(?:-c)?\//i, "/s1600/")
-          .replace(/\/w\d+-h\d+(?:-[a-z0-9-]+)?\//i, "/s1600/");
-        src = u.toString()
-          .replace(/=s\d+(?:-c)?(?:-[a-z0-9-]+)?(?=$|[?#])/i, "=s1600")
-          .replace(/=w\d+-h\d+(?:-[a-z0-9-]+)?(?=$|[&#])/i, "=s1600");
-      }
-    } catch { /* keep original */ }
+    if (/(^|\.)googleusercontent\.com$/i.test(sourceUrl.hostname)) {
+      sourceUrl.pathname = sourceUrl.pathname
+        .replace(/\/s\d+(?:-c)?\//i, "/s600/")
+        .replace(/\/w\d+-h\d+(?:-[a-z0-9-]+)?\//i, "/s600/");
+      src = sourceUrl.toString()
+        .replace(/=s\d+(?:-c)?(?:-[a-z0-9-]+)?(?=$|[?#])/i, "=s600")
+        .replace(/=w\d+-h\d+(?:-[a-z0-9-]+)?(?=$|[&#])/i, "=s600");
+    } else {
+      src = imageProxyUrl(url, "chapterPreview", undefined, false);
+    }
     if (!bust) return src;
     return `${src}${src.includes("?") ? "&" : "?"}_r=${bust}`;
   } catch {
@@ -3120,6 +3120,48 @@ export default function AdminPage() {
     setChapterEditorOpen(true);
   }
 
+  async function toggleChapterDraft(chapter: AdminChapter) {
+    const mangaRecord = selectedManga;
+    if (!mangaRecord) return;
+
+    const nextIsDraft = !chapter.isDraft;
+    setBusy(true);
+    setMessage("");
+    try {
+      const { firestore } = getAdminFirebase();
+      await updateDoc(
+        doc(firestore, "manga", mangaRecord.slug, "chapters", chapter.num),
+        { isDraft: nextIsDraft },
+      );
+
+      const updatedChapters = chapters.map((item) =>
+        item.num === chapter.num ? { ...item, isDraft: nextIsDraft } : item,
+      );
+      setChapters(updatedChapters);
+
+      let chapterLinkWarning = "";
+      try {
+        chapterLinkWarning = await syncGeneratedChapterLinks(
+          firestore,
+          mangaRecord.slug,
+          isNovelSeries(mangaRecord),
+          updatedChapters,
+        );
+      } catch (error) {
+        chapterLinkWarning = `Chapter status changed, but live links could not be updated: ${getErrorMessage(error)}`;
+        console.error(`Chapter ${chapter.num} visibility changed, but its links could not be synchronized.`, error);
+      }
+
+      const statusMessage = `Chapter ${chapter.num} ${nextIsDraft ? "hidden from readers" : "shown to readers"}.`;
+      setMessage([statusMessage, chapterLinkWarning].filter(Boolean).join(" "));
+    } catch (error) {
+      console.error(`Failed to update visibility for chapter ${chapter.num}.`, error);
+      setMessage(`Failed to update chapter visibility: ${getErrorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteChapter(chapter: AdminChapter) {
     if (!selectedManga || !window.confirm(`Delete chapter ${chapter.num}?`)) return;
     setBusy(true);
@@ -4107,11 +4149,62 @@ export default function AdminPage() {
                           }}
                         >
                           <div className={styles.chapterCardHeading}>
-                            <strong title={chapter.title || `Chapter ${chapter.num}`}>Ch. {chapter.num}</strong>
+                            <strong title={chapter.title || `Chapter ${chapter.num}`}>Chapter {chapter.num}</strong>
                             {chapter.isDraft ? <small className={styles.chapterDraftBadge}>DRAFT</small> : null}
                           </div>
                           <span className={styles.chapterDate}>{chapter.date ? new Date(getTimestamp(chapter.date)).toLocaleDateString("en-US") : ""}</span>
                           <div className={styles.rowActions}>
+                            {chapter.isDraft ? (
+                              <button
+                                type="button"
+                                disabled
+                                aria-label={`Chapter ${chapter.num} is hidden`}
+                                title="Chapter is hidden from readers"
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+                                  <circle cx="12" cy="12" r="3" />
+                                  <path d="m3 3 18 18" />
+                                </svg>
+                              </button>
+                            ) : (
+                              <a
+                                href={generatedChapterPath(
+                                  selectedManga.slug,
+                                  chapter.num,
+                                  isNovelSeries(selectedManga),
+                                )}
+                                className={styles.viewButton}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`View chapter ${chapter.num}`}
+                                title="View live chapter"
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+                                  <circle cx="12" cy="12" r="3" />
+                                </svg>
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              aria-pressed={chapter.isDraft}
+                              aria-label={`${chapter.isDraft ? "Show" : "Hide"} chapter ${chapter.num}`}
+                              title={chapter.isDraft ? "Show chapter to readers" : "Hide chapter from readers"}
+                              onClick={() => void toggleChapterDraft(chapter)}
+                              disabled={busy}
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <rect x="5" y="11" width="14" height="10" rx="2" />
+                                {chapter.isDraft ? (
+                                  <path d="M8 11V7a4 4 0 0 1 7.5-2" />
+                                ) : (
+                                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                                )}
+                                <circle cx="12" cy="16" r="1" />
+                                <path d="M12 17v1" />
+                              </svg>
+                            </button>
                             <button
                               type="button"
                               className={styles.editButton}
@@ -4667,8 +4760,9 @@ export default function AdminPage() {
                           try {
                             const proxy = new URL("https://images.weserv.nl/");
                             proxy.searchParams.set("url", url);
-                            proxy.searchParams.set("w", "240");
+                            proxy.searchParams.set("w", "600");
                             proxy.searchParams.set("q", "70");
+                            proxy.searchParams.set("output", "webp");
                             proxy.searchParams.set("n", "-1");
                             proxy.searchParams.set("v", String(imageReloadKey + 1));
                             el.src = proxy.toString();

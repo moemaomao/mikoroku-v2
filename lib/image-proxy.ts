@@ -41,6 +41,7 @@ const IMAGE_PROXY_PRESETS = {
     output: "webp",
     noUpscale: true,
   },
+  chapterPreview: { width: 600, quality: 70, output: "webp", noUpscale: true },
   readerFallback: { noUpscale: true },
 } as const;
 

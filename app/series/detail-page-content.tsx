@@ -212,6 +212,17 @@ function asStringList(value: unknown): string[] {
   return asString(value).split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function formatSeriesType(value?: string): string {
+  const normalized = (value || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  return normalized
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
+    .replace(/\bCg\b/g, "CG");
+}
+
 function firestoreDate(value: unknown): string {
   if (value && typeof value === "object" && "toDate" in value) {
     const date = (value as { toDate: () => Date }).toDate();
@@ -2959,7 +2970,7 @@ export default function DetailPageContent({
                       : "none",
                   }}
                 >
-                  <MetaTag label="Type" value={manga.type} icon="fa-layer-group" />
+                  <MetaTag label="Type" value={formatSeriesType(manga.type)} icon="fa-layer-group" />
                   <MetaTag label="Series" value={manga.series} icon="fa-bookmark" />
                   <MetaTag label="Characters" value={asStringList(manga.characters).join(", ")} icon="fa-user-group" />
                   <div className="detail-item"><i className="fas fa-book" aria-hidden="true" /><span><strong>Chapter:</strong> {chapterCount}</span></div>

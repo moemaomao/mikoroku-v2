@@ -19,6 +19,8 @@ type Manga = {
   genre?: string | string[];
   genres?: string[];
   tags?: string[];
+  femaleTags?: string | string[];
+  maleTags?: string | string[];
   labels?: string[];
   category?: string[];
   status?: string;
@@ -133,6 +135,11 @@ function nestedCatalogMetadata(manga: Manga): Record<string, unknown> {
   return { ...info, ...metadata };
 }
 
+function tagValues(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  return typeof value === "string" ? value.split(",") : [];
+}
+
 function mangaTags(manga: Manga): string[] {
   const metadata = nestedCatalogMetadata(manga);
   const values = [
@@ -146,6 +153,10 @@ function mangaTags(manga: Manga): string[] {
     ...(Array.isArray(metadata.labels) ? metadata.labels : []),
     ...(Array.isArray(metadata.category) ? metadata.category : []),
     ...(Array.isArray(metadata.genre) ? metadata.genre : metadata.genre ? [metadata.genre] : []),
+    ...tagValues(manga.femaleTags),
+    ...tagValues(manga.maleTags),
+    ...tagValues(metadata.femaleTags),
+    ...tagValues(metadata.maleTags),
     manga.type || "",
     metadata.type || "",
   ];
@@ -174,6 +185,10 @@ function genresOf(manga: Manga): string[] {
     ...(Array.isArray(metadata.tags) ? metadata.tags : []),
     ...(Array.isArray(metadata.labels) ? metadata.labels : []),
     ...(Array.isArray(metadata.category) ? metadata.category : []),
+    ...tagValues(manga.femaleTags),
+    ...tagValues(manga.maleTags),
+    ...tagValues(metadata.femaleTags),
+    ...tagValues(metadata.maleTags),
   ];
   const excluded = new Set(["ongoing", "completed", "hiatus", "dropped", "canceled", "manga", "manhwa", "manhua", "novel", "cg", "doujinshi", "up"]);
   return [...new Set(candidates.map((value) => String(value).trim()).filter((value) =>
