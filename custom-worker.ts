@@ -60,6 +60,7 @@ const MANGA_DETAIL_CACHE_TTL = 7 * 24 * 60 * 60;
 const MANGA_DETAIL_FRESH_TTL = 10 * 60 * 1000;
 const MANGA_DETAIL_CACHE_CONTROL =
   "public, max-age=60, s-maxage=600, stale-while-revalidate=3600";
+const STATIC_DOCUMENT_CACHE_CONTROL = "no-store";
 const FIREBASE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FIRESTORE_DOCUMENTS_URL =
   "https://firestore.googleapis.com/v1/projects/mikoroku/databases/(default)/documents";
@@ -208,10 +209,7 @@ async function fetchStaticDocument(
 
   const headers = new Headers(response.headers);
   headers.set("content-type", "text/html; charset=utf-8");
-  headers.set(
-    "cache-control",
-    "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
-  );
+  headers.set("cache-control", STATIC_DOCUMENT_CACHE_CONTROL);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -1739,10 +1737,7 @@ export default {
       const response = await env.ASSETS.fetch(assetRequest);
       if (response.status !== 404) {
         const headers = new Headers(response.headers);
-        headers.set(
-          "cache-control",
-          "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
-        );
+        headers.set("cache-control", STATIC_DOCUMENT_CACHE_CONTROL);
         return new Response(response.body, {
           status: response.status,
           statusText: response.statusText,
