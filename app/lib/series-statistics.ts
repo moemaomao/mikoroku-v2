@@ -22,7 +22,7 @@ const STORE_NAME = "seriesStatistics";
 export const SERIES_STATISTICS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const SERIES_STATISTICS_JSON_URL = "/series-statistics.json";
 
-const VIEWS_API = "https://mikoroku-og.vercel.app//api/views";
+const VIEWS_API = "https://mikoroku-og.vercel.app/api/views";
 
 export type SeriesStatistics = {
   slug: string;
@@ -394,15 +394,21 @@ async function syncPendingSeriesViews(
   pendingViews: number,
 ): Promise<void> {
   if (pendingViews <= 0) return;
-  try {
-    await fetch(VIEWS_API, {
-      method: "POST",
-      keepalive: true,
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify({ slug }),
-    });
-  } catch {
-    // gagal kirim tidak masalah, view ini saja yang tidak terhitung
+  const response = await fetch(VIEWS_API, {
+    method: "POST",
+    keepalive: true,
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ slug }),
+  });
+  if (!response.ok) {
+    throw new Error("Could not record the series view (" + response.status + ").");
+  }
+  const data = await response.json() as unknown;
+  if (
+    !isRecord(data) ||
+    data.ok !== true
+  ) {
+    throw new Error("The series view API returned an invalid response.");
   }
 }
 
@@ -530,7 +536,6 @@ export async function syncSeriesStatisticsForVisit(
     const now = Date.now();
     const fallback: SeriesStatistics = {
       ...claim.data,
-      views: Math.max(0, claim.data.views - pendingViews),
       syncedAt: now,
       sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
