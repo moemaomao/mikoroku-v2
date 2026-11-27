@@ -7,8 +7,7 @@ export const SERIES_NOTIFICATIONS_STORAGE_KEY = "mikoroku_series_notifications_v
 
 const FIRESTORE_MARKER = "seriesNotification";
 const FIRESTORE_ID_PREFIX = "series-notification-";
-const NOTIFICATION_MIGRATION_RETRY_MS = 12 * 60 * 60 * 1000;
-const NOTIFICATION_MIGRATION_ATTEMPT_KEY = "mikoroku_series_notification_migration_attempt_v1";
+const PENDING_NOTIFICATION_DELETIONS_KEY = "mikoroku_series_notification_deletions_v1";
 
 export type SeriesNotificationSubscription = {
   slug: string;
@@ -17,6 +16,12 @@ export type SeriesNotificationSubscription = {
   subscribedVersion: string;
   lastSeenVersion: string;
   subscribedAt: number;
+  updatedAt?: number;
+};
+
+type PendingNotificationDeletion = {
+  uid: string;
+  slug: string;
 };
 
 export type SeriesNotificationCatalogRecord = Record<string, unknown> & {
@@ -86,6 +91,7 @@ function normalizeSubscription(value: unknown): SeriesNotificationSubscription |
   const title = typeof record.title === "string" ? record.title.trim() : "";
   const slug = typeof record.slug === "string" ? normalizeSlug(record.slug) : "";
   if (!title || !slug || typeof record.lastSeenVersion !== "string") return null;
+  const subscribedAt = typeof record.subscribedAt === "number" ? record.subscribedAt : 0;
   return {
     slug,
     title,
@@ -94,7 +100,8 @@ function normalizeSubscription(value: unknown): SeriesNotificationSubscription |
       ? record.subscribedVersion
       : record.lastSeenVersion,
     lastSeenVersion: record.lastSeenVersion,
-    subscribedAt: typeof record.subscribedAt === "number" ? record.subscribedAt : 0,
+    subscribedAt,
+    updatedAt: timestampValue(record.updatedAt) || subscribedAt,
   };
 }
 
@@ -143,29 +150,61 @@ function notificationDocumentId(slug: string): string {
   return `${FIRESTORE_ID_PREFIX}${encodeURIComponent(normalizeSlug(slug))}`;
 }
 
-function claimNotificationMigration(uid: string): boolean {
-  const key = `${NOTIFICATION_MIGRATION_ATTEMPT_KEY}:${uid}`;
-  const now = Date.now();
+function readPendingNotificationDeletions(): PendingNotificationDeletion[] {
   try {
-    const lastAttempt = Number(localStorage.getItem(key)) || 0;
-    if (now - lastAttempt < NOTIFICATION_MIGRATION_RETRY_MS) return false;
-    localStorage.setItem(key, String(now));
-    return true;
+    const stored: unknown = JSON.parse(localStorage.getItem(PENDING_NOTIFICATION_DELETIONS_KEY) || "[]");
+    if (!Array.isArray(stored)) return [];
+    const deletions: PendingNotificationDeletion[] = [];
+    for (const item of stored) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      if (typeof record.uid !== "string" || typeof record.slug !== "string") continue;
+      const slug = normalizeSlug(record.slug);
+      if (slug) deletions.push({ uid: record.uid, slug });
+    }
+    return deletions;
   } catch (error) {
-    console.warn("Status percobaan sinkronisasi notifikasi tidak dapat disimpan.", error);
-    return false;
+    console.warn("Penghapusan notifikasi tertunda tidak dapat dibaca.", error);
+    return [];
   }
 }
 
-function deferNotificationMigration(uid: string): void {
-  try {
-    localStorage.setItem(
-      `${NOTIFICATION_MIGRATION_ATTEMPT_KEY}:${uid}`,
-      String(Date.now()),
-    );
-  } catch (error) {
-    console.warn("Sinkronisasi notifikasi tidak dapat ditunda di perangkat ini.", error);
+function writePendingNotificationDeletions(
+  deletions: PendingNotificationDeletion[],
+): void {
+  if (deletions.length) {
+    localStorage.setItem(PENDING_NOTIFICATION_DELETIONS_KEY, JSON.stringify(deletions));
+  } else {
+    localStorage.removeItem(PENDING_NOTIFICATION_DELETIONS_KEY);
   }
+}
+
+function queueNotificationDeletion(uid: string, slug: string): void {
+  const normalizedSlug = normalizeSlug(slug);
+  const deletions = readPendingNotificationDeletions();
+  if (deletions.some((item) => item.uid === uid && item.slug === normalizedSlug)) return;
+  writePendingNotificationDeletions([...deletions, { uid, slug: normalizedSlug }]);
+}
+
+function clearNotificationDeletion(uid: string, slug: string): void {
+  const normalizedSlug = normalizeSlug(slug);
+  writePendingNotificationDeletions(
+    readPendingNotificationDeletions().filter(
+      (item) => item.uid !== uid || item.slug !== normalizedSlug,
+    ),
+  );
+}
+
+function sameSubscription(
+  left: SeriesNotificationSubscription,
+  right: SeriesNotificationSubscription,
+): boolean {
+  return left.slug === right.slug &&
+    left.title === right.title &&
+    left.cover === right.cover &&
+    left.subscribedVersion === right.subscribedVersion &&
+    left.lastSeenVersion === right.lastSeenVersion &&
+    left.subscribedAt === right.subscribedAt;
 }
 
 function subscriptionFromFirestore(document: { id: string }): SeriesNotificationSubscription | null {
@@ -180,7 +219,7 @@ function subscriptionPayload(
   return {
     [FIRESTORE_MARKER]: true,
     ...subscription,
-    updatedAt: Date.now(),
+    updatedAt: subscription.updatedAt || Date.now(),
   };
 }
 
@@ -192,7 +231,7 @@ export function saveLocalSeriesNotificationSubscription(
   subscription: SeriesNotificationSubscription,
 ): SeriesNotificationSubscription[] {
   const next = [
-    subscription,
+    { ...subscription, updatedAt: subscription.updatedAt || Date.now() },
     ...readLocalSubscriptions().filter((item) => item.slug !== subscription.slug),
   ];
   writeLocalSubscriptions(next, false);
@@ -211,27 +250,52 @@ export async function loadSeriesNotificationSubscriptions(
   const remote = snapshot.docs
     .map(subscriptionFromFirestore)
     .filter((item): item is SeriesNotificationSubscription => item !== null);
-  const merged = new Map(remote.map((item) => [item.slug, item]));
-  const missing = local.filter((item) => !merged.has(item.slug));
-  for (const item of missing) merged.set(item.slug, item);
-  if (missing.length && claimNotificationMigration(uid)) {
+  if ((localStorage.getItem(SERIES_NOTIFICATIONS_STORAGE_KEY) || "[]") !== localStorageValue) {
+    return readLocalSubscriptions();
+  }
+
+  const pendingDeletes = readPendingNotificationDeletions()
+    .filter((item) => item.uid === uid);
+  const pendingDeleteSlugs = new Set(pendingDeletes.map((item) => item.slug));
+  const remoteBySlug = new Map(remote.map((item) => [item.slug, item]));
+  let syncError: unknown;
+  for (const pending of pendingDeletes) {
+    remoteBySlug.delete(pending.slug);
     try {
-      for (const item of missing) {
-        await persistNotificationSubscription(item, uid);
-      }
+      await removeNotificationSubscription(pending.slug, uid);
+      clearNotificationDeletion(uid, pending.slug);
     } catch (error) {
-      console.warn("Preferensi notifikasi lokal belum dapat dimigrasikan ke Firestore.", error);
+      if (syncError === undefined) syncError = error;
     }
   }
 
-  if ((localStorage.getItem(SERIES_NOTIFICATIONS_STORAGE_KEY) || "[]") !== localStorageValue) {
-    return readLocalSubscriptions();
+  const merged = new Map(remoteBySlug);
+  const pendingWrites: SeriesNotificationSubscription[] = [];
+  for (const subscription of local) {
+    if (pendingDeleteSlugs.has(subscription.slug)) continue;
+    const cloud = remoteBySlug.get(subscription.slug);
+    const localIsNewer = !cloud ||
+      (subscription.updatedAt || subscription.subscribedAt) >=
+        (cloud.updatedAt || cloud.subscribedAt);
+    if (localIsNewer) {
+      merged.set(subscription.slug, subscription);
+      if (!cloud || !sameSubscription(subscription, cloud)) pendingWrites.push(subscription);
+    }
   }
 
   const subscriptions = [...merged.values()].sort((left, right) =>
     right.subscribedAt - left.subscribedAt,
   );
   writeLocalSubscriptions(subscriptions, false);
+  for (const subscription of pendingWrites) {
+    try {
+      await persistNotificationSubscription(subscription, uid);
+    } catch (error) {
+      if (syncError === undefined) syncError = error;
+      break;
+    }
+  }
+  if (syncError !== undefined) throw syncError;
   return subscriptions;
 }
 
@@ -240,14 +304,15 @@ export async function saveSeriesNotificationSubscription(
   uid = getSeriesNotificationUserId(),
 ): Promise<SeriesNotificationSubscription[]> {
   const next = saveLocalSeriesNotificationSubscription(subscription);
+  const saved = next.find((item) => item.slug === subscription.slug) ?? subscription;
   try {
     if (uid) {
-      await persistNotificationSubscription(subscription, uid);
+      clearNotificationDeletion(uid, subscription.slug);
+      await persistNotificationSubscription(saved, uid);
     } else {
       adjustCachedNotificationCount(subscription.slug, 1);
     }
   } catch (error) {
-    if (uid) deferNotificationMigration(uid);
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
     throw error;
   }
@@ -308,10 +373,17 @@ export async function removeSeriesNotificationSubscription(
 ): Promise<SeriesNotificationSubscription[]> {
   const normalizedSlug = normalizeSlug(slug);
   const next = readLocalSubscriptions().filter((item) => item.slug !== normalizedSlug);
-  writeLocalSubscriptions(next, false);
+  if (uid) queueNotificationDeletion(uid, normalizedSlug);
+  try {
+    writeLocalSubscriptions(next, false);
+  } catch (error) {
+    if (uid) clearNotificationDeletion(uid, normalizedSlug);
+    throw error;
+  }
   try {
     if (uid) {
       await removeNotificationSubscription(normalizedSlug, uid);
+      clearNotificationDeletion(uid, normalizedSlug);
     } else {
       adjustCachedNotificationCount(normalizedSlug, -1);
     }
@@ -449,7 +521,7 @@ export async function markSeriesNotificationUpdatesRead(
   const next = subscriptions.map((item) => {
     const version = versions.get(item.slug);
     return version && version !== item.lastSeenVersion
-      ? { ...item, lastSeenVersion: version }
+      ? { ...item, lastSeenVersion: version, updatedAt: Date.now() }
       : item;
   });
   if (next.every((item, index) => item.lastSeenVersion === subscriptions[index]?.lastSeenVersion)) {
