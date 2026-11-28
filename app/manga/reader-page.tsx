@@ -2875,13 +2875,9 @@ export default function ReaderPage({
             aria-label={downloading ? `Downloading chapter, ${downloadProgress}%` : "Download chapter"}
             title={downloading ? `Downloading ${downloadProgress}%` : "Download chapter"}
           >
-            {downloading ? <>
-              <svg className="size-7" viewBox="0 0 32 32" role="img" aria-hidden="true">
-                <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeOpacity=".2" strokeWidth="3" />
-                <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="81.68" strokeDashoffset={81.68 * (1 - downloadProgress / 100)} transform="rotate(-90 16 16)" />
-                <text x="16" y="19" fill="currentColor" fontSize="8" fontWeight="700" textAnchor="middle">{downloadProgress}</text>
-              </svg>
-            </> : <i className="fas fa-download text-sm" aria-hidden="true" />}
+            {downloading
+              ? <span className="text-xs font-bold tabular-nums">{downloadProgress}%</span>
+              : <i className="fas fa-download text-sm" aria-hidden="true" />}
           </button>}
           {data.kind === "manga" && activeImageCount > 0 && (
             <div className="reader-bottom-pages relative z-[2] flex min-w-0 w-full border-r border-black/10 dark:border-white/10" ref={bottomPagesRef}>
