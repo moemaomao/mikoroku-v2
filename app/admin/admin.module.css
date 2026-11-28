@@ -301,6 +301,32 @@
   cursor: pointer;
 }
 
+.navigationLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #c5d0ea;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+}
+
+.navigationLink svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .navigation button svg,
 .sidebarAction svg,
 .logoutButton svg,
@@ -316,6 +342,7 @@
 }
 
 .navigation button:hover,
+.navigationLink:hover,
 .navigation .activeNav {
   border-color: rgb(174 192 255 / 26%);
   color: #f6f7ff;
@@ -2208,6 +2235,7 @@
 
 .lightMode .brand,
 .lightMode .navigation button,
+.lightMode .navigationLink,
 .lightMode .sidebarAction {
   color: #27324a;
 }
@@ -2217,11 +2245,13 @@
 }
 
 .lightMode .navigation button svg,
+.lightMode .navigationLink svg,
 .lightMode .sidebarAction svg {
   stroke: currentColor;
 }
 
 .lightMode .navigation button:hover,
+.lightMode .navigationLink:hover,
 .lightMode .navigation .activeNav {
   color: #202a44;
   background: rgb(107 135 220 / 16%);
@@ -2919,6 +2949,14 @@
     font-size: 12px;
   }
 
+  .navigationLink {
+    justify-content: center;
+    gap: 5px;
+    min-height: 42px;
+    padding: 9px 5px;
+    font-size: 12px;
+  }
+
   .sidebarFooter {
     margin-top: 12px;
     padding-top: 8px;
@@ -3417,6 +3455,17 @@
   }
 
   .navigation button {
+    min-width: 0;
+    min-height: 46px;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .navigationLink {
     min-width: 0;
     min-height: 46px;
     justify-content: flex-start;

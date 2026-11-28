@@ -2,15 +2,9 @@
 
 import dynamic from "next/dynamic";
 import {
-  getApps,
-  initializeApp,
-} from "firebase/app";
-import {
-  getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  type Auth,
   type User,
 } from "firebase/auth";
 import {
@@ -33,6 +27,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from "react";
 import "quill/dist/quill.snow.css";
 import styles from "./admin.module.css";
+import { getAdminFirebase } from "./admin-firebase";
 import AdvertisementSettings from "./advertisement-settings";
 import OgCoverTool from "./og-cover-tool";
 import { CoverImage } from "../lib/cover-image";
@@ -63,22 +58,10 @@ const ModerationPage = dynamic(() => import("./moderation-page"), {
   loading: () => <div className="p-6 text-sm">Loading moderation tools...</div>,
 });
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAi8z8oGGNJSNe87UVWh3FagJZSy_uhuoI",
-  authDomain: "mikoroku.firebaseapp.com",
-  databaseURL: "https://mikoroku-default-rtdb.firebaseio.com",
-  projectId: "mikoroku",
-  storageBucket: "mikoroku.firebasestorage.app",
-  messagingSenderId: "271920446600",
-  appId: "1:271920446600:web:974b11c707ebc11a7bf33d",
-};
-
-const ADMIN_APP_NAME = "mikoroku-admin";
 const ADMIN_MANGA_CACHE_KEY = "adminMangaCatalogCache_v4";
 const ADMIN_MANGA_CACHE_DURATION = 2 * 60 * 60 * 1000;
 const IMGBB_API_KEY = "751e8d146b32b8a00499aef04f568e30";
 
-type AdminFirebase = { auth: Auth; firestore: Firestore };
 type MetadataCatalogSourceMode = "effective" | "baseline";
 type MetadataSourceDebugCatalog = {
   payload: MangaMetadataPayload;
@@ -266,13 +249,6 @@ const emptyChapterDraft: ChapterDraft = {
   content: "",
   isDraft: false,
 };
-
-function getAdminFirebase(): AdminFirebase {
-  const app =
-    getApps().find((candidate) => candidate.name === ADMIN_APP_NAME) ??
-    initializeApp(firebaseConfig, ADMIN_APP_NAME);
-  return { auth: getAuth(app), firestore: getFirestore(app) };
-}
 
 async function refreshSharedMangaCatalogCache(): Promise<void> {
   const user = getAdminFirebase().auth.currentUser;
@@ -3746,6 +3722,18 @@ export default function AdminPage() {
             </svg>
             OG Cover Tool
           </button>
+          <a
+            className={styles.navigationLink}
+            href={selectedManga
+              ? `/admin/credit-generator?slug=${encodeURIComponent(selectedManga.slug)}`
+              : "/admin/credit-generator"}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M7 8h10M7 12h10M7 16h6" />
+            </svg>
+            Credit Generator
+          </a>
           <button className={styles.sidebarAction} type="button" onClick={toggleTheme}>
             {isLightMode ? (
               <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
