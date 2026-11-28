@@ -41,10 +41,6 @@ function loadSocialLogos(): Promise<void> {
   return socialLogosReady;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
-
 function drawCoverGradientBackground(
   context: CanvasRenderingContext2D,
   project: CreditProject,
@@ -158,10 +154,6 @@ function wrapText(
   return lines;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Role Icons (refined geometric)                                    */
-/* ------------------------------------------------------------------ */
-
 function drawRoleIcon(
   context: CanvasRenderingContext2D,
   role: CreditRole,
@@ -183,30 +175,24 @@ function drawRoleIcon(
 
   switch (role) {
     case "translator": {
-      // Dual speech bubbles (EN + JP)
-      // Left bubble
       context.beginPath();
       context.roundRect(x + s * 0.06, y + s * 0.1, s * 0.52, s * 0.42, s * 0.1);
       context.stroke();
-      // Left tail
       context.beginPath();
       context.moveTo(x + s * 0.2, y + s * 0.52);
       context.lineTo(x + s * 0.12, y + s * 0.66);
       context.lineTo(x + s * 0.32, y + s * 0.52);
       context.closePath();
       context.fill();
-      // Right bubble
       context.beginPath();
       context.roundRect(x + s * 0.42, y + s * 0.38, s * 0.52, s * 0.42, s * 0.1);
       context.stroke();
-      // Right tail
       context.beginPath();
       context.moveTo(x + s * 0.72, y + s * 0.8);
       context.lineTo(x + s * 0.84, y + s * 0.92);
       context.lineTo(x + s * 0.86, y + s * 0.8);
       context.closePath();
       context.fill();
-      // Letters
       context.font = `800 ${s * 0.28}px Arial`;
       context.textAlign = "center";
       context.textBaseline = "middle";
@@ -217,11 +203,9 @@ function drawRoleIcon(
     }
 
     case "typesetter": {
-      // Document with clean text lines
       context.beginPath();
       context.roundRect(x + s * 0.16, y + s * 0.08, s * 0.68, s * 0.84, s * 0.08);
       context.stroke();
-      // Text lines
       const lineWidths = [0.48, 0.38, 0.48, 0.3];
       lineWidths.forEach((lineWidth, index) => {
         const ly = y + s * (0.28 + index * 0.16);
@@ -234,7 +218,6 @@ function drawRoleIcon(
     }
 
     case "cleaner": {
-      // Eraser with a clear dividing seam
       context.save();
       context.translate(cx, cy);
       context.rotate(-Math.PI / 4);
@@ -250,12 +233,9 @@ function drawRoleIcon(
     }
 
     case "redrawer": {
-      // Picture frame + pencil
-      // Frame
       context.beginPath();
       context.roundRect(x + s * 0.08, y + s * 0.12, s * 0.58, s * 0.6, s * 0.06);
       context.stroke();
-      // Mountain / landscape
       context.beginPath();
       context.moveTo(x + s * 0.14, y + s * 0.62);
       context.lineTo(x + s * 0.28, y + s * 0.42);
@@ -263,11 +243,9 @@ function drawRoleIcon(
       context.lineTo(x + s * 0.52, y + s * 0.38);
       context.lineTo(x + s * 0.62, y + s * 0.6);
       context.stroke();
-      // Sun
       context.beginPath();
       context.arc(x + s * 0.5, y + s * 0.28, s * 0.06, 0, Math.PI * 2);
       context.stroke();
-      // Pencil body
       context.beginPath();
       context.moveTo(x + s * 0.48, y + s * 0.78);
       context.lineTo(x + s * 0.78, y + s * 0.28);
@@ -275,7 +253,6 @@ function drawRoleIcon(
       context.lineTo(x + s * 0.58, y + s * 0.86);
       context.closePath();
       context.stroke();
-      // Pencil tip
       context.beginPath();
       context.moveTo(x + s * 0.78, y + s * 0.28);
       context.lineTo(x + s * 0.9, y + s * 0.22);
@@ -286,7 +263,6 @@ function drawRoleIcon(
     }
 
     case "qualityChecker": {
-      // Shield with checkmark
       context.beginPath();
       context.moveTo(cx, y + s * 0.1);
       context.lineTo(x + s * 0.82, y + s * 0.28);
@@ -296,7 +272,6 @@ function drawRoleIcon(
       context.lineTo(x + s * 0.18, y + s * 0.28);
       context.closePath();
       context.stroke();
-      // Check
       context.beginPath();
       context.moveTo(cx - s * 0.16, cy + s * 0.02);
       context.lineTo(cx - s * 0.04, cy + s * 0.16);
@@ -306,16 +281,13 @@ function drawRoleIcon(
     }
 
     case "proofreader": {
-      // Magnifying glass with letter "A"
       context.beginPath();
       context.arc(cx - s * 0.08, cy - s * 0.08, s * 0.28, 0, Math.PI * 2);
       context.stroke();
-      // Handle
       context.beginPath();
       context.moveTo(cx + s * 0.12, cy + s * 0.12);
       context.lineTo(cx + s * 0.3, cy + s * 0.3);
       context.stroke();
-      // Letter inside
       context.font = `700 ${s * 0.26}px Arial`;
       context.textAlign = "center";
       context.textBaseline = "middle";
@@ -324,8 +296,6 @@ function drawRoleIcon(
     }
 
     case "rawProvider": {
-      // Package / box with lid
-      // Box body
       context.beginPath();
       context.moveTo(x + s * 0.14, y + s * 0.38);
       context.lineTo(x + s * 0.5, y + s * 0.22);
@@ -335,7 +305,6 @@ function drawRoleIcon(
       context.lineTo(x + s * 0.14, y + s * 0.72);
       context.closePath();
       context.stroke();
-      // Top flap lines
       context.beginPath();
       context.moveTo(x + s * 0.14, y + s * 0.38);
       context.lineTo(x + s * 0.5, y + s * 0.54);
@@ -347,20 +316,16 @@ function drawRoleIcon(
     }
 
     case "uploader": {
-      // Upload tray + upward arrow
-      // Tray
       context.beginPath();
       context.moveTo(x + s * 0.16, y + s * 0.62);
       context.lineTo(x + s * 0.16, y + s * 0.82);
       context.lineTo(x + s * 0.84, y + s * 0.82);
       context.lineTo(x + s * 0.84, y + s * 0.62);
       context.stroke();
-      // Arrow shaft
       context.beginPath();
       context.moveTo(cx, y + s * 0.62);
       context.lineTo(cx, y + s * 0.18);
       context.stroke();
-      // Arrow head
       context.beginPath();
       context.moveTo(cx - s * 0.18, y + s * 0.34);
       context.lineTo(cx, y + s * 0.16);
@@ -540,10 +505,6 @@ function drawLogo(
   context.textAlign = "left";
   context.fillText((project.logoText || "MIKOROKU").toUpperCase(), 66, 78);
 }
-
-/* ------------------------------------------------------------------ */
-/*  IMPACT TEMPLATE                                                   */
-/* ------------------------------------------------------------------ */
 
 function drawImpactBackground(
   context: CanvasRenderingContext2D,
@@ -1295,7 +1256,7 @@ export async function renderCreditCard(
     document.fonts.load(`400 48px "${project.titleFontFamily}"`),
     project.coverSource ? loadCover(project.coverSource) : Promise.resolve(null),
     project.logoSource ? loadCover(project.logoSource).catch(() => null) : Promise.resolve(null),
-    loadSocialLogos(), // load logo sosial asli
+    loadSocialLogos(),
   ]);
   if (signal?.aborted) return;
 
