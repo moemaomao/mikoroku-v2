@@ -24,6 +24,7 @@ import {
   SERIES_NOTIFICATIONS_UPDATED_EVENT,
   SERIES_NOTIFICATIONS_STORAGE_KEY,
 } from "./lib/series-notifications";
+import { getUnreadNotifCount } from "../lib/stats-api";
 
 type MangaEntry = {
   title: string;
@@ -45,6 +46,7 @@ type HeaderBookmark = {
 
 type HeaderUser = {
   uid: string;
+  getIdToken?: () => Promise<string>;
   displayName?: string | null;
   email?: string | null;
   photoURL?: string | null;
@@ -252,10 +254,45 @@ function HeaderContents() {
   const [unreadAnnouncements, setUnreadAnnouncements] = useState(0);
   const [announcementLabel, setAnnouncementLabel] = useState("Announcements");
   const [unreadSeriesUpdates, setUnreadSeriesUpdates] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const searchArea = useRef<HTMLDivElement>(null);
   const bookmarkArea = useRef<HTMLDivElement>(null);
   const authArea = useRef<HTMLDivElement>(null);
   const canAccessAdminPanels = hasAdminPanelAccess(user);
+
+  useEffect(() => {
+    let active = true;
+    const loadUnreadNotifications = async () => {
+      if (!user) {
+        setUnreadNotifications(0);
+        return;
+      }
+
+      const currentUser = getCurrentUser();
+      const tokenUser = currentUser?.getIdToken
+        ? currentUser
+        : window.firebase?.auth?.().currentUser as HeaderUser | null | undefined;
+      if (tokenUser?.uid !== user.uid || !tokenUser.getIdToken) return;
+      try {
+        const count = await getUnreadNotifCount(await tokenUser.getIdToken());
+        if (active) setUnreadNotifications(count);
+      } catch (error) {
+        console.warn("Unread notification count could not be loaded.", error);
+      }
+    };
+    const handleNotificationCount = (event: Event) => {
+      const detail = (event as CustomEvent<{ uid?: string; unreadCount?: number }>).detail;
+      if (!user || detail?.uid !== user.uid || typeof detail.unreadCount !== "number") return;
+      setUnreadNotifications(Math.max(0, Math.floor(detail.unreadCount)));
+    };
+
+    void loadUnreadNotifications();
+    window.addEventListener("mikoroku:notification-count-updated", handleNotificationCount);
+    return () => {
+      active = false;
+      window.removeEventListener("mikoroku:notification-count-updated", handleNotificationCount);
+    };
+  }, [user?.uid]);
 
   const closeAuth = useCallback(() => setAuthOpen(false), []);
 
@@ -1189,7 +1226,12 @@ function HeaderContents() {
                       </a>
                       <button type="button" onClick={handleNotifications} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-500"><Icon name="bell" className="h-4 w-4" /></span>
-                        Notifications
+                        <span className="flex-1">Notifications</span>
+                        {unreadNotifications > 0 && (
+                          <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                            {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                          </span>
+                        )}
                       </button>
                       <button type="button" onClick={handleMessages} className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition hover:bg-black/5 dark:hover:bg-white/[0.07]">
                         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-500"><Icon name="message" className="h-4 w-4" /></span>

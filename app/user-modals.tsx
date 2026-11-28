@@ -20,6 +20,7 @@ import {
 } from "../lib/user-stats-cache";
 import settingsStyles from "./settings/settings.module.css";
 import { normalizeProfileLink } from "./lib/profile-link";
+import { setUnreadNotifCount } from "../lib/stats-api";
 
 type DataRecord = Record<string, unknown>;
 type StoredNotification = DataRecord & {
@@ -86,6 +87,7 @@ type CompatSdk = {
 };
 type CompatUser = {
   uid: string;
+  getIdToken?: () => Promise<string>;
   displayName?: string | null;
   photoURL?: string | null;
   metadata?: { creationTime?: string };
@@ -779,6 +781,15 @@ function initializeUserModals(): () => void {
       return null;
     }
   };
+  const updateRemoteNotificationCount = async (uid: string, count: number) => {
+    const user = legacy.currentUser || legacy.firebase?.auth?.().currentUser;
+    if (user?.uid !== uid || !user.getIdToken) return;
+    try {
+      await setUnreadNotifCount(await user.getIdToken(), count);
+    } catch (error) {
+      console.warn("Unread notification count could not be cached by the stats API.", error);
+    }
+  };
   const waitForFirestore = async (): Promise<CompatFirestore> => {
     const existing = db();
     if (existing) return existing;
@@ -952,9 +963,10 @@ function initializeUserModals(): () => void {
       try {
         const items = rootRef.collection("items");
         const synchronizedIds = new Set<string>();
+        let updatedUnreadCount: number | null = null;
         for (let offset = 0; offset < pendingIds.length; offset += 200) {
           const group = pendingIds.slice(offset, offset + 200);
-          await firestore.runTransaction(async (transaction) => {
+          updatedUnreadCount = await firestore.runTransaction(async (transaction) => {
             const references = group.map((id) => ({ id, reference: items.doc(id) }));
             const [rootSnapshot, ...itemSnapshots] = await Promise.all([
               transaction.get(rootRef),
@@ -965,8 +977,8 @@ function initializeUserModals(): () => void {
                 itemSnapshots[index].exists &&
                 asRecord(itemSnapshots[index].data()).read !== true,
             );
+            const currentCount = numberValue(asRecord(rootSnapshot.data()).unreadCount);
             if (unreadItems.length) {
-              const currentCount = numberValue(asRecord(rootSnapshot.data()).unreadCount);
               unreadItems.forEach(({ reference }) => {
                 transaction.set(reference, { read: true }, { merge: true });
               });
@@ -974,7 +986,9 @@ function initializeUserModals(): () => void {
                 unreadCount: Math.max(0, currentCount - unreadItems.length),
                 lastReadAt: Date.now(),
               }, { merge: true });
+              return Math.max(0, currentCount - unreadItems.length);
             }
+            return currentCount;
           });
           group.forEach((id) => synchronizedIds.add(id));
           writePendingNotificationReadKeys(
@@ -990,6 +1004,10 @@ function initializeUserModals(): () => void {
         notificationReadRetryAttempts.delete(uid);
         if (!remainingKeys.length) {
           clearNotificationReadRetry(uid);
+        }
+        if (updatedUnreadCount !== null) {
+          publishNotificationUnreadCount(uid, updatedUnreadCount);
+          void updateRemoteNotificationCount(uid, updatedUnreadCount);
         }
       } catch (error) {
         console.error("Notification read states could not be synchronized.", error);
@@ -1856,7 +1874,9 @@ function initializeUserModals(): () => void {
         }));
         const pendingUnreadCount = unreadNotifications
           .filter((item) => locallyReadIds.has(stringValue(item.id))).length;
-        publishNotificationUnreadCount(uid, Math.max(0, serverUnreadCount - pendingUnreadCount));
+        const effectiveUnreadCount = Math.max(0, serverUnreadCount - pendingUnreadCount);
+        publishNotificationUnreadCount(uid, effectiveUnreadCount);
+        void updateRemoteNotificationCount(uid, effectiveUnreadCount);
 
         const notifications: StoredNotification[] = recentSnapshot.docs
           .map((document): StoredNotification => {

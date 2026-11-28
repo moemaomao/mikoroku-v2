@@ -555,11 +555,13 @@ async function claimStatisticsSync(
         };
         const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
         const hasNewJsonSnapshot = catalogExportedAtMs > (data.sourceExportedAtMs ?? 0);
+        const hasPendingViews = (data.pendingViews ?? 0) > 0;
         // Hormati syncRetryAfter supaya tidak retry terus saat gagal
         const retryBlocked = (data.syncRetryAfter ?? 0) > Date.now();
         const shouldSync =
           !retryBlocked &&
-          (age < 0 ||
+          (hasPendingViews ||
+            age < 0 ||
             age >= SERIES_STATISTICS_CACHE_TTL_MS ||
             hasNewJsonSnapshot ||
             data.viewsSource !== "api");
@@ -628,7 +630,7 @@ export async function syncSeriesStatisticsForVisit(
       syncedAt: now,
       sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
-      syncRetryAfter: now + SERIES_STATISTICS_CACHE_TTL_MS,
+      syncRetryAfter: now + (pendingViews > 0 ? 60_000 : SERIES_STATISTICS_CACHE_TTL_MS),
     };
     await cacheSeriesStatistics(fallback, syncStartedAt, 0);
     console.warn('Series statistics could not be synchronized for "' + slug + '".', error);

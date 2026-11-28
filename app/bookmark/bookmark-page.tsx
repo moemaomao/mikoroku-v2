@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CoverImage } from "../lib/cover-image";
 import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
-import {
-  reconcilePendingSeriesStatisticCount,
-  recordPendingSeriesStatisticCount,
-} from "../lib/series-statistics";
+import { decrementBookmark, incrementBookmark } from "../../lib/stats-api";
 import { markLocalBookmarksUpdated } from "../../lib/reading-stats";
 import GlobalAuth from "../global-auth";
 import { initializeFirebaseClient, loadFirestoreMangaCatalog } from "../lib/firebase-client";
@@ -232,24 +229,9 @@ async function syncBookmarkDocument(
   if (!firebase) throw new Error("Firebase belum tersedia.");
   const firestore = firebase.firestore();
   const reference = getFirestoreCollection(user).doc(normalizeTitle(bookmark.title));
-  const statisticsReference = firestore.collection("seriesStats")
-    .doc(encodeURIComponent(bookmark.slug));
-
-  try {
-    await recordPendingSeriesStatisticCount(
-      bookmark.slug,
-      "bookmarks",
-      remove ? -1 : 1,
-    );
-  } catch (error) {
-    console.warn("Cached series bookmark count could not be updated.", error);
-  }
 
   const delta = await firestore.runTransaction(async (transaction) => {
-    const [bookmarkSnapshot, statisticsSnapshot] = await Promise.all([
-      transaction.get(reference),
-      transaction.get(statisticsReference),
-    ]);
+    const bookmarkSnapshot = await transaction.get(reference);
     const previousBookmark = bookmarkSnapshot.exists
       ? bookmarkSnapshot.data() ?? {}
       : {};
@@ -258,16 +240,6 @@ async function syncBookmarkDocument(
       previousBookmark.seriesNotification !== true;
     const willBeCounted = !remove && previousBookmark.seriesNotification !== true;
     const countDelta = Number(willBeCounted) - Number(wasCounted);
-    const previousStatistics = statisticsSnapshot.exists
-      ? statisticsSnapshot.data() ?? {}
-      : {};
-    const count = (field: "views" | "bookmarks" | "notifications") => {
-      const value = previousStatistics[field];
-      return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-        ? value
-        : 0;
-    };
-    const currentBookmarks = count("bookmarks");
 
     if (remove) {
       if (bookmarkSnapshot.exists) transaction.delete(reference);
@@ -278,20 +250,22 @@ async function syncBookmarkDocument(
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
     }
-
-    if (countDelta !== 0 || !statisticsSnapshot.exists) {
-      transaction.set(statisticsReference, {
-        views: count("views"),
-        bookmarks: countDelta && currentBookmarks + countDelta >= 0
-          ? firebase.firestore.FieldValue.increment(countDelta)
-          : Math.max(0, currentBookmarks + countDelta),
-        notifications: count("notifications"),
-      }, { merge: true });
-    }
     return countDelta;
   });
 
-  await reconcilePendingSeriesStatisticCount(bookmark.slug, "bookmarks", delta);
+  if (delta > 0) {
+    try {
+      await incrementBookmark(bookmark.slug);
+    } catch (cacheError) {
+      console.warn("Bookmark was saved, but its public count could not be updated.", cacheError);
+    }
+  } else if (delta < 0) {
+    try {
+      await decrementBookmark(bookmark.slug);
+    } catch (cacheError) {
+      console.warn("Bookmark was removed, but its public count could not be updated.", cacheError);
+    }
+  }
   return delta;
 }
 

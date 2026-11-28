@@ -44,12 +44,16 @@ import {
 } from "../lib/series-notifications";
 import {
   getCachedSeriesStatistics,
-  reconcilePendingSeriesStatisticCount,
   recordPendingSeriesStatisticCount,
   recordSeriesViewInCache,
   syncSeriesStatisticsForVisit,
   type SeriesStatistics,
 } from "../lib/series-statistics";
+import {
+  decrementBookmark,
+  getSeriesStats,
+  incrementBookmark,
+} from "../../lib/stats-api";
 import { setCachedBookmarkCount } from "../lib/reading-stats-cache";
 import { setLocalStorageCacheItem } from "../lib/local-storage-cache";
 import {
@@ -1354,7 +1358,7 @@ function SeriesStatisticsBar({
   slug: string;
   bookmarked: boolean;
   notificationsEnabled: boolean;
-  onToggleBookmark: () => void;
+  onToggleBookmark: () => Promise<number | null>;
   onToggleNotifications: () => void;
   notificationError: string;
 }) {
@@ -1407,16 +1411,22 @@ function SeriesStatisticsBar({
       }
 
       if (requestId !== requestIdRef.current) return;
-      if (cached) applyLoadedStatistics(cached, versionsAtLoadStart);
+      if (cached) {
+        applyLoadedStatistics({ ...cached, bookmarks: 0 }, versionsAtLoadStart);
+      }
 
       try {
         const viewed = await recordSeriesViewInCache(slug);
         if (requestId !== requestIdRef.current) return;
-        applyLoadedStatistics(viewed, versionsAtLoadStart);
+        applyLoadedStatistics({ ...viewed, bookmarks: 0 }, versionsAtLoadStart);
 
         const updated = await syncSeriesStatisticsForVisit(slug);
         if (requestId !== requestIdRef.current) return;
-        applyLoadedStatistics(updated, versionsAtLoadStart);
+        applyLoadedStatistics({ ...updated, bookmarks: 0 }, versionsAtLoadStart);
+
+        const publicStats = await getSeriesStats(slug);
+        if (requestId !== requestIdRef.current) return;
+        applyLoadedStatistics({ ...updated, ...publicStats }, versionsAtLoadStart);
       } catch (error) {
         console.error(`Series statistics could not be synchronized for "${slug}".`, error);
         if (requestId === requestIdRef.current) {
@@ -1449,7 +1459,18 @@ function SeriesStatisticsBar({
     statisticsRef.current = next;
     setStatistics(next);
     if (key === "bookmarks") {
-      onToggleBookmark();
+      const version = localInteractionVersionsRef.current.bookmarks;
+      void onToggleBookmark().then((count) => {
+        if (
+          count === null ||
+          localInteractionVersionsRef.current.bookmarks !== version
+        ) return;
+        const current = { ...statisticsRef.current, bookmarks: count };
+        statisticsRef.current = current;
+        setStatistics(current);
+      }).catch((error: unknown) => {
+        console.error("Bookmark statistics could not be refreshed.", error);
+      });
     } else {
       void onToggleNotifications();
     }
@@ -2604,8 +2625,16 @@ export default function DetailPageContent({
     });
   }, [manga, notificationsEnabled, slug]);
 
-  const toggleBookmark = useCallback(() => {
-    if (!manga) return;
+  const toggleBookmark = useCallback(async (): Promise<number | null> => {
+    if (!manga) return null;
+    const refreshPublicBookmarkCount = async () => {
+      try {
+        return (await getSeriesStats(slug)).bookmarks;
+      } catch (error) {
+        console.warn("Public bookmark count could not be refreshed.", error);
+        return null;
+      }
+    };
     const key = normalizedKey(manga.title);
     let current: Array<string | { title?: string; img?: string; slug?: string; addedAt?: number }> = [];
     try {
@@ -2629,19 +2658,8 @@ export default function DetailPageContent({
       firebase?: SeriesBookmarkFirebase;
     };
     const uid = firebaseWindow.firebase?.auth?.().currentUser?.uid || firebaseWindow.currentUser?.uid;
-    const countDelta = isSaved ? 1 : -1;
-    void (async () => {
-      try {
-        await recordPendingSeriesStatisticCount(slug, "bookmarks", countDelta);
-      } catch (cacheError) {
-        console.warn("Cached series bookmark count could not be updated.", cacheError);
-      }
-
-      if (!uid) {
-        await reconcilePendingSeriesStatisticCount(slug, "bookmarks", countDelta);
-        return;
-      }
-
+    if (!uid) return refreshPublicBookmarkCount();
+    return (async () => {
       try {
         await setCachedBookmarkCount(uid, next.length);
       } catch (cacheError) {
@@ -2650,17 +2668,10 @@ export default function DetailPageContent({
       try {
         const firestore = firebaseWindow.firebase?.firestore?.();
         if (!firestore) throw new Error("Bookmark synchronization is unavailable.");
-        const fieldValue = firebaseWindow.firebase?.firestore?.FieldValue;
-        if (!fieldValue) throw new Error("Firestore counters are unavailable.");
         const bookmarkReference = firestore.collection("users").doc(uid)
           .collection("bookmarks").doc(key);
-        const statisticsReference = firestore.collection("seriesStats")
-          .doc(encodeURIComponent(slug));
         const firestoreDelta = await firestore.runTransaction(async (transaction) => {
-          const [bookmarkSnapshot, statisticsSnapshot] = await Promise.all([
-            transaction.get(bookmarkReference),
-            transaction.get(statisticsReference),
-          ]);
+          const bookmarkSnapshot = await transaction.get(bookmarkReference);
           const previousBookmark = bookmarkSnapshot.exists ? bookmarkSnapshot.data() ?? {} : {};
           const wasCounted = bookmarkSnapshot.exists &&
             previousBookmark.slug === slug &&
@@ -2679,32 +2690,28 @@ export default function DetailPageContent({
           } else if (bookmarkSnapshot.exists) {
             transaction.delete(bookmarkReference);
           }
-
-          const previousStatistics = statisticsSnapshot.exists
-            ? statisticsSnapshot.data() ?? {}
-            : {};
-          const count = (field: "views" | "bookmarks" | "notifications") => {
-            const value = previousStatistics[field];
-            return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-              ? value
-              : 0;
-          };
-          const currentBookmarks = count("bookmarks");
-          const nextBookmarks = Math.max(0, currentBookmarks + delta);
-          if (delta !== 0 || !statisticsSnapshot.exists) {
-            transaction.set(statisticsReference, {
-              views: count("views"),
-              bookmarks: delta !== 0 && currentBookmarks + delta >= 0
-                ? fieldValue.increment(delta)
-                : nextBookmarks,
-              notifications: count("notifications"),
-            }, { merge: true });
-          }
           return delta;
         });
-        await reconcilePendingSeriesStatisticCount(slug, "bookmarks", firestoreDelta);
+        if (firestoreDelta > 0) {
+          try {
+            return await incrementBookmark(slug);
+          } catch (statsError) {
+            console.warn("Bookmark was saved, but its public count could not be updated.", statsError);
+            return null;
+          }
+        }
+        if (firestoreDelta < 0) {
+          try {
+            return await decrementBookmark(slug);
+          } catch (statsError) {
+            console.warn("Bookmark was removed, but its public count could not be updated.", statsError);
+            return null;
+          }
+        }
+        return refreshPublicBookmarkCount();
       } catch (syncError) {
         console.warn("Bookmark is saved locally and will need cloud synchronization.", syncError);
+        return refreshPublicBookmarkCount();
       }
     })();
   }, [manga, slug]);
