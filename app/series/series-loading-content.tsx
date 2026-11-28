@@ -15,7 +15,7 @@ export default function SeriesLoadingContent() {
       aria-busy="true"
       aria-label="Memuat detail manga"
     >
-      <div className="container relative z-[2] mx-auto my-0 min-h-screen w-full max-w-[480px] text-[#171717] transition-[margin-left,width,max-width,color] duration-300 dark:text-white md:my-5 md:max-w-[720px] md:rounded-[20px] md:bg-black/[0.04] md:shadow-lg md:dark:bg-[#171717]/75 lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)] lg:rounded-3xl">
+      <div className="container relative z-[2] mx-auto my-0 min-h-screen w-full max-w-[480px] text-[#171717] transition-[margin-left,width,max-width,color] duration-300 dark:text-white md:my-5 md:max-w-[720px] md:rounded-[20px] lg:my-[30px] lg:ml-[var(--detail-content-left)] lg:mr-0 lg:max-w-[var(--detail-max-width)] lg:w-[var(--detail-content-width)] lg:rounded-3xl">
         <div className="content relative z-[3] md:grid md:grid-cols-[200px_minmax(0,1fr)] md:gap-x-[30px] md:px-[30px] md:pt-[35px] lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-x-10 lg:px-10 lg:pt-10">
           <div className="main flex items-start gap-[14px] p-[18px_14px_14px] md:contents">
             <div className="left-column flex w-[95px] shrink-0 flex-col items-center gap-3 md:col-start-1 md:row-start-1 md:row-span-7 md:w-[200px] md:self-start md:pt-0 lg:w-[240px]">

@@ -147,20 +147,31 @@ function drawRoleIcon(
 
   switch (role) {
     case "translator": {
-      // speech bubble + A
+      // Overlapping language bubbles
       context.beginPath();
-      context.roundRect(x + size * 0.12, y + size * 0.1, size * 0.76, size * 0.55, size * 0.12);
+      context.roundRect(x + size * 0.08, y + size * 0.08, size * 0.58, size * 0.48, size * 0.1);
       context.stroke();
       context.beginPath();
-      context.moveTo(cx - size * 0.08, y + size * 0.65);
-      context.lineTo(cx - size * 0.18, y + size * 0.82);
-      context.lineTo(cx + size * 0.05, y + size * 0.65);
+      context.moveTo(x + size * 0.25, y + size * 0.56);
+      context.lineTo(x + size * 0.18, y + size * 0.69);
+      context.lineTo(x + size * 0.39, y + size * 0.56);
       context.closePath();
       context.fill();
-      context.font = `800 ${size * 0.38}px Arial`;
+      context.beginPath();
+      context.roundRect(x + size * 0.34, y + size * 0.43, size * 0.58, size * 0.48, size * 0.1);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(x + size * 0.69, y + size * 0.91);
+      context.lineTo(x + size * 0.79, y + size * 0.99);
+      context.lineTo(x + size * 0.82, y + size * 0.91);
+      context.closePath();
+      context.fill();
+      context.font = `800 ${size * 0.3}px Arial`;
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText("A", cx, y + size * 0.38);
+      context.fillText("A", x + size * 0.37, y + size * 0.31);
+      context.font = `700 ${size * 0.25}px Arial`;
+      context.fillText("文", x + size * 0.63, y + size * 0.67);
       break;
     }
     case "typesetter": {
@@ -194,23 +205,26 @@ function drawRoleIcon(
       break;
     }
     case "redrawer": {
-      // pencil with a pointed tip
+      // Redraw pencil over a picture frame
       context.beginPath();
-      context.moveTo(x + size * 0.25, y + size * 0.76);
-      context.lineTo(x + size * 0.58, y + size * 0.18);
-      context.lineTo(x + size * 0.76, y + size * 0.28);
-      context.lineTo(x + size * 0.43, y + size * 0.86);
-      context.closePath();
+      context.roundRect(x + size * 0.08, y + size * 0.12, size * 0.62, size * 0.64, size * 0.07);
       context.stroke();
       context.beginPath();
-      context.moveTo(x + size * 0.25, y + size * 0.76);
-      context.lineTo(x + size * 0.2, y + size * 0.9);
-      context.lineTo(x + size * 0.43, y + size * 0.86);
-      context.closePath();
+      context.arc(x + size * 0.5, y + size * 0.3, size * 0.07, 0, Math.PI * 2);
       context.stroke();
       context.beginPath();
-      context.moveTo(x + size * 0.51, y + size * 0.3);
-      context.lineTo(x + size * 0.69, y + size * 0.41);
+      context.moveTo(x + size * 0.15, y + size * 0.66);
+      context.lineTo(x + size * 0.32, y + size * 0.46);
+      context.lineTo(x + size * 0.42, y + size * 0.56);
+      context.lineTo(x + size * 0.52, y + size * 0.46);
+      context.lineTo(x + size * 0.67, y + size * 0.64);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(x + size * 0.47, y + size * 0.78);
+      context.lineTo(x + size * 0.76, y + size * 0.29);
+      context.lineTo(x + size * 0.86, y + size * 0.36);
+      context.lineTo(x + size * 0.57, y + size * 0.84);
+      context.closePath();
       context.stroke();
       break;
     }
@@ -621,11 +635,6 @@ function drawImpactCredits(
     const y = panelY + 72 + index * 60;
     const name = project.credits[role].trim() || "—";
 
-    // icon circle
-    context.fillStyle = "rgba(255,255,255,0.16)";
-    context.beginPath();
-    context.arc(panelX + 44, y + 12, 21, 0, Math.PI * 2);
-    context.fill();
     drawRoleIcon(context, role, panelX + 25, y - 7, 38, project.accent);
 
     context.fillStyle = "rgba(255,255,255,0.5)";

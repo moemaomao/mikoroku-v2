@@ -32,7 +32,8 @@ The Admin route imports the same generator source directly, so the normal `npm r
 - The default MikoRoku Impact template uses a bold poster composition, uploaded team/web logo, and editable Discord, Facebook, Trakteer, PayPal, and website links with locally rendered icons.
 - Manga titles default to the bundled Oswald font and can be changed independently of the rest of the poster typography.
 - Dramatic Split exports use a 2:1 landscape canvas (1120 × 560 standard or 2240 × 1120 high resolution).
-- Minimal exports use a square canvas (1125 × 1125 standard or 2250 × 2250 high resolution); the other templates retain portrait dimensions.
+- Minimal exports use a square canvas (844 × 844 standard or 1688 × 1688 high resolution); the other templates retain portrait dimensions.
+- Portrait exports use an 844 × 1200 standard canvas or a 1688 × 2400 high-resolution canvas.
 - Its background can use a blurred version of the selected cover; choose cover or color-only mode and tune blur, gradient strength, accent, and background colors in the Design panel.
 - Team presets, draft settings, and saved projects use their own IndexedDB database and stores (`mikoroku-credit-generator`), separate from Admin data.
 - Rendering and PNG/JPG export happen locally in Canvas. External covers are requested through the existing image proxy; if a source cannot be exported, upload its image manually.

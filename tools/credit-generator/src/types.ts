@@ -66,8 +66,8 @@ export type TeamPreset = {
 };
 
 export const FORMAT_DIMENSIONS: Record<CreditFormat, { width: number; height: number }> = {
-  standard: { width: 1125, height: 1600 },
-  high: { width: 2250, height: 3200 },
+  standard: { width: 844, height: 1200 },
+  high: { width: 1688, height: 2400 },
 };
 
 const SPLIT_FORMAT_DIMENSIONS: Record<CreditFormat, { width: number; height: number }> = {
@@ -95,7 +95,7 @@ export function createEmptyProject(): CreditProject {
     template: "impact",
     format: "standard",
     accent: "#ffffff",
-    highlight: "#ffe53b",
+    highlight: "#ffffff",
     background: "#08090c",
     useCoverBackground: true,
     coverBackgroundBlur: 24,
@@ -118,7 +118,7 @@ export function createEmptyProject(): CreditProject {
       qualityChecker: "",
       proofreader: "",
       rawProvider: "",
-      uploader: "",
+      uploader: "m6",
     },
     coverFocusX: 50,
     coverFocusY: 50,
