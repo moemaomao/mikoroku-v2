@@ -40,30 +40,6 @@ async function fetchCountMap(
   }
 }
 
-async function fetchStaticBookmarkCounts(
-  slugs: string[],
-): Promise<Record<string, number>> {
-  try {
-    const res = await fetch("/series-statistics.json", {
-      cache: "no-cache",
-      credentials: "omit",
-    });
-    if (!res.ok) return {};
-    const data: unknown = await res.json();
-    if (!isRecord(data) || !isRecord(data.series)) return {};
-    const series = data.series;
-
-    return Object.fromEntries(
-      slugs.flatMap((slug) => {
-        const stats = series[slug];
-        return isRecord(stats) ? [[slug, countValue(stats.bookmarks)]] : [];
-      }),
-    );
-  } catch {
-    return {};
-  }
-}
-
 async function getSeriesStatsMap(slugs: string[]): Promise<Record<string, SeriesStats>> {
   let primaryStats: Record<string, SeriesStats> = {};
   try {
@@ -94,10 +70,9 @@ async function getSeriesStatsMap(slugs: string[]): Promise<Record<string, Series
   const missingSlugs = slugs.filter((slug) => !primaryStats[slug]);
   if (!missingSlugs.length) return primaryStats;
 
-  const [views, apiBookmarks, staticBookmarks] = await Promise.all([
+  const [views, bookmarks] = await Promise.all([
     fetchCountMap("views", missingSlugs),
     fetchCountMap("bookmarks", missingSlugs),
-    fetchStaticBookmarkCounts(missingSlugs),
   ]);
   return {
     ...primaryStats,
@@ -105,7 +80,7 @@ async function getSeriesStatsMap(slugs: string[]): Promise<Record<string, Series
       slug,
       {
         views: views[slug] ?? 0,
-        bookmarks: apiBookmarks[slug] ?? staticBookmarks[slug] ?? 0,
+        bookmarks: bookmarks[slug] ?? 0,
       },
     ])),
   };

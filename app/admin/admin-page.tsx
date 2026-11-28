@@ -51,7 +51,6 @@ import {
   type ReaderServerNoticeConfig,
 } from "../series/reader-server-notice-config";
 import { isNovelSeries } from "../../lib/reader-kind";
-import { getSeriesStatisticsFirestore } from "../lib/series-statistics";
 
 const ModerationPage = dynamic(() => import("./moderation-page"), {
   ssr: false,
@@ -2560,57 +2559,6 @@ export default function AdminPage() {
     }
   }
 
-  async function exportSeriesStatisticsJson() {
-    setBusy(true);
-    setSettingsStatus("Loading series statistics from Firestore...");
-    try {
-      const firestore = getSeriesStatisticsFirestore();
-      const snapshot = await getDocs(collection(firestore, "seriesStats"));
-      const series: Record<string, {
-        bookmarks: number;
-        notifications: number;
-      }> = {};
-
-      for (const statisticsDocument of snapshot.docs) {
-        let slug: string;
-        try {
-          slug = decodeURIComponent(statisticsDocument.id);
-        } catch {
-          throw new Error(`Invalid encoded series statistics document ID: ${statisticsDocument.id}`);
-        }
-        if (!slug) {
-          throw new Error(`Series statistics document "${statisticsDocument.id}" has no series slug.`);
-        }
-        const data = statisticsDocument.data();
-        const count = (key: "bookmarks" | "notifications") =>
-          typeof data[key] === "number" &&
-            Number.isSafeInteger(data[key]) &&
-            data[key] >= 0
-            ? data[key]
-            : 0;
-        series[slug] = {
-          bookmarks: count("bookmarks"),
-          notifications: count("notifications"),
-        };
-      }
-
-      const exportedAt = new Date();
-      downloadJson("series-statistics.json", {
-        exportedAt: exportedAt.toISOString(),
-        exportedAtMs: exportedAt.getTime(),
-        series,
-      });
-      setSettingsStatus(
-        `Series statistics JSON exported: ${Object.keys(series).length} series. Replace public/series-statistics.json with this file and deploy it to publish bookmark and notification counts.`,
-      );
-    } catch (error) {
-      console.error("Failed to export series statistics JSON.", error);
-      setSettingsStatus(`Series statistics export failed: ${getErrorMessage(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function toggleTheme() {
     setIsLightMode((current) => {
       const next = !current;
@@ -4465,9 +4413,7 @@ export default function AdminPage() {
                   <button className={styles.secondaryButton} onClick={() => void backupFirestore(false)} disabled={busy}>Backup Metadata Manga</button>
                   <button className={styles.primaryButton} onClick={() => void backupFirestore(true)} disabled={busy}>Full Backup</button>
                   <button className={styles.secondaryButton} onClick={() => void exportAllStaticChapterSummaries()} disabled={busy}>Export All Chapter JSON</button>
-                  <button className={styles.secondaryButton} onClick={() => void exportSeriesStatisticsJson()} disabled={busy}>Export Series Statistics JSON</button>
                 </div>
-                <p>To publish the latest bookmark and notification counts, replace <code>public/series-statistics.json</code> with the downloaded file and deploy the site.</p>
               </div>
               {settingsStatus && <p className={styles.inlineStatus}>{settingsStatus}</p>}
             </section>

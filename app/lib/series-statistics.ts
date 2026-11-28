@@ -1,28 +1,10 @@
 "use client";
 
-import {
-  doc,
-} from "firebase/firestore";
-import { getApps, initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-
-const STATISTICS_FIREBASE_APP_NAME = "mikoroku-series-statistics-widget-comment";
-const STATISTICS_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCxufJubuS95zQnvctINvzj-H8WSIgsse4",
-  authDomain: "widget-comment.firebaseapp.com",
-  projectId: "widget-comment",
-  storageBucket: "widget-comment.firebasestorage.app",
-  messagingSenderId: "249700505242",
-  appId: "1:249700505242:web:dab240af09caf30ad7f123",
-};
-
 const DATABASE_NAME = "widget-comment-series-statistics";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "seriesStatistics";
 const PENDING_STATISTIC_DELTAS_KEY = "mikoroku_pending_series_statistic_deltas_v1";
 export const SERIES_STATISTICS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const SERIES_STATISTICS_JSON_URL = "/series-statistics.json";
-
 const VIEWS_API = "https://mikoroku-og.vercel.app/api/views";
 
 export type SeriesStatistics = {
@@ -33,26 +15,10 @@ export type SeriesStatistics = {
   syncedAt: number;
   pendingViews?: number;
   localUpdatedAt?: number;
-  sourceExportedAtMs?: number;
   viewsSource?: "api";
   lastSyncAttemptAt?: number;
   syncRetryAfter?: number;
 };
-
-function statisticsFirestore() {
-  const app = getApps().find((candidate) =>
-    candidate.name === STATISTICS_FIREBASE_APP_NAME,
-  ) ?? initializeApp(STATISTICS_FIREBASE_CONFIG, STATISTICS_FIREBASE_APP_NAME);
-  return getFirestore(app);
-}
-
-export function getSeriesStatisticsFirestore() {
-  return statisticsFirestore();
-}
-
-export function getSeriesStatsRef(slug: string) {
-  return doc(statisticsFirestore(), "seriesStats", encodeURIComponent(slug));
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -122,7 +88,6 @@ export async function getCachedSeriesStatistics(
       syncedAt: value.syncedAt,
       pendingViews: isCount(value.pendingViews) ? value.pendingViews : 0,
       localUpdatedAt: isCount(value.localUpdatedAt) ? value.localUpdatedAt : 0,
-      sourceExportedAtMs: isCount(value.sourceExportedAtMs) ? value.sourceExportedAtMs : 0,
       viewsSource: value.viewsSource === "api" ? "api" : undefined,
       lastSyncAttemptAt: isCount(value.lastSyncAttemptAt)
         ? value.lastSyncAttemptAt
@@ -211,9 +176,6 @@ export async function recordSeriesViewInCache(
               syncedAt: previous.syncedAt,
               pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
               localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
-              sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
-                ? previous.sourceExportedAtMs
-                : 0,
               viewsSource: previous.viewsSource === "api" ? "api" : undefined,
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
@@ -227,7 +189,6 @@ export async function recordSeriesViewInCache(
               notifications: 0,
               syncedAt: 0,
               pendingViews: 0,
-              sourceExportedAtMs: 0,
             };
         updated = {
           ...data,
@@ -277,9 +238,6 @@ export async function adjustCachedSeriesStatistic(
               syncedAt: previous.syncedAt,
               pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
               localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
-              sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
-                ? previous.sourceExportedAtMs
-                : 0,
               viewsSource: previous.viewsSource === "api" ? "api" : undefined,
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
@@ -293,7 +251,6 @@ export async function adjustCachedSeriesStatistic(
               notifications: 0,
               syncedAt: 0,
               pendingViews: 0,
-              sourceExportedAtMs: 0,
             };
 
         const nextCount = Math.max(0, data[key] + delta);
@@ -394,85 +351,6 @@ export async function reconcilePendingSeriesStatisticCount(
   }
 }
 
-type StatisticsCounters = Pick<SeriesStatistics, "bookmarks" | "notifications">;
-
-type SeriesStatisticsCatalog = {
-  exportedAtMs: number;
-  series: Record<string, StatisticsCounters>;
-};
-
-let statisticsCatalogRequest: Promise<SeriesStatisticsCatalog> | null = null;
-
-function parseStatisticsCatalog(value: unknown): SeriesStatisticsCatalog {
-  if (!isRecord(value) || !isRecord(value.series)) {
-    throw new Error("The series statistics JSON has an invalid format.");
-  }
-  const exportedAtFromIso = typeof value.exportedAt === "string"
-    ? Date.parse(value.exportedAt)
-    : Number.NaN;
-  const exportedAtMs =
-    typeof value.exportedAtMs === "number" &&
-      Number.isFinite(value.exportedAtMs) &&
-      value.exportedAtMs > 0
-      ? value.exportedAtMs
-      : Number.isFinite(exportedAtFromIso) && exportedAtFromIso >= 0
-        ? exportedAtFromIso
-        : value.exportedAtMs === 0
-          ? 0
-          : Number.NaN;
-  if (!Number.isFinite(exportedAtMs)) {
-    throw new Error("The series statistics JSON has an invalid export timestamp.");
-  }
-
-  const series: Record<string, StatisticsCounters> = {};
-  for (const [slug, rawCounters] of Object.entries(value.series)) {
-    if (!slug || !isRecord(rawCounters)) {
-      throw new Error("The series statistics JSON contains an invalid series entry.");
-    }
-    if (
-      !isCount(rawCounters.bookmarks) ||
-      !isCount(rawCounters.notifications)
-    ) {
-      throw new Error('The series statistics JSON contains invalid counters for "' + slug + '".');
-    }
-    series[slug] = {
-      bookmarks: rawCounters.bookmarks,
-      notifications: rawCounters.notifications,
-    };
-  }
-
-  return { exportedAtMs, series };
-}
-
-async function loadStatisticsCatalog(): Promise<SeriesStatisticsCatalog> {
-  if (!statisticsCatalogRequest) {
-    statisticsCatalogRequest = fetch(SERIES_STATISTICS_JSON_URL, { cache: "no-cache" })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Could not load series statistics JSON (" + response.status + ").");
-        }
-        return parseStatisticsCatalog(await response.json());
-      })
-      .catch((error: unknown) => {
-        statisticsCatalogRequest = null;
-        throw error;
-      });
-  }
-  const request = statisticsCatalogRequest;
-  try {
-    return await request;
-  } finally {
-    if (statisticsCatalogRequest === request) statisticsCatalogRequest = null;
-  }
-}
-
-function statisticsForSlug(
-  catalog: SeriesStatisticsCatalog,
-  slug: string,
-): StatisticsCounters {
-  return catalog.series[slug] ?? { bookmarks: 0, notifications: 0 };
-}
-
 // Kirim view ke server Vercel (bukan Firestore lagi).
 // Server yang dedupe: maksimal 1 view per pengunjung per series per 6 jam.
 async function syncPendingSeriesViews(
@@ -513,7 +391,6 @@ async function fetchExtraViews(slug: string): Promise<number | null> {
 
 async function claimStatisticsSync(
   slug: string,
-  catalogExportedAtMs: number,
 ): Promise<{ data: SeriesStatistics; shouldSync: boolean }> {
   const database = await openDatabase();
   try {
@@ -544,9 +421,6 @@ async function claimStatisticsSync(
           syncedAt: previous.syncedAt,
           pendingViews: isCount(previous.pendingViews) ? previous.pendingViews : 0,
           localUpdatedAt: isCount(previous.localUpdatedAt) ? previous.localUpdatedAt : 0,
-          sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
-            ? previous.sourceExportedAtMs
-            : 0,
           viewsSource: previous.viewsSource === "api" ? "api" : undefined,
           lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
             ? previous.lastSyncAttemptAt
@@ -554,7 +428,6 @@ async function claimStatisticsSync(
           syncRetryAfter: isCount(previous.syncRetryAfter) ? previous.syncRetryAfter : 0,
         };
         const age = Date.now() - (data.lastSyncAttemptAt ?? data.syncedAt);
-        const hasNewJsonSnapshot = catalogExportedAtMs > (data.sourceExportedAtMs ?? 0);
         const hasPendingViews = (data.pendingViews ?? 0) > 0;
         // Hormati syncRetryAfter supaya tidak retry terus saat gagal
         const retryBlocked = (data.syncRetryAfter ?? 0) > Date.now();
@@ -563,7 +436,6 @@ async function claimStatisticsSync(
           (hasPendingViews ||
             age < 0 ||
             age >= SERIES_STATISTICS_CACHE_TTL_MS ||
-            hasNewJsonSnapshot ||
             data.viewsSource !== "api");
         if (shouldSync) {
           data.lastSyncAttemptAt = Date.now();
@@ -585,24 +457,11 @@ async function claimStatisticsSync(
 export async function syncSeriesStatisticsForVisit(
   slug: string,
 ): Promise<SeriesStatistics> {
-  const catalog = await loadStatisticsCatalog();
-  const claim = await claimStatisticsSync(slug, catalog.exportedAtMs);
+  const claim = await claimStatisticsSync(slug);
   if (!claim.shouldSync) return claim.data;
   const syncStartedAt = claim.data.lastSyncAttemptAt ?? Date.now();
   const pendingViews = claim.data.pendingViews ?? 0;
   try {
-    const jsonCounters = statisticsForSlug(catalog, slug);
-    const useCachedCounters = catalog.exportedAtMs <= (claim.data.sourceExportedAtMs ?? 0);
-    const baseline = useCachedCounters
-      ? {
-          bookmarks: claim.data.bookmarks,
-          notifications: claim.data.notifications,
-        }
-      : {
-          bookmarks: jsonCounters.bookmarks,
-          notifications: jsonCounters.notifications,
-        };
-
     await syncPendingSeriesViews(slug, pendingViews);
     const extraViews = await fetchExtraViews(slug);
     const fallbackViews = Math.max(0, claim.data.views - pendingViews);
@@ -612,11 +471,11 @@ export async function syncSeriesStatisticsForVisit(
 
     const updated: SeriesStatistics = {
       slug,
-      ...baseline,
+      bookmarks: claim.data.bookmarks,
+      notifications: claim.data.notifications,
       views,
       viewsSource: extraViews === null ? claim.data.viewsSource : "api",
       syncedAt: Date.now(),
-      sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
       syncRetryAfter: extraViews === null
         ? Date.now() + SERIES_STATISTICS_CACHE_TTL_MS
@@ -628,7 +487,6 @@ export async function syncSeriesStatisticsForVisit(
     const fallback: SeriesStatistics = {
       ...claim.data,
       syncedAt: now,
-      sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
       syncRetryAfter: now + (pendingViews > 0 ? 60_000 : SERIES_STATISTICS_CACHE_TTL_MS),
     };
