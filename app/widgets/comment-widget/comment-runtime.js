@@ -817,6 +817,13 @@ async function uploadToImgBB(base64) {
   }
 }
 
+async function uploadCommentImage(image) {
+  if (typeof image !== 'string' || !image.startsWith('data:image/')) return image;
+  const imageUrl = await uploadToImgBB(image);
+  if (!imageUrl) throw new Error('Gambar komentar gagal diunggah.');
+  return imageUrl;
+}
+
 
     function getBase64(file, callback, options = {}) {
       if (!file) return callback(null);
@@ -4267,9 +4274,9 @@ initEditPreviewListeners();
 
     async function editComment(commentId, newText, newImage) {
       const updates = { text: newText.trim() };
-      if (window.removeImageOnEdit) updates.image = null;
-      else if (newImage) updates.image = newImage;
       try {
+        if (window.removeImageOnEdit) updates.image = null;
+        else if (newImage) updates.image = await uploadCommentImage(newImage);
         await queueCommentMutationRecord("edit", commentId, updates);
         pendingCommentEditUpdates.set(commentId, updates);
         window.__commentsCache = (window.__commentsCache || []).map(comment =>
@@ -4545,7 +4552,8 @@ if (fileInput) {
 
       const sendReply = async (img) => {
         try {
-          const saved = await addComment(authorInput, text, img, true, parentId);
+          const imageUrl = await uploadCommentImage(img);
+          const saved = await addComment(authorInput, text, imageUrl, true, parentId);
           if (!saved) {
             alert('Komentar gagal dikirim. Silakan coba lagi.');
             return;
@@ -4557,6 +4565,9 @@ if (fileInput) {
           const replyContainer = form.closest('.reply-form-container');
           replyContainer.style.display = 'none';
           replyContainer.closest('.comment')?.classList.remove('is-replying');
+        } catch (error) {
+          console.error('Gagal mengunggah gambar balasan:', error);
+          alert('Gambar balasan gagal diunggah. Silakan coba lagi.');
         } finally {
           form.dataset.submitting = "false";
         }
@@ -4571,9 +4582,7 @@ if (fileInput) {
         try {
           const base64 = await getBase64Async(fileInput.files[0]);
           if (!base64) return;
-          const imageUrl = await uploadToImgBB(base64);
-          if (!imageUrl) return;
-          await sendReply(imageUrl);
+          await sendReply(base64);
         } catch (error) {
           console.error('Gagal mengunggah gambar balasan:', error);
           alert('Gambar gagal diunggah. Silakan coba lagi.');
@@ -4729,33 +4738,19 @@ if (fileInput) {
 
   // =========================
 
-      let image = null;
       const textarea = document.getElementById('comment-text');
-      if (textarea.dataset.pastedImage) {
-        image = textarea.dataset.pastedImage;
-      } else {
-        const fileInput = document.getElementById('comment-image');
-        if (fileInput.files[0]) {
-          (async () => {
-
-       const base64 = await getBase64Async(fileInput.files[0]);
-       if (!base64) return;
-       const imageUrl =
-        await uploadToImgBB(base64);
-        if (!imageUrl) return;
-        const saved = await addComment(authorInput, text, imageUrl);
-        if (!saved) {
-          alert('Komentar gagal dikirim. Silakan coba lagi.');
-          return;
-        }
-        recent.push(now);
-        localStorage.setItem(spamKey, JSON.stringify(recent));
-        localStorage.setItem(lastCommentKey, text);
-        e.target.reset();
-        document.getElementById('author').value = authorInput;
-        document.getElementById('comment-preview').style.display = 'none';
-        textarea.dataset.pastedImage = '';
-        })();
+      let image = textarea.dataset.pastedImage || null;
+      const fileInput = document.getElementById('comment-image');
+      if (!image && fileInput.files[0]) {
+        image = await getBase64Async(fileInput.files[0]);
+        if (!image) return;
+      }
+      if (image) {
+        try {
+          image = await uploadCommentImage(image);
+        } catch (error) {
+          console.error('Gagal mengunggah gambar komentar:', error);
+          alert('Gambar gagal diunggah. Komentar belum dikirim; silakan coba lagi.');
           return;
         }
       }
