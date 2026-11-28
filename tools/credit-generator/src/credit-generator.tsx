@@ -154,6 +154,7 @@ export default function CreditGenerator() {
             trakteer: savedDraft.trakteer?.trim() || empty.trakteer,
             paypal: savedDraft.paypal?.trim() || empty.paypal,
             website: savedDraft.website?.trim() || empty.website,
+            websiteAlternative: savedDraft.websiteAlternative?.trim() || empty.websiteAlternative,
             credits: { ...empty.credits, ...savedDraft.credits },
           }
         : empty;
@@ -335,6 +336,7 @@ export default function CreditGenerator() {
       trakteer: saved.trakteer?.trim() || empty.trakteer,
       paypal: saved.paypal?.trim() || empty.paypal,
       website: saved.website?.trim() || empty.website,
+      websiteAlternative: saved.websiteAlternative?.trim() || empty.websiteAlternative,
       logoSource: saved.logoSource || empty.logoSource,
       credits: { ...empty.credits, ...saved.credits },
     });
@@ -631,6 +633,7 @@ export default function CreditGenerator() {
               <label className={styles.field}><span>Trakteer link</span><input value={project.trakteer} onChange={(event) => updateProject("trakteer", event.target.value)} placeholder="trakteer.id/..." /></label>
               <label className={styles.field}><span>PayPal link</span><input value={project.paypal} onChange={(event) => updateProject("paypal", event.target.value)} placeholder="paypal.me/..." /></label>
               <label className={styles.field}><span>Website</span><input value={project.website} onChange={(event) => updateProject("website", event.target.value)} placeholder="https://..." /></label>
+              <label className={styles.field}><span>Alternative website</span><input value={project.websiteAlternative} onChange={(event) => updateProject("websiteAlternative", event.target.value)} placeholder="https://..." /></label>
             </div>
             <button type="button" className={`${styles.secondaryButton} ${styles.resetButton}`} onClick={resetDraft}>
               Reset draft

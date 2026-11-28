@@ -1,4 +1,8 @@
 import { imageProxyUrl } from "../../../../lib/image-proxy";
+import discordLogo from "../assets/sosial/discord.webp";
+import facebookLogo from "../assets/sosial/facebook.webp";
+import paypalLogo from "../assets/sosial/paypal.png";
+import websiteLogo from "../assets/sosial/website.webp";
 import { CREDIT_ROLES, getCreditDimensions, type CreditProject, type CreditRole } from "../types";
 
 const BASE_WIDTH = 1080;
@@ -6,6 +10,36 @@ const BASE_HEIGHT = 1440;
 const SPLIT_HEIGHT = 540;
 const MINIMAL_HEIGHT = 1080;
 const coverRequests = new Map<string, Promise<HTMLImageElement>>();
+
+type SocialIconKind = "discord" | "facebook" | "trakteer" | "paypal" | "website";
+
+const SOCIAL_LOGO_URLS: Partial<Record<SocialIconKind, string>> = {
+  discord: typeof discordLogo === "string" ? discordLogo : discordLogo.src,
+  facebook: typeof facebookLogo === "string" ? facebookLogo : facebookLogo.src,
+  paypal: typeof paypalLogo === "string" ? paypalLogo : paypalLogo.src,
+  website: typeof websiteLogo === "string" ? websiteLogo : websiteLogo.src,
+};
+
+const socialLogoCache = new Map<string, HTMLImageElement | null>();
+let socialLogosReady: Promise<void> | null = null;
+
+function loadSocialLogos(): Promise<void> {
+  if (socialLogosReady) return socialLogosReady;
+
+  socialLogosReady = Promise.all(
+    Object.entries(SOCIAL_LOGO_URLS).map(async ([kind, url]) => {
+      try {
+        const img = await loadCover(url);
+        socialLogoCache.set(kind, img);
+      } catch (error) {
+        console.warn(`Could not load the ${kind} social icon; using its drawn fallback.`, error);
+        socialLogoCache.set(kind, null);
+      }
+    }),
+  ).then(() => undefined);
+
+  return socialLogosReady;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -125,7 +159,7 @@ function wrapText(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Role Icons (simple geometric)                                     */
+/*  Role Icons (refined geometric)                                    */
 /* ------------------------------------------------------------------ */
 
 function drawRoleIcon(
@@ -138,148 +172,204 @@ function drawRoleIcon(
 ): void {
   const cx = x + size / 2;
   const cy = y + size / 2;
+  const s = size;
+
   context.save();
   context.strokeStyle = color;
   context.fillStyle = color;
-  context.lineWidth = Math.max(1.4, size * 0.065);
+  context.lineWidth = Math.max(1.6, s * 0.07);
   context.lineCap = "round";
   context.lineJoin = "round";
 
   switch (role) {
     case "translator": {
-      // Overlapping language bubbles
+      // Dual speech bubbles (EN + JP)
+      // Left bubble
       context.beginPath();
-      context.roundRect(x + size * 0.08, y + size * 0.08, size * 0.58, size * 0.48, size * 0.1);
+      context.roundRect(x + s * 0.06, y + s * 0.1, s * 0.52, s * 0.42, s * 0.1);
       context.stroke();
+      // Left tail
       context.beginPath();
-      context.moveTo(x + size * 0.25, y + size * 0.56);
-      context.lineTo(x + size * 0.18, y + size * 0.69);
-      context.lineTo(x + size * 0.39, y + size * 0.56);
+      context.moveTo(x + s * 0.2, y + s * 0.52);
+      context.lineTo(x + s * 0.12, y + s * 0.66);
+      context.lineTo(x + s * 0.32, y + s * 0.52);
       context.closePath();
       context.fill();
+      // Right bubble
       context.beginPath();
-      context.roundRect(x + size * 0.34, y + size * 0.43, size * 0.58, size * 0.48, size * 0.1);
+      context.roundRect(x + s * 0.42, y + s * 0.38, s * 0.52, s * 0.42, s * 0.1);
       context.stroke();
+      // Right tail
       context.beginPath();
-      context.moveTo(x + size * 0.69, y + size * 0.91);
-      context.lineTo(x + size * 0.79, y + size * 0.99);
-      context.lineTo(x + size * 0.82, y + size * 0.91);
+      context.moveTo(x + s * 0.72, y + s * 0.8);
+      context.lineTo(x + s * 0.84, y + s * 0.92);
+      context.lineTo(x + s * 0.86, y + s * 0.8);
       context.closePath();
       context.fill();
-      context.font = `800 ${size * 0.3}px Arial`;
+      // Letters
+      context.font = `800 ${s * 0.28}px Arial`;
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText("A", x + size * 0.37, y + size * 0.31);
-      context.font = `700 ${size * 0.25}px Arial`;
-      context.fillText("文", x + size * 0.63, y + size * 0.67);
+      context.fillText("A", x + s * 0.32, y + s * 0.31);
+      context.font = `700 ${s * 0.24}px Arial`;
+      context.fillText("文", x + s * 0.68, y + s * 0.59);
       break;
     }
+
     case "typesetter": {
-      // page with aligned text
+      // Document with clean text lines
       context.beginPath();
-      context.roundRect(x + size * 0.18, y + size * 0.1, size * 0.64, size * 0.8, size * 0.08);
+      context.roundRect(x + s * 0.16, y + s * 0.08, s * 0.68, s * 0.84, s * 0.08);
       context.stroke();
-      for (let i = 0; i < 3; i++) {
-        const ly = y + size * (0.34 + i * 0.2);
-        const w = size * (i === 1 ? 0.42 : 0.48);
+      // Text lines
+      const lineWidths = [0.48, 0.38, 0.48, 0.3];
+      lineWidths.forEach((lineWidth, index) => {
+        const ly = y + s * (0.28 + index * 0.16);
         context.beginPath();
-        context.moveTo(x + size * 0.28, ly);
-        context.lineTo(x + size * 0.28 + w, ly);
+        context.moveTo(x + s * 0.26, ly);
+        context.lineTo(x + s * 0.26 + s * lineWidth, ly);
         context.stroke();
-      }
+      });
       break;
     }
+
     case "cleaner": {
-      // angled eraser with a visible rubber seam
+      // Eraser with a clear dividing seam
+      context.save();
+      context.translate(cx, cy);
+      context.rotate(-Math.PI / 4);
       context.beginPath();
-      context.moveTo(x + size * 0.18, y + size * 0.62);
-      context.lineTo(x + size * 0.57, y + size * 0.18);
-      context.lineTo(x + size * 0.84, y + size * 0.42);
-      context.lineTo(x + size * 0.45, y + size * 0.86);
-      context.closePath();
+      context.roundRect(-s * 0.21, -s * 0.35, s * 0.42, s * 0.7, s * 0.06);
       context.stroke();
       context.beginPath();
-      context.moveTo(x + size * 0.38, y + size * 0.4);
-      context.lineTo(x + size * 0.65, y + size * 0.64);
+      context.moveTo(-s * 0.21, s * 0.02);
+      context.lineTo(s * 0.21, s * 0.02);
       context.stroke();
+      context.restore();
       break;
     }
+
     case "redrawer": {
-      // Redraw pencil over a picture frame
+      // Picture frame + pencil
+      // Frame
       context.beginPath();
-      context.roundRect(x + size * 0.08, y + size * 0.12, size * 0.62, size * 0.64, size * 0.07);
+      context.roundRect(x + s * 0.08, y + s * 0.12, s * 0.58, s * 0.6, s * 0.06);
       context.stroke();
+      // Mountain / landscape
       context.beginPath();
-      context.arc(x + size * 0.5, y + size * 0.3, size * 0.07, 0, Math.PI * 2);
+      context.moveTo(x + s * 0.14, y + s * 0.62);
+      context.lineTo(x + s * 0.28, y + s * 0.42);
+      context.lineTo(x + s * 0.4, y + s * 0.52);
+      context.lineTo(x + s * 0.52, y + s * 0.38);
+      context.lineTo(x + s * 0.62, y + s * 0.6);
       context.stroke();
+      // Sun
       context.beginPath();
-      context.moveTo(x + size * 0.15, y + size * 0.66);
-      context.lineTo(x + size * 0.32, y + size * 0.46);
-      context.lineTo(x + size * 0.42, y + size * 0.56);
-      context.lineTo(x + size * 0.52, y + size * 0.46);
-      context.lineTo(x + size * 0.67, y + size * 0.64);
+      context.arc(x + s * 0.5, y + s * 0.28, s * 0.06, 0, Math.PI * 2);
       context.stroke();
+      // Pencil body
       context.beginPath();
-      context.moveTo(x + size * 0.47, y + size * 0.78);
-      context.lineTo(x + size * 0.76, y + size * 0.29);
-      context.lineTo(x + size * 0.86, y + size * 0.36);
-      context.lineTo(x + size * 0.57, y + size * 0.84);
+      context.moveTo(x + s * 0.48, y + s * 0.78);
+      context.lineTo(x + s * 0.78, y + s * 0.28);
+      context.lineTo(x + s * 0.88, y + s * 0.36);
+      context.lineTo(x + s * 0.58, y + s * 0.86);
       context.closePath();
       context.stroke();
+      // Pencil tip
+      context.beginPath();
+      context.moveTo(x + s * 0.78, y + s * 0.28);
+      context.lineTo(x + s * 0.9, y + s * 0.22);
+      context.lineTo(x + s * 0.88, y + s * 0.36);
+      context.closePath();
+      context.fill();
       break;
     }
+
     case "qualityChecker": {
-      // checkmark in circle
+      // Shield with checkmark
       context.beginPath();
-      context.arc(cx, cy, size * 0.36, 0, Math.PI * 2);
-      context.stroke();
-      context.beginPath();
-      context.moveTo(cx - size * 0.16, cy + size * 0.02);
-      context.lineTo(cx - size * 0.04, cy + size * 0.16);
-      context.lineTo(cx + size * 0.18, cy - size * 0.14);
-      context.stroke();
-      break;
-    }
-    case "proofreader": {
-      // magnifying glass
-      context.beginPath();
-      context.arc(cx - size * 0.08, cy - size * 0.08, size * 0.26, 0, Math.PI * 2);
-      context.stroke();
-      context.beginPath();
-      context.moveTo(cx + size * 0.1, cy + size * 0.1);
-      context.lineTo(cx + size * 0.28, cy + size * 0.28);
-      context.stroke();
-      break;
-    }
-    case "rawProvider": {
-      // folder / package
-      context.beginPath();
-      context.moveTo(x + size * 0.15, y + size * 0.32);
-      context.lineTo(x + size * 0.38, y + size * 0.32);
-      context.lineTo(x + size * 0.45, y + size * 0.22);
-      context.lineTo(x + size * 0.82, y + size * 0.22);
-      context.lineTo(x + size * 0.82, y + size * 0.78);
-      context.lineTo(x + size * 0.15, y + size * 0.78);
+      context.moveTo(cx, y + s * 0.1);
+      context.lineTo(x + s * 0.82, y + s * 0.28);
+      context.lineTo(x + s * 0.82, y + s * 0.55);
+      context.quadraticCurveTo(x + s * 0.82, y + s * 0.78, cx, y + s * 0.9);
+      context.quadraticCurveTo(x + s * 0.18, y + s * 0.78, x + s * 0.18, y + s * 0.55);
+      context.lineTo(x + s * 0.18, y + s * 0.28);
       context.closePath();
       context.stroke();
+      // Check
+      context.beginPath();
+      context.moveTo(cx - s * 0.16, cy + s * 0.02);
+      context.lineTo(cx - s * 0.04, cy + s * 0.16);
+      context.lineTo(cx + s * 0.18, cy - s * 0.12);
+      context.stroke();
       break;
     }
-    case "uploader": {
-      // upload arrow above a tray
+
+    case "proofreader": {
+      // Magnifying glass with letter "A"
       context.beginPath();
-      context.moveTo(x + size * 0.18, y + size * 0.62);
-      context.lineTo(x + size * 0.18, y + size * 0.84);
-      context.lineTo(x + size * 0.82, y + size * 0.84);
-      context.lineTo(x + size * 0.82, y + size * 0.62);
-      context.moveTo(cx, y + size * 0.62);
-      context.lineTo(cx, y + size * 0.16);
-      context.moveTo(cx - size * 0.2, y + size * 0.36);
-      context.lineTo(cx, y + size * 0.16);
-      context.lineTo(cx + size * 0.2, y + size * 0.36);
+      context.arc(cx - s * 0.08, cy - s * 0.08, s * 0.28, 0, Math.PI * 2);
+      context.stroke();
+      // Handle
+      context.beginPath();
+      context.moveTo(cx + s * 0.12, cy + s * 0.12);
+      context.lineTo(cx + s * 0.3, cy + s * 0.3);
+      context.stroke();
+      // Letter inside
+      context.font = `700 ${s * 0.26}px Arial`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText("A", cx - s * 0.08, cy - s * 0.08);
+      break;
+    }
+
+    case "rawProvider": {
+      // Package / box with lid
+      // Box body
+      context.beginPath();
+      context.moveTo(x + s * 0.14, y + s * 0.38);
+      context.lineTo(x + s * 0.5, y + s * 0.22);
+      context.lineTo(x + s * 0.86, y + s * 0.38);
+      context.lineTo(x + s * 0.86, y + s * 0.72);
+      context.lineTo(x + s * 0.5, y + s * 0.88);
+      context.lineTo(x + s * 0.14, y + s * 0.72);
+      context.closePath();
+      context.stroke();
+      // Top flap lines
+      context.beginPath();
+      context.moveTo(x + s * 0.14, y + s * 0.38);
+      context.lineTo(x + s * 0.5, y + s * 0.54);
+      context.lineTo(x + s * 0.86, y + s * 0.38);
+      context.moveTo(x + s * 0.5, y + s * 0.54);
+      context.lineTo(x + s * 0.5, y + s * 0.88);
+      context.stroke();
+      break;
+    }
+
+    case "uploader": {
+      // Upload tray + upward arrow
+      // Tray
+      context.beginPath();
+      context.moveTo(x + s * 0.16, y + s * 0.62);
+      context.lineTo(x + s * 0.16, y + s * 0.82);
+      context.lineTo(x + s * 0.84, y + s * 0.82);
+      context.lineTo(x + s * 0.84, y + s * 0.62);
+      context.stroke();
+      // Arrow shaft
+      context.beginPath();
+      context.moveTo(cx, y + s * 0.62);
+      context.lineTo(cx, y + s * 0.18);
+      context.stroke();
+      // Arrow head
+      context.beginPath();
+      context.moveTo(cx - s * 0.18, y + s * 0.34);
+      context.lineTo(cx, y + s * 0.16);
+      context.lineTo(cx + s * 0.18, y + s * 0.34);
       context.stroke();
       break;
     }
   }
+
   context.restore();
 }
 
@@ -347,7 +437,6 @@ function drawCover(
     context.fillText("UPLOAD A COVER", x + width / 2, y + height / 2);
   }
   context.restore();
-
 }
 
 function drawTitle(
@@ -387,7 +476,6 @@ function drawCredits(
     const name = project.credits[role].trim();
     if (!name) continue;
 
-    // icon
     const iconSize = Math.max(34, fontSize * 1.15);
     drawRoleIcon(context, role, x, top - fontSize * 0.28, iconSize, project.accent);
 
@@ -566,7 +654,10 @@ function drawImpactTitle(context: CanvasRenderingContext2D, project: CreditProje
       false,
     );
   }
-  const boxHeight = titleY - boxY + lines * lineHeight +
+  const boxHeight =
+    titleY -
+    boxY +
+    lines * lineHeight +
     (altLines ? altTitleGap + altLines * 22 + 12 : 12);
   roundedRect(context, 40, boxY, BASE_WIDTH - 80, boxHeight, 12);
   context.fillStyle = "rgba(255,255,255,0.06)";
@@ -632,79 +723,144 @@ function drawImpactCredits(
   context.fillText("CREDITS", panelX + 28, panelY + 36);
 
   CREDIT_ROLES.forEach(([role, label], index) => {
-    const y = panelY + 72 + index * 60;
+    const yPos = panelY + 72 + index * 60;
     const name = project.credits[role].trim() || "—";
 
-    drawRoleIcon(context, role, panelX + 25, y - 7, 38, project.accent);
+    drawRoleIcon(context, role, panelX + 25, yPos - 7, 38, project.accent);
 
     context.fillStyle = "rgba(255,255,255,0.5)";
     context.font = `700 14px "${project.fontFamily}"`;
     context.textAlign = "left";
-    context.fillText(label.toUpperCase(), panelX + 76, y + 4);
+    context.fillText(label.toUpperCase(), panelX + 76, yPos + 4);
 
     context.fillStyle = project.highlight;
     context.font = `400 24px "${project.fontFamily}"`;
-    context.fillText(name, panelX + 76, y + 32, panelW - 100);
+    context.fillText(name, panelX + 76, yPos + 32, panelW - 100);
   });
   context.restore();
 }
 
 function drawSocialIcon(
   context: CanvasRenderingContext2D,
-  kind: "discord" | "facebook" | "trakteer" | "paypal" | "website",
+  kind: SocialIconKind,
   x: number,
   y: number,
   size: number,
 ): void {
   const colors: Record<string, string> = {
-    discord: "#5865f2",
-    facebook: "#1877f2",
-    trakteer: "#ef4444",
+    discord: "#5865F2",
+    facebook: "#1877F2",
+    trakteer: "#EF4444",
     paypal: "#003087",
-    website: "#0f766e",
+    website: "#0F766E",
   };
-  const centerX = x + size / 2;
-  const centerY = y + size / 2;
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const r = size / 2;
+
+  const logo = socialLogoCache.get(kind);
+  if (logo && logo.complete && logo.naturalWidth > 0) {
+    context.save();
+    context.shadowColor = "rgba(0,0,0,0.35)";
+    context.shadowBlur = 5;
+    context.shadowOffsetY = 2;
+    const logoSize = size * (kind === "facebook" ? 1.25 : 1);
+    context.drawImage(
+      logo,
+      x + (size - logoSize) / 2,
+      y + (size - logoSize) / 2,
+      logoSize,
+      logoSize,
+    );
+    context.restore();
+    return;
+  }
 
   context.save();
   context.shadowColor = "rgba(0,0,0,0.35)";
   context.shadowBlur = 8;
   context.shadowOffsetY = 3;
-
   context.fillStyle = colors[kind];
   context.beginPath();
-  context.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+  context.arc(cx, cy, r, 0, Math.PI * 2);
   context.fill();
   context.shadowColor = "transparent";
 
   context.fillStyle = "#ffffff";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = Math.max(1.6, size * 0.065);
+  context.lineCap = "round";
+  context.lineJoin = "round";
 
   if (kind === "discord") {
+    const s = size;
     context.beginPath();
-    context.roundRect(x + 7, y + 10, size - 14, size - 19, 6);
+    context.moveTo(cx - s * 0.28, cy - s * 0.08);
+    context.bezierCurveTo(cx - s * 0.28, cy - s * 0.22, cx - s * 0.18, cy - s * 0.28, cx, cy - s * 0.28);
+    context.bezierCurveTo(cx + s * 0.18, cy - s * 0.28, cx + s * 0.28, cy - s * 0.22, cx + s * 0.28, cy - s * 0.08);
+    context.lineTo(cx + s * 0.28, cy + s * 0.08);
+    context.bezierCurveTo(cx + s * 0.28, cy + s * 0.18, cx + s * 0.2, cy + s * 0.26, cx + s * 0.1, cy + s * 0.26);
+    context.lineTo(cx + s * 0.04, cy + s * 0.18);
+    context.lineTo(cx - s * 0.04, cy + s * 0.18);
+    context.lineTo(cx - s * 0.1, cy + s * 0.26);
+    context.bezierCurveTo(cx - s * 0.2, cy + s * 0.26, cx - s * 0.28, cy + s * 0.18, cx - s * 0.28, cy + s * 0.08);
+    context.closePath();
     context.fill();
+
     context.fillStyle = colors.discord;
     context.beginPath();
-    context.arc(centerX - 5, centerY + 1, 2.2, 0, Math.PI * 2);
-    context.arc(centerX + 5, centerY + 1, 2.2, 0, Math.PI * 2);
+    context.ellipse(cx - s * 0.1, cy - s * 0.02, s * 0.055, s * 0.07, 0, 0, Math.PI * 2);
+    context.ellipse(cx + s * 0.1, cy - s * 0.02, s * 0.055, s * 0.07, 0, 0, Math.PI * 2);
     context.fill();
-  } else if (kind === "website") {
-    context.strokeStyle = "#ffffff";
-    context.lineWidth = 2.2;
+  } else if (kind === "facebook") {
+    context.font = `900 ${size * 0.62}px Arial`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("f", cx + size * 0.02, cy + size * 0.02);
+  } else if (kind === "trakteer") {
+    const s = size;
     context.beginPath();
-    context.arc(centerX, centerY, size * 0.3, 0, Math.PI * 2);
-    context.moveTo(centerX - size * 0.28, centerY);
-    context.lineTo(centerX + size * 0.28, centerY);
-    context.moveTo(centerX, centerY - size * 0.28);
-    context.lineTo(centerX, centerY + size * 0.28);
+    context.moveTo(cx - s * 0.18, cy - s * 0.02);
+    context.lineTo(cx - s * 0.14, cy + s * 0.2);
+    context.quadraticCurveTo(cx, cy + s * 0.26, cx + s * 0.14, cy + s * 0.2);
+    context.lineTo(cx + s * 0.18, cy - s * 0.02);
+    context.closePath();
+    context.fill();
+    context.beginPath();
+    context.ellipse(cx, cy - s * 0.02, s * 0.2, s * 0.06, 0, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.arc(cx + s * 0.22, cy + s * 0.06, s * 0.09, -Math.PI * 0.4, Math.PI * 0.7);
     context.stroke();
-  } else {
-    const glyph = kind === "facebook" ? "f" : kind === "trakteer" ? "T" : "P";
-    context.font = `900 ${kind === "facebook" ? 26 : 19}px Arial`;
-    context.fillText(glyph, centerX, centerY + (kind === "facebook" ? 1 : 0));
+    context.beginPath();
+    context.moveTo(cx - s * 0.06, cy - s * 0.12);
+    context.quadraticCurveTo(cx - s * 0.1, cy - s * 0.2, cx - s * 0.04, cy - s * 0.26);
+    context.moveTo(cx + s * 0.04, cy - s * 0.12);
+    context.quadraticCurveTo(cx + s * 0.08, cy - s * 0.2, cx + s * 0.02, cy - s * 0.26);
+    context.stroke();
+  } else if (kind === "paypal") {
+    context.font = `900 ${size * 0.52}px Arial`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("P", cx, cy + size * 0.02);
+  } else if (kind === "website") {
+    const s = size;
+    context.lineWidth = Math.max(1.5, s * 0.06);
+    context.beginPath();
+    context.arc(cx, cy, s * 0.28, 0, Math.PI * 2);
+    context.stroke();
+    context.beginPath();
+    context.ellipse(cx, cy, s * 0.28, s * 0.11, 0, 0, Math.PI * 2);
+    context.stroke();
+    context.beginPath();
+    context.ellipse(cx, cy, s * 0.12, s * 0.28, 0, 0, Math.PI * 2);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(cx, cy - s * 0.28);
+    context.lineTo(cx, cy + s * 0.28);
+    context.stroke();
   }
+
   context.restore();
 }
 
@@ -757,6 +913,7 @@ function drawSocialLinksGrid(
     { kind: "trakteer" as const, label: "TRAKTEER", value: project.trakteer },
     { kind: "paypal" as const, label: "PAYPAL", value: project.paypal },
     { kind: "website" as const, label: "WEBSITE", value: project.website },
+    { kind: "website" as const, label: "ALT WEBSITE", value: project.websiteAlternative },
   ].filter((link) => link.value.trim());
   if (links.length === 0) return;
 
@@ -817,7 +974,7 @@ function drawMinimalTemplate(
   const titleBottom = drawMinimalTitle(context, project);
   const coverBottomLimit = 700;
   const coverY = Math.max(220, titleBottom + 14);
-  const coverWidth = Math.min(300, Math.max(180, (coverBottomLimit - coverY) * 2 / 3));
+  const coverWidth = Math.min(300, Math.max(180, ((coverBottomLimit - coverY) * 2) / 3));
   const coverHeight = coverWidth * 1.5;
   const coverBottom = coverY + coverHeight;
   const coverX = (BASE_WIDTH - coverWidth) / 2;
@@ -937,6 +1094,7 @@ function drawMinimalLinks(
     { kind: "trakteer" as const, label: "TRAKTEER", value: project.trakteer },
     { kind: "paypal" as const, label: "PAYPAL", value: project.paypal },
     { kind: "website" as const, label: "WEBSITE", value: project.website },
+    { kind: "website" as const, label: "ALT WEBSITE", value: project.websiteAlternative },
   ].filter((link) => link.value.trim());
   if (!links.length) return;
 
@@ -984,15 +1142,7 @@ function drawDramaticSplit(
   drawDramaticSplitAuthor(context, project, coverX, coverY + coverHeight + 25, coverWidth);
   drawDramaticSplitLogo(context, project, logo, contentX, 18, contentWidth);
 
-  const titleBottom = drawTitle(
-    context,
-    project,
-    contentX,
-    90,
-    contentWidth - 8,
-    30,
-    "left",
-  );
+  const titleBottom = drawTitle(context, project, contentX, 90, contentWidth - 8, 30, "left");
   const creditsY = Math.max(220, titleBottom + 12);
   const roleRows = drawDramaticSplitCredits(context, project, contentX, creditsY, contentWidth);
   const roleHeight = roleRows ? roleRows * 48 + (roleRows - 1) * 8 : 32;
@@ -1095,6 +1245,7 @@ function drawDramaticSplitLinks(
     { kind: "trakteer" as const, label: "TRAKTEER", value: project.trakteer },
     { kind: "paypal" as const, label: "PAYPAL", value: project.paypal },
     { kind: "website" as const, label: "WEBSITE", value: project.website },
+    { kind: "website" as const, label: "ALT WEBSITE", value: project.websiteAlternative },
   ].filter((link) => link.value.trim());
 
   const columns = 3;
@@ -1144,15 +1295,17 @@ export async function renderCreditCard(
     document.fonts.load(`400 48px "${project.titleFontFamily}"`),
     project.coverSource ? loadCover(project.coverSource) : Promise.resolve(null),
     project.logoSource ? loadCover(project.logoSource).catch(() => null) : Promise.resolve(null),
+    loadSocialLogos(), // load logo sosial asli
   ]);
   if (signal?.aborted) return;
 
   const scaleX = width / BASE_WIDTH;
-  const logicalHeight = project.template === "split"
-    ? SPLIT_HEIGHT
-    : project.template === "minimal"
-      ? MINIMAL_HEIGHT
-      : BASE_HEIGHT;
+  const logicalHeight =
+    project.template === "split"
+      ? SPLIT_HEIGHT
+      : project.template === "minimal"
+        ? MINIMAL_HEIGHT
+        : BASE_HEIGHT;
   const scaleY = height / logicalHeight;
   context.save();
   context.scale(scaleX, scaleY);
@@ -1166,10 +1319,7 @@ export async function renderCreditCard(
     const cardY = Math.max(300, titleBottom + 20);
     const availableHeight = Math.max(1, 1010 - cardY);
     const maxCardWidthByHeight = (availableHeight * scaleY) / (scaleX * 1.5);
-    const cardWidth = Math.min(
-      (BASE_WIDTH - sideMargin * 2 - columnGap) / 2,
-      maxCardWidthByHeight,
-    );
+    const cardWidth = Math.min((BASE_WIDTH - sideMargin * 2 - columnGap) / 2, maxCardWidthByHeight);
     const cardHeight = cardWidth * 1.5 * (scaleX / scaleY);
     const creditsX = sideMargin + cardWidth + columnGap;
     drawCover(context, image, project, sideMargin, cardY, cardWidth, cardHeight);

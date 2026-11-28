@@ -54,6 +54,7 @@ export type CreditProject = {
   trakteer: string;
   paypal: string;
   website: string;
+  websiteAlternative: string;
   credits: Record<CreditRole, string>;
   coverFocusX: number;
   coverFocusY: number;
@@ -110,6 +111,7 @@ export function createEmptyProject(): CreditProject {
     trakteer: "https://trakteer.id/mikorokuscan",
     paypal: "https://www.paypal.me/moemaomao",
     website: "https://mikoroku.com",
+    websiteAlternative: "",
     credits: {
       translator: "m6",
       typesetter: "m6",
