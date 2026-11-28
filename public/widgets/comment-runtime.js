@@ -830,7 +830,7 @@ async function uploadToImgBB(base64) {
       const reader = new FileReader();
       reader.onload = () => {
         const source = reader.result;
-        if (typeof source !== 'string' || maxDimension >= 1024) {
+        if (typeof source !== 'string' || file.type === 'image/gif') {
           callback(source);
           return;
         }
@@ -847,13 +847,19 @@ async function uploadToImgBB(base64) {
             return;
           }
           context.drawImage(image, 0, 0, canvas.width, canvas.height);
-          callback(canvas.toDataURL('image/jpeg', quality));
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          const compressedSize = Math.ceil((compressed.length - compressed.indexOf(',') - 1) * 3 / 4);
+          callback(compressedSize < file.size ? compressed : source);
         };
         image.onerror = () => callback(source);
         image.src = source;
       };
       reader.onerror = () => callback(null);
       reader.readAsDataURL(file);
+    }
+
+    function getBase64Async(file, options = {}) {
+      return new Promise(resolve => getBase64(file, resolve, options));
     }
 
     function handlePaste(e, textarea, previewContainer, previewImg, removeBtn) {
@@ -4236,14 +4242,12 @@ function initEditPreviewListeners() {
       form.querySelector(".edit-preview");
     const previewImg =
       form.querySelector(".edit-preview-img");
-    const reader = new FileReader();
-    
-    reader.onload = function(ev){
-      previewImg.src = ev.target.result;
+    getBase64(file, base64 => {
+      if (!base64) return;
+      previewImg.src = base64;
       preview.style.display = "block";
-    };
-
-    reader.readAsDataURL(file);
+      form.querySelector(".reply-text").dataset.pastedImage = base64;
+    });
   });
 
   document.addEventListener("click", function(e){
@@ -4565,7 +4569,9 @@ if (fileInput) {
       const fileInput = form.querySelector('.reply-image');
       if (fileInput.files[0]) {
         try {
-          const imageUrl = await uploadToImgBB(fileInput.files[0]);
+          const base64 = await getBase64Async(fileInput.files[0]);
+          if (!base64) return;
+          const imageUrl = await uploadToImgBB(base64);
           if (!imageUrl) return;
           await sendReply(imageUrl);
         } catch (error) {
@@ -4629,12 +4635,7 @@ if (fileInput) {
       const fileInput = form.querySelector('.reply-image');
       if (!image && fileInput?.files[0]) {
         try {
-          image = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(reader.error || new Error("Could not read the selected image."));
-            reader.readAsDataURL(fileInput.files[0]);
-          });
+          image = await getBase64Async(fileInput.files[0]);
         } catch (error) {
           console.error("Could not read the edited comment image.", error);
           alert("Gagal membaca gambar komentar: " + error.message);
@@ -4737,8 +4738,10 @@ if (fileInput) {
         if (fileInput.files[0]) {
           (async () => {
 
+       const base64 = await getBase64Async(fileInput.files[0]);
+       if (!base64) return;
        const imageUrl =
-        await uploadToImgBB(fileInput.files[0]);
+        await uploadToImgBB(base64);
         if (!imageUrl) return;
         const saved = await addComment(authorInput, text, imageUrl);
         if (!saved) {

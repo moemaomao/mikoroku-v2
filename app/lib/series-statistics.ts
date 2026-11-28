@@ -36,13 +36,13 @@ function isSeriesStatistics(value: unknown, slug: string): value is SeriesStatis
     isCount(value.notifications) &&
     typeof value.syncedAt === "number" &&
     Number.isFinite(value.syncedAt);
-}
+}``
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
       reject(new Error("IndexedDB is unavailable."));
-      return;
+      return;``
     }
 
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
