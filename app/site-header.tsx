@@ -731,7 +731,7 @@ function HeaderContents() {
   useEffect(() => {
     let active = true;
     let loading = false;
-    const refreshSeriesUpdates = async (force = false) => {
+    const refreshSeriesUpdates = async () => {
       if (loading) return;
       loading = true;
       try {
@@ -743,7 +743,7 @@ function HeaderContents() {
           setUnreadSeriesUpdates(0);
           return;
         }
-        const records = await loadFirestoreMangaCatalog({ force });
+        const records = await loadFirestoreMangaCatalog();
         if (!active) return;
         const unread = getSeriesNotificationUpdates(subscriptions, records)
           .filter((update) => update.unread).length;
@@ -755,7 +755,7 @@ function HeaderContents() {
       }
     };
     const refresh = () => { void refreshSeriesUpdates(); };
-    const refreshLatest = () => { void refreshSeriesUpdates(true); };
+    const refreshLatest = refresh;
     const handleStorage = (event: StorageEvent) => {
       if (event.key === SERIES_NOTIFICATIONS_STORAGE_KEY) refresh();
     };

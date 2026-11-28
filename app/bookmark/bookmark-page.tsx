@@ -359,26 +359,6 @@ function bookmarkFromFirestore(document: {
   };
 }
 
-async function migrateLocalBookmarks(user: AuthUser, local: Bookmark[]): Promise<void> {
-  if (!local.length || !window.firebase) return;
-  const collection = getFirestoreCollection(user);
-  const snapshot = await collection.orderBy("updatedAt", "desc").get();
-  const existing = new Set<string>();
-  snapshot.forEach((document) => {
-    const bookmark = bookmarkFromFirestore(document);
-    if (bookmark) existing.add(normalizeTitle(bookmark.title));
-  });
-  const missing = local.filter((item) => !existing.has(normalizeTitle(item.title)));
-  if (!missing.length) return;
-
-  for (const item of missing) {
-    await syncBookmarkDocument(user, {
-      ...item,
-      slug: item.slug || slugify(item.title),
-    });
-  }
-}
-
 export default function BookmarkPage() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [activeView, setActiveView] = useState<"bookmarks" | "notifications">("bookmarks");
@@ -502,13 +482,24 @@ export default function BookmarkPage() {
       void loadAccountNotifications(user.uid);
       const local = readLocalBookmarks();
       try {
-        await migrateLocalBookmarks(user, local);
         const snapshot = await getFirestoreCollection(user).orderBy("updatedAt", "desc").get();
         const remote = new Map<string, Bookmark>();
         snapshot.forEach((document) => {
           const bookmark = bookmarkFromFirestore(document);
           if (bookmark) remote.set(normalizeTitle(bookmark.title), bookmark);
         });
+        const missing = local.filter((bookmark) =>
+          !remote.has(normalizeTitle(bookmark.title)),
+        );
+        for (const bookmark of missing) {
+          const migratedBookmark = {
+            ...bookmark,
+            slug: bookmark.slug || slugify(bookmark.title),
+            updatedAt: Date.now(),
+          };
+          await syncBookmarkDocument(user, migratedBookmark);
+          remote.set(normalizeTitle(bookmark.title), migratedBookmark);
+        }
         for (const bookmark of local) {
           const key = normalizeTitle(bookmark.title);
           if (!remote.has(key)) remote.set(key, bookmark);
@@ -581,7 +572,7 @@ export default function BookmarkPage() {
       }
 
       try {
-        const records = await loadFirestoreMangaCatalog({ force: true });
+        const records = await loadFirestoreMangaCatalog();
         if (!active) return;
         const updates = getSeriesNotificationUpdates(subscriptions, records);
         setDisplayedUpdates(updates);

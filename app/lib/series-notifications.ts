@@ -9,6 +9,7 @@ const FIRESTORE_MARKER = "seriesNotification";
 const FIRESTORE_ID_PREFIX = "series-notification-";
 const PENDING_NOTIFICATION_DELETIONS_KEY = "mikoroku_series_notification_deletions_v1";
 const NOTIFICATION_SYNC_RETRY_DELAY_MS = 30_000;
+const NOTIFICATION_LOAD_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type SeriesNotificationSubscription = {
   slug: string;
@@ -72,6 +73,18 @@ type NotificationWindow = Window & {
 
 const notificationLoadRequests = new Map<string, Promise<SeriesNotificationSubscription[]>>();
 const notificationLoadRetryAfter = new Map<string, { at: number; error: unknown }>();
+const notificationLoadCache = new Map<string, {
+  loadedAt: number;
+  subscriptions: SeriesNotificationSubscription[];
+}>();
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === SERIES_NOTIFICATIONS_STORAGE_KEY) {
+      notificationLoadCache.clear();
+    }
+  });
+}
 
 function browserWindow(): NotificationWindow {
   return window as NotificationWindow;
@@ -228,6 +241,8 @@ export function readSeriesNotificationSubscriptions(): SeriesNotificationSubscri
 export function saveLocalSeriesNotificationSubscription(
   subscription: SeriesNotificationSubscription,
 ): SeriesNotificationSubscription[] {
+  const uid = getSeriesNotificationUserId();
+  if (uid) notificationLoadCache.delete(uid);
   const next = [
     { ...subscription, updatedAt: subscription.updatedAt || Date.now() },
     ...readLocalSubscriptions().filter((item) => item.slug !== subscription.slug),
@@ -243,12 +258,17 @@ export function loadSeriesNotificationSubscriptions(
   if (!uid) return Promise.resolve(local);
   const pendingRequest = notificationLoadRequests.get(uid);
   if (pendingRequest) return pendingRequest;
+  const cached = notificationLoadCache.get(uid);
+  if (cached && Date.now() - cached.loadedAt < NOTIFICATION_LOAD_CACHE_TTL_MS) {
+    return Promise.resolve(cached.subscriptions);
+  }
   const retry = notificationLoadRetryAfter.get(uid);
   if (retry && retry.at > Date.now()) return Promise.reject(retry.error);
 
   const request = loadAndSyncSeriesNotificationSubscriptions(uid)
     .then((subscriptions) => {
       notificationLoadRetryAfter.delete(uid);
+      notificationLoadCache.set(uid, { loadedAt: Date.now(), subscriptions });
       return subscriptions;
     })
     .catch((error: unknown) => {
@@ -336,6 +356,10 @@ export async function saveSeriesNotificationSubscription(
       clearNotificationDeletion(uid, subscription.slug);
       await persistNotificationSubscription(saved, uid);
       notificationLoadRetryAfter.delete(uid);
+      notificationLoadCache.set(uid, {
+        loadedAt: Date.now(),
+        subscriptions: next,
+      });
     } else {
       await reconcilePendingSeriesStatisticCount(subscription.slug, "notifications", 1);
     }
@@ -397,6 +421,7 @@ export async function removeSeriesNotificationSubscription(
   uid = getSeriesNotificationUserId(),
 ): Promise<SeriesNotificationSubscription[]> {
   const normalizedSlug = normalizeSlug(slug);
+  if (uid) notificationLoadCache.delete(uid);
   const next = readLocalSubscriptions().filter((item) => item.slug !== normalizedSlug);
   if (uid) queueNotificationDeletion(uid, normalizedSlug);
   try {
@@ -410,6 +435,10 @@ export async function removeSeriesNotificationSubscription(
       await removeNotificationSubscription(normalizedSlug, uid);
       clearNotificationDeletion(uid, normalizedSlug);
       notificationLoadRetryAfter.delete(uid);
+      notificationLoadCache.set(uid, {
+        loadedAt: Date.now(),
+        subscriptions: next,
+      });
     } else {
       await reconcilePendingSeriesStatisticCount(normalizedSlug, "notifications", -1);
     }
@@ -552,6 +581,7 @@ export async function markSeriesNotificationUpdatesRead(
     return subscriptions;
   }
 
+  if (uid) notificationLoadCache.delete(uid);
   writeLocalSubscriptions(next, false);
   try {
     if (uid) {
@@ -562,6 +592,10 @@ export async function markSeriesNotificationUpdatesRead(
       await Promise.all(changed.map((item) =>
         collection.doc(notificationDocumentId(item.slug)).set(subscriptionPayload(item), { merge: true }),
       ));
+      notificationLoadCache.set(uid, {
+        loadedAt: Date.now(),
+        subscriptions: next,
+      });
     }
   } catch (error) {
     window.dispatchEvent(new Event(SERIES_NOTIFICATIONS_UPDATED_EVENT));
