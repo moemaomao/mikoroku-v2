@@ -2591,7 +2591,6 @@ export default function AdminPage() {
       const firestore = getSeriesStatisticsFirestore();
       const snapshot = await getDocs(collection(firestore, "seriesStats"));
       const series: Record<string, {
-        views: number;
         bookmarks: number;
         notifications: number;
       }> = {};
@@ -2607,14 +2606,13 @@ export default function AdminPage() {
           throw new Error(`Series statistics document "${statisticsDocument.id}" has no series slug.`);
         }
         const data = statisticsDocument.data();
-        const count = (key: "views" | "bookmarks" | "notifications") =>
+        const count = (key: "bookmarks" | "notifications") =>
           typeof data[key] === "number" &&
             Number.isSafeInteger(data[key]) &&
             data[key] >= 0
             ? data[key]
             : 0;
         series[slug] = {
-          views: count("views"),
           bookmarks: count("bookmarks"),
           notifications: count("notifications"),
         };
@@ -2627,7 +2625,7 @@ export default function AdminPage() {
         series,
       });
       setSettingsStatus(
-        `Series statistics JSON exported: ${Object.keys(series).length} series. Replace public/series-statistics.json with this file and deploy it to publish the counts.`,
+        `Series statistics JSON exported: ${Object.keys(series).length} series. Replace public/series-statistics.json with this file and deploy it to publish bookmark and notification counts.`,
       );
     } catch (error) {
       console.error("Failed to export series statistics JSON.", error);
@@ -4481,7 +4479,7 @@ export default function AdminPage() {
                   <button className={styles.secondaryButton} onClick={() => void exportAllStaticChapterSummaries()} disabled={busy}>Export All Chapter JSON</button>
                   <button className={styles.secondaryButton} onClick={() => void exportSeriesStatisticsJson()} disabled={busy}>Export Series Statistics JSON</button>
                 </div>
-                <p>To publish the latest counts, replace <code>public/series-statistics.json</code> with the downloaded file and deploy the site.</p>
+                <p>To publish the latest bookmark and notification counts, replace <code>public/series-statistics.json</code> with the downloaded file and deploy the site.</p>
               </div>
               {settingsStatus && <p className={styles.inlineStatus}>{settingsStatus}</p>}
             </section>

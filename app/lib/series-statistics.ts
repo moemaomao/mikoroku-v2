@@ -34,6 +34,7 @@ export type SeriesStatistics = {
   pendingViews?: number;
   localUpdatedAt?: number;
   sourceExportedAtMs?: number;
+  viewsSource?: "api";
   lastSyncAttemptAt?: number;
   syncRetryAfter?: number;
 };
@@ -122,6 +123,7 @@ export async function getCachedSeriesStatistics(
       pendingViews: isCount(value.pendingViews) ? value.pendingViews : 0,
       localUpdatedAt: isCount(value.localUpdatedAt) ? value.localUpdatedAt : 0,
       sourceExportedAtMs: isCount(value.sourceExportedAtMs) ? value.sourceExportedAtMs : 0,
+      viewsSource: value.viewsSource === "api" ? "api" : undefined,
       lastSyncAttemptAt: isCount(value.lastSyncAttemptAt)
         ? value.lastSyncAttemptAt
         : value.syncedAt,
@@ -212,6 +214,7 @@ export async function recordSeriesViewInCache(
               sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
                 ? previous.sourceExportedAtMs
                 : 0,
+              viewsSource: previous.viewsSource === "api" ? "api" : undefined,
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
                 : previous.syncedAt,
@@ -277,6 +280,7 @@ export async function adjustCachedSeriesStatistic(
               sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
                 ? previous.sourceExportedAtMs
                 : 0,
+              viewsSource: previous.viewsSource === "api" ? "api" : undefined,
               lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
                 ? previous.lastSyncAttemptAt
                 : previous.syncedAt,
@@ -390,7 +394,7 @@ export async function reconcilePendingSeriesStatisticCount(
   }
 }
 
-type StatisticsCounters = Pick<SeriesStatistics, "views" | "bookmarks" | "notifications">;
+type StatisticsCounters = Pick<SeriesStatistics, "bookmarks" | "notifications">;
 
 type SeriesStatisticsCatalog = {
   exportedAtMs: number;
@@ -426,14 +430,12 @@ function parseStatisticsCatalog(value: unknown): SeriesStatisticsCatalog {
       throw new Error("The series statistics JSON contains an invalid series entry.");
     }
     if (
-      !isCount(rawCounters.views) ||
       !isCount(rawCounters.bookmarks) ||
       !isCount(rawCounters.notifications)
     ) {
       throw new Error('The series statistics JSON contains invalid counters for "' + slug + '".');
     }
     series[slug] = {
-      views: rawCounters.views,
       bookmarks: rawCounters.bookmarks,
       notifications: rawCounters.notifications,
     };
@@ -468,7 +470,7 @@ function statisticsForSlug(
   catalog: SeriesStatisticsCatalog,
   slug: string,
 ): StatisticsCounters {
-  return catalog.series[slug] ?? { views: 0, bookmarks: 0, notifications: 0 };
+  return catalog.series[slug] ?? { bookmarks: 0, notifications: 0 };
 }
 
 // Kirim view ke server Vercel (bukan Firestore lagi).
@@ -545,6 +547,7 @@ async function claimStatisticsSync(
           sourceExportedAtMs: isCount(previous.sourceExportedAtMs)
             ? previous.sourceExportedAtMs
             : 0,
+          viewsSource: previous.viewsSource === "api" ? "api" : undefined,
           lastSyncAttemptAt: isCount(previous.lastSyncAttemptAt)
             ? previous.lastSyncAttemptAt
             : previous.syncedAt,
@@ -558,7 +561,8 @@ async function claimStatisticsSync(
           !retryBlocked &&
           (age < 0 ||
             age >= SERIES_STATISTICS_CACHE_TTL_MS ||
-            hasNewJsonSnapshot);
+            hasNewJsonSnapshot ||
+            data.viewsSource !== "api");
         if (shouldSync) {
           data.lastSyncAttemptAt = Date.now();
           data.syncRetryAfter = 0;
@@ -599,21 +603,22 @@ export async function syncSeriesStatisticsForVisit(
 
     await syncPendingSeriesViews(slug, pendingViews);
     const extraViews = await fetchExtraViews(slug);
-    const fallbackViews = useCachedCounters
-      ? Math.max(0, claim.data.views - pendingViews)
-      : jsonCounters.views;
+    const fallbackViews = Math.max(0, claim.data.views - pendingViews);
     const views = extraViews === null
       ? fallbackViews
-      : jsonCounters.views + extraViews;
+      : extraViews;
 
     const updated: SeriesStatistics = {
       slug,
       ...baseline,
       views,
+      viewsSource: extraViews === null ? claim.data.viewsSource : "api",
       syncedAt: Date.now(),
       sourceExportedAtMs: catalog.exportedAtMs,
       lastSyncAttemptAt: syncStartedAt,
-      syncRetryAfter: 0,
+      syncRetryAfter: extraViews === null
+        ? Date.now() + SERIES_STATISTICS_CACHE_TTL_MS
+        : 0,
     };
     return cacheSeriesStatistics(updated, syncStartedAt, pendingViews);
   } catch (error) {
